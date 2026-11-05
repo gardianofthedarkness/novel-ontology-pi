@@ -5,7 +5,7 @@ aliases: ["Stage manager"]
 kind: "stage"
 status: "partial"
 zoom: "none"
-reads: ["frame", "generalist"]
+reads: ["firstAD", "scriptSupervisor"]
 tags: ["directing/director", "kind/stage", "status/partial"]
 ---
 <!-- Written by world-engine/director/directing-vault.mjs from the code; change the code, not this note. -->
@@ -20,8 +20,8 @@ No zoom of its own: it chooses which action director leads each beat and where t
 
 ## Plays
 
-- [Scene frame](../faculties/frame.md) (its own)
-- [Generalist](../faculties/generalist.md)
+- [1st AD](../casts/firstAD.md) (its own)
+- [Script supervisor](../casts/scriptSupervisor.md)
 
 ## How Jev is asked
 

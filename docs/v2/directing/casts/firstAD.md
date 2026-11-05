@@ -1,17 +1,17 @@
 ---
-type: "faculty"
-id: "frame"
-aliases: ["Scene frame"]
+type: "cast"
+id: "firstAD"
+aliases: ["1st AD"]
 status: "partial"
 fired_by: ["always: each scene"]
 read_by: ["stage"]
-tags: ["directing/faculty", "status/partial"]
+tags: ["directing/cast", "status/partial"]
 ---
 <!-- Written by world-engine/director/directing-vault.mjs from the code; change the code, not this note. -->
 
-# Scene frame
+# 1st AD
 
-A summary faculty: the work model reading the text. Status: **partial** (`world-engine/director/director.mjs (M4: the cast from the scene digest, gathered in the set; beats from gate.mjs)`). Back to [Directing](../Directing.md).
+A summary cast: the work model reading the text. Status: **partial** (`world-engine/director/director.mjs (M4: the cast from the scene digest, gathered in the set; beats from gate.mjs)`). Back to [Directing](../Directing.md).
 
 ## What it writes
 
@@ -55,4 +55,4 @@ How often: one request a scene, in reading order.
 
 ## Read by
 
-- [Stage manager](../directors/stage.md) (its own faculty)
+- [Stage manager](../directors/stage.md) (its own cast)

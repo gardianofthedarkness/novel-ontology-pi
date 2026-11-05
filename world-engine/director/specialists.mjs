@@ -1,6 +1,6 @@
 // The director as specialists (docs/v2/next-steps.md A4–A5; the user, 2026-11-03): "jev can be asked for different
 // questions based on what the input director sees... we can split our directors into specialist". One registry, in
-// code, of what reads the text (the summary faculties, the work model), what fires them (Jev's block types and the
+// code, of what reads the text (the pre-film casts, the work model), what fires them (Jev's block types and the
 // reading's own signals), and which specialist director each one feeds (the questions Jev is asked on pictures, the
 // scale it works at, its camera, its tools). The docs and the plan page are written from it
 // (specialists-doc.mjs), so the design and the code cannot drift apart.
@@ -20,14 +20,14 @@ export const BLOCK_TYPES = {
   catastrophe: { label: 'Spectacle / catastrophe', means: 'the world itself changing: ground splits, floods, collapses', volume1: '21, 22, 26, 27' },
 };
 /**
- * Types that fire no reader (exposition, a flashback). Nothing is held still for them: faculties co-fire wherever their
- * evidence is sufficient (the user, 2026-11-03), and a stretch with no action is quiet because no action faculty fires.
+ * Types that fire no reader (exposition, a flashback). Nothing is held still for them: casts co-fire wherever their
+ * evidence is sufficient (the user, 2026-11-03), and a stretch with no action is quiet because no action cast fires.
  */
 export const QUIET = ['exposition', 'memory'];
 /** Sentence kinds (the reading's kinds pass), each sentence's distribution over them kept whole with its top and score. */
 export const SENTENCE_KINDS = ['spoken', 'thought', 'fact', 'action', 'environment', 'narration'];
 
-/** The reading's own signals, counted per window, that can fire a faculty beside the block types. */
+/** The reading's own signals, counted per window, that can fire a cast beside the block types. */
 export const SIGNALS = {
   vehicles: { label: 'vehicles named', from: 'the reading\'s vehicle slots and things (23 vehicle slots in volume 1)' },
   weapons: { label: 'weapons named', from: 'the reading\'s weapon slots (27 in volume 1)' },
@@ -37,58 +37,62 @@ export const SIGNALS = {
 };
 
 /**
- * The summary faculties: work-model readers of the text. `always`: on for every scene, beat or window; else fired by a
+ * The pre-film casts: work-model readers of the text. `always`: on for every scene, beat or window; else fired by a
  * mixed index of its block `types`, its sentence `kinds` and its `signals` (firing()). `writes`: the claims it puts on the
  * scene board.
  */
-export const FACULTIES = {
-  frame: { label: 'Scene frame', always: 'scene', status: 'partial', code: 'world-engine/director/director.mjs (M4: the cast from the scene digest, gathered in the set; beats from gate.mjs)', writes: ['the set as a path down the place tree', 'who is on stage', 'how it follows the scene before', 'the beats'] },
-  // The user, 2026-11-03: "an implicit or scale faculty of summarization pass the zoom and view angle recommendation to
+export const CASTS = {
+  firstAD: { label: '1st AD', always: 'scene', status: 'partial', code: 'world-engine/director/director.mjs (M4: the cast from the scene digest, gathered in the set; beats from gate.mjs)', writes: ['the set as a path down the place tree', 'who is on stage', 'how it follows the scene before', 'the beats'] },
+  // The user, 2026-11-03: "an implicit or scale cast of summarization pass the zoom and view angle recommendation to
   // it's associated directors and the directors camera man. Only directors who records actions need the zoom parameter."
-  scale: { label: 'Scale and view', always: 'beat', status: 'built', code: 'world-engine/digest/digest.mjs scaleBeats (M5); the director sizes the action directors\' pictures, reach and camera by it', writes: ['the zoom: how many metres across the beat plays (a room ~15 m, a street ~80 m, a block ~300 m, a district ~1.5 km)', 'the view angle: eye level, over a shoulder, high, top-down, low looking up, aerial', 'whose eyes or which landmark it is seen from', 'how far its moves reach'] },
-  generalist: { label: 'Generalist', always: 'window', status: 'built', code: 'world-engine/digest/digest.mjs', writes: ['stated moves (graded)', 'facts, stated and implied', 'items', 'talk kinds', 'breaks'] },
-  conversation: { label: 'Conversation and blocking', types: ['routine', 'mediated'], kinds: ['spoken'], status: 'built', code: 'world-engine/digest/digest.mjs talkOf (M8)', writes: ['who talks with whom and through what', 'formations: beside, across a table, a ring, two sides of a door', 'attention: who looks at whom'] },
-  feeling: { label: 'Inner state', types: ['interior', 'routine'], kinds: ['thought'], status: 'proposed', writes: ['each person\'s emotional state as it changes (a distribution)', 'intent: what they want next', 'bonds: who they are to each other'] },
-  journeys: { label: 'Journeys', types: ['traversal'], kinds: ['action'], signals: ['scaleJump'], status: 'built', code: 'world-engine/digest/digest.mjs journeysOf (M6)', writes: ['from, via and to as places of the tree', 'the manner (alleys, up a wall, leaps, carried)', 'distance and duration'] },
-  choreography: { label: 'Choreography', types: ['confrontation', 'catastrophe'], kinds: ['action'], status: 'built', code: 'world-engine/digest/digest.mjs exchangesOf (M7)', writes: ['exchanges: attacker, target, attack, outcome', 'knock-backs, dodges, throws', 'what breaks and how wide'] },
-  ambience: { label: 'Ambience', types: ['establishing'], kinds: ['environment'], signals: ['crowds'], status: 'built', writes: ['the crowd as a field of the place (M9, world-engine/crowd/field.mjs): its size and state (milling, flowing, gathering, alarmed, gone), its focus; hazards from the fight; drag on the characters (L20)', 'weather, light, mood (not yet)', 'set dressing (not yet)'] },
-  props: { label: 'Props and vehicles', types: [], kinds: ['action'], signals: ['vehicles', 'weapons'], status: 'partial', code: 'world-engine/digest/digest.mjs (items)', writes: ['vehicles: kind, who drives or rides', 'weapons: kind, who holds them', 'things held, thrown, broken'] },
-  setting: { label: 'Set description', types: ['establishing'], kinds: ['environment', 'fact'], signals: ['buildings'], status: 'proposed', writes: ['a building\'s look, floors and uses (a 70-floor tower: mall, offices, flats)', 'a room\'s make-up (a container bar, a thick-doored cell)', 'changes to them'] },
+  cinematographer: { label: 'Cinematographer', always: 'beat', status: 'built', code: 'world-engine/digest/digest.mjs scaleBeats (M5); the director sizes the action directors\' pictures, reach and camera by it', writes: ['the zoom: how many metres across the beat plays (a room ~15 m, a street ~80 m, a block ~300 m, a district ~1.5 km)', 'the view angle: eye level, over a shoulder, high, top-down, low looking up, aerial', 'whose eyes or which landmark it is seen from', 'how far its moves reach'] },
+  scriptSupervisor: { label: 'Script supervisor', always: 'window', status: 'built', code: 'world-engine/digest/digest.mjs', writes: ['stated moves (graded)', 'facts, stated and implied', 'items', 'talk kinds', 'breaks'] },
+  dialogueCoverage: { label: 'Dialogue coverage', types: ['routine', 'mediated'], kinds: ['spoken'], status: 'built', code: 'world-engine/digest/digest.mjs talkOf (M8)', writes: ['who talks with whom and through what', 'formations: beside, across a table, a ring, two sides of a door', 'attention: who looks at whom'] },
+  actingCoach: { label: 'Acting coach', types: ['interior', 'routine'], kinds: ['thought'], status: 'proposed', writes: ['each person\'s emotional state as it changes (a distribution)', 'intent: what they want next', 'bonds: who they are to each other'] },
+  blocking: { label: 'Blocking', types: ['traversal'], kinds: ['action'], signals: ['scaleJump'], status: 'built', code: 'world-engine/digest/digest.mjs journeysOf (M6)', writes: ['from, via and to as places of the tree', 'the manner (alleys, up a wall, leaps, carried)', 'distance and duration'] },
+  actionDirector: { label: 'Action director', types: ['confrontation', 'catastrophe'], kinds: ['action'], status: 'built', code: 'world-engine/digest/digest.mjs exchangesOf (M7)', writes: ['exchanges: attacker, target, attack, outcome', 'knock-backs, dodges, throws', 'what breaks and how wide'] },
+  backgroundAction: { label: 'Background action', types: ['establishing'], kinds: ['environment'], signals: ['crowds'], status: 'built', writes: ['the crowd as a field of the place (M9, world-engine/crowd/field.mjs): its size and state (milling, flowing, gathering, alarmed, gone), its focus; hazards from the fight; drag on the characters (L20)', 'weather, light, mood (not yet)', 'set dressing (not yet)'] },
+  propMaster: { label: 'Prop master', types: [], kinds: ['action'], signals: ['vehicles', 'weapons'], status: 'partial', code: 'world-engine/digest/digest.mjs (items)', writes: ['vehicles: kind, who drives or rides', 'weapons: kind, who holds them', 'things held, thrown, broken'] },
+  setDresser: { label: 'Set dresser', types: ['establishing'], kinds: ['environment', 'fact'], signals: ['buildings'], status: 'proposed', writes: ['a building\'s look, floors and uses (a 70-floor tower: mall, offices, flats)', 'a room\'s make-up (a container bar, a thick-doored cell)', 'changes to them'] },
 };
+/** The old cast ids (readings made before 2026-11-04 keep them): each one's pre-film cast. */
+export const CAST_OF_FACULTY = { frame: 'firstAD', scale: 'cinematographer', generalist: 'scriptSupervisor', conversation: 'dialogueCoverage', feeling: 'actingCoach', journeys: 'blocking', choreography: 'actionDirector', ambience: 'backgroundAction', props: 'propMaster', setting: 'setDresser' };
+/** A reading step's notes with the cast ids, from either file (prefilm.json, or an older casts.json). */
+export const prefilmOf = json => (json ? { ...json, units: Object.fromEntries(Object.entries(json.units ?? {}).map(([id, unit]) => [id, Object.fromEntries(Object.entries(unit).map(([key, value]) => [CAST_OF_FACULTY[key] ?? key, value]))])) } : null);
 
 /**
  * The specialist directors, of three kinds (the user, 2026-11-03):
  * - `stage`: the stage manager, always on: the set, who is on stage, who leads each beat, where the cuts fall;
  * - `action`: directors who record action (where people go, how they fight, how far they travel). Only they read the
- *   scale faculty: each has a camera operator framing its beats at the zoom and view angle the faculty recommends, and Jev's
+ *   scale cast: each has a camera operator framing its beats at the zoom and view angle the cast recommends, and Jev's
  *   pictures for its questions are framed the same way. One of them leads each beat;
  * - `state`: directors who keep what rides with people and things, not where they move: a character's feelings, a vehicle
  *   or weapon, a building. They need no zoom and hold no camera; their questions are asked on the text and on fixed
  *   reference pictures (a model sheet, a building's elevation and plan). Things in motion are played by the beat's action
  *   director, at its zoom.
- * `reads`: the faculties whose claims it plays, its own first; `scale`: an action director's zoom range in metres
+ * `reads`: the casts whose claims it plays, its own first; `scale`: an action director's zoom range in metres
  * [near, far]; `asks`: its Jev questions (built: a mode in src/v2/context, proposed: to be written); `tools`: its means.
  */
 export const DIRECTORS = {
-  stage: { kind: 'stage', label: 'Stage manager', role: 'the set, who is on stage, which action director leads each beat and where the cuts fall', reads: ['frame', 'generalist'], always: true, status: 'partial',
+  stage: { kind: 'stage', label: 'Stage manager', role: 'the set, who is on stage, which action director leads each beat and where the cuts fall', reads: ['firstAD', 'scriptSupervisor'], always: true, status: 'partial',
     asks: [{ name: 'spawnSpotMode', status: 'built', what: 'where each person starts in the set' }, { name: 'sceneGoesOnMode', status: 'built', what: 'whether the scene carries straight on' }, { name: 'the set on a map of the place tree', status: 'proposed' }],
     tools: ['spawning', 'the place tree', 'the smoother', 'the gate (lead)'] },
-  routine: { kind: 'action', label: 'Routine director', role: 'inside a room or on a street corner: positions, gaze, who talks to whom and from where', reads: ['conversation', 'scale', 'generalist'], scale: [2, 15], camera: 'medium and close at the recommended angle; a room cut away', status: 'partial',
+  routine: { kind: 'action', label: 'Routine director', role: 'inside a room or on a street corner: positions, gaze, who talks to whom and from where', reads: ['dialogueCoverage', 'cinematographer', 'scriptSupervisor'], scale: [2, 15], camera: 'medium and close at the recommended angle; a room cut away', status: 'partial',
     asks: [{ name: 'dialogueKindMode', status: 'built', what: 'how a talk happens (face to face, group, remote, public)' }, { name: 'moveSpotMode', status: 'built', what: 'a spot near the speaker' }, { name: 'formation on a room plan (who sits where, facing whom)', status: 'proposed' }, { name: 'who is addressed, from the faces turned', status: 'proposed' }],
     tools: ['rooms and doors of the building skeleton', 'talk rings (L6)'] },
-  mega: { kind: 'action', label: 'Mega-scene director', role: 'traversals and catastrophes seen from far: routes across blocks, leaps between towers, the ground splitting, crowds flowing', reads: ['journeys', 'scale', 'ambience', 'choreography'], scale: [100, 2000], camera: 'wide and aerial at the recommended angle; follows a journey whole', status: 'partial',
+  mega: { kind: 'action', label: 'Mega-scene director', role: 'traversals and catastrophes seen from far: routes across blocks, leaps between towers, the ground splitting, crowds flowing', reads: ['blocking', 'cinematographer', 'backgroundAction', 'actionDirector'], scale: [100, 2000], camera: 'wide and aerial at the recommended angle; follows a journey whole', status: 'partial',
     asks: [{ name: 'moveDirectionMode at the journey\'s zoom', status: 'partial', what: 'the arrows, framed wide' }, { name: 'a landmark on a top-down map (lettered towers, bridges, stations)', status: 'built', what: 'where a journey goes when no place or label names it (M6)' }, { name: 'a route among the place graph\'s routes', status: 'proposed' }, { name: 'the extent of a catastrophe (an area on the map)', status: 'proposed' }, { name: 'which way a crowd flows', status: 'proposed' }],
     tools: ['map routes on the place graph', 'the terrain', 'the crowd field', 'percolation damage'] },
-  combat: { kind: 'action', label: 'Combat director', role: 'a fight, exchange by exchange: the kind and shape of each attack, who it hits, what it breaks', reads: ['choreography', 'scale', 'generalist'], scale: [5, 60], camera: 'close to medium at the recommended angle, following the exchange; wider for a blast', status: 'partial',
+  combat: { kind: 'action', label: 'Combat director', role: 'a fight, exchange by exchange: the kind and shape of each attack, who it hits, what it breaks', reads: ['actionDirector', 'cinematographer', 'scriptSupervisor'], scale: [5, 60], camera: 'close to medium at the recommended angle, following the exchange; wider for a blast', status: 'partial',
     asks: [{ name: 'the hit spot and size (red spheres)', status: 'built', what: 'where a blast lands and how big' }, { name: 'attack kind: hand to hand, grapple, weapon, ranged power, beam, blast, thrown object, the ground itself', status: 'built', what: 'where the reader is unsure (M7)' }, { name: 'attack shape: point, line or beam, cone, sphere, wave along the ground', status: 'built', what: 'where the reader is unsure (M7)' }, { name: 'outcome: hit, dodged, blocked, cancelled; how far knocked back', status: 'partial', what: 'the outcome asked where the reader is unsure; the distance the reader\'s (M7)' }],
     tools: ['hitSphere and percolation', 'graded moves', 'destruction (L13)'] },
-  character: { kind: 'state', label: 'Character director', role: 'what rides with a person: how they feel, what they want, who they are to each other', reads: ['feeling', 'generalist'], status: 'proposed',
+  character: { kind: 'state', label: 'Character director', role: 'what rides with a person: how they feel, what they want, who they are to each other', reads: ['actingCoach', 'scriptSupervisor'], status: 'proposed',
     asks: [{ name: 'emotional state as a score (Jev\'s score primitive)', status: 'proposed' }, { name: 'intent: what they want next', status: 'proposed' }, { name: 'a bond changing (closer, colder, a first meeting)', status: 'proposed' }],
     tools: ['the ontology\'s state fold (additive deltas)', 'the smoother, later'] },
-  transport: { kind: 'state', label: 'Transport specialist', role: 'vehicles and weapons: what they are, who drives, rides or holds them, whose they are; their motion is played by the beat\'s action director', reads: ['props', 'generalist'], status: 'proposed',
+  transport: { kind: 'state', label: 'Transport specialist', role: 'vehicles and weapons: what they are, who drives, rides or holds them, whose they are; their motion is played by the beat\'s action director', reads: ['propMaster', 'scriptSupervisor'], status: 'proposed',
     asks: [{ name: 'which model a vehicle or weapon is (on the model packs\' sheets)', status: 'proposed' }, { name: 'who rides, drives or holds it', status: 'proposed' }, { name: 'whose it is', status: 'proposed' }],
     tools: ['model packs (CC0)', 'things on the page'] },
-  architect: { kind: 'state', label: 'Architect', role: 'a building borrowed from the world made the one the text describes: its look, floors, uses, rooms and what changes in it', reads: ['setting', 'generalist'], status: 'partial',
+  architect: { kind: 'state', label: 'Architect', role: 'a building borrowed from the world made the one the text describes: its look, floors, uses, rooms and what changes in it', reads: ['setDresser', 'scriptSupervisor'], status: 'partial',
     asks: [{ name: 'terrainHeightMode and terrainPartMode', status: 'built', what: 'a building\'s height and what it belongs to' }, { name: 'its look among the model packs and themes (on its elevation)', status: 'proposed' }, { name: 'floors and uses (the mall below, offices, flats, the rooftop deck)', status: 'proposed' }, { name: 'a room\'s make-up and furniture (on its plan)', status: 'proposed' }],
     tools: ['building skeletons', 'architecture models', 'model packs', 'building EM'] },
 };
@@ -155,7 +159,7 @@ export const STATE = {
     { state: 'Positions in the room', log: 'position', laws: ['L1', 'L10', 'L11'], smoothed: true, to: 'stateChange.location', also: 'relation.PART_OF', gate: 'applied', status: 'partial', note: 'today at the building; a room becomes a Location inside it' },
     { state: 'Who talks with whom, through what', log: 'meeting', laws: ['L6'], to: 'relation.SPEAKS_TO', also: 'scene.turns', gate: 'held', status: 'partial', what: 'the channel sets the card\'s talk kind (M8); L6 respects a remote one', note: 'speakers are off for now; the channel (face to face, phone, door) a property of the relation' },
     { state: 'Formations and attention', log: 'meeting', laws: ['L6'], to: 'relation.ADDRESSES', gate: 'held', status: 'partial', note: 'formations played by rule (M8); attention read, not yet drawn' },
-    { state: 'Its camera', what: 'the zoom and view angle the scale faculty recommends, as framed', log: null, laws: [], to: null, gate: 'run', status: 'proposed' },
+    { state: 'Its camera', what: 'the zoom and view angle the scale cast recommends, as framed', log: null, laws: [], to: null, gate: 'run', status: 'proposed' },
   ],
   character: [
     { state: 'Feelings', log: 'feeling', laws: [], smoothed: true, to: 'stateChange.emotions', gate: 'held', status: 'proposed', note: 'additive deltas clamped to [-1, 1] (the ontology\'s rule); applied once audits show them right' },
@@ -165,7 +169,7 @@ export const STATE = {
   mega: [
     { state: 'Journeys', what: 'routes, stops, manner', log: 'position', laws: ['L5', 'L10', 'L12'], smoothed: true, to: 'stateChange.location', also: 'event.movement', gate: 'applied', status: 'partial', note: 'each stop a location; the journey an event, held' },
     { state: 'A catastrophe\'s extent', log: 'damage', laws: ['L13'], to: 'entity.Location.damage', also: 'event.conflict', gate: 'applied', status: 'partial' },
-    { state: 'Its camera', what: 'the zoom and view angle the scale faculty recommends, as framed', log: null, laws: [], to: null, gate: 'run', status: 'proposed' },
+    { state: 'Its camera', what: 'the zoom and view angle the scale cast recommends, as framed', log: null, laws: [], to: null, gate: 'run', status: 'proposed' },
     { state: 'Crowds', log: 'crowd', laws: [], to: 'entity.Organization.members', also: 'relation.MEMBER_OF', gate: 'held', status: 'proposed', note: 'a named crowd (the student column) an Organization its people are members of; an unnamed density stays with the run' },
   ],
   combat: [
@@ -174,7 +178,7 @@ export const STATE = {
     { state: 'Injury and condition', what: 'hurt, unconscious, bound', log: 'condition', laws: [], to: 'stateChange.conditionsAdd', also: 'stateChange.conditionsRemove', gate: 'held', status: 'partial', note: 'the field added 2026-11-03 (set add/remove, as possessions)' },
     { state: 'Abilities shown', log: 'exchange', laws: ['L12'], to: 'entity.Character.abilities', gate: 'held', status: 'proposed' },
     { state: 'What breaks', log: 'damage', laws: ['L13'], to: 'entity.Location.damage', gate: 'applied', status: 'built' },
-    { state: 'Its camera', what: 'the zoom and view angle the scale faculty recommends, as framed', log: null, laws: [], to: null, gate: 'run', status: 'partial' },
+    { state: 'Its camera', what: 'the zoom and view angle the scale cast recommends, as framed', log: null, laws: [], to: null, gate: 'run', status: 'partial' },
   ],
   transport: [
     { state: 'Vehicles and weapons', log: 'item', laws: [], to: 'entity.Item.class', gate: 'held', status: 'proposed', note: 'new identities: held, as EM\'s are' },
@@ -196,20 +200,20 @@ export const target = to => { if (!to) return null; const [base, a, b] = to.spli
 /** Problems the registry must not have: references to nothing, a type nobody listens to, a director with no reader. */
 export function registryProblems() {
   const out = [];
-  for (const [id, faculty] of Object.entries(FACULTIES)) {
-    for (const type of faculty.types ?? []) if (!BLOCK_TYPES[type]) out.push(`faculty ${id}: no block type ${type}`);
-    for (const signal of faculty.signals ?? []) if (!SIGNALS[signal]) out.push(`faculty ${id}: no signal ${signal}`);
-    for (const kind of faculty.kinds ?? []) if (!SENTENCE_KINDS.includes(kind)) out.push(`faculty ${id}: no sentence kind ${kind}`);
-    if (!faculty.always && !(faculty.types?.length || faculty.signals?.length)) out.push(`faculty ${id}: nothing fires it`);
-    if (!Object.values(DIRECTORS).some(director => director.reads.includes(id))) out.push(`faculty ${id}: no director reads it`);
+  for (const [id, cast] of Object.entries(CASTS)) {
+    for (const type of cast.types ?? []) if (!BLOCK_TYPES[type]) out.push(`cast ${id}: no block type ${type}`);
+    for (const signal of cast.signals ?? []) if (!SIGNALS[signal]) out.push(`cast ${id}: no signal ${signal}`);
+    for (const kind of cast.kinds ?? []) if (!SENTENCE_KINDS.includes(kind)) out.push(`cast ${id}: no sentence kind ${kind}`);
+    if (!cast.always && !(cast.types?.length || cast.signals?.length)) out.push(`cast ${id}: nothing fires it`);
+    if (!Object.values(DIRECTORS).some(director => director.reads.includes(id))) out.push(`cast ${id}: no director reads it`);
   }
-  for (const type of Object.keys(BLOCK_TYPES)) if (!QUIET.includes(type) && !Object.values(FACULTIES).some(faculty => faculty.types?.includes(type))) out.push(`block type ${type}: fires nothing and is not one of the quiet types`);
-  for (const [id, director] of Object.entries(DIRECTORS)) for (const faculty of director.reads) if (!FACULTIES[faculty]) out.push(`director ${id}: no faculty ${faculty}`);
+  for (const type of Object.keys(BLOCK_TYPES)) if (!QUIET.includes(type) && !Object.values(CASTS).some(cast => cast.types?.includes(type))) out.push(`block type ${type}: fires nothing and is not one of the quiet types`);
+  for (const [id, director] of Object.entries(DIRECTORS)) for (const cast of director.reads) if (!CASTS[cast]) out.push(`director ${id}: no cast ${cast}`);
   for (const id of Object.keys(DIRECTORS)) if (!STATE[id]?.length) out.push(`director ${id}: no state`);
   // Only those who record action read the zoom, and hold a camera and a zoom range.
   for (const [id, director] of Object.entries(DIRECTORS)) {
     const action = director.kind === 'action';
-    if (action !== director.reads.includes('scale')) out.push(`director ${id}: ${action ? 'records action but does not read' : 'reads'} the scale faculty`);
+    if (action !== director.reads.includes('cinematographer')) out.push(`director ${id}: ${action ? 'records action but does not read' : 'reads'} the scale cast`);
     if (action !== !!director.camera || action !== !!director.scale) out.push(`director ${id}: ${action ? 'an action director needs' : 'only action directors have'} a camera and a zoom range`);
     if (!['stage', 'action', 'state'].includes(director.kind)) out.push(`director ${id}: no kind`);
   }
@@ -224,14 +228,14 @@ export function registryProblems() {
   return out;
 }
 
-/** How much each part of the evidence weighs in a faculty's mixed index, before each window's own scores scale it. */
+/** How much each part of the evidence weighs in a cast's mixed index, before each window's own scores scale it. */
 export const MIX = { block: 1, sentence: 0.6, signal: 0.6 };
 
 /**
  * The gate (A4; the user, 2026-11-03: "we keep top distributions and scores for blocks and sentences, and we use them all
- * for faculty triggering calculates on a score based mixed index"). `windows` in reading order, each
+ * for cast triggering calculates on a score based mixed index"). `windows` in reading order, each
  *   { block: { distribution: { type: p }, confidence }, sentences: [{ distribution: { kind: p }, confidence }], signals: { signal: count } }
- * (a window's top candidates are kept beside, for the record; the index reads the whole distributions). For a faculty, in
+ * (a window's top candidates are kept beside, for the record; the index reads the whole distributions). For a cast, in
  * each window, three parts:
  *   block    = Σ over its types   P(type | block)
  *   sentence = Σ over its kinds   P(kind | sentence), averaged over the window's sentences weighted by their confidence
@@ -240,12 +244,12 @@ export const MIX = { block: 1, sentence: 0.6, signal: 0.6 };
  * block's confidence, the sentences' mean confidence, 1 for signals):
  *   index = Σ aᵢ·zᵢ ÷ √Σ aᵢ²
  * so an unsure block leans on its sentences and the reverse. It turns on at kOn, off below kOff, stays on at least
- * `minimum` windows, and reads a margin of `margin` windows either side. Returns { faculty: boolean[] } and, as `index`, each
- * faculty's index per window.
+ * `minimum` windows, and reads a margin of `margin` windows either side. Returns { cast: boolean[] } and, as `index`, each
+ * cast's index per window.
  */
 /**
- * The firing settings by window (the user, 2026-11-03, tested on real faculty reads of scenes 1–13,
- * experiments/v2/faculty-firing.mjs): on 12-sentence blocks, on at 1.5, off below 0.5, at least 2, a margin of 1; on
+ * The firing settings by window (the user, 2026-11-03, tested on real cast reads of scenes 1–13,
+ * experiments/v2/cast-firing.mjs): on 12-sentence blocks, on at 1.5, off below 0.5, at least 2, a margin of 1; on
  * segments (M14), above the stretches' average with no hysteresis or margin (F1 0.52 against 0.33).
  */
 export const FIRING = { block: { kOn: 1.5, kOff: 0.5, minimum: 2, margin: 1 }, segment: { kOn: 0, kOff: 0, minimum: 0, margin: 0 } };
@@ -253,18 +257,18 @@ export function firing(windows, { kOn = 1.5, kOff = 0.5, minimum = 2, margin = 1
   const most = Object.fromEntries(Object.keys(SIGNALS).map(signal => [signal, Math.max(0, ...windows.map(window => window.signals?.[signal] ?? 0))]));
   const stats = values => { const mu = values.reduce((sum, value) => sum + value, 0) / (values.length || 1), sd = Math.sqrt(values.reduce((sum, value) => sum + (value - mu) ** 2, 0) / (values.length || 1)); return value => (sd ? (value - mu) / sd : 0); };
   const out = { index: {} };
-  for (const [id, faculty] of Object.entries(FACULTIES)) {
-    if (faculty.always) { out[id] = windows.map(() => true); continue; }
+  for (const [id, cast] of Object.entries(CASTS)) {
+    if (cast.always) { out[id] = windows.map(() => true); continue; }
     const parts = windows.map(window => {
       const sentences = window.sentences ?? [], trust = sentences.reduce((sum, sentence) => sum + (sentence.confidence ?? 1), 0);
       return {
-        block: (faculty.types ?? []).reduce((sum, type) => sum + (window.block?.distribution?.[type] ?? 0), 0),
-        sentence: trust ? sentences.reduce((sum, sentence) => sum + (sentence.confidence ?? 1) * (faculty.kinds ?? []).reduce((share, kind) => share + (sentence.distribution?.[kind] ?? 0), 0), 0) / trust : 0,
-        signal: (faculty.signals ?? []).reduce((sum, signal) => sum + (most[signal] ? (window.signals?.[signal] ?? 0) / most[signal] : 0), 0),
+        block: (cast.types ?? []).reduce((sum, type) => sum + (window.block?.distribution?.[type] ?? 0), 0),
+        sentence: trust ? sentences.reduce((sum, sentence) => sum + (sentence.confidence ?? 1) * (cast.kinds ?? []).reduce((share, kind) => share + (sentence.distribution?.[kind] ?? 0), 0), 0) / trust : 0,
+        signal: (cast.signals ?? []).reduce((sum, signal) => sum + (most[signal] ? (window.signals?.[signal] ?? 0) / most[signal] : 0), 0),
         scores: { block: window.block ? window.block.confidence ?? 1 : 0, sentence: sentences.length ? trust / sentences.length : 0, signal: 1 },
       };
     });
-    const used = ['block', 'sentence', 'signal'].filter(part => (part === 'block' ? faculty.types : part === 'sentence' ? faculty.kinds : faculty.signals)?.length);
+    const used = ['block', 'sentence', 'signal'].filter(part => (part === 'block' ? cast.types : part === 'sentence' ? cast.kinds : cast.signals)?.length);
     const z = Object.fromEntries(used.map(part => [part, stats(parts.map(entry => entry[part]))]));
     const index = parts.map(entry => { let top = 0, under = 0; for (const part of used) { const a = MIX[part] * entry.scores[part]; top += a * z[part](entry[part]); under += a * a; } return under ? top / Math.sqrt(under) : 0; });
     const on = new Array(windows.length).fill(false);
@@ -278,16 +282,16 @@ export function firing(windows, { kOn = 1.5, kOff = 0.5, minimum = 2, margin = 1
 
 
 /**
- * Who leads a window's beat: of the action directors, the one whose fired faculties weigh most there (its own faculty
+ * Who leads a window's beat: of the action directors, the one whose fired casts weigh most there (its own cast
  * weighs 2, the others it reads 1; the always-on ones nothing); with none fired, the routine director. A fight alone is
  * the combat director's; a fight during a chase the mega-scene director's, the combat director co-directing. The lead's
  * camera operator holds the camera; co-directors (action or state) answer their own questions. `type`: the window's
- * smoothed block type; the director whose own faculty listens for it weighs one more (a confrontation is the combat
+ * smoothed block type; the director whose own cast listens for it weighs one more (a confrontation is the combat
  * director's even where its action sentences fire journeys too).
  */
 export function lead(fired, n, type = null) {
-  const weight = id => DIRECTORS[id].reads.reduce((sum, faculty, k) => sum + (!FACULTIES[faculty].always && fired[faculty]?.[n] ? (k === 0 ? 2 : 1) : 0), 0) + (type && FACULTIES[DIRECTORS[id].reads[0]]?.types?.includes(type) ? 1 : 0);
-  // Equal weights: the one whose own faculty stands higher on its mixed index there (firing()'s `index`), so a faculty
+  const weight = id => DIRECTORS[id].reads.reduce((sum, cast, k) => sum + (!CASTS[cast].always && fired[cast]?.[n] ? (k === 0 ? 2 : 1) : 0), 0) + (type && CASTS[DIRECTORS[id].reads[0]]?.types?.includes(type) ? 1 : 0);
+  // Equal weights: the one whose own cast stands higher on its mixed index there (firing()'s `index`), so a cast
   // two directors read is not counted twice.
   const strength = id => { const own = DIRECTORS[id].reads[0]; return fired[own]?.[n] ? fired.index?.[own]?.[n] ?? 0 : -Infinity; };
   const ranked = Object.keys(DIRECTORS).filter(id => DIRECTORS[id].kind !== 'stage').map(id => ({ id, weight: weight(id), strength: strength(id), action: DIRECTORS[id].kind === 'action' })).filter(entry => entry.weight > 0).sort((a, b) => b.weight - a.weight || b.strength - a.strength);

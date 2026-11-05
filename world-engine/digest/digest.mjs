@@ -190,7 +190,7 @@ export async function sceneWindows(work, { scene, line, kind, people, place = ''
  * The scenes of a run digested in reading order, the memory carried from one to the next; `peopleOf(scene)` the people
  * for each, `onScene(result)` called as each is done. Scenes in `done` (a scene id → its digest) are kept, not asked again.
  *
- * `ahead` (a work model, the faculties step's): only the summaries wait on each other (each takes the memory of the one
+ * `ahead` (a work model, the pre-film casts step's): only the summaries wait on each other (each takes the memory of the one
  * before), so a scene's windows are read through `ahead` while the next scene is summarized, and `onSummary(scene,
  * digest)` lets the caller start what needs only the summary. `onScene` then comes in the order scenes finish. Without
  * it (the director, which writes its file at each scene), one scene after another as before.
@@ -216,7 +216,7 @@ export async function digestScenes(work, { scenes, line, kind, peopleOf, placeOf
 }
 
 /**
- * At most `at` requests at once through every work model it wraps (one shared lane): the faculties step's windows and
+ * At most `at` requests at once through every work model it wraps (one shared lane): the pre-film casts step's windows and
  * specialists, all started as soon as they can be, without flooding the work model.
  */
 export function limiter(at = 12) {
@@ -269,7 +269,7 @@ export async function scaleBeats(work, { scene, beats, line, kind, people, diges
   return out;
 }
 
-// ── Journeys (M6): read where the journeys faculty fires (gate.mjs), one request a span ─────────────────────────────
+// ── Journeys (M6): read where the journeys cast fires (gate.mjs), one request a span ─────────────────────────────
 export const MANNERS = ['walk', 'run', 'zigzag through alleys', 'up or along a wall', 'leaps between roofs', 'flight', 'carried', 'a vehicle', 'an underground passage'];
 export const JOURNEY_SYSTEM = 'You read a passage of a light novel being staged in a 3D city and trace each journey in it across the city\'s places: who goes, from where, through which places, to where, how. Use the place ids given where a place is one of them; else say the place in words as the text names it (a tower, a bridge, a station). Reply with JSON only.';
 export const JOURNEY_SHAPE = { journeys: [{ sentence: '<sentence id where the journey ends or is told>', who: '<person id>', from: '<place id or words>', via: ['<place id or words>'], to: '<place id or words>', manner: MANNERS.join(' | '), distance: { ...REFERENT_SHAPE, referent: REFERENTS.join(' | ') + ': how far, said by what it spans' }, duration: 'words', sure: '0..1' }] };
@@ -300,7 +300,7 @@ export async function journeysOf(work, { scene, spans, line, kind, people, place
   return out.flat();
 }
 
-// ── Ambience (M9): the crowd of a place, read where the ambience faculty fires, one request a span ─────────────────────
+// ── Ambience (M9): the crowd of a place, read where the ambience cast fires, one request a span ─────────────────────
 // The crowd is a field of the place (world-engine/crowd/field.mjs); the director gives it a state, never destinations.
 export const CROWD_SIZES = ['none', 'few', 'some', 'many', 'packed'];
 export const CROWD_STATES = ['milling', 'flowing', 'gathering', 'alarmed', 'gone'];
@@ -333,7 +333,7 @@ export async function crowdOf(work, { scene, spans, line, kind, people, digest =
   return out.flat();
 }
 
-// ── Choreography (M7): read where the choreography faculty fires (fights, catastrophes), one request a span ───────────
+// ── Choreography (M7): read where the choreography cast fires (fights, catastrophes), one request a span ───────────
 export const ATTACKS = ['hand to hand', 'grapple or throw', 'blade or blunt weapon', 'firearm', 'ranged power', 'beam or laser', 'area blast', 'thrown object', 'the ground or a building itself', 'an ability that cancels'];
 export const SHAPES = ['point', 'line or beam', 'cone', 'sphere', 'ring', 'wave along the ground', 'rain from above'];
 export const RANGES = ['touch', 'close (under 3 m)', 'near (under 15 m)', 'far (under 100 m)', 'very far'];
@@ -369,7 +369,7 @@ export async function exchangesOf(work, { scene, spans, line, kind, people, dige
   return out.flat();
 }
 
-// ── Conversation and blocking (M8): read where the conversation faculty fires, one request a span ─────────────────────
+// ── Conversation and blocking (M8): read where the conversation cast fires, one request a span ─────────────────────
 export const CHANNELS = { 'face to face': 'live', 'a group together': 'group', phone: 'remote', 'video call': 'remote', message: 'remote', 'through a door or wall': 'remote', 'loudspeaker or broadcast': 'public', telepathy: 'remote', 'a voice from afar': 'remote' };
 export const FORMATIONS = ['beside', 'facing', 'across a table', 'a ring', 'side by side walking', 'behind', 'two sides of a door', 'apart'];
 export const TALK_SYSTEM = 'You read a conversation in a light novel for those staging it: who talks with whom and through what (face to face, a phone, a door), how the people stand (beside each other, facing, across a table, in a ring, walking side by side, two sides of a door), and who looks at whom. Reply with JSON only.';

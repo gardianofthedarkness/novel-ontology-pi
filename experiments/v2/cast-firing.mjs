@@ -1,16 +1,16 @@
-// How faculties should fire, tested on real faculty reads (the user, 2026-11-03): scenes tiled into segments
+// How casts should fire, tested on real cast reads (the user, 2026-11-03): scenes tiled into segments
 // (segment-tiling.mjs), then three stages.
-//   oracle    every built faculty reader (conversation: talkOf, journeys: journeysOf, choreography: exchangesOf) on every
+//   oracle    every built cast reader (conversation: talkOf, journeys: journeysOf, choreography: exchangesOf) on every
 //             stretch, with the work model: what each finds there (items at least MOVE_SURE sure) is where it should
 //             have fired. Paid: work-model requests, cached.
 //   firing    the firing rule (specialists.mjs firing(): the mixed index's z-scores, on at kOn, off below kOff, at least
 //             `minimum` windows, a margin either side) replayed over a grid, the stretches' distributions raw, smoothed or
-//             between, beside a plain rule (fire where the faculty's types hold at least τ); each scored against the
+//             between, beside a plain rule (fire where the cast's types hold at least τ); each scored against the
 //             oracle: recall, precision, F1, the share of stretches read. Nothing paid.
-//   residual  the residual flow of typing: the faculties the best rule fires read their stretches, and what they found
+//   residual  the residual flow of typing: the pre-film casts the best rule fires read their stretches, and what they found
 //             goes into the context of the next type question (one Jev request a scene); the stretches retyped, fired
-//             again, scored again. The faculties' reads are the oracle's (the same reads a fired faculty makes).
-//   node experiments/v2/faculty-firing.mjs <novel-dir> <reading>/v2/data.json <segments.json> --stage oracle|firing|residual [--oracle file] [--grid file] [--out file]
+//             again, scored again. The pre-film casts' reads are the oracle's (the same reads a fired cast makes).
+//   node experiments/v2/cast-firing.mjs <novel-dir> <reading>/v2/data.json <segments.json> --stage oracle|firing|residual [--oracle file] [--grid file] [--out file]
 import { readFile, writeFile } from 'node:fs/promises';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
@@ -19,7 +19,7 @@ import { firing } from '../../world-engine/director/specialists.mjs';
 import { windowsOf } from '../../world-engine/director/gate.mjs';
 
 const repository = resolve(dirname(fileURLToPath(import.meta.url)), '..', '..'), load = path => import(pathToFileURL(join(repository, path)).href);
-const FIRED = ['conversation', 'journeys', 'choreography'], SURE = 0.5;
+const FIRED = ['dialogueCoverage', 'blocking', 'actionDirector'], SURE = 0.5;
 const TYPES = ['routine', 'confrontation', 'traversal', 'mediated', 'interior', 'exposition', 'establishing', 'memory', 'catastrophe'];
 const mean = list => { const out = Object.fromEntries(TYPES.map(type => [type, 0])); for (const dist of list) for (const type of TYPES) out[type] += (dist?.[type] ?? 0) / (list.length || 1); return out; };
 
@@ -40,7 +40,7 @@ export function hysteresis(index, { kOn, kOff, minimum, margin }) {
   return on.map((_, n) => on.slice(Math.max(0, n - margin), n + margin + 1).some(Boolean));
 }
 
-/** Recall, precision, F1 and the share read, of `fired` against where the faculty found something. */
+/** Recall, precision, F1 and the share read, of `fired` against where the cast found something. */
 export function score(fired, found) {
   let hit = 0, firedCount = 0, should = 0;
   fired.forEach((value, n) => { if (value) firedCount++; if (found[n]) should++; if (value && found[n]) hit++; });
@@ -50,7 +50,7 @@ export function score(fired, found) {
 
 if (process.argv[1] === fileURLToPath(import.meta.url)) {
   const { values, positionals: [novelDir, readingPath, segmentsPath] } = parseArgs({ allowPositionals: true, options: { stage: { type: 'string' }, oracle: { type: 'string' }, grid: { type: 'string' }, out: { type: 'string' } } });
-  if (!novelDir || !readingPath || !segmentsPath || !values.stage) { console.error('usage: node experiments/v2/faculty-firing.mjs <novel-dir> <data.json> <segments.json> --stage oracle|firing|residual [--oracle file] [--out file]'); process.exit(2); }
+  if (!novelDir || !readingPath || !segmentsPath || !values.stage) { console.error('usage: node experiments/v2/cast-firing.mjs <novel-dir> <data.json> <segments.json> --stage oracle|firing|residual [--oracle file] [--out file]'); process.exit(2); }
   const reading = JSON.parse(await readFile(readingPath, 'utf8')), segments = JSON.parse(await readFile(segmentsPath, 'utf8'));
   const order = reading.scenes.flatMap(scene => scene.sentences), stretches = stretchesOf(segments, order);
   const oraclePath = resolve(values.oracle ?? join(dirname(resolve(segmentsPath)), 'firing-oracle.json'));
@@ -71,8 +71,8 @@ if (process.argv[1] === fileURLToPath(import.meta.url)) {
       const people = [...(peopleOf.get(stretch.scene) ?? [])].map(id => ({ id, name: names.get(id) ?? id })), common = { scene, spans: [stretch.sentences], line, kind, people, parallel: 1 };
       const [talk, journeys, exchanges] = await Promise.all([DG.talkOf(work, common), DG.journeysOf(work, common), DG.exchangesOf(work, common)]);
       const sure = list => (list ?? []).filter(entry => (entry.sure ?? 1) >= SURE);
-      out.push({ scene: stretch.scene, first: stretch.first, last: stretch.last, found: { conversation: sure(talk?.exchanges).length + sure(talk?.formations).length, journeys: sure(journeys).length, choreography: sure(exchanges).length },
-        items: { conversation: sure(talk?.exchanges).slice(0, 12).map(entry => ({ who: names.get(entry.who) ?? entry.who, with: (entry.with ?? []).map(id => names.get(id) ?? id), channel: entry.channel })), journeys: sure(journeys).map(entry => ({ who: names.get(entry.who) ?? entry.who, to: entry.to, manner: entry.manner })), choreography: sure(exchanges).slice(0, 12).map(entry => ({ attacker: names.get(entry.attacker) ?? entry.attacker, target: names.get(entry.target) ?? entry.target, attack: entry.attack, outcome: entry.outcome })) } });
+      out.push({ scene: stretch.scene, first: stretch.first, last: stretch.last, found: { dialogueCoverage: sure(talk?.exchanges).length + sure(talk?.formations).length, blocking: sure(journeys).length, actionDirector: sure(exchanges).length },
+        items: { dialogueCoverage: sure(talk?.exchanges).slice(0, 12).map(entry => ({ who: names.get(entry.who) ?? entry.who, with: (entry.with ?? []).map(id => names.get(id) ?? id), channel: entry.channel })), blocking: sure(journeys).map(entry => ({ who: names.get(entry.who) ?? entry.who, to: entry.to, manner: entry.manner })), actionDirector: sure(exchanges).slice(0, 12).map(entry => ({ attacker: names.get(entry.attacker) ?? entry.attacker, target: names.get(entry.target) ?? entry.target, attack: entry.attack, outcome: entry.outcome })) } });
     } }));
     const position = new Map(order.map((id, n) => [id, n]));
     out.sort((a, b) => position.get(a.first) - position.get(b.first));
@@ -81,8 +81,10 @@ if (process.argv[1] === fileURLToPath(import.meta.url)) {
   }
 
   const oracle = values.stage === 'oracle' ? null : JSON.parse(await readFile(oraclePath, 'utf8'));
-  const foundOf = id => stretches.map(stretch => (oracle.stretches.find(entry => entry.first === stretch.first)?.found[id] ?? 0) > 0);
-  /** Every rule over the grid for the stretches' distributions `pick` (raw, smoothed, between): each faculty's score. */
+  // An oracle written before the casts were named keeps the old ids (conversation, journeys, choreography).
+  const OLD = { dialogueCoverage: 'conversation', blocking: 'journeys', actionDirector: 'choreography' };
+  const foundOf = id => stretches.map(stretch => { const found = oracle.stretches.find(entry => entry.first === stretch.first)?.found ?? {}; return (found[id] ?? found[OLD[id]] ?? 0) > 0; });
+  /** Every rule over the grid for the stretches' distributions `pick` (raw, smoothed, between): each cast's score. */
   const grid = (pick, distributions = null) => {
     const windows = windowsOf({ ...reading, blocks: stretches.map((stretch, n) => ({ first: stretch.first, last: stretch.last, sentences: stretch.sentences, type: stretch.type, confidence: Math.max(...Object.values((distributions?.[n]) ?? stretch[pick])), distribution: distributions?.[n] ?? stretch[pick] })) });
     const index = firing(windows).index, rows = [];
@@ -97,7 +99,7 @@ if (process.argv[1] === fileURLToPath(import.meta.url)) {
     }
     return { rows, index };
   };
-  const { FACULTIES } = await import('../../world-engine/director/specialists.mjs'), TYPE_OF = Object.fromEntries(FIRED.map(id => [id, FACULTIES[id].types]));
+  const { CASTS } = await import('../../world-engine/director/specialists.mjs'), TYPE_OF = Object.fromEntries(FIRED.map(id => [id, CASTS[id].types]));
 
   if (values.stage === 'firing') {
     const rows = ['raw', 'smoothed', 'between'].flatMap(pick => grid(pick).rows).sort((a, b) => b.f1 - a.f1);
@@ -115,12 +117,12 @@ if (process.argv[1] === fileURLToPath(import.meta.url)) {
     const grids = JSON.parse(await readFile(resolve(values.grid ?? 'firing-grid.json'), 'utf8'));
     const best = grids.rows[0], before = grid(best.pick);
     const fired = Object.fromEntries(FIRED.map(id => [id, best.rule === 'mixed index' ? hysteresis(before.index[id], best) : before.rows.length && stretches.map((stretch, n) => (TYPE_OF[id] ?? []).reduce((sum, type) => sum + (stretch[best.pick][type] ?? 0), 0) >= best.tau)]));
-    // What the fired faculties found in each stretch, in words, for the next type question.
+    // What the fired casts found in each stretch, in words, for the next type question.
     const summary = (stretch, n) => {
       const entry = oracle.stretches.find(row => row.first === stretch.first), parts = [];
-      if (fired.choreography[n]) parts.push(entry.items.choreography.length ? `the fight choreographer read ${entry.found.choreography} exchanges: ${entry.items.choreography.slice(0, 4).map(item => `${item.attacker ?? 'the world'} on ${item.target ?? 'a place'} (${item.attack}, ${item.outcome})`).join('; ')}` : 'the fight choreographer read it and found no blows');
-      if (fired.journeys[n]) parts.push(entry.items.journeys.length ? `the chase unit read ${entry.found.journeys} journeys: ${entry.items.journeys.slice(0, 4).map(item => `${item.who} to ${item.to} (${item.manner})`).join('; ')}` : 'the chase unit read it and found nobody going anywhere');
-      if (fired.conversation[n]) parts.push(entry.items.conversation.length ? `the conversation reader read ${entry.found.conversation} lines or groups: ${[...new Set(entry.items.conversation.map(item => item.channel))].join(', ')}` : 'the conversation reader read it and found no talk');
+      if (fired.actionDirector[n]) parts.push(entry.items.actionDirector.length ? `the fight choreographer read ${entry.found.actionDirector} exchanges: ${entry.items.actionDirector.slice(0, 4).map(item => `${item.attacker ?? 'the world'} on ${item.target ?? 'a place'} (${item.attack}, ${item.outcome})`).join('; ')}` : 'the fight choreographer read it and found no blows');
+      if (fired.blocking[n]) parts.push(entry.items.blocking.length ? `the chase unit read ${entry.found.blocking} journeys: ${entry.items.blocking.slice(0, 4).map(item => `${item.who} to ${item.to} (${item.manner})`).join('; ')}` : 'the chase unit read it and found nobody going anywhere');
+      if (fired.dialogueCoverage[n]) parts.push(entry.items.dialogueCoverage.length ? `the conversation reader read ${entry.found.dialogueCoverage} lines or groups: ${[...new Set(entry.items.dialogueCoverage.map(item => item.channel))].join(', ')}` : 'the conversation reader read it and found no talk');
       return parts.length ? parts.join('. ') : 'no specialist read it';
     };
     const retyped = new Array(stretches.length);

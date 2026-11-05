@@ -5,7 +5,7 @@ import { compose } from "../src/v2/context/engine.js";
 import { moveWhetherMode } from "../src/v2/context/directorModes.js";
 
 const prepared = {
-  generalist: {
+  scriptSupervisor: {
     digest: { summary: "A chase through a station.", where: "a station", people: [{ who: "a", doing: "running", start: "on the platform", end: "on the stairs", holding: [] }] },
     facts: [
       { sentence: "s2", who: "a", kind: "floor", value: "upper", basis: "implied", sure: 0.7 },
@@ -16,8 +16,8 @@ const prepared = {
     moves: [{ sentence: "s3", who: "a", motion: "elsewhere", to: "the stairs", how: "run", basis: "stated", sure: 0.9 }, { sentence: "s4", who: "b", motion: "step", how: "walk", basis: "implied", sure: 0.6 }],
     items: [{ sentence: "s1", item: "a bag", event: "held", who: "a", to: null }],
   },
-  choreography: [{ sentence: "s3", attacker: "b", target: "a", attack: "a kick", range: "near", outcome: "miss", sure: 0.8 }],
-  conversation: { exchanges: [{ sentence: "s3", who: "a", with: ["b"], channel: "phone", sure: 0.9 }], formations: [] },
+  actionDirector: [{ sentence: "s3", attacker: "b", target: "a", attack: "a kick", range: "near", outcome: "miss", sure: 0.8 }],
+  dialogueCoverage: { exchanges: [{ sentence: "s3", who: "a", with: ["b"], channel: "phone", sure: 0.9 }], formations: [] },
 };
 const bag = notesOfUnit("u1", prepared, { heading: { setting: "interior", place: "the station", daytime: "night", confidence: { setting: 0.9, place: 0.7, daytime: 0.6 } }, cuts: [{ id: "cut_1", first: "s1", size: "wide shot", angle: "high", move: "pan", seconds: 4, confidence: 0.6 }] });
 const order = ["s1", "s2", "s3", "s4", "s5", "s6", "s7", "s8", "s9"];

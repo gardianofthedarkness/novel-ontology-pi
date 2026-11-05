@@ -5,7 +5,7 @@ aliases: ["Mega-scene director"]
 kind: "action"
 status: "partial"
 zoom: "100–2 km"
-reads: ["journeys", "scale", "ambience", "choreography"]
+reads: ["blocking", "cinematographer", "backgroundAction", "actionDirector"]
 tags: ["directing/director", "kind/action", "status/partial"]
 ---
 <!-- Written by world-engine/director/directing-vault.mjs from the code; change the code, not this note. -->
@@ -16,14 +16,14 @@ Traversals and catastrophes seen from far: routes across blocks, leaps between t
 
 ## Zoom and camera
 
-Reads the [Scale and view](../faculties/scale.md) faculty: its camera operator frames each beat, and Jev's pictures for its questions, at the recommended zoom and view angle. Zoom range 100–2 km; camera: wide and aerial at the recommended angle; follows a journey whole.
+Reads the [Cinematographer](../casts/cinematographer.md) cast: its camera operator frames each beat, and Jev's pictures for its questions, at the recommended zoom and view angle. Zoom range 100–2 km; camera: wide and aerial at the recommended angle; follows a journey whole.
 
 ## Plays
 
-- [Journeys](../faculties/journeys.md) (its own)
-- [Scale and view](../faculties/scale.md)
-- [Ambience](../faculties/ambience.md)
-- [Choreography](../faculties/choreography.md)
+- [Blocking](../casts/blocking.md) (its own)
+- [Cinematographer](../casts/cinematographer.md)
+- [Background action](../casts/backgroundAction.md)
+- [Action director](../casts/actionDirector.md)
 
 ## How Jev is asked
 
@@ -31,13 +31,13 @@ Reads the [Scale and view](../faculties/scale.md) faculty: its camera operator f
 
 Asked in `src/v2/context/directorModes.ts`, mode `moveDirectionMode` (run here on a sample whose names are placeholders).
 
-**Note**: today framed 16 m across; at the beat's zoom once the scale faculty is in.
+**Note**: today framed 16 m across; at the beat's zoom once the scale cast is in.
 
 **Task**
 
 > In scene 1 (&lt;the place&gt;), the card's lines (card) are being played. &lt;the mover&gt; is the person asked about. &lt;the mover&gt; goes somewhere else in this card. Which way, as the picture "arrows" shows it: one of the lettered arrows out of them (each said by what it points at), or with someone? And how, and which line says so.
 
-**Given**: card, scene, now, digest, pictures, arrows.
+**Given**: card, scene, now, digest, pictures, notes, arrows.
 
 | Key | Kind | Asks | Options |
 |---|---|---|---|
@@ -94,5 +94,5 @@ What it keeps as it plays, and where that lands (the flow and the gates: [Direct
 |---|---|---|---|---|---|
 | Journeys (routes, stops, manner) | `position`, smoothed | L5 travel time; L10 reachable; L12 abilities | StateChange.location + movement event; each stop a location; the journey an event, held | applied | partial |
 | A catastrophe's extent | `damage` | L13 destruction | Location.properties.damage + conflict event | applied | partial |
-| Its camera (the zoom and view angle the scale faculty recommends, as framed) | — | — | the run only | run | proposed |
+| Its camera (the zoom and view angle the scale cast recommends, as framed) | — | — | the run only | run | proposed |
 | Crowds | `crowd` (new) | — | Organization.properties.members + MEMBER_OF relation; a named crowd (the student column) an Organization its people are members of; an unnamed density stays with the run | held | proposed |

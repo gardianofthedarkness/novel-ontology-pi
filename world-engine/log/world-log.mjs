@@ -64,8 +64,8 @@ export function worldLog({ run, record, page, spawn, strands }) {
       if (card?.kind === 'dialogue' && gathered.length) add({ kind: 'meeting', strand, scene: scene.id, card: card.card, parties: [...new Set(gathered.map(move => move.person))], rank: 'ruled', source: 'talk gathers' });
       // The combat director's exchanges and the states they leave (M7): attacker and target, never `who` (the smoother
       // reads `who` as a position's rank).
-      for (const exchange of card?.exchanges ?? []) add({ kind: 'exchange', strand, scene: scene.id, card: card.card, attacker: exchange.attacker, target: exchange.target, attack: exchange.attack, shape: exchange.shape, range: exchange.range, outcome: exchange.outcome, knockback: exchange.knockback, line: exchange.sentence, rank: exchange.by === 'jev' ? 'answered' : 'ruled', source: exchange.by === 'jev' ? 'jev' : 'choreography' });
-      for (const entry of card?.conditions ?? []) add({ kind: 'condition', strand, scene: scene.id, card: card.card, subject: entry.who, condition: entry.condition, line: entry.line, rank: 'ruled', source: 'choreography' });
+      for (const exchange of card?.exchanges ?? []) add({ kind: 'exchange', strand, scene: scene.id, card: card.card, attacker: exchange.attacker, target: exchange.target, attack: exchange.attack, shape: exchange.shape, range: exchange.range, outcome: exchange.outcome, knockback: exchange.knockback, line: exchange.sentence, rank: exchange.by === 'jev' ? 'answered' : 'ruled', source: exchange.by === 'jev' ? 'jev' : 'action director' });
+      for (const entry of card?.conditions ?? []) add({ kind: 'condition', strand, scene: scene.id, card: card.card, subject: entry.who, condition: entry.condition, line: entry.line, rank: 'ruled', source: 'action director' });
       if (event.hit) add({ kind: 'damage', strand, scene: scene.id, card: card?.card ?? event.id, lot: event.hit.lot ?? null, sphere: event.hit.sphere ?? null, strength: event.hit.strength ?? null, rank: 'answered', source: 'blast' });
     });
   }

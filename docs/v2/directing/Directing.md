@@ -7,48 +7,48 @@ tags: ["directing"]
 
 # Directing
 
-The director as readers and specialists (docs/v2/next-steps.md A4–A5). Faculties read the text (the work model); directors decide (Jev). Every note here is written from the code: `world-engine/director/specialists.mjs` and `questions.mjs`. The visual plan with volume 1's density strip and gate preview: [summarizer-faculties.html](../summarizer-faculties.html). The gate over volume 1 (M3): [Gate](Gate.md) and its strip [gate-volume-1.html](gate-volume-1.html). What needs the user's decision: [Decisions needed](Decisions.md). How Jev picks on a map, tested: [Pick test](Pick-test.md).
+The director as readers and specialists (docs/v2/next-steps.md A4–A5). Casts read the text (the work model); directors decide (Jev). Every note here is written from the code: `world-engine/director/specialists.mjs` and `questions.mjs`. The visual plan with volume 1's density strip and gate preview: [summarizer-faculties.html](../summarizer-faculties.html). The gate over volume 1 (M3): [Gate](Gate.md) and its strip [gate-volume-1.html](gate-volume-1.html). What needs the user's decision: [Decisions needed](Decisions.md). How Jev picks on a map, tested: [Pick test](Pick-test.md).
 
-## Faculties
+## Casts
 
-| Faculty | Fired by | Read by | Status |
+| Cast | Fired by | Read by | Status |
 |---|---|---|---|
-| [Scene frame](faculties/frame.md) | always (each scene) | [Stage manager](directors/stage.md) | partial |
-| [Scale and view](faculties/scale.md) | always (each beat) | [Routine director](directors/routine.md), [Mega-scene director](directors/mega.md), [Combat director](directors/combat.md) | built |
-| [Generalist](faculties/generalist.md) | always (each window) | [Stage manager](directors/stage.md), [Routine director](directors/routine.md), [Combat director](directors/combat.md), [Character director](directors/character.md), [Transport specialist](directors/transport.md), [Architect](directors/architect.md) | built |
-| [Conversation and blocking](faculties/conversation.md) | Routine interaction, Mediated exchange, spoken sentences | [Routine director](directors/routine.md) | built |
-| [Inner state](faculties/feeling.md) | Interior flow, Routine interaction, thought sentences | [Character director](directors/character.md) | proposed |
-| [Journeys](faculties/journeys.md) | Pursuit / traversal, action sentences, a jump in scale | [Mega-scene director](directors/mega.md) | built |
-| [Choreography](faculties/choreography.md) | Confrontation, Spectacle / catastrophe, action sentences | [Mega-scene director](directors/mega.md), [Combat director](directors/combat.md) | built |
-| [Ambience](faculties/ambience.md) | Establishing / ambience, environment sentences, crowds named | [Mega-scene director](directors/mega.md) | built |
-| [Props and vehicles](faculties/props.md) | action sentences, vehicles named, weapons named | [Transport specialist](directors/transport.md) | partial |
-| [Set description](faculties/setting.md) | Establishing / ambience, environment sentences, fact sentences, buildings named or described | [Architect](directors/architect.md) | proposed |
+| [1st AD](casts/firstAD.md) | always (each scene) | [Stage manager](directors/stage.md) | partial |
+| [Cinematographer](casts/cinematographer.md) | always (each beat) | [Routine director](directors/routine.md), [Mega-scene director](directors/mega.md), [Combat director](directors/combat.md) | built |
+| [Script supervisor](casts/scriptSupervisor.md) | always (each window) | [Stage manager](directors/stage.md), [Routine director](directors/routine.md), [Combat director](directors/combat.md), [Character director](directors/character.md), [Transport specialist](directors/transport.md), [Architect](directors/architect.md) | built |
+| [Dialogue coverage](casts/dialogueCoverage.md) | Routine interaction, Mediated exchange, spoken sentences | [Routine director](directors/routine.md) | built |
+| [Acting coach](casts/actingCoach.md) | Interior flow, Routine interaction, thought sentences | [Character director](directors/character.md) | proposed |
+| [Blocking](casts/blocking.md) | Pursuit / traversal, action sentences, a jump in scale | [Mega-scene director](directors/mega.md) | built |
+| [Action director](casts/actionDirector.md) | Confrontation, Spectacle / catastrophe, action sentences | [Mega-scene director](directors/mega.md), [Combat director](directors/combat.md) | built |
+| [Background action](casts/backgroundAction.md) | Establishing / ambience, environment sentences, crowds named | [Mega-scene director](directors/mega.md) | built |
+| [Prop master](casts/propMaster.md) | action sentences, vehicles named, weapons named | [Transport specialist](directors/transport.md) | partial |
+| [Set dresser](casts/setDresser.md) | Establishing / ambience, environment sentences, fact sentences, buildings named or described | [Architect](directors/architect.md) | proposed |
 
 ## Directors
 
 | Director | Kind | Zoom | Plays | Status |
 |---|---|---|---|---|
-| [Stage manager](directors/stage.md) | stage | — | [Scene frame](faculties/frame.md), [Generalist](faculties/generalist.md) | partial |
-| [Routine director](directors/routine.md) | action | 2–15 m | [Conversation and blocking](faculties/conversation.md), [Scale and view](faculties/scale.md), [Generalist](faculties/generalist.md) | partial |
-| [Mega-scene director](directors/mega.md) | action | 100–2 km | [Journeys](faculties/journeys.md), [Scale and view](faculties/scale.md), [Ambience](faculties/ambience.md), [Choreography](faculties/choreography.md) | partial |
-| [Combat director](directors/combat.md) | action | 5–60 m | [Choreography](faculties/choreography.md), [Scale and view](faculties/scale.md), [Generalist](faculties/generalist.md) | partial |
-| [Character director](directors/character.md) | state | — | [Inner state](faculties/feeling.md), [Generalist](faculties/generalist.md) | proposed |
-| [Transport specialist](directors/transport.md) | state | — | [Props and vehicles](faculties/props.md), [Generalist](faculties/generalist.md) | proposed |
-| [Architect](directors/architect.md) | state | — | [Set description](faculties/setting.md), [Generalist](faculties/generalist.md) | partial |
+| [Stage manager](directors/stage.md) | stage | — | [1st AD](casts/firstAD.md), [Script supervisor](casts/scriptSupervisor.md) | partial |
+| [Routine director](directors/routine.md) | action | 2–15 m | [Dialogue coverage](casts/dialogueCoverage.md), [Cinematographer](casts/cinematographer.md), [Script supervisor](casts/scriptSupervisor.md) | partial |
+| [Mega-scene director](directors/mega.md) | action | 100–2 km | [Blocking](casts/blocking.md), [Cinematographer](casts/cinematographer.md), [Background action](casts/backgroundAction.md), [Action director](casts/actionDirector.md) | partial |
+| [Combat director](directors/combat.md) | action | 5–60 m | [Action director](casts/actionDirector.md), [Cinematographer](casts/cinematographer.md), [Script supervisor](casts/scriptSupervisor.md) | partial |
+| [Character director](directors/character.md) | state | — | [Acting coach](casts/actingCoach.md), [Script supervisor](casts/scriptSupervisor.md) | proposed |
+| [Transport specialist](directors/transport.md) | state | — | [Prop master](casts/propMaster.md), [Script supervisor](casts/scriptSupervisor.md) | proposed |
+| [Architect](directors/architect.md) | state | — | [Set dresser](casts/setDresser.md), [Script supervisor](casts/scriptSupervisor.md) | partial |
 
 ## Block types
 
 | Type | What it is | In volume 1 | Fires |
 |---|---|---|---|
-| Routine interaction | people together: talk and small acts | the dart bar (13–18), the crosswalk (11–12), walking with Index (8) | Conversation and blocking, Inner state |
-| Confrontation | a fight or standoff: blows, dodges, powers used on someone | 21–22, 25–31, 40 | Choreography |
-| Pursuit / traversal | going somewhere at scale: chases, escapes, crossing the city | the escape (1), the chase to the subway (3), the tower leaps (26), the tower's shaft (34) | Journeys |
-| Mediated exchange | talk through a channel: a phone, a door, a broadcast, a message | phone calls (12, 29, 33), through a door (42–43) | Conversation and blocking |
-| Interior flow | thought, reflection, free indirect thought | 18, 36, the long narration and thought stretches | Inner state |
+| Routine interaction | people together: talk and small acts | the dart bar (13–18), the crosswalk (11–12), walking with Index (8) | Dialogue coverage, Acting coach |
+| Confrontation | a fight or standoff: blows, dodges, powers used on someone | 21–22, 25–31, 40 | Action director |
+| Pursuit / traversal | going somewhere at scale: chases, escapes, crossing the city | the escape (1), the chase to the subway (3), the tower leaps (26), the tower's shaft (34) | Blocking |
+| Mediated exchange | talk through a channel: a phone, a door, a broadcast, a message | phone calls (12, 29, 33), through a door (42–43) | Dialogue coverage |
+| Interior flow | thought, reflection, free indirect thought | 18, 36, the long narration and thought stretches | Acting coach |
 | Exposition | world-building and background with no one acting | the Board (37), R&C Occultics (39) | fires no reader |
-| Establishing / ambience | where and when: the place, weather, crowds, mood | the openings of 1, 2, 10, 45 | Ambience, Set description |
+| Establishing / ambience | where and when: the place, weather, crowds, mood | the openings of 1, 2, 10, 45 | Background action, Set dresser |
 | Memory / flashback | what happened before this scene's now | 35 | fires no reader |
-| Spectacle / catastrophe | the world itself changing: ground splits, floods, collapses | 21, 22, 26, 27 | Choreography |
+| Spectacle / catastrophe | the world itself changing: ground splits, floods, collapses | 21, 22, 26, 27 | Action director |
 
 ## How state flows into the ontology
 

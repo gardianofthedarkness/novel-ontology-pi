@@ -1,17 +1,17 @@
 ---
-type: "faculty"
-id: "setting"
-aliases: ["Set description"]
+type: "cast"
+id: "setDresser"
+aliases: ["Set dresser"]
 status: "proposed"
 fired_by: ["establishing", "buildings"]
 read_by: ["architect"]
-tags: ["directing/faculty", "status/proposed"]
+tags: ["directing/cast", "status/proposed"]
 ---
 <!-- Written by world-engine/director/directing-vault.mjs from the code; change the code, not this note. -->
 
-# Set description
+# Set dresser
 
-A summary faculty: the work model reading the text. Status: **proposed**. Back to [Directing](../Directing.md).
+A summary cast: the work model reading the text. Status: **proposed**. Back to [Directing](../Directing.md).
 
 ## What it writes
 
@@ -55,4 +55,4 @@ How often: one request a fired span.
 
 ## Read by
 
-- [Architect](../directors/architect.md) (its own faculty)
+- [Architect](../directors/architect.md) (its own cast)

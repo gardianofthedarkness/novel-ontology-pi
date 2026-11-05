@@ -1,6 +1,6 @@
 /**
  * Sequence headings and the storyboard (the user, 2026-11-04: "rephrase and redefine ... into the industry standard";
- * docs/v2/directing/faculties-jev-and-crew.md). The levels of an anime episode are episode › sequence › scene › cut: a
+ * docs/v2/directing/casts-jev-and-crew.md). The levels of an anime episode are episode › sequence › scene › cut: a
  * sequence is one span of the tiler's scene pass (where the place, the time or the viewpoint changes), a scene is one
  * unit of the kind pass, a cut is one camera setup.
  *

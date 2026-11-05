@@ -1,17 +1,17 @@
 ---
-type: "faculty"
-id: "generalist"
-aliases: ["Generalist"]
+type: "cast"
+id: "scriptSupervisor"
+aliases: ["Script supervisor"]
 status: "built"
 fired_by: ["always: each window"]
 read_by: ["stage", "routine", "combat", "character", "transport", "architect"]
-tags: ["directing/faculty", "status/built"]
+tags: ["directing/cast", "status/built"]
 ---
 <!-- Written by world-engine/director/directing-vault.mjs from the code; change the code, not this note. -->
 
-# Generalist
+# Script supervisor
 
-A summary faculty: the work model reading the text. Status: **built** (`world-engine/digest/digest.mjs`). Back to [Directing](../Directing.md).
+A summary cast: the work model reading the text. Status: **built** (`world-engine/digest/digest.mjs`). Back to [Directing](../Directing.md).
 
 ## What it writes
 

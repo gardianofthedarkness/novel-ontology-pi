@@ -1,17 +1,17 @@
 ---
-type: "faculty"
-id: "props"
-aliases: ["Props and vehicles"]
+type: "cast"
+id: "propMaster"
+aliases: ["Prop master"]
 status: "partial"
 fired_by: ["vehicles", "weapons"]
 read_by: ["transport"]
-tags: ["directing/faculty", "status/partial"]
+tags: ["directing/cast", "status/partial"]
 ---
 <!-- Written by world-engine/director/directing-vault.mjs from the code; change the code, not this note. -->
 
-# Props and vehicles
+# Prop master
 
-A summary faculty: the work model reading the text. Status: **partial** (`world-engine/digest/digest.mjs (items)`). Back to [Directing](../Directing.md).
+A summary cast: the work model reading the text. Status: **partial** (`world-engine/digest/digest.mjs (items)`). Back to [Directing](../Directing.md).
 
 ## What it writes
 
@@ -53,4 +53,4 @@ How often: one request a fired span.
 
 ## Read by
 
-- [Transport specialist](../directors/transport.md) (its own faculty)
+- [Transport specialist](../directors/transport.md) (its own cast)

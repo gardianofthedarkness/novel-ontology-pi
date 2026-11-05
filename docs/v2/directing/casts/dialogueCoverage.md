@@ -1,17 +1,17 @@
 ---
-type: "faculty"
-id: "conversation"
-aliases: ["Conversation and blocking"]
+type: "cast"
+id: "dialogueCoverage"
+aliases: ["Dialogue coverage"]
 status: "built"
 fired_by: ["routine", "mediated"]
 read_by: ["routine"]
-tags: ["directing/faculty", "status/built"]
+tags: ["directing/cast", "status/built"]
 ---
 <!-- Written by world-engine/director/directing-vault.mjs from the code; change the code, not this note. -->
 
-# Conversation and blocking
+# Dialogue coverage
 
-A summary faculty: the work model reading the text. Status: **built** (`world-engine/digest/digest.mjs talkOf (M8)`). Back to [Directing](../Directing.md).
+A summary cast: the work model reading the text. Status: **built** (`world-engine/digest/digest.mjs talkOf (M8)`). Back to [Directing](../Directing.md).
 
 ## What it writes
 
@@ -29,7 +29,7 @@ On a score-based mixed index of all of these, each against its own baseline over
 
 ## How it is asked
 
-How often: one request a span where conversation fires.
+How often: one request a span where dialogue coverage fires.
 
 **System**
 
@@ -55,4 +55,4 @@ How often: one request a span where conversation fires.
 
 ## Read by
 
-- [Routine director](../directors/routine.md) (its own faculty)
+- [Routine director](../directors/routine.md) (its own cast)

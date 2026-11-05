@@ -13,7 +13,7 @@
  */
 import type { Item, Source } from "./engine.js";
 
-export type PreFilmCast = "script supervisor" | "screenwriter" | "storyboard artist" | "blocking" | "action director" | "dialogue coverage" | "background action";
+export type PreFilmCast = "script supervisor" | "screenwriter" | "storyboard artist" | "cinematographer" | "blocking" | "action director" | "dialogue coverage" | "background action";
 export type RuntimeTask = "layout" | "frame" | "keys" | "layout check" | "key check" | "rush check";
 export type NoteKind = "summary" | "state" | "fact" | "move" | "item" | "talk" | "background" | "journey" | "reach" | "exchange" | "formation" | "channel" | "crowd" | "heading" | "shot";
 export interface Note { id: string; cast: PreFilmCast; kind: NoteKind; unit: string; sentence: string | null; who: string[]; basis: "stated" | "implied" | null; sure: number; text: string; /** The cast's own entry, for a rule that tests it (a fact on a spot). */ raw?: unknown }
@@ -46,7 +46,7 @@ export const ROUTES: Record<RuntimeTask, Route[]> = {
     { from: "screenwriter", kinds: ["heading"], where: "unit", about: "anyone", quota: 1 },
     { from: "action director", kinds: ["exchange"], where: "cut", about: "cast", quota: 6 },
     { from: "dialogue coverage", kinds: ["channel", "formation"], where: "cut", about: "cast", quota: 6 },
-    { from: "blocking", kinds: ["reach"], where: "unit", about: "anyone", quota: 1 },
+    { from: "cinematographer", kinds: ["reach"], where: "unit", about: "anyone", quota: 1 },
   ],
   // The key animator, for one mover in one card: their moves, what is said or implied of where they are, what they
   // carry, their journeys, the blows they give or take, the formations they stand in, the unit's summary.
@@ -80,13 +80,12 @@ const people = (...values: unknown[]) => values.flat().filter((value): value is 
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
 /**
- * Every pre-film cast's notes for one unit, as the reading step left them (faculties.json's unit: the script supervisor's
- * digest as `generalist`, blocking's `scale` and `journeys`, the action director's `choreography`, dialogue coverage's
- * `conversation`, background action's `ambience`), with the screenwriter's heading and the storyboard's cuts of the unit.
+ * Every pre-film cast's notes for one unit, as the reading step left them (prefilm.json's unit, by cast id: `scriptSupervisor`,
+ * `cinematographer`, `blocking`, `actionDirector`, `dialogueCoverage`, `backgroundAction`), with the screenwriter's heading and the storyboard's cuts of the unit.
  */
 export function notesOfUnit(unit: string, prepared: any, extra: { heading?: any; cuts?: any[] } = {}): Note[] {
   const notes: Note[] = [], add = (note: Omit<Note, "id" | "unit">) => notes.push({ id: `${unit}:${notes.length + 1}`, unit, ...note });
-  const g = prepared?.generalist ?? null, digest = g?.digest ?? null;
+  const g = prepared?.scriptSupervisor ?? null, digest = g?.digest ?? null;
   if (digest?.summary) add({ cast: "script supervisor", kind: "summary", sentence: null, who: [], basis: null, sure: 1, text: clip(`${digest.summary}${digest.where ? ` Where: ${digest.where}.` : ""}`, 300) });
   for (const person of digest?.people ?? []) add({ cast: "script supervisor", kind: "state", sentence: null, who: people(person.who), basis: null, sure: 1, text: clip(`${person.who}: ${person.doing ?? ""}; starts ${person.start ?? "?"}; ends ${person.end ?? "?"}${person.holding?.length ? `; holding ${person.holding.join(", ")}` : ""}`) });
   for (const fact of g?.facts ?? []) add({ cast: "script supervisor", kind: "fact", sentence: fact.sentence ?? null, who: people(fact.who), basis: fact.basis === "stated" ? "stated" : "implied", sure: sureOf(fact.sure), text: clip(`${fact.who} ${fact.kind}${fact.value ? `: ${fact.value}` : ""}`), raw: fact });
@@ -94,12 +93,12 @@ export function notesOfUnit(unit: string, prepared: any, extra: { heading?: any;
   for (const item of g?.items ?? []) add({ cast: "script supervisor", kind: "item", sentence: item.sentence ?? null, who: people(item.who, item.to), basis: null, sure: 0.8, text: clip(`${item.item} ${item.event}${item.who ? ` by ${item.who}` : ""}${item.to ? ` to ${item.to}` : ""}`) });
   for (const talk of g?.talk ?? []) add({ cast: "script supervisor", kind: "talk", sentence: talk.sentence ?? null, who: [], basis: null, sure: 0.7, text: `spoken ${talk.kind}` });
   for (const entry of g?.background ?? []) add({ cast: "script supervisor", kind: "background", sentence: entry.sentence ?? null, who: entry.who === "crowd" ? [] : people(entry.who), basis: null, sure: 0.6, text: clip(`${entry.who} ${entry.doing}`) });
-  for (const scale of prepared?.scale ?? []) add({ cast: "blocking", kind: "reach", sentence: scale.first ?? null, who: [], basis: null, sure: sureOf(scale.sure), text: clip(`a move reaches ${scale.reach?.times ?? 1} × ${scale.reach?.referent ?? "?"}; the frame takes in ${scale.frame?.referent ?? "?"}`) });
-  for (const journey of prepared?.journeys ?? []) add({ cast: "blocking", kind: "journey", sentence: journey.sentence ?? null, who: people(journey.who), basis: null, sure: sureOf(journey.sure), text: clip(`${journey.who} ${journey.manner ?? "goes"} from ${journey.said?.from ?? journey.from ?? "?"} to ${journey.said?.to ?? journey.to ?? "?"}${journey.distance ? `, ${journey.distance.times ?? 1} × ${journey.distance.referent}` : ""}`) });
-  for (const blow of prepared?.choreography ?? []) add({ cast: "action director", kind: "exchange", sentence: blow.sentence ?? null, who: people(blow.attacker, blow.target), basis: null, sure: sureOf(blow.sure), text: clip(`${blow.attacker} → ${blow.target}: ${blow.attack}, ${blow.range ?? ""}, ${blow.outcome ?? ""}${blow.condition ? `, ${blow.condition}` : ""}`) });
-  for (const exchange of prepared?.conversation?.exchanges ?? []) add({ cast: "dialogue coverage", kind: "channel", sentence: exchange.sentence ?? null, who: people(exchange.who, exchange.with ?? []), basis: null, sure: sureOf(exchange.sure), text: clip(`${exchange.who} to ${(exchange.with ?? []).join(", ")}: ${exchange.channel}`) });
-  for (const formation of prepared?.conversation?.formations ?? []) add({ cast: "dialogue coverage", kind: "formation", sentence: formation.sentence ?? null, who: people(formation.who ?? []), basis: null, sure: sureOf(formation.sure), text: clip(`${(formation.who ?? []).join(", ")}: ${formation.formation}`) });
-  for (const crowd of prepared?.ambience ?? []) add({ cast: "background action", kind: "crowd", sentence: crowd.sentence ?? null, who: people(crowd.focus), basis: null, sure: sureOf(crowd.sure), text: clip(`crowd ${crowd.size}, ${crowd.state}${crowd.focus ? ` round ${crowd.focus}` : ""}`) });
+  for (const scale of prepared?.cinematographer ?? []) add({ cast: "cinematographer", kind: "reach", sentence: scale.first ?? null, who: [], basis: null, sure: sureOf(scale.sure), text: clip(`a move reaches ${scale.reach?.times ?? 1} × ${scale.reach?.referent ?? "?"}; the frame takes in ${scale.frame?.referent ?? "?"}`) });
+  for (const journey of prepared?.blocking ?? []) add({ cast: "blocking", kind: "journey", sentence: journey.sentence ?? null, who: people(journey.who), basis: null, sure: sureOf(journey.sure), text: clip(`${journey.who} ${journey.manner ?? "goes"} from ${journey.said?.from ?? journey.from ?? "?"} to ${journey.said?.to ?? journey.to ?? "?"}${journey.distance ? `, ${journey.distance.times ?? 1} × ${journey.distance.referent}` : ""}`) });
+  for (const blow of prepared?.actionDirector ?? []) add({ cast: "action director", kind: "exchange", sentence: blow.sentence ?? null, who: people(blow.attacker, blow.target), basis: null, sure: sureOf(blow.sure), text: clip(`${blow.attacker} → ${blow.target}: ${blow.attack}, ${blow.range ?? ""}, ${blow.outcome ?? ""}${blow.condition ? `, ${blow.condition}` : ""}`) });
+  for (const exchange of prepared?.dialogueCoverage?.exchanges ?? []) add({ cast: "dialogue coverage", kind: "channel", sentence: exchange.sentence ?? null, who: people(exchange.who, exchange.with ?? []), basis: null, sure: sureOf(exchange.sure), text: clip(`${exchange.who} to ${(exchange.with ?? []).join(", ")}: ${exchange.channel}`) });
+  for (const formation of prepared?.dialogueCoverage?.formations ?? []) add({ cast: "dialogue coverage", kind: "formation", sentence: formation.sentence ?? null, who: people(formation.who ?? []), basis: null, sure: sureOf(formation.sure), text: clip(`${(formation.who ?? []).join(", ")}: ${formation.formation}`) });
+  for (const crowd of prepared?.backgroundAction ?? []) add({ cast: "background action", kind: "crowd", sentence: crowd.sentence ?? null, who: people(crowd.focus), basis: null, sure: sureOf(crowd.sure), text: clip(`crowd ${crowd.size}, ${crowd.state}${crowd.focus ? ` round ${crowd.focus}` : ""}`) });
   const heading = extra.heading;
   if (heading) add({ cast: "screenwriter", kind: "heading", sentence: null, who: [], basis: null, sure: Math.min(...Object.values(heading.confidence ?? { all: 1 }).map((value) => sureOf(value, 1))), text: [heading.setting === "interior" ? "INT." : heading.setting === "exterior" ? "EXT." : "", heading.place ?? "", heading.daytime ? `— ${heading.daytime}` : ""].filter(Boolean).join(" ") });
   for (const cut of extra.cuts ?? []) add({ cast: "storyboard artist", kind: "shot", sentence: cut.first ?? null, who: [], basis: null, sure: sureOf(cut.confidence), text: `${cut.id}: ${cut.size}, ${cut.angle}, ${cut.move}, ${cut.seconds} s` });

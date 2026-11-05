@@ -1,17 +1,17 @@
 ---
-type: "faculty"
-id: "feeling"
-aliases: ["Inner state"]
+type: "cast"
+id: "actingCoach"
+aliases: ["Acting coach"]
 status: "proposed"
 fired_by: ["interior", "routine"]
 read_by: ["character"]
-tags: ["directing/faculty", "status/proposed"]
+tags: ["directing/cast", "status/proposed"]
 ---
 <!-- Written by world-engine/director/directing-vault.mjs from the code; change the code, not this note. -->
 
-# Inner state
+# Acting coach
 
-A summary faculty: the work model reading the text. Status: **proposed**. Back to [Directing](../Directing.md).
+A summary cast: the work model reading the text. Status: **proposed**. Back to [Directing](../Directing.md).
 
 ## What it writes
 
@@ -55,4 +55,4 @@ How often: one request a fired span.
 
 ## Read by
 
-- [Character director](../directors/character.md) (its own faculty)
+- [Character director](../directors/character.md) (its own cast)

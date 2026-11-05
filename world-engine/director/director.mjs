@@ -67,7 +67,7 @@ export async function readerView(reading, text) {
   return { version: 2, kinds: Object.fromEntries(Object.entries(reading.kinds ?? {}).map(([id, entry]) => [id, entry.kind])), marks, names };
 }
 
-export async function direct(novelDir, { reading, readingPath = null, faculties = null, from, to, jev, workModel = null, budget = Infinity, live = null, pace = 0, agent = null, digest = true, speakers = true, smoothing = null, blasts = [], log = console.error }) {
+export async function direct(novelDir, { reading, readingPath = null, prefilm = null, from, to, jev, workModel = null, budget = Infinity, live = null, pace = 0, agent = null, digest = true, speakers = true, smoothing = null, blasts = [], log = console.error }) {
   // A card's line with its kind (spoken, action, environment, thought, fact, narration) and, spoken, who says it: the
   // reader colours sentences by kind, and the page puts a spoken line in a bubble over its speaker.
   // Who says a line is the reading's (EM², a Jev question during extraction): its answer and how sure; below its accept
@@ -100,7 +100,7 @@ export async function direct(novelDir, { reading, readingPath = null, faculties 
   const gate = G.gateOf(G.windowsOf(reading), { strandOf: scene => forkOf.get(scene) ?? null }), beatOf = new Map();
   // The storyboard's cuts (the reading's storyboard step, src/v2/extraction/storyboard.ts): each line's cut, so a card plays
   // in the cut its first line is in, framed by its shot size and angle, timed by its seconds. A reading without one plays
-  // the scale faculty's beats as before.
+  // the scale cast's beats as before.
   const cutAt = new Map();
   if (reading.storyboard?.length) { const order = reading.scenes.flatMap(entry => entry.sentences), at_ = new Map(order.map((id, n) => [id, n])); for (const cut of reading.storyboard) for (let k = at_.get(cut.first); k !== undefined && k <= (at_.get(cut.last) ?? -1); k++) cutAt.set(order[k], cut); }
   if (gate) { const order = reading.scenes.flatMap(entry => entry.sentences), at_ = new Map(order.map((id, n) => [id, n])); gate.beats.forEach((beat, n) => { for (let k = at_.get(beat.first); k <= at_.get(beat.last); k++) if (!beatOf.has(order[k])) beatOf.set(order[k], { n, type: beat.type, lead: beat.lead }); }); }
@@ -173,13 +173,13 @@ export async function direct(novelDir, { reading, readingPath = null, faculties 
   // What each model used (the user, 2026-11-03: track the cost): the work model's requests and tokens, for system 2 and for
   // the summarizer apart; Jev's calls.
   const workMeter = workModel ? DG.metered(workModel) : null, digestMeter = workModel && digest ? DG.metered(workModel) : null;
-  // Each faculty its own meter (M12: the run prices itself by faculty and director).
-  const meters = digestMeter ? Object.fromEntries(['scale', 'journeys', 'choreography', 'conversation', 'ambience'].map(id => [id, DG.metered(workModel)])) : {};
+  // Each cast its own meter (M12: the run prices itself by cast and director).
+  const meters = digestMeter ? Object.fromEntries(['cinematographer', 'blocking', 'actionDirector', 'dialogueCoverage', 'backgroundAction'].map(id => [id, DG.metered(workModel)])) : {};
   record.gate = gate ? { unit: gate.windows[0]?.unit ?? null, windows: gate.windows.length, beats: gate.beats.length, coverage: gate.coverage } : null;
   // Jev's requests and the tokens it reports, by what was asked (the first question's key, its kind).
   const jevUse = { requests: 0, input: 0, output: 0, by: {} };
-  record.usage = { system2: workMeter?.usage ?? null, digest: digestMeter?.usage ?? null, faculties: Object.fromEntries(Object.entries(meters).map(([id, meter]) => [id, meter.usage])), jev: jevUse, workModel: workModel?.modelId ?? null };
-  // Each stretch of the gate (M12): what fired there and, once played, what each fired faculty found.
+  record.usage = { system2: workMeter?.usage ?? null, digest: digestMeter?.usage ?? null, casts: Object.fromEntries(Object.entries(meters).map(([id, meter]) => [id, meter.usage])), jev: jevUse, workModel: workModel?.modelId ?? null };
+  // Each stretch of the gate (M12): what fired there and, once played, what each fired cast found.
   record.stretches = gate ? gate.windows.map(window => ({ scene: window.scene, first: window.first, last: window.last, type: window.type, fired: window.fired, found: {} })) : [];
   const asked = withSystem2((state, questions, options) => retried(() => jev.decide(state, questions, options), log), workMeter, { note: entry => { if (asking) (asking.system2 ??= []).push(entry); } });
   // The summarizer (Track A, digest.mjs; the user, 2026-11-03): every scene of the line read by the work model ahead of the
@@ -187,11 +187,11 @@ export async function direct(novelDir, { reading, readingPath = null, faculties 
   // to it. Its moves (graded), facts (stated and implied), items, talk and breaks replace the pass and the text-only
   // questions; Jev still decides on the pictures. Without a work model, the director plays as before.
   const digested = new Map();
-  // The faculties as a reading step (world-engine/digest/faculties.mjs; the user, 2026-11-04): where the reading has them,
+  // The pre-film casts as a reading step (world-engine/digest/casts.mjs; the user, 2026-11-04): where the reading has them,
   // the run plays from them and asks the work model nothing for them.
-  if (faculties) {
-    for (const [id, unit] of Object.entries(faculties.units ?? {})) digested.set(id, Promise.resolve(unit.generalist ?? null));
-    await writeFile(join(runDir, 'digest.json'), JSON.stringify({ version: 1, model: faculties.model ?? null, from: 'the reading step', scenes: Object.fromEntries(Object.entries(faculties.units ?? {}).filter(([, unit]) => unit.generalist).map(([id, unit]) => [id, unit.generalist])) }));
+  if (prefilm) {
+    for (const [id, unit] of Object.entries(prefilm.units ?? {})) digested.set(id, Promise.resolve(unit.scriptSupervisor ?? null));
+    await writeFile(join(runDir, 'digest.json'), JSON.stringify({ version: 1, model: prefilm.model ?? null, from: 'the reading step', scenes: Object.fromEntries(Object.entries(prefilm.units ?? {}).filter(([, unit]) => unit.scriptSupervisor).map(([id, unit]) => [id, unit.scriptSupervisor])) }));
   } else if (digestMeter) {
     // The line from `from` to `to` (scene ids): every container whose scene is in it (by segment, each scene's segments).
     const ids = reading.scenes.map(scene => scene.parent ?? scene.id), lineScenes = reading.scenes.slice(ids.indexOf(from), ids.lastIndexOf(to) + 1);
@@ -403,7 +403,7 @@ export async function direct(novelDir, { reading, readingPath = null, faculties 
         // carries on from where they are; seen for the first time, they start at spawning's start (spawning happens once);
         // standing outside the scene's place, they travel to their start in it (walked; beyond 300 m they arrive off-page).
         const own = script.scenes.find(entry => entry.id === scene.id), spawned = spawn?.scenes?.find(entry => entry.id === scene.id);
-        const dg = digested.has(scene.id) ? await digested.get(scene.id) : null, prepared = faculties?.units?.[scene.id] ?? null;
+        const dg = digested.has(scene.id) ? await digested.get(scene.id) : null, prepared = prefilm?.units?.[scene.id] ?? null;
         const startNode = who => {
           const start = spawned?.starts.find(entry => entry.who === who);
           if (!start) return run.starts[who]?.[0] ?? null;
@@ -458,11 +458,11 @@ export async function direct(novelDir, { reading, readingPath = null, faculties 
         };
         // Scale and view (M5, referential since): each beat of the scene given its frame, reach, angle and duration by the
         // work model; only the action directors' questions and their camera operator read them.
-        const sceneBeats = gate && (digestMeter || faculties) ? gate.beats.map((beat, n) => ({ ...beat, n })).filter(beat => beat.scene === scene.id) : [];
+        const sceneBeats = gate && (digestMeter || prefilm) ? gate.beats.map((beat, n) => ({ ...beat, n })).filter(beat => beat.scene === scene.id) : [];
         const order_ = reads.sentences, scaleOf = new Map();
         if (sceneBeats.length) {
           const span = beat => { const a = order_.indexOf(beat.first), b = order_.indexOf(beat.last); return order_.slice(Math.max(0, a), (b < 0 ? order_.length : b + 1)).slice(0, 40); };
-          const scales = faculties ? (prepared?.scale ?? []).map(entry => ({ ...entry, n: sceneBeats.find(beat => beat.first === entry.first)?.n ?? entry.n })) : await DG.scaleBeats(meters.scale, { scene, beats: sceneBeats.map(beat => ({ ...beat, sentences: span(beat) })), line: id => text.get(id)?.text ?? '', kind: id => reading.kinds?.[id]?.kind ?? null, people: present.map(id => ({ id, name: names.get(id) ?? id })), digest: dg?.digest ?? null });
+          const scales = prefilm ? (prepared?.cinematographer ?? []).map(entry => ({ ...entry, n: sceneBeats.find(beat => beat.first === entry.first)?.n ?? entry.n })) : await DG.scaleBeats(meters.cinematographer, { scene, beats: sceneBeats.map(beat => ({ ...beat, sentences: span(beat) })), line: id => text.get(id)?.text ?? '', kind: id => reading.kinds?.[id]?.kind ?? null, people: present.map(id => ({ id, name: names.get(id) ?? id })), digest: dg?.digest ?? null });
           for (const entry of scales) scaleOf.set(entry.n, entry);
           sceneRecord.scales = scales;
         }
@@ -566,12 +566,12 @@ export async function direct(novelDir, { reading, readingPath = null, faculties 
         const digestMovers = card => digestIn(dg?.moves ?? [], card).filter(entry => entry.motion !== 'still' && entry.sure >= MOVE_SURE && positions[entry.who]).map(entry => entry.who);
         const cards = [...(cardsOf.get(scene.id) ?? []), ...moving].filter(card => card.people.some(person => positions[person.id] && person.how.some(how => PRESENT.has(how))) || digestMovers(card).length).sort((a, b) => (position.get(a.first) ?? 0) - (position.get(b.first) ?? 0));
         // The crowd (M9; the user, 2026-11-03: a field of the place with states, acting back on the characters): where the
-        // scene digest has people not named on stage, or the ambience faculty fires in the scene, a field over the open
+        // scene digest has people not named on stage, or the ambience cast fires in the scene, a field over the open
         // ground of the scene's frame round the anchor (else the street, measured), sized by the digest; drawn by its
         // samples (`crowd:` ids: scenery, never in the laws, the log, the smoother or canon). Its state is set card by card.
         const extras = new Map();
         let crowd = null;
-        const ambience = (gate?.windows ?? []).some(window => window.scene === scene.id && window.fired.includes('ambience'));
+        const ambience = (gate?.windows ?? []).some(window => window.scene === scene.id && window.fired.includes('backgroundAction'));
         if (dg && (dg.digest.background.crowd !== 'none' || ambience) && anchor !== null && anchor !== undefined) {
           const p = at(anchor), radius = frameMetres ? frameMetres / 2 : measure({ referent: 'the street', of: null, times: 1 }, p) ?? null;
           const { nodes, built } = radius ? around(p[0], p[2], radius) : { nodes: [] };
@@ -691,7 +691,7 @@ export async function direct(novelDir, { reading, readingPath = null, faculties 
         const splitOf = new Map();
         // The cut bag (cutBag.ts; the user, 2026-11-04: the context engine decides which pre-film casts' notes go to which
         // runtime cast): every pre-film cast's notes on this unit, with its sequence's heading and its storyboard cuts.
-        const cutBag = { notes: CB.notesOfUnit(scene.id, prepared ?? (dg ? { generalist: dg } : null), { heading: (reading.sequences ?? []).find(entry => entry.id === reads?.sequence)?.heading ?? null, cuts: (reading.storyboard ?? []).filter(entry => entry.scene === scene.id) }) };
+        const cutBag = { notes: CB.notesOfUnit(scene.id, prepared ?? (dg ? { scriptSupervisor: dg } : null), { heading: (reading.sequences ?? []).find(entry => entry.id === reads?.sequence)?.heading ?? null, cuts: (reading.storyboard ?? []).filter(entry => entry.scene === scene.id) }) };
         const cutLines = id => { const entry = (reading.storyboard ?? []).find(cut => cut.id === id); if (!entry) return []; const from = sentenceAt.get(entry.first), to = sentenceAt.get(entry.last); return from === undefined ? [] : reads.sentences.slice(from, (to ?? from) + 1); };
         const routeAt = (lines, subject = null, cutId = null) => ({ unit: scene.id, lines, cut: cutId ? cutLines(cutId) : lines, order: reads.sentences, cast: (desk.nodes.get(cutId)?.cast ?? []).filter(who => positions[who]), subject });
         // The script supervisor's facts the routing gives a check, tested on where the cast stands now: each binding one that
@@ -717,61 +717,61 @@ export async function direct(novelDir, { reading, readingPath = null, faculties 
         const ELEVATION = { 'eye level': 12, 'over a shoulder': 20, 'over the shoulder': 20, high: 45, 'top-down': 80, overhead: 80, 'low, looking up': 6, low: 6, aerial: 60 };
         // What a shot size takes in, metres across (a close-up one face, a wide shot the room or the street round them).
         const SHOT_SPAN = { 'extreme close-up': 0.6, 'close-up': 1.2, 'medium close-up': 2, 'medium shot': 3.5, 'full shot': 6, 'wide shot': 30, 'extreme wide shot': 250 };
-        // Journeys (M6): where the journeys faculty fires in this scene (gate.mjs), its spans read for journeys at scale,
+        // Journeys (M6): where the journeys cast fires in this scene (gate.mjs), its spans read for journeys at scale,
         // given the places the world has placed (each with its box).
         const journeyOf = new Map();
-        // The spans of this scene where a faculty fires (gate.mjs): overlapping blocks joined (segments do not overlap), read
+        // The spans of this scene where a cast fires (gate.mjs): overlapping blocks joined (segments do not overlap), read
         // sixty lines a request (a long segment in parts, none of it dropped).
-        const firedSpans = faculty => {
+        const firedSpans = cast => {
           const spans = [];
-          for (const window of (gate?.windows ?? []).filter(entry => entry.scene === scene.id && entry.fired.includes(faculty))) {
+          for (const window of (gate?.windows ?? []).filter(entry => entry.scene === scene.id && entry.fired.includes(cast))) {
             const a = order_.indexOf(window.first), b = order_.indexOf(window.last), ids = order_.slice(Math.max(0, a), b < 0 ? order_.length : b + 1), last = spans.at(-1);
             if (last && ids.some(id => last.includes(id))) last.push(...ids.filter(id => !last.includes(id))); else spans.push(ids);
           }
           return spans.flatMap(span => Array.from({ length: Math.ceil(span.length / 60) }, (_, k) => span.slice(k * 60, (k + 1) * 60)));
         };
         const people_ = () => Object.keys(positions).map(id => ({ id, name: names.get(id) ?? id }));
-        if (gate && (digestMeter || faculties)) {
-          const spans = faculties ? [] : firedSpans('journeys');
-          if (faculties) { for (const journey of prepared?.journeys ?? []) journeyOf.set(`${journey.sentence}|${journey.who}`, journey); if (prepared?.journeys) sceneRecord.journeys = prepared.journeys; }
+        if (gate && (digestMeter || prefilm)) {
+          const spans = prefilm ? [] : firedSpans('blocking');
+          if (prefilm) { for (const journey of prepared?.blocking ?? []) journeyOf.set(`${journey.sentence}|${journey.who}`, journey); if (prepared?.blocking) sceneRecord.journeys = prepared.blocking; }
           if (spans.length) {
             // Only the places the story has by now (story time); a place still to come is said in words, as the text names it.
             const places = placeIds.filter(id => boxOf(id) && existsBy(id, scene.id)).map(id => ({ id, label: script.places?.[id]?.label ?? citySites[id]?.label ?? names.get(id) ?? id, scale: script.places?.[id]?.scale ?? citySites[id]?.scale ?? null }));
             sceneRecord.placesOffered = { happened: places.filter(place => !nominated(place.id)).length, nominated: places.filter(place => nominated(place.id)).length, notYet: placeIds.filter(id => boxOf(id) && !existsBy(id, scene.id)).length };
-            const journeys = await DG.journeysOf(meters.journeys, { scene, spans, line: id => text.get(id)?.text ?? '', kind: id => reading.kinds?.[id]?.kind ?? null, people: Object.keys(positions).map(id => ({ id, name: names.get(id) ?? id })), places, digest: dg?.digest ?? null });
+            const journeys = await DG.journeysOf(meters.blocking, { scene, spans, line: id => text.get(id)?.text ?? '', kind: id => reading.kinds?.[id]?.kind ?? null, people: Object.keys(positions).map(id => ({ id, name: names.get(id) ?? id })), places, digest: dg?.digest ?? null });
             for (const journey of journeys) journeyOf.set(`${journey.sentence}|${journey.who}`, journey);
             sceneRecord.journeys = journeys;
           }
         }
         // Choreography (M7): the exchanges of this scene's fights and catastrophes, by the sentence each is told in.
         const exchangesAt = new Map();
-        if (gate && (digestMeter || faculties)) {
-          const spans = faculties ? [] : firedSpans('choreography');
-          if (faculties) { for (const exchange of prepared?.choreography ?? []) (exchangesAt.get(exchange.sentence) ?? exchangesAt.set(exchange.sentence, []).get(exchange.sentence)).push(exchange); if (prepared?.choreography) sceneRecord.exchanges = prepared.choreography.length; }
+        if (gate && (digestMeter || prefilm)) {
+          const spans = prefilm ? [] : firedSpans('actionDirector');
+          if (prefilm) { for (const exchange of prepared?.actionDirector ?? []) (exchangesAt.get(exchange.sentence) ?? exchangesAt.set(exchange.sentence, []).get(exchange.sentence)).push(exchange); if (prepared?.actionDirector) sceneRecord.exchanges = prepared.actionDirector.length; }
           if (spans.length) {
-            const exchanges = await DG.exchangesOf(meters.choreography, { scene, spans, line: id => text.get(id)?.text ?? '', kind: id => reading.kinds?.[id]?.kind ?? null, people: people_(), digest: dg?.digest ?? null });
+            const exchanges = await DG.exchangesOf(meters.actionDirector, { scene, spans, line: id => text.get(id)?.text ?? '', kind: id => reading.kinds?.[id]?.kind ?? null, people: people_(), digest: dg?.digest ?? null });
             for (const exchange of exchanges) (exchangesAt.get(exchange.sentence) ?? exchangesAt.set(exchange.sentence, []).get(exchange.sentence)).push(exchange);
             sceneRecord.exchanges = exchanges.length;
           }
         }
         // Conversation and blocking (M8): the channels, formations and attention of this scene's talk.
         const channelAt = new Map(), formationAt = new Map(), inFormation = new Set(), talkingUntil = new Map();
-        if (gate && (digestMeter || faculties)) {
-          const spans = faculties ? [] : firedSpans('conversation');
-          if (faculties && prepared?.conversation) { const talk = prepared.conversation; for (const entry of talk.exchanges ?? []) (channelAt.get(entry.sentence) ?? channelAt.set(entry.sentence, []).get(entry.sentence)).push(entry); for (const entry of talk.formations ?? []) (formationAt.get(entry.sentence) ?? formationAt.set(entry.sentence, []).get(entry.sentence)).push(entry); sceneRecord.talk = { exchanges: (talk.exchanges ?? []).length, formations: (talk.formations ?? []).length, attention: (talk.attention ?? []).length }; }
+        if (gate && (digestMeter || prefilm)) {
+          const spans = prefilm ? [] : firedSpans('dialogueCoverage');
+          if (prefilm && prepared?.dialogueCoverage) { const talk = prepared.dialogueCoverage; for (const entry of talk.exchanges ?? []) (channelAt.get(entry.sentence) ?? channelAt.set(entry.sentence, []).get(entry.sentence)).push(entry); for (const entry of talk.formations ?? []) (formationAt.get(entry.sentence) ?? formationAt.set(entry.sentence, []).get(entry.sentence)).push(entry); sceneRecord.talk = { exchanges: (talk.exchanges ?? []).length, formations: (talk.formations ?? []).length, attention: (talk.attention ?? []).length }; }
           if (spans.length) {
-            const talk = await DG.talkOf(meters.conversation, { scene, spans, line: id => text.get(id)?.text ?? '', kind: id => reading.kinds?.[id]?.kind ?? null, people: people_(), digest: dg?.digest ?? null });
+            const talk = await DG.talkOf(meters.dialogueCoverage, { scene, spans, line: id => text.get(id)?.text ?? '', kind: id => reading.kinds?.[id]?.kind ?? null, people: people_(), digest: dg?.digest ?? null });
             for (const entry of talk.exchanges) (channelAt.get(entry.sentence) ?? channelAt.set(entry.sentence, []).get(entry.sentence)).push(entry);
             for (const entry of talk.formations) (formationAt.get(entry.sentence) ?? formationAt.set(entry.sentence, []).get(entry.sentence)).push(entry);
             sceneRecord.talk = { exchanges: talk.exchanges.length, formations: talk.formations.length, attention: talk.attention.length };
           }
         }
-        // Ambience (M9): the crowd's size, state and focus as the text has them, read where the ambience faculty fires.
+        // Ambience (M9): the crowd's size, state and focus as the text has them, read where the ambience cast fires.
         const crowdAt = [];
-        if (gate && (digestMeter || faculties) && crowd) {
-          const spans = faculties ? [] : firedSpans('ambience');
-          if (faculties) crowdAt.push(...(prepared?.ambience ?? []).filter(entry => entry.sure >= MOVE_SURE));
-          if (spans.length) { crowdAt.push(...(await DG.crowdOf(meters.ambience, { scene, spans, line: id => text.get(id)?.text ?? '', kind: id => reading.kinds?.[id]?.kind ?? null, people: people_(), digest: dg?.digest ?? null })).filter(entry => entry.sure >= MOVE_SURE)); sceneRecord.crowdRead = crowdAt.map(entry => ({ sentence: entry.sentence, size: entry.size, state: entry.state, focus: entry.focus })); }
+        if (gate && (digestMeter || prefilm) && crowd) {
+          const spans = prefilm ? [] : firedSpans('backgroundAction');
+          if (prefilm) crowdAt.push(...(prepared?.backgroundAction ?? []).filter(entry => entry.sure >= MOVE_SURE));
+          if (spans.length) { crowdAt.push(...(await DG.crowdOf(meters.backgroundAction, { scene, spans, line: id => text.get(id)?.text ?? '', kind: id => reading.kinds?.[id]?.kind ?? null, people: people_(), digest: dg?.digest ?? null })).filter(entry => entry.sure >= MOVE_SURE)); sceneRecord.crowdRead = crowdAt.map(entry => ({ sentence: entry.sentence, size: entry.size, state: entry.state, focus: entry.focus })); }
         }
         // A card's crowd: the state the text last gave it (a focus where it watches or flees someone present), and a hazard
         // where the card's fight strikes an area or breaks something (alarm spreads from there, L17's run).
@@ -790,30 +790,30 @@ export async function direct(novelDir, { reading, readingPath = null, faculties 
             if (p && !crowd.hazards.some(hazard => hazard.by === `${id}|${who}`)) { crowd.hazard(p[0], p[2]); crowd.hazards.at(-1).by = `${id}|${who}`; }
           }
         };
-        // Who leads each beat, by what its faculties found (the user, 2026-11-03: the faculties' findings steer the lead
-        // directly, not a second type question; experiments/v2/faculty-firing.mjs): blows read in a beat make it the combat
+        // Who leads each beat, by what its casts found (the user, 2026-11-03: the pre-film casts' findings steer the lead
+        // directly, not a second type question; experiments/v2/cast-firing.mjs): blows read in a beat make it the combat
         // director's, journeys the mega-scene director's, both the mega-scene director's with combat co-directing; a beat
-        // whose leading faculty read it and found nothing goes to the routine director. Unread, the gate's lead stands.
+        // whose leading cast read it and found nothing goes to the routine director. Unread, the gate's lead stands.
         if (gate) {
-          const readBy = faculty => new Set(firedSpans(faculty).flat()), read = { choreography: readBy('choreography'), journeys: readBy('journeys') };
+          const readBy = cast => new Set(firedSpans(cast).flat()), read = { actionDirector: readBy('actionDirector'), blocking: readBy('blocking') };
           sceneRecord.leads = [];
           for (const [n, beat] of gate.beats.entries()) {
             if (beat.scene !== scene.id) continue;
             const a = order_.indexOf(beat.first), b = order_.indexOf(beat.last), ids = order_.slice(Math.max(0, a), b < 0 ? order_.length : b + 1);
             const blows = ids.some(id => exchangesAt.has(id)), goes = (sceneRecord.journeys ?? []).some(entry => ids.includes(entry.sentence));
-            const readFight = ids.some(id => read.choreography.has(id)), readWay = ids.some(id => read.journeys.has(id));
+            const readFight = ids.some(id => read.actionDirector.has(id)), readWay = ids.some(id => read.blocking.has(id));
             let found = beat.lead, co = [];
             if (blows && goes) { found = 'mega'; co = ['combat']; } else if (blows) found = 'combat'; else if (goes) found = 'mega';
             else if ((beat.lead === 'combat' && readFight) || (beat.lead === 'mega' && readWay)) found = 'routine';
             if (found !== beat.lead || co.length) { for (const id of ids) { const entry = beatOf.get(id); if (entry?.n === n) beatOf.set(id, { ...entry, lead: found, gateLead: beat.lead, ...(co.length ? { with: co } : {}) }); } }
             sceneRecord.leads.push({ beat: n, type: beat.type, gate: beat.lead, lead: found, ...(co.length ? { with: co } : {}), blows, journeys: goes });
           }
-          // What each fired faculty found in each of this scene's stretches (M12).
+          // What each fired cast found in each of this scene's stretches (M12).
           for (const stretch of record.stretches.filter(entry => entry.scene === scene.id)) {
             const a = order_.indexOf(stretch.first), b = order_.indexOf(stretch.last), ids = new Set(order_.slice(Math.max(0, a), b < 0 ? order_.length : b + 1));
-            if (stretch.fired.includes('choreography')) stretch.found.choreography = [...ids].reduce((n, id) => n + (exchangesAt.get(id)?.length ?? 0), 0);
-            if (stretch.fired.includes('journeys')) stretch.found.journeys = (sceneRecord.journeys ?? []).filter(entry => ids.has(entry.sentence)).length;
-            if (stretch.fired.includes('conversation')) stretch.found.conversation = [...ids].reduce((n, id) => n + (channelAt.get(id)?.length ?? 0) + (formationAt.get(id)?.length ?? 0), 0);
+            if (stretch.fired.includes('actionDirector')) stretch.found.actionDirector = [...ids].reduce((n, id) => n + (exchangesAt.get(id)?.length ?? 0), 0);
+            if (stretch.fired.includes('blocking')) stretch.found.blocking = (sceneRecord.journeys ?? []).filter(entry => ids.has(entry.sentence)).length;
+            if (stretch.fired.includes('dialogueCoverage')) stretch.found.dialogueCoverage = [...ids].reduce((n, id) => n + (channelAt.get(id)?.length ?? 0) + (formationAt.get(id)?.length ?? 0), 0);
           }
         }
         // What people carry as the scene begins (the scene digest). A thing someone here held before is drawn with them only
@@ -977,7 +977,7 @@ export async function direct(novelDir, { reading, readingPath = null, faculties 
             // The conversation reader's channel first (M8): a phone, a door, a message is remote; a loudspeaker public.
             const channel = card.sentences.flatMap(id => channelAt.get(id) ?? []).sort((a, b) => b.sure - a.sure)[0] ?? null;
             if (pinnedKind) { kind = pinnedKind; cardRecord.talk = { kind, pinned: true }; }
-            else if (channel) { kind = DG.CHANNELS[channel.channel]; cardRecord.talk = { kind, by: 'conversation', channel: channel.channel }; }
+            else if (channel) { kind = DG.CHANNELS[channel.channel]; cardRecord.talk = { kind, by: 'dialogue coverage', channel: channel.channel }; }
             else if (digestKind) { kind = digestKind; cardRecord.talk = { kind, by: 'digest' }; }
             else if (apart.length && calls < budget) {
               const others = Object.keys(positions).filter(id => id !== anchor).map(id => ({ name: names.get(id) ?? id, ...gap(id) }));
@@ -1387,7 +1387,7 @@ export async function direct(novelDir, { reading, readingPath = null, faculties 
         }
         // Departures (the user, 2026-11-03: a group leaving the strand is a fork; "they just run"): whoever's next container
         // in story time is at another place leaves now, running out of the frame toward that place, while the rest stay;
-        // their arrival there picks up from where they left. Read from the strands' story order (no faculty of its own).
+        // their arrival there picks up from where they left. Read from the strands' story order (no cast of its own).
         {
           const leaving = Object.keys(positions).filter(who => !who.startsWith('crowd:') && nextOf.get(`${scene.id}|${who}`) && !nextOf.get(`${scene.id}|${who}`).samePlace);
           if (leaving.length) {
@@ -1485,7 +1485,7 @@ export async function direct(novelDir, { reading, readingPath = null, faculties 
 }
 
 if (process.argv[1] === fileURLToPath(import.meta.url)) {
-  const { values, positionals: [novelDir] } = parseArgs({ allowPositionals: true, options: { reading: { type: 'string' }, from: { type: 'string' }, to: { type: 'string' }, budget: { type: 'string' }, 'stand-in': { type: 'boolean' }, live: { type: 'boolean' }, pace: { type: 'string' }, agent: { type: 'string' }, 'no-digest': { type: 'boolean' }, 'no-speakers': { type: 'boolean' }, 'live-test': { type: 'boolean' }, 'no-faculties': { type: 'boolean' } } });
+  const { values, positionals: [novelDir] } = parseArgs({ allowPositionals: true, options: { reading: { type: 'string' }, from: { type: 'string' }, to: { type: 'string' }, budget: { type: 'string' }, 'stand-in': { type: 'boolean' }, live: { type: 'boolean' }, pace: { type: 'string' }, agent: { type: 'string' }, 'no-digest': { type: 'boolean' }, 'no-speakers': { type: 'boolean' }, 'live-test': { type: 'boolean' }, 'no-prefilm': { type: 'boolean' }, 'no-faculties': { type: 'boolean' } } });
   if (!novelDir || !values.reading || !values.from || !values.to) { console.error('usage: node world-engine/director/director.mjs <novel-dir> --reading <data.json> --from <scene> --to <scene> [--budget 60] [--stand-in] [--live]'); process.exit(2); }
   const reading = JSON.parse(await readFile(values.reading, 'utf8'));
   let jev = standIn();
@@ -1510,10 +1510,10 @@ if (process.argv[1] === fileURLToPath(import.meta.url)) {
     // --agent <host state dir>: the main agent's console (Pi, through the host's queue) the held batches are sent to.
     const agentLinks = values.agent ? JSON.parse(await readFile(join(resolve(values.agent), 'links.json'), 'utf8').catch(() => '{}')) : null;
     const agent = values.agent ? { console: join(resolve(values.agent), 'runtime', 'pi-console'), expiresAt: agentLinks?.expiresAt ? Date.parse(agentLinks.expiresAt) || agentLinks.expiresAt : Date.now() + 3600_000 } : null;
-    // The faculties the reading step made (experiments/v2/faculties.mjs), beside the reading.
-    const faculties = values['no-faculties'] ? null : JSON.parse(await readFile(join(dirname(resolve(values.reading)), 'faculties.json'), 'utf8').catch(() => 'null'));
-    if (faculties) console.error(`faculties from the reading step: ${Object.keys(faculties.units ?? {}).length} units${faculties.standIn ? ' (made by a stand-in)' : ''}`);
-    const { record } = await direct(resolve(novelDir), { reading, readingPath: values.reading, faculties, agent, digest: !values['no-digest'], speakers: !values['no-speakers'], from: values.from, to: values.to, jev, workModel, budget: values.budget ? Number(values.budget) : Infinity, live, pace: values.pace ? Number(values.pace) : values.live ? 6 : 0 });
+    // The pre-film casts' notes the reading step made (experiments/v2/prefilm.mjs), beside the reading.
+    const prefilm = values['no-prefilm'] || values['no-faculties'] ? null : await (await import('../digest/prefilm.mjs')).loadPrefilm(dirname(resolve(values.reading)));
+    if (prefilm) console.error(`pre-film casts' notes from the reading step: ${Object.keys(prefilm.units ?? {}).length} units${prefilm.standIn ? ' (made by a stand-in)' : ''}`);
+    const { record } = await direct(resolve(novelDir), { reading, readingPath: values.reading, prefilm, agent, digest: !values['no-digest'], speakers: !values['no-speakers'], from: values.from, to: values.to, jev, workModel, budget: values.budget ? Number(values.budget) : Infinity, live, pace: values.pace ? Number(values.pace) : values.live ? 6 : 0 });
     const moves = record.scenes.flatMap(scene => scene.cards.flatMap(card => card.moves));
     const second = record.scenes.flatMap(scene => [...(scene.system2 ?? []), ...scene.cards.flatMap(card => card.system2 ?? [])]);
     console.error(`system 2: ran on ${second.length} answers, the work model's used for ${second.filter(entry => entry.used === 'work').length}, differing from Jev's on ${second.filter(entry => entry.work && String(entry.work.value) !== String(entry.jev.value)).length}`);

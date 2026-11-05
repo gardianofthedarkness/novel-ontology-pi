@@ -1,20 +1,20 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { firedSpans } from './faculties.mjs';
+import { firedSpans } from './prefilm.mjs';
 
-test('a faculty reads where the gate fires it: overlapping windows joined, sixty lines a request', () => {
+test('a cast reads where the gate fires it: overlapping windows joined, sixty lines a request', () => {
   const scene = { id: 'u1', sentences: Array.from({ length: 130 }, (_, k) => `s${k}`) };
   const gate = { windows: [
-    { scene: 'u1', first: 's0', last: 's11', fired: ['journeys'] }, { scene: 'u1', first: 's6', last: 's17', fired: ['journeys', 'conversation'] },
-    { scene: 'u1', first: 's40', last: 's129', fired: ['journeys'] }, { scene: 'u2', first: 's0', last: 's5', fired: ['journeys'] },
+    { scene: 'u1', first: 's0', last: 's11', fired: ['blocking'] }, { scene: 'u1', first: 's6', last: 's17', fired: ['blocking', 'dialogueCoverage'] },
+    { scene: 'u1', first: 's40', last: 's129', fired: ['blocking'] }, { scene: 'u2', first: 's0', last: 's5', fired: ['blocking'] },
   ] };
-  assert.deepEqual(firedSpans(gate, scene, 'journeys').map(span => [span[0], span.at(-1), span.length]), [['s0', 's17', 18], ['s40', 's99', 60], ['s100', 's129', 30]]);
-  assert.deepEqual(firedSpans(gate, scene, 'conversation').map(span => span.length), [12]);
-  assert.deepEqual(firedSpans(gate, scene, 'choreography'), []);
+  assert.deepEqual(firedSpans(gate, scene, 'blocking').map(span => [span[0], span.at(-1), span.length]), [['s0', 's17', 18], ['s40', 's99', 60], ['s100', 's129', 30]]);
+  assert.deepEqual(firedSpans(gate, scene, 'dialogueCoverage').map(span => span.length), [12]);
+  assert.deepEqual(firedSpans(gate, scene, 'actionDirector'), []);
 });
 
 test('a journey said in words takes the place offered that fits, near ones first', async () => {
-  const { placeOfWords, placedJourney } = await import('./faculties.mjs');
+  const { placeOfWords, placedJourney } = await import('./prefilm.mjs');
   const places = [{ id: 'loc_a', label: '小巷' }, { id: 'loc_b', label: '小巷', near: true }, { id: 'loc_c', label: '车站' }, { id: 'loc_d', label: '北区' }];
   assert.equal(placeOfWords('loc_c', places), 'loc_c');
   assert.equal(placeOfWords('小巷', places), 'loc_b');

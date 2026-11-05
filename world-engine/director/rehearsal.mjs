@@ -65,7 +65,7 @@ export function measure(record) {
     exchanges: cards.reduce((n, card) => n + (card.exchanges?.length ?? 0), 0), askedJev: cards.reduce((n, card) => n + (card.exchanges?.filter(entry => entry.by === 'jev').length ?? 0), 0), conditions: cards.reduce((n, card) => n + (card.conditions?.length ?? 0), 0),
     talkKinds: count(cards.map(card => card.talk?.kind).filter(Boolean)), formations: cards.reduce((n, card) => n + (card.formations?.length ?? 0), 0),
     laws: count(cards.flatMap(card => (card.laws ?? []).map(law => `${law.law} ${law.verdict}`))), calls: record.calls, usage: record.usage, timing: record.timing ?? null,
-    // M12: where each faculty fired and found something, the leads the findings changed, the price.
+    // M12: where each cast fired and found something, the leads the findings changed, the price.
     gateUnit: record.gate?.unit ?? null, stretches: (record.stretches ?? []).length,
     firedBy: count((record.stretches ?? []).flatMap(entry => entry.fired ?? [])), foundBy: count((record.stretches ?? []).flatMap(entry => Object.entries(entry.found ?? {}).filter(([, n]) => n > 0).map(([id]) => id))),
     leadsChanged: count(record.scenes.flatMap(scene => (scene.leads ?? []).filter(entry => entry.lead !== entry.gate).map(entry => `${entry.gate} → ${entry.lead}`))), cost: record.cost ?? null,
@@ -94,12 +94,12 @@ if (process.argv[1] === fileURLToPath(import.meta.url)) {
   const reading = JSON.parse(await readFile(values.reading, 'utf8')), world = join(resolve(novelDir), 'stage', 'world');
   const strands = JSON.parse(await readFile(join(world, 'strands.json'), 'utf8')), spawn = JSON.parse(await readFile(join(world, 'spawn.json'), 'utf8').catch(() => 'null'));
   const passes = [];
-  // The faculties the reading step made, beside the reading (the real ones when a paid step made them).
-  const faculties = JSON.parse(await readFile(join(dirname(resolve(values.reading)), 'faculties.json'), 'utf8').catch(() => 'null'));
+  // The pre-film casts' notes the reading step made, beside the reading (the real ones when a paid step made them).
+  const prefilm = await (await import('../digest/prefilm.mjs')).loadPrefilm(dirname(resolve(values.reading)));
   let smoothing = null, blasts = [];
   for (let pass = 1; pass <= Number(values.passes ?? 1); pass++) {
     const started = Date.now();
-    const { record, data } = await direct(resolve(novelDir), { reading, faculties, from: values.from, to: values.to, jev: standIn(), workModel: ruledWork(), speakers: false, smoothing, blasts: blasts.map(entry => ({ ...entry })), log: () => {} });
+    const { record, data } = await direct(resolve(novelDir), { reading, prefilm, from: values.from, to: values.to, jev: standIn(), workModel: ruledWork(), speakers: false, smoothing, blasts: blasts.map(entry => ({ ...entry })), log: () => {} });
     const smoothedNow = smoothedOf({ run: `rehearsal-${pass}`, record, page: data, spawn, strands, reading });
     // --keep-page: the page beside the run's record, as a real run keeps it (why-walk.mjs and the replay read it).
     if (values['keep-page']) { const id = `d${record.startedAt.replace(/\D/g, '').slice(0, 14)}`, folder = join(resolve(novelDir), 'stage', 'simulation', 'runs', 'director'); await mkdir(folder, { recursive: true }); await writeFile(join(folder, `${id}.page.json`), JSON.stringify(data)); passes.keptPage = id; }

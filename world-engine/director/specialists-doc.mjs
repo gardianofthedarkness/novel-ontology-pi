@@ -6,14 +6,14 @@
 import { readFile, writeFile } from 'node:fs/promises';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { BLOCK_TYPES, QUIET, DIRECTORS, FACULTIES, FLOW, GATES, LAWS, LOG_KINDS, SIGNALS, STATE, registryProblems, target } from './specialists.mjs';
+import { BLOCK_TYPES, QUIET, DIRECTORS, CASTS, FLOW, GATES, LAWS, LOG_KINDS, SIGNALS, STATE, registryProblems, target } from './specialists.mjs';
 
 const repository = resolve(dirname(fileURLToPath(import.meta.url)), '..', '..');
 const START = '<!-- specialists:start -->', END = '<!-- specialists:end -->';
 export const esc = text => String(text).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]);
-export const firedBy = faculty => faculty.always ? `always (each ${faculty.always})` : [...(faculty.types ?? []).map(type => BLOCK_TYPES[type].label), ...(faculty.kinds ?? []).map(kind => `${kind} sentences`), ...(faculty.signals ?? []).map(signal => SIGNALS[signal].label)].join(', ');
+export const firedBy = cast => cast.always ? `always (each ${cast.always})` : [...(cast.types ?? []).map(type => BLOCK_TYPES[type].label), ...(cast.kinds ?? []).map(kind => `${kind} sentences`), ...(cast.signals ?? []).map(signal => SIGNALS[signal].label)].join(', ');
 export const readers = id => Object.entries(DIRECTORS).filter(([, director]) => director.reads.includes(id)).map(([key, director]) => ({ key, label: director.label, own: director.reads[0] === id }));
-export const fires = type => Object.entries(FACULTIES).filter(([, faculty]) => faculty.types?.includes(type)).map(([, faculty]) => faculty.label);
+export const fires = type => Object.entries(CASTS).filter(([, cast]) => cast.types?.includes(type)).map(([, cast]) => cast.label);
 export const metres = ([near, far]) => `${near}–${far >= 1000 ? `${far / 1000} km` : `${far} m`}`;
 // A target in words: the record and its field, relation or event type.
 const RECORD = { scene: 'Scene', stateChange: 'StateChange', relation: 'Relation', event: 'Event', entity: 'Entity', timeline: 'Timeline' };
@@ -29,9 +29,9 @@ export function markdown() {
   const lines = ['_Written from `world-engine/director/specialists.mjs` by `specialists-doc.mjs`; change the registry, not this._', ''];
   lines.push('**Block types** (Jev, in the kinds pass, as one distribution a window):', '', '| Type | What it is | In volume 1 | Fires |', '|---|---|---|---|');
   for (const [id, type] of Object.entries(BLOCK_TYPES)) lines.push(`| ${type.label} | ${type.means} | ${type.volume1} | ${[...(QUIET.includes(id) ? ['fires no reader'] : []), ...fires(id)].join(', ')} |`);
-  lines.push('', '**Summary faculties** (the work model reads the text) and the directors that play them (own: the director\'s first faculty):', '', '| Faculty | Fired by | Writes | Read by | Status |', '|---|---|---|---|---|');
-  for (const [id, faculty] of Object.entries(FACULTIES)) lines.push(`| ${faculty.label} | ${firedBy(faculty)} | ${faculty.writes.join('; ')} | ${readers(id).map(entry => `${entry.label}${entry.own ? ' (own)' : ''}`).join(', ')} | ${faculty.status} |`);
-  lines.push('', '**Specialist directors.** The stage manager always runs; action directors record action, read the scale faculty and hold a camera (one of them leads each beat); state directors keep what rides with people and things, with no zoom and no camera:', '', '| Director | Kind | Plays | Zoom | Camera | Asks Jev | Status |', '|---|---|---|---|---|---|---|');
+  lines.push('', '**Pre-film casts** (the work model reads the text) and the directors that play them (own: the director\'s first cast):', '', '| Cast | Fired by | Writes | Read by | Status |', '|---|---|---|---|---|');
+  for (const [id, cast] of Object.entries(CASTS)) lines.push(`| ${cast.label} | ${firedBy(cast)} | ${cast.writes.join('; ')} | ${readers(id).map(entry => `${entry.label}${entry.own ? ' (own)' : ''}`).join(', ')} | ${cast.status} |`);
+  lines.push('', '**Specialist directors.** The stage manager always runs; action directors record action, read the scale cast and hold a camera (one of them leads each beat); state directors keep what rides with people and things, with no zoom and no camera:', '', '| Director | Kind | Plays | Zoom | Camera | Asks Jev | Status |', '|---|---|---|---|---|---|---|');
   for (const director of Object.values(DIRECTORS)) lines.push(`| ${director.label} | ${director.kind} | ${director.role} | ${director.scale ? metres(director.scale) : '—'} | ${director.camera ?? '—'} | ${director.asks.map(ask => `${ask.name}${ask.status === 'built' ? ' (built)' : ask.status === 'partial' ? ' (partial)' : ''}`).join('; ')} | ${director.status} |`);
   lines.push('', '**State and the ontology.** What each director keeps as it plays, and how it flows:', '', ...FLOW.map((step, n) => `${n + 1}. **${step.step}**: ${step.what} (\`${step.code}\`)`), '', 'Gates: ' + Object.entries(GATES).map(([gate, what]) => `**${gate}**, ${what}`).join('; ') + '.', '');
   for (const [id, states] of Object.entries(STATE)) {
@@ -44,32 +44,32 @@ export function markdown() {
   return lines.join('\n');
 }
 
-/** The HTML sections for the plan page: block types, the faculty-to-director matrix, the faculties, the directors. */
+/** The HTML sections for the plan page: block types, the cast-to-director matrix, the casts, the directors. */
 export function html() {
   const pill = status => `<span class="pill ${status === 'built' ? 'always' : status === 'partial' ? 'damp' : 'fired'}">${status}</span>`;
   const ids = Object.keys(DIRECTORS);
   const types = Object.entries(BLOCK_TYPES).map(([id, type]) => `<tr><td>${esc(type.label)}</td><td>${esc(type.means)}</td><td>${esc(type.volume1)}</td><td>${[...(QUIET.includes(id) ? ['<span class="pill damp">fires no reader</span>'] : []), ...fires(id).map(label => `<span class="pill fired">${esc(label)}</span>`)].join(' ')}</td></tr>`).join('\n');
-  const matrix = Object.entries(FACULTIES).map(([id, faculty]) => `<tr><th scope="row">${esc(faculty.label)}<br><small>${esc(firedBy(faculty))}</small></th>${ids.map(key => { const k = DIRECTORS[key].reads.indexOf(id); return `<td class="cell">${k === 0 ? '<b title="its own">●</b>' : k > 0 ? '<span title="reads">○</span>' : ''}</td>`; }).join('')}</tr>`).join('\n');
-  const faculties = Object.entries(FACULTIES).map(([id, faculty]) => `<div class="card ${faculty.always ? 'always' : 'fired'}"><span class="tag">${faculty.always ? `Always on · each ${faculty.always}` : 'Fired'}</span> ${pill(faculty.status)}<h3>${esc(faculty.label)}</h3><dl>
-    <dt>Fired by</dt><dd>${esc(firedBy(faculty))}</dd><dt>Writes</dt><dd>${faculty.writes.map(esc).join('; ')}</dd><dt>Read by</dt><dd>${readers(id).map(entry => esc(entry.label)).join(', ')}</dd>${faculty.code ? `<dt>Code</dt><dd><code>${esc(faculty.code)}</code></dd>` : ''}</dl></div>`).join('\n');
+  const matrix = Object.entries(CASTS).map(([id, cast]) => `<tr><th scope="row">${esc(cast.label)}<br><small>${esc(firedBy(cast))}</small></th>${ids.map(key => { const k = DIRECTORS[key].reads.indexOf(id); return `<td class="cell">${k === 0 ? '<b title="its own">●</b>' : k > 0 ? '<span title="reads">○</span>' : ''}</td>`; }).join('')}</tr>`).join('\n');
+  const casts = Object.entries(CASTS).map(([id, cast]) => `<div class="card ${cast.always ? 'always' : 'fired'}"><span class="tag">${cast.always ? `Always on · each ${cast.always}` : 'Fired'}</span> ${pill(cast.status)}<h3>${esc(cast.label)}</h3><dl>
+    <dt>Fired by</dt><dd>${esc(firedBy(cast))}</dd><dt>Writes</dt><dd>${cast.writes.map(esc).join('; ')}</dd><dt>Read by</dt><dd>${readers(id).map(entry => esc(entry.label)).join(', ')}</dd>${cast.code ? `<dt>Code</dt><dd><code>${esc(cast.code)}</code></dd>` : ''}</dl></div>`).join('\n');
   const KIND = { stage: 'Stage · always on', action: 'Action · reads the zoom, holds a camera', state: 'State · no zoom, no camera' };
   const directors = Object.values(DIRECTORS).map(director => `<div class="card ${director.kind === 'action' ? 'fired' : director.kind === 'stage' ? 'always' : 'damp'}"><span class="tag">${KIND[director.kind]}</span> ${pill(director.status)}<h3>${esc(director.label)}</h3><p>${esc(director.role)}</p><dl>
-    ${director.scale ? `<dt>Zoom</dt><dd>${metres(director.scale)}</dd><dt>Camera</dt><dd>${esc(director.camera)}</dd>` : ''}<dt>Plays</dt><dd>${director.reads.map(id => esc(FACULTIES[id].label)).join(', ')}</dd>
+    ${director.scale ? `<dt>Zoom</dt><dd>${metres(director.scale)}</dd><dt>Camera</dt><dd>${esc(director.camera)}</dd>` : ''}<dt>Plays</dt><dd>${director.reads.map(id => esc(CASTS[id].label)).join(', ')}</dd>
     <dt>Asks Jev</dt><dd><ul class="asks">${director.asks.map(ask => `<li>${pill(ask.status)} ${esc(ask.name)}${ask.what ? ` <span class="note">(${esc(ask.what)})</span>` : ''}</li>`).join('')}</ul></dd><dt>Tools</dt><dd>${director.tools.map(esc).join('; ')}</dd></dl></div>`).join('\n');
   return `<p class="note">Written from <code>world-engine/director/specialists.mjs</code> by <code>specialists-doc.mjs</code>: the registry is the design.</p>
 <h2>Block types</h2>
-<p>A block is a window of about 12 sentences, moving 6 at a time. Jev answers its type with a distribution kept whole, so a block can be 0.5 confrontation and 0.4 pursuit, and both faculties fire.</p>
+<p>A block is a window of about 12 sentences, moving 6 at a time. Jev answers its type with a distribution kept whole, so a block can be 0.5 confrontation and 0.4 pursuit, and both casts fire.</p>
 <div class="scroll"><table><thead><tr><th>Type</th><th>What it is</th><th>In volume 1</th><th>Fires</th></tr></thead><tbody>
 ${types}
 </tbody></table></div>
-<h2>Faculties and specialist directors</h2>
-<p>Faculties are the work model reading the text; directors are Jev deciding. Each director owns one faculty (●) and plays others' claims (○). The scale-and-view faculty goes only to the action directors, whose camera operators frame each beat at the zoom and angle it recommends. The stage manager chooses which action director leads each beat; state directors (character, transport, architect) answer their own questions with no zoom and no camera.</p>
-<div class="scroll"><table class="matrix"><thead><tr><th>Faculty · fired by</th>${ids.map(key => `<th>${esc(DIRECTORS[key].label)}</th>`).join('')}</tr></thead><tbody>
+<h2>Casts and specialist directors</h2>
+<p>Casts are the work model reading the text; directors are Jev deciding. Each director owns one cast (●) and plays others' claims (○). The scale-and-view cast goes only to the action directors, whose camera operators frame each beat at the zoom and angle it recommends. The stage manager chooses which action director leads each beat; state directors (character, transport, architect) answer their own questions with no zoom and no camera.</p>
+<div class="scroll"><table class="matrix"><thead><tr><th>Cast · fired by</th>${ids.map(key => `<th>${esc(DIRECTORS[key].label)}</th>`).join('')}</tr></thead><tbody>
 ${matrix}
 </tbody></table></div>
-<h3>The faculties</h3>
+<h3>The casts</h3>
 <div class="grid">
-${faculties}
+${casts}
 </div>
 <h3>The directors</h3>
 <div class="grid">

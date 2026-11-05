@@ -5,7 +5,7 @@ aliases: ["Transport specialist"]
 kind: "state"
 status: "proposed"
 zoom: "none"
-reads: ["props", "generalist"]
+reads: ["propMaster", "scriptSupervisor"]
 tags: ["directing/director", "kind/state", "status/proposed"]
 ---
 <!-- Written by world-engine/director/directing-vault.mjs from the code; change the code, not this note. -->
@@ -20,8 +20,8 @@ None: a state director keeps what rides with people and things. Its questions ar
 
 ## Plays
 
-- [Props and vehicles](../faculties/props.md) (its own)
-- [Generalist](../faculties/generalist.md)
+- [Prop master](../casts/propMaster.md) (its own)
+- [Script supervisor](../casts/scriptSupervisor.md)
 
 ## How Jev is asked
 

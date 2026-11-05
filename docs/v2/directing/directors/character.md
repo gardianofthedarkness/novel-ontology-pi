@@ -5,7 +5,7 @@ aliases: ["Character director"]
 kind: "state"
 status: "proposed"
 zoom: "none"
-reads: ["feeling", "generalist"]
+reads: ["actingCoach", "scriptSupervisor"]
 tags: ["directing/director", "kind/state", "status/proposed"]
 ---
 <!-- Written by world-engine/director/directing-vault.mjs from the code; change the code, not this note. -->
@@ -20,8 +20,8 @@ None: a state director keeps what rides with people and things. Its questions ar
 
 ## Plays
 
-- [Inner state](../faculties/feeling.md) (its own)
-- [Generalist](../faculties/generalist.md)
+- [Acting coach](../casts/actingCoach.md) (its own)
+- [Script supervisor](../casts/scriptSupervisor.md)
 
 ## How Jev is asked
 
@@ -49,7 +49,7 @@ None: a state director keeps what rides with people and things. Its questions ar
 
 | Key | Kind | Asks | Options |
 |---|---|---|---|
-| `intent` | choice | What does &lt;a person&gt; want next? | `<each wish the inner-state faculty found>`<br>`none of these` |
+| `intent` | choice | What does &lt;a person&gt; want next? | `<each wish the inner-state cast found>`<br>`none of these` |
 
 ## Tools
 

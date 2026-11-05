@@ -1,17 +1,17 @@
 ---
-type: "faculty"
-id: "journeys"
-aliases: ["Journeys"]
+type: "cast"
+id: "blocking"
+aliases: ["Blocking"]
 status: "built"
 fired_by: ["traversal", "scaleJump"]
 read_by: ["mega"]
-tags: ["directing/faculty", "status/built"]
+tags: ["directing/cast", "status/built"]
 ---
 <!-- Written by world-engine/director/directing-vault.mjs from the code; change the code, not this note. -->
 
-# Journeys
+# Blocking
 
-A summary faculty: the work model reading the text. Status: **built** (`world-engine/digest/digest.mjs journeysOf (M6)`). Back to [Directing](../Directing.md).
+A summary cast: the work model reading the text. Status: **built** (`world-engine/digest/digest.mjs journeysOf (M6)`). Back to [Directing](../Directing.md).
 
 ## What it writes
 
@@ -29,7 +29,7 @@ On a score-based mixed index of all of these, each against its own baseline over
 
 ## How it is asked
 
-How often: one request a span where journeys fires.
+How often: one request a span where blocking fires.
 
 **System**
 
@@ -54,4 +54,4 @@ How often: one request a span where journeys fires.
 
 ## Read by
 
-- [Mega-scene director](../directors/mega.md) (its own faculty)
+- [Mega-scene director](../directors/mega.md) (its own cast)

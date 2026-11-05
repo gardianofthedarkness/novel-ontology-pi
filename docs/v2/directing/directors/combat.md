@@ -5,7 +5,7 @@ aliases: ["Combat director"]
 kind: "action"
 status: "partial"
 zoom: "5–60 m"
-reads: ["choreography", "scale", "generalist"]
+reads: ["actionDirector", "cinematographer", "scriptSupervisor"]
 tags: ["directing/director", "kind/action", "status/partial"]
 ---
 <!-- Written by world-engine/director/directing-vault.mjs from the code; change the code, not this note. -->
@@ -16,13 +16,13 @@ A fight, exchange by exchange: the kind and shape of each attack, who it hits, w
 
 ## Zoom and camera
 
-Reads the [Scale and view](../faculties/scale.md) faculty: its camera operator frames each beat, and Jev's pictures for its questions, at the recommended zoom and view angle. Zoom range 5–60 m; camera: close to medium at the recommended angle, following the exchange; wider for a blast.
+Reads the [Cinematographer](../casts/cinematographer.md) cast: its camera operator frames each beat, and Jev's pictures for its questions, at the recommended zoom and view angle. Zoom range 5–60 m; camera: close to medium at the recommended angle, following the exchange; wider for a blast.
 
 ## Plays
 
-- [Choreography](../faculties/choreography.md) (its own)
-- [Scale and view](../faculties/scale.md)
-- [Generalist](../faculties/generalist.md)
+- [Action director](../casts/actionDirector.md) (its own)
+- [Cinematographer](../casts/cinematographer.md)
+- [Script supervisor](../casts/scriptSupervisor.md)
 
 ## How Jev is asked
 
@@ -99,4 +99,4 @@ What it keeps as it plays, and where that lands (the flow and the gates: [Direct
 | Injury and condition (hurt, unconscious, bound) | `condition` | — | StateChange.conditionsAdd + StateChange.conditionsRemove; the field added 2026-11-03 (set add/remove, as possessions) | held | partial |
 | Abilities shown | `exchange` | L12 abilities | Character.properties.abilities | held | proposed |
 | What breaks | `damage` | L13 destruction | Location.properties.damage | applied | built |
-| Its camera (the zoom and view angle the scale faculty recommends, as framed) | — | — | the run only | run | partial |
+| Its camera (the zoom and view angle the scale cast recommends, as framed) | — | — | the run only | run | partial |

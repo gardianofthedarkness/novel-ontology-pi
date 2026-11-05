@@ -209,7 +209,7 @@ run failed on something the replay does not recreate). Against the same units wi
 
 ## Sequences, headings and cuts (909265b; the user, 2026-11-04: "I agree to the new plan ... let's do it")
 
-The industry's levels (docs/v2/directing/faculties-jev-and-crew.md): episode › sequence › scene › cut. The tiler's scene
+The industry's levels (docs/v2/directing/casts-jev-and-crew.md): episode › sequence › scene › cut. The tiler's scene
 pass is kept as **sequences**; Jev gives each a screenplay's **heading** (interior or exterior, where among the places
 offered, the time of day), and a scene whose place was only carried on takes the heading's place. A **storyboard** step
 asks Jev, card by card, where the camera cuts and the shot (size, angle, movement, seconds); the director frames each card

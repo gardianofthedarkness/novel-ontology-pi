@@ -5,7 +5,7 @@ aliases: ["Architect"]
 kind: "state"
 status: "partial"
 zoom: "none"
-reads: ["setting", "generalist"]
+reads: ["setDresser", "scriptSupervisor"]
 tags: ["directing/director", "kind/state", "status/partial"]
 ---
 <!-- Written by world-engine/director/directing-vault.mjs from the code; change the code, not this note. -->
@@ -20,8 +20,8 @@ None: a state director keeps what rides with people and things. Its questions ar
 
 ## Plays
 
-- [Set description](../faculties/setting.md) (its own)
-- [Generalist](../faculties/generalist.md)
+- [Set dresser](../casts/setDresser.md) (its own)
+- [Script supervisor](../casts/scriptSupervisor.md)
 
 ## How Jev is asked
 

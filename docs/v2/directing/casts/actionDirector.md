@@ -1,17 +1,17 @@
 ---
-type: "faculty"
-id: "choreography"
-aliases: ["Choreography"]
+type: "cast"
+id: "actionDirector"
+aliases: ["Action director"]
 status: "built"
 fired_by: ["confrontation", "catastrophe"]
 read_by: ["mega", "combat"]
-tags: ["directing/faculty", "status/built"]
+tags: ["directing/cast", "status/built"]
 ---
 <!-- Written by world-engine/director/directing-vault.mjs from the code; change the code, not this note. -->
 
-# Choreography
+# Action director
 
-A summary faculty: the work model reading the text. Status: **built** (`world-engine/digest/digest.mjs exchangesOf (M7)`). Back to [Directing](../Directing.md).
+A summary cast: the work model reading the text. Status: **built** (`world-engine/digest/digest.mjs exchangesOf (M7)`). Back to [Directing](../Directing.md).
 
 ## What it writes
 
@@ -29,7 +29,7 @@ On a score-based mixed index of all of these, each against its own baseline over
 
 ## How it is asked
 
-How often: one request a span where choreography fires.
+How often: one request a span where the action director fires.
 
 **System**
 
@@ -54,4 +54,4 @@ How often: one request a span where choreography fires.
 ## Read by
 
 - [Mega-scene director](../directors/mega.md)
-- [Combat director](../directors/combat.md) (its own faculty)
+- [Combat director](../directors/combat.md) (its own cast)

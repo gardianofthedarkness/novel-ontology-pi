@@ -207,32 +207,32 @@ _Written from `world-engine/director/specialists.mjs` by `specialists-doc.mjs`; 
 
 | Type | What it is | In volume 1 | Fires |
 |---|---|---|---|
-| Routine interaction | people together: talk and small acts | the dart bar (13–18), the crosswalk (11–12), walking with Index (8) | Conversation and blocking, Inner state |
-| Confrontation | a fight or standoff: blows, dodges, powers used on someone | 21–22, 25–31, 40 | Choreography |
-| Pursuit / traversal | going somewhere at scale: chases, escapes, crossing the city | the escape (1), the chase to the subway (3), the tower leaps (26), the tower's shaft (34) | Journeys |
-| Mediated exchange | talk through a channel: a phone, a door, a broadcast, a message | phone calls (12, 29, 33), through a door (42–43) | Conversation and blocking |
-| Interior flow | thought, reflection, free indirect thought | 18, 36, the long narration and thought stretches | Inner state |
+| Routine interaction | people together: talk and small acts | the dart bar (13–18), the crosswalk (11–12), walking with Index (8) | Dialogue coverage, Acting coach |
+| Confrontation | a fight or standoff: blows, dodges, powers used on someone | 21–22, 25–31, 40 | Action director |
+| Pursuit / traversal | going somewhere at scale: chases, escapes, crossing the city | the escape (1), the chase to the subway (3), the tower leaps (26), the tower's shaft (34) | Blocking |
+| Mediated exchange | talk through a channel: a phone, a door, a broadcast, a message | phone calls (12, 29, 33), through a door (42–43) | Dialogue coverage |
+| Interior flow | thought, reflection, free indirect thought | 18, 36, the long narration and thought stretches | Acting coach |
 | Exposition | world-building and background with no one acting | the Board (37), R&C Occultics (39) | fires no reader |
-| Establishing / ambience | where and when: the place, weather, crowds, mood | the openings of 1, 2, 10, 45 | Ambience, Set description |
+| Establishing / ambience | where and when: the place, weather, crowds, mood | the openings of 1, 2, 10, 45 | Background action, Set dresser |
 | Memory / flashback | what happened before this scene's now | 35 | fires no reader |
-| Spectacle / catastrophe | the world itself changing: ground splits, floods, collapses | 21, 22, 26, 27 | Choreography |
+| Spectacle / catastrophe | the world itself changing: ground splits, floods, collapses | 21, 22, 26, 27 | Action director |
 
-**Summary faculties** (the work model reads the text) and the directors that play them (own: the director's first faculty):
+**Pre-film casts** (the work model reads the text) and the directors that play them (own: the director's first cast):
 
-| Faculty | Fired by | Writes | Read by | Status |
+| Cast | Fired by | Writes | Read by | Status |
 |---|---|---|---|---|
-| Scene frame | always (each scene) | the set as a path down the place tree; who is on stage; how it follows the scene before; the beats | Stage manager (own) | partial |
-| Scale and view | always (each beat) | the zoom: how many metres across the beat plays (a room ~15 m, a street ~80 m, a block ~300 m, a district ~1.5 km); the view angle: eye level, over a shoulder, high, top-down, low looking up, aerial; whose eyes or which landmark it is seen from; how far its moves reach | Routine director, Mega-scene director, Combat director | built |
-| Generalist | always (each window) | stated moves (graded); facts, stated and implied; items; talk kinds; breaks | Stage manager, Routine director, Combat director, Character director, Transport specialist, Architect | built |
-| Conversation and blocking | Routine interaction, Mediated exchange, spoken sentences | who talks with whom and through what; formations: beside, across a table, a ring, two sides of a door; attention: who looks at whom | Routine director (own) | built |
-| Inner state | Interior flow, Routine interaction, thought sentences | each person's emotional state as it changes (a distribution); intent: what they want next; bonds: who they are to each other | Character director (own) | proposed |
-| Journeys | Pursuit / traversal, action sentences, a jump in scale | from, via and to as places of the tree; the manner (alleys, up a wall, leaps, carried); distance and duration | Mega-scene director (own) | built |
-| Choreography | Confrontation, Spectacle / catastrophe, action sentences | exchanges: attacker, target, attack, outcome; knock-backs, dodges, throws; what breaks and how wide | Mega-scene director, Combat director (own) | built |
-| Ambience | Establishing / ambience, environment sentences, crowds named | the crowd as a field of the place (M9, world-engine/crowd/field.mjs): its size and state (milling, flowing, gathering, alarmed, gone), its focus; hazards from the fight; drag on the characters (L20); weather, light, mood (not yet); set dressing (not yet) | Mega-scene director | built |
-| Props and vehicles | action sentences, vehicles named, weapons named | vehicles: kind, who drives or rides; weapons: kind, who holds them; things held, thrown, broken | Transport specialist (own) | partial |
-| Set description | Establishing / ambience, environment sentences, fact sentences, buildings named or described | a building's look, floors and uses (a 70-floor tower: mall, offices, flats); a room's make-up (a container bar, a thick-doored cell); changes to them | Architect (own) | proposed |
+| 1st AD | always (each scene) | the set as a path down the place tree; who is on stage; how it follows the scene before; the beats | Stage manager (own) | partial |
+| Cinematographer | always (each beat) | the zoom: how many metres across the beat plays (a room ~15 m, a street ~80 m, a block ~300 m, a district ~1.5 km); the view angle: eye level, over a shoulder, high, top-down, low looking up, aerial; whose eyes or which landmark it is seen from; how far its moves reach | Routine director, Mega-scene director, Combat director | built |
+| Script supervisor | always (each window) | stated moves (graded); facts, stated and implied; items; talk kinds; breaks | Stage manager, Routine director, Combat director, Character director, Transport specialist, Architect | built |
+| Dialogue coverage | Routine interaction, Mediated exchange, spoken sentences | who talks with whom and through what; formations: beside, across a table, a ring, two sides of a door; attention: who looks at whom | Routine director (own) | built |
+| Acting coach | Interior flow, Routine interaction, thought sentences | each person's emotional state as it changes (a distribution); intent: what they want next; bonds: who they are to each other | Character director (own) | proposed |
+| Blocking | Pursuit / traversal, action sentences, a jump in scale | from, via and to as places of the tree; the manner (alleys, up a wall, leaps, carried); distance and duration | Mega-scene director (own) | built |
+| Action director | Confrontation, Spectacle / catastrophe, action sentences | exchanges: attacker, target, attack, outcome; knock-backs, dodges, throws; what breaks and how wide | Mega-scene director, Combat director (own) | built |
+| Background action | Establishing / ambience, environment sentences, crowds named | the crowd as a field of the place (M9, world-engine/crowd/field.mjs): its size and state (milling, flowing, gathering, alarmed, gone), its focus; hazards from the fight; drag on the characters (L20); weather, light, mood (not yet); set dressing (not yet) | Mega-scene director | built |
+| Prop master | action sentences, vehicles named, weapons named | vehicles: kind, who drives or rides; weapons: kind, who holds them; things held, thrown, broken | Transport specialist (own) | partial |
+| Set dresser | Establishing / ambience, environment sentences, fact sentences, buildings named or described | a building's look, floors and uses (a 70-floor tower: mall, offices, flats); a room's make-up (a container bar, a thick-doored cell); changes to them | Architect (own) | proposed |
 
-**Specialist directors.** The stage manager always runs; action directors record action, read the scale faculty and hold a camera (one of them leads each beat); state directors keep what rides with people and things, with no zoom and no camera:
+**Specialist directors.** The stage manager always runs; action directors record action, read the scale cast and hold a camera (one of them leads each beat); state directors keep what rides with people and things, with no zoom and no camera:
 
 | Director | Kind | Plays | Zoom | Camera | Asks Jev | Status |
 |---|---|---|---|---|---|---|
@@ -274,7 +274,7 @@ Gates: **applied**, written by canon without review: a law checks it and nothing
 | Positions in the room | position | L1, L10, L11 | yes | StateChange.location + PART_OF relation; today at the building; a room becomes a Location inside it | applied | partial |
 | Who talks with whom, through what (the channel sets the card's talk kind (M8); L6 respects a remote one) | meeting | L6 |  | SPEAKS_TO relation + Scene.turns; speakers are off for now; the channel (face to face, phone, door) a property of the relation | held | partial |
 | Formations and attention | meeting | L6 |  | ADDRESSES relation; formations played by rule (M8); attention read, not yet drawn | held | partial |
-| Its camera (the zoom and view angle the scale faculty recommends, as framed) | — | — |  | the run only | run | proposed |
+| Its camera (the zoom and view angle the scale cast recommends, as framed) | — | — |  | the run only | run | proposed |
 
 *Character director*
 
@@ -290,7 +290,7 @@ Gates: **applied**, written by canon without review: a law checks it and nothing
 |---|---|---|---|---|---|---|
 | Journeys (routes, stops, manner) | position | L5, L10, L12 | yes | StateChange.location + movement event; each stop a location; the journey an event, held | applied | partial |
 | A catastrophe's extent | damage | L13 |  | Location.properties.damage + conflict event | applied | partial |
-| Its camera (the zoom and view angle the scale faculty recommends, as framed) | — | — |  | the run only | run | proposed |
+| Its camera (the zoom and view angle the scale cast recommends, as framed) | — | — |  | the run only | run | proposed |
 | Crowds | crowd (new) | — |  | Organization.properties.members + MEMBER_OF relation; a named crowd (the student column) an Organization its people are members of; an unnamed density stays with the run | held | proposed |
 
 *Combat director*
@@ -302,7 +302,7 @@ Gates: **applied**, written by canon without review: a law checks it and nothing
 | Injury and condition (hurt, unconscious, bound) | condition | — |  | StateChange.conditionsAdd + StateChange.conditionsRemove; the field added 2026-11-03 (set add/remove, as possessions) | held | partial |
 | Abilities shown | exchange | L12 |  | Character.properties.abilities | held | proposed |
 | What breaks | damage | L13 |  | Location.properties.damage | applied | built |
-| Its camera (the zoom and view angle the scale faculty recommends, as framed) | — | — |  | the run only | run | partial |
+| Its camera (the zoom and view angle the scale cast recommends, as framed) | — | — |  | the run only | run | partial |
 
 *Transport specialist*
 

@@ -5,7 +5,7 @@ aliases: ["Routine director"]
 kind: "action"
 status: "partial"
 zoom: "2–15 m"
-reads: ["conversation", "scale", "generalist"]
+reads: ["dialogueCoverage", "cinematographer", "scriptSupervisor"]
 tags: ["directing/director", "kind/action", "status/partial"]
 ---
 <!-- Written by world-engine/director/directing-vault.mjs from the code; change the code, not this note. -->
@@ -16,13 +16,13 @@ Inside a room or on a street corner: positions, gaze, who talks to whom and from
 
 ## Zoom and camera
 
-Reads the [Scale and view](../faculties/scale.md) faculty: its camera operator frames each beat, and Jev's pictures for its questions, at the recommended zoom and view angle. Zoom range 2–15 m; camera: medium and close at the recommended angle; a room cut away.
+Reads the [Cinematographer](../casts/cinematographer.md) cast: its camera operator frames each beat, and Jev's pictures for its questions, at the recommended zoom and view angle. Zoom range 2–15 m; camera: medium and close at the recommended angle; a room cut away.
 
 ## Plays
 
-- [Conversation and blocking](../faculties/conversation.md) (its own)
-- [Scale and view](../faculties/scale.md)
-- [Generalist](../faculties/generalist.md)
+- [Dialogue coverage](../casts/dialogueCoverage.md) (its own)
+- [Cinematographer](../casts/cinematographer.md)
+- [Script supervisor](../casts/scriptSupervisor.md)
 
 ## How Jev is asked
 
@@ -48,7 +48,7 @@ Asked in `src/v2/context/directorModes.ts`, mode `moveSpotMode` (run here on a s
 
 > In scene 1 (&lt;the place&gt;), the card's lines (card) are being played. &lt;the mover&gt; is the person asked about. They go &lt;toward what&gt;, the shaded wedge on picture "wedge". Where do they end up in this card: one of the spots (spots), or none of these when the text puts them somewhere the spots do not name?
 
-**Given**: card, scene, now, digest, pictures, spots.
+**Given**: card, scene, now, digest, pictures, notes, spots.
 
 | Key | Kind | Asks | Options |
 |---|---|---|---|
@@ -90,4 +90,4 @@ What it keeps as it plays, and where that lands (the flow and the gates: [Direct
 | Positions in the room | `position`, smoothed | L1 continuity by strand; L10 reachable; L11 bodies | StateChange.location + PART_OF relation; today at the building; a room becomes a Location inside it | applied | partial |
 | Who talks with whom, through what (the channel sets the card's talk kind (M8); L6 respects a remote one) | `meeting` | L6 talk needs nearness | SPEAKS_TO relation + Scene.turns; speakers are off for now; the channel (face to face, phone, door) a property of the relation | held | partial |
 | Formations and attention | `meeting` | L6 talk needs nearness | ADDRESSES relation; formations played by rule (M8); attention read, not yet drawn | held | partial |
-| Its camera (the zoom and view angle the scale faculty recommends, as framed) | — | — | the run only | run | proposed |
+| Its camera (the zoom and view angle the scale cast recommends, as framed) | — | — | the run only | run | proposed |

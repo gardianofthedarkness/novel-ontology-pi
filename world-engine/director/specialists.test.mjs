@@ -1,8 +1,8 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { DIRECTORS, FACULTIES, firing, lead, registryProblems } from './specialists.mjs';
+import { DIRECTORS, CASTS, firing, lead, registryProblems } from './specialists.mjs';
 
-test('the registry holds together: every type fires or is quiet, every faculty is fired and read, every director reads', () => {
+test('the registry holds together: every type fires or is quiet, every cast is fired and read, every director reads', () => {
   assert.deepEqual(registryProblems(), []);
   for (const director of Object.values(DIRECTORS)) assert.ok(director.asks.length && (director.kind !== 'action' || director.scale[0] < director.scale[1]));
 });
@@ -12,17 +12,17 @@ test('the built Jev questions the registry names are modes in the code', async (
   for (const director of Object.values(DIRECTORS)) for (const ask of director.asks.filter(entry => entry.status === 'built')) for (const name of ask.name.match(/\b[a-z]\w+Mode\b/g) ?? []) assert.ok(modes[name], `${name} is a mode`);
 });
 
-test('the gate: a dense stretch fires its faculty with hysteresis and a margin; a fight leads to the combat director, a fight in a chase to the mega-scene one', () => {
+test('the gate: a dense stretch fires its cast with hysteresis and a margin; a fight leads to the combat director, a fight in a chase to the mega-scene one', () => {
   const block = (distribution, confidence = 0.9) => ({ block: { distribution, confidence } });
   const quiet = block({ routine: 0.1, confrontation: 0.1, traversal: 0.1 });
   const windows = [quiet, quiet, block({ confrontation: 0.4 }), block({ confrontation: 0.18 }), block({ confrontation: 0.4, traversal: 0.4 }), quiet, quiet, quiet, quiet];
   const fired = firing(windows);
-  assert.deepEqual(fired.choreography, [false, true, true, true, true, true, false, false, false], 'on at 2, held through the dip at 3 (the minimum span), off at 5, a window of margin each side');
-  assert.equal(fired.generalist.every(Boolean), true);
+  assert.deepEqual(fired.actionDirector, [false, true, true, true, true, true, false, false, false], 'on at 2, held through the dip at 3 (the minimum span), off at 5, a window of margin each side');
+  assert.equal(fired.scriptSupervisor.every(Boolean), true);
   assert.equal(lead(fired, 2).lead, 'combat');
   assert.deepEqual(lead(fired, 4), { lead: 'mega', with: ['combat'] });
   assert.equal(lead(fired, 8).lead, 'routine');
-  assert.equal(Object.keys(FACULTIES).length >= 8, true);
+  assert.equal(Object.keys(CASTS).length >= 8, true);
 });
 
 test('the docs are as the registry writes them', async () => {
@@ -59,20 +59,20 @@ test('what the registry calls built, canon writes today', async () => {
   }
 });
 
-test('only the directors who record action take the zoom: they read the scale faculty and hold a camera; one of them always leads', () => {
+test('only the directors who record action take the zoom: they read the cinematographer and hold a camera; one of them always leads', () => {
   const action = Object.entries(DIRECTORS).filter(([, director]) => director.kind === 'action').map(([id]) => id);
   assert.deepEqual(action, ['routine', 'mega', 'combat']);
-  for (const [id, director] of Object.entries(DIRECTORS)) assert.equal(director.reads.includes('scale'), action.includes(id), `${id} and the zoom`);
+  for (const [id, director] of Object.entries(DIRECTORS)) assert.equal(director.reads.includes('cinematographer'), action.includes(id), `${id} and the zoom`);
   for (const id of ['character', 'transport', 'architect']) assert.equal(DIRECTORS[id].camera, undefined, `${id} holds no camera`);
   // A routine stretch fires conversation and inner state: the routine director leads, the character director answers its own.
-  const fired = { conversation: [true], feeling: [true], props: [true] };
+  const fired = { dialogueCoverage: [true], actingCoach: [true], propMaster: [true] };
   assert.deepEqual(lead(fired, 0), { lead: 'routine', with: ['character', 'transport'] });
-  assert.equal(lead({ props: [true] }, 0).lead, 'routine', 'a state director never leads');
+  assert.equal(lead({ propMaster: [true] }, 0).lead, 'routine', 'a state director never leads');
 });
 
-test('a page per faculty and per director: each faculty says how it is asked, each director its Jev questions, the notes in sync', async () => {
-  const { FACULTY_ASKS, DIRECTOR_QUESTIONS, directorQuestions } = await import('./questions.mjs');
-  assert.deepEqual(Object.keys(FACULTY_ASKS).sort(), Object.keys(FACULTIES).sort());
+test('a page per cast and per director: each cast says how it is asked, each director its Jev questions, the notes in sync', async () => {
+  const { CAST_ASKS, DIRECTOR_QUESTIONS, directorQuestions } = await import('./questions.mjs');
+  assert.deepEqual(Object.keys(CAST_ASKS).sort(), Object.keys(CASTS).sort());
   assert.deepEqual(Object.keys(DIRECTOR_QUESTIONS).sort(), Object.keys(DIRECTORS).sort());
   const asked = await directorQuestions();
   for (const [id, entries] of Object.entries(asked)) for (const entry of entries) {
@@ -91,11 +91,11 @@ test('the mixed index: sentences and blocks, each by its score; an unsure block 
   const calm = window(0.1, 0.9, 0.1);
   // Window 4: Jev unsure of the block (0.2), which looks calm, but its sentences are action through and through.
   const windows = [calm, calm, calm, calm, window(0.05, 0.2, 0.9), calm, calm, calm, calm, calm];
-  const { index, choreography } = firing(windows);
-  assert.ok(index.choreography[4] >= 1.5 && choreography[4], `the sentences carry it: ${index.choreography[4]}`);
+  const { index, actionDirector } = firing(windows);
+  assert.ok(index.actionDirector[4] >= 1.5 && actionDirector[4], `the sentences carry it: ${index.actionDirector[4]}`);
   // The same block, sure of itself (0.95), outweighs the sentences less: its own calm counts.
   const sure = firing(windows.map((entry, n) => (n === 4 ? { ...entry, block: { ...entry.block, confidence: 0.95 } } : entry)));
-  assert.ok(sure.index.choreography[4] < index.choreography[4], 'a sure calm block pulls the index down');
+  assert.ok(sure.index.actionDirector[4] < index.actionDirector[4], 'a sure calm block pulls the index down');
 });
 
 test('the block types Jev is asked are the registry\'s', async () => {
