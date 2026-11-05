@@ -62,7 +62,7 @@ export async function v2Workspace(sourceDir, outDir, novelDir) {
   const albumDir = join(outDir, 'v2', 'album'), album = await stat(join(albumDir, 'ontology', 'illustrations.jsonl')).then(() => true, () => false);
   if (album) {
     await cp(join(albumDir, 'assets'), join(novelDir, 'assets'), { recursive: true });
-    for (const name of ['illustrations.jsonl', 'album.json', 'portraits.jsonl']) await cp(join(albumDir, 'ontology', name), join(novelDir, 'ontology', name)).catch(error => { if (error.code !== 'ENOENT') throw error; });
+    for (const name of ['illustrations.jsonl', 'album.json', 'portraits.jsonl', 'intro-groups.json']) await cp(join(albumDir, 'ontology', name), join(novelDir, 'ontology', name)).catch(error => { if (error.code !== 'ENOENT') throw error; });
   }
   return { novelDir, album, scenes: canon.scenes.length, entities: canon.entities.length, events: canon.events.length, relations: canon.relations.length, script: await writeScript(outDir, novelDir, read) };
 }

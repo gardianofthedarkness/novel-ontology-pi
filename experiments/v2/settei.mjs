@@ -17,7 +17,17 @@ if (!novelDir || !readingPath || !values.universe) { console.error('usage: node 
 const reading = JSON.parse(await readFile(resolve(readingPath), 'utf8'));
 const prefilm = await (await import('../../world-engine/digest/prefilm.mjs')).loadPrefilm(dirname(resolve(readingPath)));
 const { loadWorkspaceSentences } = await load('dist/src/cli/commands/extract/timeplaceCommands.js'), { ask } = await load('dist/src/v2/context/engine.js');
-const text = await loadWorkspaceSentences(resolve(novelDir)), line = id => text.get(id)?.text ?? '';
+const text = await loadWorkspaceSentences(resolve(novelDir));
+// The book's introduction (src/v2/extraction/front.ts; front.json beside the reading): each introduced person's line from
+// it (what they are, by the publisher) leads the lines asked about them, and an introduced person is asked about even if
+// the book sees them seldom.
+const front = JSON.parse(await readFile(join(dirname(resolve(readingPath)), 'front.json'), 'utf8').catch(() => 'null'));
+const introLine = new Map(), introOf = new Map();
+if (front && reading.intro?.cast?.length) {
+  const { introParts, introSentences } = await load('dist/src/v2/extraction/front.js'), { sentences } = introSentences(introParts(front));
+  reading.intro.cast.forEach((entry, k) => { if (entry.entity && sentences[k]) { introLine.set(sentences[k].id, sentences[k].text); introOf.set(entry.entity, sentences[k].id); } });
+}
+const line = id => text.get(id)?.text ?? introLine.get(id) ?? '';
 const clip = (value, size) => (value.length > size ? `${value.slice(0, size - 1)}…` : value);
 const names = new Map((reading.chart?.entities ?? []).map(entity => [entity.id, entity.proper?.[0] ?? entity.names?.[0] ?? entity.id]));
 const formsOf = new Map((reading.chart?.entities ?? []).filter(entity => entity.type === 'person').map(entity => [entity.id, [...new Set([...(entity.proper ?? []), ...(entity.names ?? [])])].filter(form => form.length >= 2)]));
@@ -28,9 +38,9 @@ const MOVE = /跳|跃|飞|瞬间移动|空间移动|冲|奔|飘|浮|传送|骑|�
 // A person's own lines that move them, spread over the volume (the first few alone missed what comes later: a leap
 // between towers in a later unit).
 const spread = (list, most) => (list.length <= most ? list : Array.from({ length: most }, (_, k) => list[Math.floor((k * list.length) / most)]));
-const people = (reading.chart?.entities ?? []).filter(entity => entity.type === 'person' && (entity.seen?.length ?? 0) >= 15).map(entity => {
+const people = (reading.chart?.entities ?? []).filter(entity => entity.type === 'person' && ((entity.seen?.length ?? 0) >= 15 || introOf.has(entity.id))).map(entity => {
   const forms = formsOf.get(entity.id) ?? [], lines = spread([...text.keys()].filter(id => MOVE.test(line(id)) && forms.some(form => line(id).includes(form))), 8);
-  return { who: entity.id, label: names.get(entity.id), sentences: lines };
+  return { who: entity.id, label: names.get(entity.id), sentences: [...(introOf.has(entity.id) ? [introOf.get(entity.id)] : []), ...lines] };
 }).filter(entry => entry.sentences.length);
 const props = ST.propsToAsk({ reading, prefilm });
 console.error(`to ask: ${abilities.length} abilities of people, ${people.length} people by their own lines, ${props.length} objects`);

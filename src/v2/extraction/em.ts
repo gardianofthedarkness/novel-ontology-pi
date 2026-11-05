@@ -98,6 +98,40 @@ export class Chart {
     if (!proper || this.byName.has(text)) return;
     this.byName.set(text, id);
     entity.proper.push(text);
+    // A person the book's introduction names (front.ts): its other names are theirs from the time the reading meets them.
+    if (entity.category === "person") for (const expected of this.expected) if (!expected.met && expected.names.includes(text)) {
+      expected.met = id;
+      for (const other of expected.names) if (other !== text) this.name(id, other, true);
+    }
+  }
+
+  /** The names the book's introduction gives one person: whichever the reading meets first, the others join it. */
+  private readonly expected: { names: string[]; met: string | null }[] = [];
+  expect(names: string[]): void { if (names.length > 1) this.expected.push({ names: [...new Set(names)], met: null }); }
+
+  /**
+   * People of the chart the introduction names as one (a name of theirs met before the one that carried the others: its
+   * own entity), merged into the first met. Returns each merged id and the one it is now. Ids are never renumbered.
+   */
+  mergeExpected(position: (sentence: string) => number): [string, string][] {
+    const out: [string, string][] = [];
+    for (const expected of this.expected) {
+      const ids = [...new Set(expected.names.map((name) => this.byName.get(name)).filter((id): id is string => !!id && this.entities.get(id)?.category === "person"))];
+      if (ids.length < 2) continue;
+      const [keep, ...drop] = ids.sort((a, b) => position(this.entities.get(a)!.first) - position(this.entities.get(b)!.first));
+      for (const id of drop) { this.merge(keep, id); out.push([id, keep]); }
+    }
+    return out;
+  }
+
+  /** `drop`'s names and appearances become `keep`'s; `drop` is gone. */
+  merge(keep: string, drop: string): void {
+    const into = this.entities.get(keep)!, from = this.entities.get(drop)!;
+    for (const name of from.names) if (!into.names.includes(name)) into.names.push(name);
+    for (const name of from.proper) if (!into.proper.includes(name)) into.proper.push(name);
+    for (const sentence of from.seen) if (!into.seen.includes(sentence)) into.seen.push(sentence);
+    for (const [name, at] of this.byName) if (at === drop) this.byName.set(name, keep);
+    this.entities.delete(drop);
   }
 
   see(id: string, sentences: string[]): void {

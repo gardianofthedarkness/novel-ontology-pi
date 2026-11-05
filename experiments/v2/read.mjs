@@ -59,7 +59,16 @@ export async function read(novelDir, outDir, { blocks: range = null, lister: lis
   // V2_HINTS=inline none, V2_HINTS=once every step but the tiling, V2_HINTS=once:<step>,<step> those (by their log name).
   const hints = process.env.V2_HINTS;
   const hintsOnce = hints === 'inline' ? false : hints === 'once' ? true : hints?.startsWith('once:') ? hints.slice(5).split(',') : undefined;
-  const result = await readFlow(blocks, (state, questions) => jev.decide(state, questions), lister, { hintsOnce, onStep: step => console.error(`${step.step}: ${step.requests} requests, ${step.ms} ms`) });
+  // The book's introduction (src/v2/extraction/front.ts): with the EPUB, its front matter read into its parts by rule and
+  // given to the flow as standing knowledge (the cast's names and lines, the synopsis), before the book is read. Its words
+  // stay in front.json (the book's, never exported); data.json keeps who it named and which facts stood for it.
+  let intro = null;
+  if (epub) {
+    const { bookMatter } = await load('dist/src/v2/album.js'), { introParts } = await load('dist/src/v2/extraction/front.js');
+    intro = introParts(bookMatter(blocks.flatMap(block => block.sentences), await readFile(resolve(epub))));
+    console.error(`introduction: ${intro.cast.length} people introduced, synopsis ${intro.synopsis.length} paragraphs, afterword ${intro.afterword.length}`);
+  }
+  const result = await readFlow(blocks, (state, questions) => jev.decide(state, questions), lister, { hintsOnce, intro, onStep: step => console.error(`${step.step}: ${step.requests} requests, ${step.ms} ms`) });
   const text = new Map(blocks.flatMap(block => block.sentences.map(sentence => [sentence.id, sentence.text])));
   const base = worldBase(result, id => text.get(id) ?? '');
   const v2 = join(outDir, 'v2'), baseDir = join(outDir, 'base');
@@ -75,6 +84,11 @@ export async function read(novelDir, outDir, { blocks: range = null, lister: lis
     const { readingAlbum } = await load('dist/src/v2/album.js'), { cropper } = await load('dist/src/cli/commands/extract/portraitCommands.js');
     const people = entities.filter(entity => entity.category === 'person' && /^char_/.test(entity.id)).map(entity => ({ id: entity.id, names: [...entity.proper, ...entity.names.filter(name => !entity.proper.includes(name))] }));
     album = await readingAlbum(v2, [...text].map(([id, sentence]) => ({ id, text: sentence })), resolve(epub), people);
+    // The people each plate page of the introduction names (front.ts): a face left over on a page whose others the captions
+    // bound is the one left unbound (tools/album-portraits: elimination).
+    const groups = new Map();
+    for (const entry of result.intro?.cast ?? []) if (entry.plate !== null) groups.set(entry.plate, [...(groups.get(entry.plate) ?? []), ...entry.names]);
+    if (groups.size) await writeFile(join(album.dir, 'ontology', 'intro-groups.json'), JSON.stringify([...groups].map(([plate, names]) => ({ plate, names }))), { mode: 0o600 });
     const ready = await cropper(album.dir, true, process.env).catch(error => ({ ready: false, error: String(error.message ?? error) }));
     album.portraits = ready.ready ? await cropper(album.dir, false, process.env).then(made => ({ bound: made.created ?? 0, notFound: made.notFoundCount ?? null }), error => ({ error: String(error.message ?? error) })) : { skipped: ready.missingPackages?.length ? `the cropper's packages are missing (${ready.missingPackages.join(', ')}); set NOVEL_PORTRAIT_PYTHON` : ready.error ?? 'not ready' };
     console.error(`album: ${album.illustrations} pictures, ${album.anchored} anchored on their sentences; front matter ${album.front.before} paragraphs, back ${album.front.after}; portraits ${JSON.stringify(album.portraits)}`);
@@ -123,6 +137,7 @@ export async function read(novelDir, outDir, { blocks: range = null, lister: lis
       thingTypes: Object.fromEntries(['object', 'vehicle', 'weapon'].map(type => [type, entities.filter(entity => entity.category === 'thing' && entity.type === type).length])),
       concept: entities.filter(entity => entity.category === 'concept').length, conceptsOwned: entities.filter(entity => entity.owners?.length).length, place: entities.filter(entity => entity.category === 'place').length, time: times.length },
     album,
+    intro: result.intro ? { cast: result.intro.cast.map(entry => ({ entity: entry.entity, names: entry.names.length })), standing: result.intro.standing.length, merged: result.intro.merged } : null,
     steps: result.steps,
   };
   await Promise.all([
@@ -142,7 +157,7 @@ export async function read(novelDir, outDir, { blocks: range = null, lister: lis
     write(v2, 'spatial.yaml', yamlDocument(result.spatial ?? [])),
     ...((live.usage ?? []).length ? [write(v2, 'jev-usage.json', JSON.stringify(live.usage))] : []),
     // The same data as JSON, for tools (compare.mjs, inspect.mjs, the world loop).
-    write(v2, 'data.json', JSON.stringify({ log: summary, sequences: result.sequences, storyboard: result.storyboard, scenes: result.scenes, cards: result.cards, kinds: result.kinds, blocks: result.blocks, chart: { entities, times }, em: result.em, contexts: result.contexts, roles: result.roles, references: result.references, slots: result.slots, habits: result.habits, facts: result.facts.map(({ text: _, ...fact }) => fact), time: result.time, places: result.places, spatial: result.spatial })),
+    write(v2, 'data.json', JSON.stringify({ intro: result.intro && { ...result.intro, synopsis: result.intro.synopsis.length, standing: result.intro.standing.map(({ id, card, about }) => ({ id, card, about })) }, log: summary, sequences: result.sequences, storyboard: result.storyboard, scenes: result.scenes, cards: result.cards, kinds: result.kinds, blocks: result.blocks, chart: { entities, times }, em: result.em, contexts: result.contexts, roles: result.roles, references: result.references, slots: result.slots, habits: result.habits, facts: result.facts.map(({ text: _, ...fact }) => fact), time: result.time, places: result.places, spatial: result.spatial })),
     write(baseDir, 'scenes.json', JSON.stringify(base.scenes)),
     write(baseDir, 'roster.json', JSON.stringify(base.roster, null, 1)),
     write(baseDir, 'facts.json', JSON.stringify(base.facts)),

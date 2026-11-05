@@ -14,6 +14,8 @@ import { mentions, type Chart } from "./em.js";
  * thing (an update) comes after what it updates. Before that, and for ties, reading order.
  */
 export const FACT_RECENT = 2;
+/** Standing facts (the book's introduction, front.ts) a request carries beside the recent ones, per thing asked about. */
+export const FACT_STANDING = 1;
 /** Characters of a fact's text a request carries. */
 export const FACT_CLIP = 160;
 
@@ -36,6 +38,16 @@ export class FactLedger {
   private readonly scanned = new Map<string, { size: number; ids: Set<string> }>();
   /** The facts in the order "latest" means: reading order, or story time once it is known. */
   private ranked: FactEntry[];
+
+  /**
+   * The book's introduction (front.ts): known before the story, so no story time and no place in reading order; every
+   * request about the people they name carries them (FACT_STANDING), however long ago the book last spoke of those people.
+   */
+  readonly standing: FactEntry[] = [];
+
+  addStanding(entries: { sentence: string; text: string }[]): void {
+    for (const entry of entries) this.standing.push({ id: `fact_intro_${String(this.standing.length + 1).padStart(3, "0")}`, card: entry.sentence, first: entry.sentence, last: entry.sentence, sentences: [entry.sentence], text: entry.text, order: -1_000_000 + this.standing.length, time: null, period: null, story: null, about: [] });
+  }
 
   constructor(cards: { id: string; first: string; last: string; sentences: string[] }[], text: (sentence: string) => string, position: (sentence: string) => number) {
     this.facts = [...cards].sort((a, b) => position(a.first) - position(b.first)).map((card, index) => ({
@@ -70,6 +82,8 @@ export class FactLedger {
       const named = this.named(fact, names), linked = this.linked.get(fact.id);
       if (ids.some((id) => named.has(id) || linked?.has(id))) out.push(fact);
     }
+    let standing = 0;
+    for (const fact of this.standing) { if (standing >= FACT_STANDING) break; if (ids.some((id) => this.named(fact, names).has(id))) { out.push(fact); standing++; } }
     return out;
   }
 
@@ -77,6 +91,7 @@ export class FactLedger {
   holding(text: string, before: number, limit = FACT_RECENT): FactEntry[] {
     const out: FactEntry[] = [];
     for (let index = this.ranked.length - 1; index >= 0 && out.length < limit; index--) if (this.ranked[index].order < before && this.ranked[index].text.includes(text)) out.push(this.ranked[index]);
+    out.push(...this.standing.filter((fact) => fact.text.includes(text)).slice(0, FACT_STANDING));
     return out;
   }
 
@@ -89,7 +104,7 @@ export class FactLedger {
   settle(chart: Chart, position: (sentence: string) => number): void {
     const names = chart.names();
     const times = [...chart.times.values()].flatMap((node) => node.seen.map((id) => [position(id), node.id] as const)).sort((a, b) => a[0] - b[0]);
-    for (const fact of this.facts) {
+    for (const fact of [...this.standing, ...this.facts]) {
       const named = this.named(fact, names), linked = this.linked.get(fact.id) ?? new Set<string>();
       const owners = [...named].flatMap((id) => (chart.entities.get(id)?.owners ?? []).map((owner) => owner.id)).filter((id) => id !== "many" && !named.has(id) && !linked.has(id));
       fact.about = [...[...named].map((id) => ({ id, via: "name" as const })), ...[...linked].filter((id) => !named.has(id)).map((id) => ({ id, via: "description" as const })), ...[...new Set(owners)].map((id) => ({ id, via: "concept" as const }))];

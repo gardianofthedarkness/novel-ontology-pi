@@ -82,6 +82,11 @@ function matterOf(albumText: string, sentences: { id: string; text: string }[]):
   return { before: from > 0 ? paragraphs(albumText.slice(0, raw[from])) : [], after: to >= 0 && to + last.length < raw.length ? paragraphs(albumText.slice(raw[to + last.length - 1] + 1)) : [] };
 }
 
+/** The book's front and back matter alone (read before the reading's flow: its introduction is the flow's, front.ts). */
+export function bookMatter(sentences: { id: string; text: string }[], epubBytes: Buffer): BookMatter {
+  return matterOf(walkEpub(epubBytes).text, sentences);
+}
+
 /** The album of a book: each EPUB picture with its kind and its anchor on the book's sentences, and the book's front and back matter. */
 export function albumOf(sentences: { id: string; text: string }[], epubBytes: Buffer) {
   const index = sentenceIndex(sentences), walk = walkEpub(epubBytes), archive = unzipAll(epubBytes), chapters = splitChapters(walk.text);

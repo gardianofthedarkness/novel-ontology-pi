@@ -13,6 +13,7 @@ import { placeEm, type PlaceResult } from "./placeEm.js";
 import { spatialMentions, type SpatialMention } from "./spatial.js";
 import { readHeadings, readStoryboard, type Cut } from "./storyboard.js";
 import { CATEGORY_OF, typeNames, type Decide, type Detected, type EntityType } from "./typing.js";
+import { designationForms, introSentences, introTerms, type IntroParts } from "./front.js";
 import { settledCategory, usualType } from "../rules/typing.js";
 
 /**
@@ -80,6 +81,8 @@ export interface FlowResult extends RolesResult {
   places: PlaceResult;
   /** Spatial words (on the ground, underground, on the roof): who or what each says is where, and at what level. */
   spatial: SpatialMention[];
+  /** The book's introduction as the reading used it (front.ts): each cast entry's names and who it is in the chart, the synopsis, its standing facts, the people it merged. */
+  intro: { cast: { name: string; names: string[]; entity: string | null; plate: number | null }[]; synopsis: string[]; afterword: number; standing: FactEntry[]; merged: [string, string][] } | null;
 }
 
 /** Sentences a listing batch holds (small: two new names of one person in one batch cannot see each other's answers). */
@@ -97,7 +100,7 @@ const RECENT_SCENES = 3, CONTEXT_FACTS = 6;
 export const HINTS_ONCE_STEPS: string[] = [];
 
 /** `hintsOnce`: the steps (by their log name) that send meanings once; true every step but the tiling, false none. */
-export async function readFlow(blocks: FlowBlock[], decideRaw: Decide, lister: Lister, options: { onStep?: (log: StepLog) => void; present?: Map<string, string[]>; hintsOnce?: boolean | string[] } = {}): Promise<FlowResult> {
+export async function readFlow(blocks: FlowBlock[], decideRaw: Decide, lister: Lister, options: { onStep?: (log: StepLog) => void; present?: Map<string, string[]>; hintsOnce?: boolean | string[]; intro?: IntroParts | null } = {}): Promise<FlowResult> {
   const onceSteps = options.hintsOnce === true ? null : options.hintsOnce === false ? [] : options.hintsOnce ?? HINTS_ONCE_STEPS;
   const once = (step: string) => onceSteps === null || onceSteps.includes(step);
   const steps: StepLog[] = [];
@@ -200,6 +203,29 @@ export async function readFlow(blocks: FlowBlock[], decideRaw: Decide, lister: L
 
   // EM, batch by batch in reading order (the facts before each string are its evidence).
   const chart = new Chart(), emLog = meter("EM"), emDecide = decideFor(emLog), em: FlowResult["em"] = [];
+  // The book's introduction (front.ts; the user, 2026-11-05: "are we using the introduction parts to leverage our overall
+  // understanding?"): its lines are standing facts, carried by every request about the people they name; each cast
+  // entry's other names (what its epithet quotes or sets off, typed once: a name of theirs, not an ability or a title,
+  // and a numbered designation's digits) join the person when the reading meets them.
+  let introCast: { name: string; names: string[]; plate: number | null }[] = [];
+  if (options.intro && (options.intro.cast.length || options.intro.synopsis.length)) {
+    const introLog = meter("introduction");
+    await timed(introLog, async () => {
+      const { sentences } = introSentences(options.intro!), castSentences = sentences.slice(0, options.intro!.cast.length);
+      for (const sentence of sentences) textOf.set(sentence.id, sentence.text);
+      const terms = options.intro!.cast.map(introTerms), asked = [...new Set(terms.flat())];
+      const typed = asked.length ? await typeNames(decideFor(introLog), castSentences, asked) : [];
+      const isName = (term: string) => typed.some((entry) => entry.text === term && entry.category === "person" && (entry.proper ?? 1) >= 0.5);
+      introCast = options.intro!.cast.map((entry, index) => {
+        const names = [entry.name, ...terms[index].filter(isName)];
+        // A numbered designation (a serial number) is a name of theirs whatever typing said (the book calls them by its number).
+        const designations = terms[index].flatMap(designationForms), numbered = terms[index].filter((term) => designationForms(term).length);
+        return { name: entry.name, names: [...new Set([...names, ...numbered, ...designations])], plate: entry.plate };
+      });
+      for (const entry of introCast) chart.expect(entry.names);
+      facts.addStanding(sentences.map((sentence) => ({ sentence: sentence.id, text: sentence.text })));
+    });
+  }
   await timed(emLog, async () => {
     for (const [index, batch] of batches.entries()) em.push({ batch: batch.sentences[0]?.id ?? String(index), results: await resolveBatch(emDecide, chart, batch.sentences, detectedOf[index] ?? [], { position: pos, text, facts }) });
   });
@@ -212,6 +238,9 @@ export async function readFlow(blocks: FlowBlock[], decideRaw: Decide, lister: L
     const settled = settledCategory(votes, (type) => CATEGORY_OF[type as keyof typeof CATEGORY_OF]), entity = chart.entities.get(id)!;
     if (settled && settled.category !== entity.category && settled.category !== "time" && settled.category !== "crowd") moved.set(id, chart.recategorize(id, settled.category, settled.type as EntityType));
   }
+  // Two people of the chart the introduction names as one (a name of theirs met on its own first): one, ids kept.
+  const merged = chart.mergeExpected(pos);
+  for (const [drop, keep] of merged) moved.set(drop, keep);
   for (const result of em.flatMap((batch) => batch.results)) { if (result.entity && moved.has(result.entity)) result.entity = moved.get(result.entity)!; result.candidates = result.candidates?.map((candidate) => ({ ...candidate, id: moved.get(candidate.id) ?? candidate.id })); }
   for (const entity of chart.entities.values()) entity.owners = entity.owners?.map((owner) => ({ ...owner, id: moved.get(owner.id) ?? owner.id }));
 
@@ -330,5 +359,6 @@ export async function readFlow(blocks: FlowBlock[], decideRaw: Decide, lister: L
   const storyboard = await timed(boardLog, () => readStoryboard(decideFor(boardLog), { scenes, cards, text, sequenceOf: (scene) => sequenceOf.get(scene) ?? null,
     headingOf: (scene) => { const heading = sequenceById.get(sequenceOf.get(scene) ?? "")?.heading; return heading ? { setting: heading.setting, where: heading.place ? labelOf(heading.place) : null, daytime: heading.daytime } : null; } }));
   const { periodOf: _, ...storyTime } = time;
-  return { sequences, storyboard, scenes, cards, kinds: kindOf, blocks: kinds.flatMap((entry) => entry.blocks.map((answer) => ({ ...answer, block: entry.block.id }))), chart, em, contexts, steps, facts: facts.facts, time: storyTime, places, spatial, ...resolved };
+  return { sequences, storyboard, scenes, cards, kinds: kindOf, blocks: kinds.flatMap((entry) => entry.blocks.map((answer) => ({ ...answer, block: entry.block.id }))), chart, em, contexts, steps, facts: facts.facts, time: storyTime, places, spatial, ...resolved,
+    intro: options.intro ? { cast: introCast.map((entry) => ({ ...entry, entity: entry.names.map((name) => chart.exact(name)?.id).find(Boolean) ?? null })), synopsis: options.intro.synopsis, afterword: options.intro.afterword.length, standing: facts.standing, merged } : null };
 }

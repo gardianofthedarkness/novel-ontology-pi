@@ -120,7 +120,7 @@ const DERIVED: RegExp[] = [
  * reading/front.json: the book's front and back matter, its own words). Kept with the book as its text is: never snapshotted,
  * restored, or exported (another user makes them from their own EPUB: novel album import, novel album assign).
  */
-const ALBUM = /^vol-[^/]+\/(?:novel\/(?:assets\/|ontology\/(?:illustrations\.jsonl|album\.json|portraits\.jsonl|portrait-tasks\.jsonl)$)|reading\/(?:album\/|front\.json$))/;
+const ALBUM = /^vol-[^/]+\/(?:novel\/(?:assets\/|ontology\/(?:illustrations\.jsonl|album\.json|portraits\.jsonl|portrait-tasks\.jsonl|intro-groups\.json)$)|reading\/(?:album\/|front\.json$))/;
 
 /** How a library-relative path is kept: tracked state, a run's own file, derived (never kept), or the book's text. */
 export function classify(rel: string): { kind: Kind; run?: string } {
