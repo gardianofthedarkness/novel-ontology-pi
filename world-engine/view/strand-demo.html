@@ -85,6 +85,7 @@
         <button id="play" aria-label="Play or pause">⏸ Pause</button>
         <button data-speed="1" aria-pressed="false">1×</button><button data-speed="2" aria-pressed="true">2×</button><button data-speed="4" aria-pressed="false">4×</button>
         <button id="follow" aria-pressed="true">Follow</button>
+        <button id="cuts" aria-pressed="false" title="Follow through the photographer's cuts (else a steady view of each card's people)">Cuts</button>
         <button id="jev" aria-pressed="false" title="Show what Jev decided at this moment">Jev trace</button>
         <input type="range" id="seek" min="0" max="1000" value="0" aria-label="Position in the strand">
         <span class="count" id="count"></span>
@@ -118,6 +119,10 @@ if (data?.world) for (const place of Object.values(data.places)) if (place.world
 const keyOf = (id) => (data?.places[id]?.world ? "world" : id);
 // Live mode (data.live, from the live record's page.json): the moment just played is played and held, full screen, drawn
 // round where Jev looks and where the people are; the world view swaps these frames in as moments come.
+// Replay (?replay, World · Live's Player; the user, 2026-11-05: "build the replay functionality in replay page back"): the
+// line a running director has played so far, as a player from its start, not the live frame (only the units landed).
+const replayMode = new URLSearchParams(location.search).has("replay");
+if (replayMode && data?.live) { delete data.live; data.scenes = data.scenes.filter((scene) => scene.landed !== false); }
 const liveMode = !!data?.live;
 if (liveMode) document.body.classList.add("live");
 if (strands?.length > 1) {
@@ -297,7 +302,7 @@ const mats = {
 // Every label made, so none fills the view when the camera is close: a label keeps its size in metres, but never stands
 // taller than LABEL_MOST of the view (the user, 2026-11-04: the photographer's close shots, where a name tag or a place's
 // name a few metres off covered the people).
-const labels = new Set(), LABEL_MOST = 0.045, labelAt = new THREE.Vector3();
+const labels = new Set(), LABEL_MOST = 0.03, labelAt = new THREE.Vector3();
 // An unnamed place exists from the unit it is first told in (the user, 2026-11-04: places in story time; the narration
 // complying with the stranding): in a live director's line, its pin, name and sky name wait for that unit to land.
 let bornShown = null;
@@ -1104,6 +1109,26 @@ function peoplePose(segment) {
   return { target, position: target.clone().add(new THREE.Vector3(spread * 1.1 + 10, spread * 1.3 + 14, spread * 1.5 + 16)) };
 }
 function glideTo(id, seconds, start = time) { glide = { to: poseFor(id), start, seconds }; }
+/** Cuts: Follow through the photographer's shots; off (the default), the steady watch view. */
+let cuts = new URLSearchParams(location.search).has("cuts");
+/**
+ * The steady view of a card: its actors and movers where they stand as it begins and where their walks end (else everyone
+ * there), framed whole from 50° above, at least 30 m off, turned as the camera already is (the view never spins on its own).
+ */
+function watchPose(segment) {
+  const place = segment.place, entry = built.get(segment.scene.place);
+  if (!place?.world || !entry) return null;
+  const real = (id) => !data.people[id]?.crowd, nodes = [];
+  for (const id of new Set([...(segment.event?.actors ?? []), ...segment.moves.map((move) => move.person)].filter(real))) if (segment.positions[id] != null) nodes.push(segment.positions[id]);
+  for (const move of segment.moves) if (real(move.person) && move.path?.length) nodes.push(move.path.at(-1));
+  if (!nodes.length) for (const id of Object.keys(segment.scene.starts).filter(real)) if (segment.positions[id] != null) nodes.push(segment.positions[id]);
+  if (!nodes.length) return null;
+  const points = nodes.map((node) => at(place, node)), x = points.reduce((sum, p) => sum + p.x, 0) / points.length, y = points.reduce((sum, p) => sum + p.y, 0) / points.length, z = points.reduce((sum, p) => sum + p.z, 0) / points.length;
+  const spread = Math.max(0, ...points.map((p) => Math.hypot(p.x - x, p.z - z))), target = new THREE.Vector3(x - entry.cx, y + 1, z - entry.cz), distance = Math.max(30, spread * 2.4 + 14);
+  const away = camera.position.clone().sub(controls.target).setY(0); if (away.lengthSq() < 1) away.set(0.6, 0, 0.8); away.normalize();
+  const up = THREE.MathUtils.degToRad(50);
+  return { target, position: target.clone().add(away.multiplyScalar(Math.cos(up) * distance).setY(Math.sin(up) * distance)) };
+}
 /** The glide's way, from wherever the camera is when it starts: out over both places, across, and down. */
 function glideFrom(glide) {
   const from = { target: controls.target.clone(), position: camera.position.clone() }, d = from.target.distanceTo(glide.to.target);
@@ -1193,12 +1218,14 @@ function frame(now) {
     else { const pose = peoplePose(segment); if (pose) glide = { to: pose, start: time, seconds: 2.6, direct: true }; else glideTo(segment.scene.place, 2.6); }
     shownPlace = segment.scene.place;
   }
-  // Follow: the producer's camera (the director's shot of each card, docs/v2/director-camera.md) as each card begins: the
-  // view glides there, near and turned as Jev saw it, in the player and in World · Live alike.
-  if (follow && segment.kind === "event" && segment.event.camera && cameraSegment !== segment) {
+  // Follow (the user, 2026-11-05: "we want to at least stably watch what happens"): by default a steady view of each card's
+  // people and where their walks end, from above at a slant, turned as the viewer left it, moving only when the people do;
+  // with Cuts, the photographer's shot of each card (the director's camera, docs/v2/director-camera.md) as it begins.
+  if (follow && segment.kind === "event" && cameraSegment !== segment && (!cuts || segment.event.camera)) {
     cameraSegment = segment;
-    const pose = producerPose(segment.scene.id, segment.event.camera);
-    if (pose) glide = { to: pose, start: time, seconds: 0.9, direct: true };
+    let pose = cuts ? producerPose(segment.scene.id, segment.event.camera) : watchPose(segment);
+    if (!cuts && pose && pose.target.distanceTo(controls.target) < 6 && Math.abs(pose.position.distanceTo(pose.target) - camera.position.distanceTo(controls.target)) < 10) pose = null;
+    if (pose) glide = { to: pose, start: time, seconds: cuts ? 0.9 : 1.6, direct: true };
   }
   if (glide && time >= glide.start) {
     if (!glide.from) glide = glideFrom(glide);
@@ -1420,6 +1447,7 @@ if (liveMode) {
     // Unframed (a page on its own, or a check), its own camera messages are not a world view's.
     if (parent === window && event.data?.type === "camera") return;
     if (event.data?.type === "follow") { follow = !!event.data.on; return; }
+    if (event.data?.type === "cuts") { cuts = !!event.data.on; cameraSegment = null; return; }
     if (event.data?.type === "replay") { replayCard(event.data); return; }
     if (event.data?.type === "continue") { continueTo(event.data); return; }
     // Follow Jev (the user, 2026-11-04: "follow jev follows the photographer's current view on the newest segment landed on
@@ -1573,6 +1601,7 @@ function continueTo({ scene, event, camera: cam = null, speed: pace = 2, follow:
 
 $("play").addEventListener("click", () => { playing = !playing; $("play").textContent = playing ? "⏸ Pause" : "▶ Play"; });
 $("follow").addEventListener("click", () => { follow = !follow; $("follow").setAttribute("aria-pressed", String(follow)); if (!follow) controls.target.set(0, 4, 0); });
+$("cuts").setAttribute("aria-pressed", String(cuts)); $("cuts").addEventListener("click", () => { cuts = !cuts; cameraSegment = null; $("cuts").setAttribute("aria-pressed", String(cuts)); });
 for (const button of document.querySelectorAll("[data-speed]")) button.addEventListener("click", () => { speed = Number(button.dataset.speed); for (const other of document.querySelectorAll("[data-speed]")) other.setAttribute("aria-pressed", String(other === button)); });
 $("seek").addEventListener("input", () => { time = Number($("seek").value) / 1000 * total; });
 const esc = (text) => String(text).replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c]);
