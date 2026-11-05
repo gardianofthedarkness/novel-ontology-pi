@@ -26,6 +26,11 @@ export interface MoveFocus {
   digest?: Record<string, string>;
   /** What the key animator is working on, for the cut bag (cutBag.ts): the pre-film casts' notes routed to it come under `notes`. */
   route?: RouteFocus;
+  /**
+   * A retake (world-engine/director/workflow.mjs; the user, 2026-11-04): the animation director sent this person's key back.
+   * `before`: what was chosen; `why`: what failed (the law, or the note it broke). That choice is no longer offered.
+   */
+  retake?: { before: string; why: string };
 }
 export interface DirectionFocus extends MoveFocus {
   /** Each arrow: its letter, and what it points at (the first thing it meets). */
@@ -47,10 +52,11 @@ const text = <F extends MoveFocus>(): Source<F, unknown>[] => [
   fixed<F>("now", (focus) => focus.now),
   fixed<F>("digest", (focus) => focus.digest ?? {}),
   fixed<F>("pictures", (focus) => focus.pictures),
+  fixed<F>("retake", (focus) => focus.retake ?? {}),
   // The pre-film casts' notes the routing table gives the key animator (cutBag.ts), from the cut bag passed as the stores.
   notesSource<F>("keys", (focus) => focus.route) as unknown as Source<F, unknown>,
 ];
-const lead = (focus: MoveFocus) => `In scene ${Number(focus.scene.id.slice(-3)) || focus.scene.id} (${focus.scene.place}${focus.scene.when ? `, ${focus.scene.when}` : ""}), the card's lines (card) are being played. ${focus.mover.name} is the person asked about.${focus.route ? " The notes are the pre-film crew's (by whom, stated or implied, how sure, the line they rest on): trust the text over a note." : ""}`;
+const lead = (focus: MoveFocus) => `In scene ${Number(focus.scene.id.slice(-3)) || focus.scene.id} (${focus.scene.place}${focus.scene.when ? `, ${focus.scene.when}` : ""}), the card's lines (card) are being played. ${focus.mover.name} is the person asked about.${focus.route ? " The notes are the pre-film crew's (by whom, stated or implied, how sure, the line they rest on): trust the text over a note." : ""}${focus.retake ? ` This is a retake: ${focus.mover.name}'s key was sent back (retake: what was chosen before and why it failed); that choice is no longer offered, choose again.` : ""}`;
 
 /**
  * First, from the text alone (no picture): does the person go somewhere else in this card, or act where they are? The
@@ -76,8 +82,9 @@ export const moveDirectionMode: Mode<DirectionFocus, unknown> = {
   sources: [...text<DirectionFocus>(), fixed<DirectionFocus>("arrows", (focus) => Object.fromEntries(focus.arrows.map((arrow) => [arrow.letter, arrow.said])))],
   cutOrder: ["scene", "notes"],
   questions: (focus) => {
-    const options = [...focus.arrows.map((arrow) => arrow.letter), ...focus.others.map((other) => `with:${other.id}`)];
-    const hints = Object.fromEntries([...focus.arrows.map((arrow) => [arrow.letter, `arrow ${arrow.letter}: ${arrow.said}`]), ...focus.others.map((other) => [`with:${other.id}`, `goes with ${other.name}, to where they go`])]);
+    // On a retake, staying where they are is a choice too (a key with no way there may be one the text never meant).
+    const options = [...focus.arrows.map((arrow) => arrow.letter), ...focus.others.map((other) => `with:${other.id}`), ...(focus.retake ? ["stays"] : [])];
+    const hints = Object.fromEntries([...focus.arrows.map((arrow) => [arrow.letter, `arrow ${arrow.letter}: ${arrow.said}`]), ...focus.others.map((other) => [`with:${other.id}`, `goes with ${other.name}, to where they go`]), ...(focus.retake ? [["stays", "stays where they are in this card"]] : [])]);
     const lines = [...focus.card.lines, ...focus.lines].map((line) => line.id);
     return [
       { key: "direction", primitive: "choice", instructions: `Which way does ${focus.mover.name} go?`, options, optionHints: hints },

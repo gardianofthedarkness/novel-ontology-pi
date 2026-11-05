@@ -998,7 +998,10 @@ export async function direct(novelDir, { reading, readingPath = null, prefilm = 
           // Each person the card moves. Where the digest read the card, its moves: a step or a move nearby played by rule
           // (toward, away from or with someone, else on along their way), going elsewhere asked of Jev on the pictures,
           // following someone after they have gone. Elsewhere, Jev's text question first, as before.
-          const jevMove = async (person, hint = null) => {
+          // `retake` (the key check's, workflow.mjs): { n, before, why, avoid: { directions, spots } }: the key sent back, asked
+          // again with what failed, the failed choices no longer offered (their spots, else their directions).
+          const keyedByJev = new Map();
+          const jevMove = async (person, hint = null, retake = null) => {
             const here = at(positions[person][0]), mover = { id: person, name: names.get(person) ?? person }, slug = `${scene.id.slice(-3)}-${card.id.replace(/[^a-z0-9_]/gi, '_')}-${person}`;
             // The key animator works in the photographer's window (the user, 2026-11-04: "The key animator needs to rely on the
             // window provided by photographer"): a still camera's frame bounds the pictures and the spots, and a spot beyond it
@@ -1013,7 +1016,7 @@ export async function direct(novelDir, { reading, readingPath = null, prefilm = 
             const first = reads.sentences.indexOf(card.sentences[0]), forms = nameForms.get(person) ?? [mover.name], spatial = new Set((reading.spatial ?? []).filter(entry => entry.scene === scene.id).map(entry => entry.sentence));
             const others_ = reads.sentences.map((id, n) => ({ id, n })).filter(({ id, n }) => !card.sentences.includes(id) && (Math.abs(n - first) <= 4 || spatial.has(id) || reading.kinds[id]?.kind === 'environment' || forms.some(form => (text.get(id)?.text ?? '').includes(form))));
             const context = others_.sort((a, b) => Math.abs(a.n - first) - Math.abs(b.n - first)).map(({ id }) => line(id));
-            const base = { scene: { id: scene.id, place: placeName, when }, card: { id: card.id, lines: card.sentences.map(line) }, mover, lines: context, now, route: routeAt(card.sentences, person, cut?.id ?? null), ...(dg ? { digest: { scene: dg.digest.summary ?? '', ...(hint ? { move: moveWords(hint) } : {}) } } : {}) };
+            const base = { scene: { id: scene.id, place: placeName, when }, card: { id: card.id, lines: card.sentences.map(line) }, mover, lines: context, now, route: routeAt(card.sentences, person, cut?.id ?? null), ...(retake ? { retake: { before: retake.before, why: retake.why } } : {}), ...(dg ? { digest: { scene: dg.digest.summary ?? '', ...(hint ? { move: moveWords(hint) } : {}) } } : {}) };
             // Every picture is of the line as played to this moment: people where their walks ended, buildings as broken.
             const shotBase = { place: scene.placeId, at: Math.max(0, (played?.end ?? 0) - 0.02), only: [scene.placeId], mover: person };
             // a. The direction: every arrow, said by what it meets.
@@ -1024,7 +1027,8 @@ export async function direct(novelDir, { reading, readingPath = null, prefilm = 
               return { ...direction, said: `${meets ?? `more of ${said(here)}`}${leaves ? ', out of the frame' : ''}`, blocked };
             });
             // First the text alone: does this person go anywhere in this card? (Not asked when the digest says they go elsewhere.)
-            if (!hint) {
+            keyedByJev.set(person, hint);
+            if (!hint && !retake) {
               const whether = await ask(decide, M.moveWhetherMode, { ...base, pictures: {} }, cutBag);
               const goes = String(whether.replies.find(entry => entry.key === 'moves')?.value ?? 'stays') === 'goes', said_ = whether.replies.find(entry => entry.key === 'line')?.value ?? null;
               // Destruction only on clear evidence (the user, 2026-11-02: routine things blasted): Jev sure of it, 0.7 or more.
@@ -1033,10 +1037,10 @@ export async function direct(novelDir, { reading, readingPath = null, prefilm = 
             }
             cardRecord.camera ??= { focus: { x: here[0], z: here[2], y0: here[1], w: 6, d: 6, h: 3 }, radius: 16, elevation: 35, yaw: 0 };
             const a = await shoot(`${slug}-a`, [1440, 900], { ...shotBase, focus: keyFocus, radius: keyRadius, elevation: bounded ? Math.min(60, Math.max(20, frame.camera.elevation)) : scale ? ELEVATION[scale.angle] ?? 35 : 35, arrows: arrows.map(arrow => ({ at: here, vector: arrow.vector, letter: arrow.letter, color: arrow.color, length: Math.max(bounded ? 3 : 9, keyRadius * 0.55), blocked: arrow.blocked })) });
-            const asked = await ask(decide, M.moveDirectionMode, { ...base, pictures: { arrows: `${mover.name} now, from 35° above; the lettered arrows go out of them (warm rise, cool fall, level ones flat).` }, arrows: arrows.map(arrow => ({ letter: arrow.letter, said: `${arrow.rise}, toward ${arrow.said}` })), others }, cutBag, { request: { images: { arrows: a.png } } });
+            const asked = await ask(decide, M.moveDirectionMode, { ...base, pictures: { arrows: `${mover.name} now, from 35° above; the lettered arrows go out of them (warm rise, cool fall, level ones flat).` }, arrows: arrows.filter(arrow => !retake?.avoid?.directions?.includes(arrow.letter)).map(arrow => ({ letter: arrow.letter, said: `${arrow.rise}, toward ${arrow.said}` })), others: others.filter(other => !retake?.avoid?.directions?.includes(`with:${other.id}`)) }, cutBag, { request: { images: { arrows: a.png } } });
             const reply = key => asked.replies.find(entry => entry.key === key)?.value;
             const choice = String(reply('direction') ?? 'stays'), how = String(reply('how') ?? 'walk'), because = reply('line') ?? null;
-            const moveRecord = { person, direction: choice, how, line: because, ...(hint ? { digest: moveWords(hint) } : {}) };
+            const moveRecord = { person, direction: choice, how, line: because, ...(hint ? { digest: moveWords(hint) } : {}), ...(retake ? { retake: retake.n } : {}) };
             if (choice === 'stays') { cardRecord.moves.push({ ...moveRecord, moved: false }); return; }
             if (choice.startsWith('with:')) {
               const leader = choice.slice(5), there = positions[leader] ? at(positions[leader][0]) : null;
@@ -1059,7 +1063,7 @@ export async function direct(novelDir, { reading, readingPath = null, prefilm = 
             for (const other of others) { const p = at(positions[other.id][0]); if (C.inWedge(here, arrow.vector, p, 60) && Math.hypot(p[0] - here[0], p[2] - here[2]) <= reach) spots.push({ what: `beside ${other.name}`, nodes: pool.nodes.filter(node => Math.abs(node.y - p[1]) < 1 && Math.hypot(node.x - p[0], node.z - p[2]) <= 2).map(node => node.id), d: Math.hypot(p[0] - here[0], p[2] - here[2]) }); }
             // In a still camera's frame: the spots inside it, and the nearest beyond it as one choice, leaving the frame.
             const found = spots.filter(spot => spot.nodes.length).sort((x, y) => x.d - y.d), inside = bounded ? found.filter(spot => WF.inFrame(frame, at(spot.nodes[0]))) : found, beyond = bounded ? found.filter(spot => !inside.includes(spot)) : [];
-            const offered = [...inside.slice(0, beyond.length ? 15 : 16), ...(beyond.length ? [{ what: `leaves the frame toward ${arrow.said.replace(/, out of the frame$/, '')}`, nodes: beyond[0].nodes, d: beyond[0].d, leaves: true }] : [])].map((spot, n) => ({ ...spot, letter: String.fromCharCode(65 + n) }));
+            const offered = [...inside.slice(0, beyond.length ? 15 : 16), ...(beyond.length ? [{ what: `leaves the frame toward ${arrow.said.replace(/, out of the frame$/, '')}`, nodes: beyond[0].nodes, d: beyond[0].d, leaves: true }] : [])].filter(spot => !retake?.avoid?.spots?.includes(spot.what)).map((spot, n) => ({ ...spot, letter: String.fromCharCode(65 + n) }));
             let targets = null, how2 = how;
             if (offered.length) {
               const b = await shoot(`${slug}-b`, [1440, 900], { ...shotBase, focus: keyFocus, radius: bounded ? keyRadius : Math.max(frameRadius, Math.min(reach, 400) * 0.7), elevation: 35, arrows: [{ at: here, vector: arrow.vector, letter: arrow.letter, color: arrow.color, length: Math.min(reach, Math.max(30, frameRadius)) }], ...(wedge ? { wedge: { points: wedge, y: here[1], color: arrow.color } } : {}) });
@@ -1278,6 +1282,10 @@ export async function direct(novelDir, { reading, readingPath = null, prefilm = 
             desk.done(node, 'layout'); desk.done(node, 'frame');
           }
           if (node) desk.start(node, 'keys', card.id); else frame = null;
+          // Before the keys: where everyone stands and the walk this card already holds for each (a layout fix), so a key
+          // sent back is made again from the same place.
+          const keysFrom = { moves: cardRecord.moves.length, laws: (cardRecord.laws ?? []).length }, walkKey = who => `${scene.id}|${card.id}|${who}`;
+          const beforeKeys = new Map(Object.entries(positions).map(([who, value]) => [who, { at: [...value], walk: E.moves.get(walkKey(who)), moves: [], laws: [] }]));
           const movers = card.kind === 'dialogue' ? (read(card) ? [...new Set(digestMovers(card))] : [])
             : [...new Set([...card.people.filter(entry => positions[entry.id] && entry.how.includes('acts')).map(entry => entry.id), ...(read(card) ? digestMovers(card) : [])])];
           for (const person of movers) {
@@ -1290,6 +1298,51 @@ export async function direct(novelDir, { reading, readingPath = null, prefilm = 
             if (Math.hypot(t[0] - here[0], t[2] - here[2]) <= 2.5 && Math.abs(t[1] - here[1]) < 1) { cardRecord.moves.push({ person, why: `with ${names.get(leader) ?? leader}: already beside them`, moved: false, by: 'digest' }); continue; }
             moveTo(person, walk(scene, `${scene.id}|${card.id}|${person}|with`, positions[person], near(t, 0.8, 2.5).map(node => node.id), entry.how === 'run' ? 'run' : 'walk'), entry.how, `with ${names.get(leader) ?? leader}`);
             Object.assign(cardRecord.moves.at(-1), { direction: 'elsewhere', line: entry.sentence, digest: moveWords(entry) });
+          }
+          // The key check (the animation director's, workflow.mjs; the user, 2026-11-04: "let's implement the retake"): a key
+          // with no way there (L10) or that puts its mover where the script supervisor's sure notes say they are not (L14).
+          // A key Jev made is sent back: its mover is put back where they stood, and the key animator is asked again with
+          // what failed, the failed choices no longer offered; at most two retakes, then the attempt with the fewest faults
+          // is kept. A key made by rule (a graded step, a journey, a follower) is not Jev's to make again: it passes.
+          if (node && frame) {
+            const keysNow = () => cardRecord.moves.slice(keysFrom.moves).map(move => ({ who: move.person, moved: !!move.moved, ...(move.direction ? { direction: move.direction } : {}), ...(move.spot ? { spot: move.spot } : {}), ...(move.leaves ? { leaves: true } : {}), ...(move.retake ? { retake: move.retake } : {}) }));
+            const keyFaults = () => [
+              ...(cardRecord.laws ?? []).slice(keysFrom.laws).filter(entry => entry.law === 'L10' && entry.verdict === 'held').map(entry => ({ law: 'L10', who: entry.who, why: entry.why })),
+              ...factFaults('key check', card.sentences, cut.id).faults.filter(fault => keyedByJev.has(fault.who)).map(({ law, who, why }) => ({ law, who, why })),
+            ];
+            const stateOf = who => ({ at: positions[who] ? [...positions[who]] : null, walk: E.moves.get(walkKey(who)), moves: cardRecord.moves.slice(keysFrom.moves).filter(move => move.person === who), laws: (cardRecord.laws ?? []).slice(keysFrom.laws).filter(entry => entry.who === who) });
+            const restore = (who, state) => {
+              if (state.at) positions[who] = [...state.at];
+              if (state.walk) E.moves.set(walkKey(who), state.walk); else E.moves.delete(walkKey(who));
+              cardRecord.moves.splice(keysFrom.moves, Infinity, ...cardRecord.moves.slice(keysFrom.moves).filter(move => move.person !== who), ...state.moves);
+              if (cardRecord.laws) cardRecord.laws.splice(keysFrom.laws, Infinity, ...cardRecord.laws.slice(keysFrom.laws).filter(entry => entry.who !== who), ...state.laws);
+            };
+            let retaken = null;
+            const attempts = [], avoid = new Map();
+            desk.publish(node, 'keys', keysNow(), card.id);
+            for (let n = 1; ; n++) {
+              desk.start(node, 'key check', card.id);
+              const faults = keyFaults();
+              retaken ??= [...new Set(faults.filter(fault => keyedByJev.has(fault.who) && beforeKeys.has(fault.who)).map(fault => fault.who))];
+              attempts.push(new Map(retaken.map(who => [who, stateOf(who)])));
+              const verdict = desk.check(node, 'key check', faults, { card: card.id, of: 'keys', canRetake: retaken.some(who => faults.some(fault => fault.who === who)) && calls < budget });
+              if (verdict === 'passed with faults' && attempts.length > 1) {
+                const kept = desk.nodes.get(node)?.cards[card.id]?.keys?.kept ?? attempts.length;
+                if (kept !== attempts.length) for (const [who, state] of attempts[kept - 1]) restore(who, state);
+              }
+              if (verdict !== 'retake') break;
+              for (const who of retaken) {
+                const mine = faults.filter(fault => fault.who === who);
+                if (!mine.length) continue;
+                const last = [...cardRecord.moves.slice(keysFrom.moves)].reverse().find(move => move.person === who && move.direction), was = avoid.get(who) ?? { directions: [], spots: [] };
+                if (last?.spot && last.spot !== 'none') was.spots.push(last.spot); else if (last?.direction) was.directions.push(last.direction);
+                avoid.set(who, was);
+                restore(who, beforeKeys.get(who));
+                await jevMove(who, keyedByJev.get(who), { n, before: last ? `${last.direction}${last.spot && last.spot !== 'none' ? `, to ${last.spot}` : ''}${last.how ? ` (${last.how})` : ''}` : 'a move', why: mine.map(fault => `${fault.law}: ${fault.why}`).join('; '), avoid: was });
+              }
+              desk.publish(node, 'keys', keysNow(), card.id);
+            }
+            desk.done(node, 'keys', card.id);
           }
           // What the text says or implies about where people are (the digest's facts up to this card): someone whose spot
           // disagrees with a binding fact moves to the nearest spot that agrees (an implied move); a stated fact no spot near
@@ -1355,15 +1408,10 @@ export async function direct(novelDir, { reading, readingPath = null, prefilm = 
               // A cut's shot: as close as its size, never cutting off the people it holds.
               ? { focus: { x: mid[0], z: mid[2], y0: mid[1], w: 6, d: 6, h: 3 }, radius: Math.max(shotSpan + 1.5, spread * 1.2 + 2 * BODY), elevation: ELEVATION[cut.angle] ?? 12, yaw: 0, cut: cut.id, move: cut.move }
               : { focus: { x: mid[0], z: mid[2], y0: mid[1], w: 6, d: 6, h: 3 }, radius: Math.max(10 * BODY, spread * 1.2 + 4 * BODY, frameHere ? Math.min(400, frameHere / 2) : 0), elevation: scale ? ELEVATION[scale.angle] ?? 35 : 35, yaw: 0 }; } }
-          // The cut's node after the keys (workflow.mjs): the key check (L6, L10 as the card played them; no key retake yet,
-          // so faults pass), the in-betweens (the walks), the reframe (held, followed, exits frame, or a new cut where someone
+          // The cut's node after the keys (workflow.mjs; the key check ran right after them): the in-betweens (the walks), the reframe (held, followed, exits frame, or a new cut where someone
           // who left is seen again in this cut), the photography (the camera is the frame's) and the rush check (every law
           // the card holds).
           if (node && frame) {
-            desk.publish(node, 'keys', cardRecord.moves.map(move => ({ who: move.person, moved: !!move.moved, ...(move.leaves ? { leaves: true } : {}) })), card.id);
-            desk.done(node, 'keys', card.id);
-            desk.start(node, 'key check', card.id);
-            desk.check(node, 'key check', [...(cardRecord.laws ?? []).filter(entry => ['L6', 'L10'].includes(entry.law) && entry.verdict === 'held').map(entry => ({ law: entry.law, who: entry.who, why: entry.why })), ...factFaults('key check', card.sentences, cut.id).faults.map(({ law, who, why }) => ({ law, who, why }))], { card: card.id, canRetake: false, of: 'keys' });
             desk.publish(node, 'in-betweens', { walks: cardRecord.moves.filter(move => move.moved).length }, card.id); desk.done(node, 'in-betweens', card.id);
             const later = new Set(cards.slice(cards.indexOf(card) + 1).filter(entry => cutAt.get(entry.first)?.id === cut.id).flatMap(entry => entry.people.filter(person => person.how.some(how => how === 'speaks' || how === 'acts')).map(person => person.id)));
             const ended = castNow().filter(who => !frame.holds || frame.holds.includes(who)).map(who => ({ who, at: at(positions[who][0]) }));
