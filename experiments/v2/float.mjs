@@ -24,13 +24,20 @@ const prefilm = await loadPrefilm(dirname(resolve(readingPath))), abilities = aw
 const macro = new Map((page.macro ?? []).map(node => [node.id, node])), parentOf = id => macro.get(id)?.parent ?? null;
 const ancestors = id => { const out = []; for (let p = parentOf(id), guard = 0; p && guard < 16; p = parentOf(p), guard++) out.push(p); return out; };
 const massOf = id => (id.startsWith('unnamed:') ? FL.MASS.unnamed : id.startsWith('slot:') ? FL.MASS.slot : FL.MASS.named);
-const places = new Map([...macro].map(([id, node]) => [id, { at: [node.x, node.z], r: node.r ?? 10, parent: node.parent ?? null, mass: massOf(id), movable: FL.MOVABLE.has(node.scale) }]));
+// A place standing on a borrowed lot of its street (a borrow, a tenant: terrain spawning's building level) is that lot's
+// and never floats.
+const sites = (await json(join(stage, 'terrain.json')).catch(() => null))?.sites ?? {}, onLot = id => ['borrow', 'tenant'].includes(sites[id]?.by);
+const places = new Map([...macro].map(([id, node]) => [id, { at: [node.x, node.z], r: node.r ?? 10, parent: node.parent ?? null, mass: massOf(id), movable: FL.MOVABLE.has(node.scale) && !onLot(id) }]));
 
 // The tracks: each person's units in the order played, a pair at two places neither holding the other.
 const unitPlace = new Map(page.scenes.map(scene => [scene.id, scene.place]));
 const seconds = new Map(); for (const cut of reading.storyboard ?? []) seconds.set(cut.scene, (seconds.get(cut.scene) ?? 0) + (cut.seconds ?? 4));
 const SPEED = 3, GAP = 60;
 const agilityOf = (unit, who) => { const used = [...(prefilm?.units?.[unit]?.scriptSupervisor?.moves ?? []), ...(prefilm?.units?.[unit]?.blocking ?? [])].some(move => move.who === who && move.ability === 'agility'); return used ? abilities?.people?.[who]?.move?.agility?.factor ?? 1 : 1; };
+// Where a unit's people stand against its place's spot: its spawn box's offset (a box may stand far from the spot the city
+// drew; the move carries both, so the track is measured at the box).
+const plan = await json(join(stage, 'world', 'spawn.json')).catch(() => ({ scenes: [] })), planOf = new Map(plan.scenes.map(entry => [entry.id, entry]));
+const standOff = unit => { const box = planOf.get(unit)?.target?.box, p = macro.get(unitPlace.get(unit)); return Array.isArray(box) && p ? [box[0] - p.x, box[1] - p.z] : null; };
 const last = new Map(), tracks = [];
 for (const scene of record.scenes) {
   const place = unitPlace.get(scene.scene);
@@ -39,7 +46,7 @@ for (const scene of record.scenes) {
     const before = last.get(who);
     if (before && place && before.place && before.place !== place && macro.has(place) && macro.has(before.place) && !ancestors(place).includes(before.place) && !ancestors(before.place).includes(place)) {
       const time = ((seconds.get(before.unit) ?? 30) + (seconds.get(scene.scene) ?? 30)) / 2 + GAP;
-      tracks.push({ a: before.place, b: place, reach: SPEED * agilityOf(scene.scene, who) * time, who, from: before.unit, to: scene.scene });
+      tracks.push({ a: before.place, b: place, offA: standOff(before.unit), offB: standOff(scene.scene), reach: SPEED * agilityOf(scene.scene, who) * time, who, from: before.unit, to: scene.scene });
     }
     last.set(who, { unit: scene.scene, place });
   }
@@ -76,7 +83,7 @@ if (values.apply) {
   await copyFile(join(cstage, 'terrain.json'), join(cstage, 'terrain.before-float.json')); await copyFile(join(cstage, 'world', 'spawn.json'), join(cstage, 'world', 'spawn.before-float.json'));
   // Each moved place's position beside its parent (as the canvas bears it), the parent where it now stands.
   const moved = new Map(out.moves.map(move => [move.id, [move.to[0] - move.from[0], move.to[1] - move.from[1]]]));
-  for (const move of out.moves) { const site = (terrain.sites[move.id] ??= {}), parent = parentOf(move.id), base = parent ? out.at.get(parent) ?? places.get(parent).at : [0, 0]; site.at = [Math.round((move.to[0] - base[0]) * 10) / 10, Math.round((move.to[1] - base[1]) * 10) / 10]; site.floated = { from: move.from, to: move.to, metres: move.metres, run }; }
+  for (const move of out.moves) { const site = (terrain.sites[move.id] ??= {}), parent = parentOf(move.id), base = parent ? out.at.get(parent) ?? places.get(parent).at : [0, 0]; site.at = [Math.round((move.to[0] - base[0]) * 10) / 10, Math.round((move.to[1] - base[1]) * 10) / 10]; site.floated = { from: move.from, to: move.to, metres: move.metres, parent, run }; }
   terrain.floated = { run, at: new Date().toISOString(), moved: out.moves.length };
   // The spawn plan moves with its places: a unit's box and starts shifted by its place's move (or its nearest moved ancestor's).
   const shiftOf = id => { for (const p of [id, ...ancestors(id)]) if (moved.has(p)) return moved.get(p); return null; };

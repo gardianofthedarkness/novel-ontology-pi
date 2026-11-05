@@ -5,7 +5,7 @@ import { attackCheck, limitsOf, lineBlocked } from './attacks.mjs';
 test('the limits of a blow: the attacker\'s own ability, else a weapon held, else a person\'s; no explosion without one', () => {
   assert.deepEqual(limitsOf('line', { own: { line: { range: 400, sure: 1 } } }), { range: 400, sure: 1, by: 'ability' });
   assert.deepEqual(limitsOf('line', { weapons: [{ label: 'gun', attack: { kind: 'line', range: 100, sure: 0.9 } }] }), { range: 100, by: 'weapon', weapon: 'gun' });
-  assert.deepEqual(limitsOf('close', {}), { reach: 2, by: 'person' });
+  assert.deepEqual(limitsOf('close', {}), { reach: 3, by: 'person' });
   assert.equal(limitsOf('area', {}), null);
 });
 

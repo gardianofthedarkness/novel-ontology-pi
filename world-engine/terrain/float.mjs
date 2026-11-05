@@ -4,7 +4,8 @@
 //
 //   tracks    a person in two units one after the other at two places: the places pulled together while they stand
 //             further apart than the person can go in the time the two units allow (their speed, faster where an
-//             agility is in use);
+//             agility is in use); measured where its people stand (a place's spot plus a track's `offA`/`offB`, the
+//             spawn box's offset from it), which a move carries along;
 //   settings  a unit whose text says a kind of ground (high-rise, low houses…) that its place does not stand in: the place
 //             pulled toward the nearest ground of that kind (set-dresser.mjs);
 //   mass      every place costs its mass times the square of how far it moves (unnamed ones light, named ones heavy,
@@ -21,7 +22,7 @@ export function energyOf(at, { places, tracks, pulls, weights }) {
   const grad = new Map([...at.keys()].map(id => [id, [0, 0]]));
   let tracksE = 0, pullsE = 0, massE = 0;
   for (const track of tracks) {
-    const a = at.get(track.a), b = at.get(track.b);
+    const a = standOf(at, track, 'a'), b = standOf(at, track, 'b');
     if (!a || !b) continue;
     const dx = b[0] - a[0], dz = b[1] - a[1], d = Math.hypot(dx, dz) || 1e-9, excess = d - track.reach;
     if (excess <= 0) continue;
@@ -78,9 +79,12 @@ export function relax({ places, tracks, pulls = [], weights = { track: 1, settin
   return { at, moves, before: { energy: Math.round(before.energy), tracks: Math.round(before.tracks), pulls: Math.round(before.pulls) }, after: { energy: Math.round(after.energy), tracks: Math.round(after.tracks), pulls: Math.round(after.pulls), mass: Math.round(after.mass) } };
 }
 
+/** Where a track's end stands: its place's spot plus the track's offset there. */
+function standOf(at, track, end) { const p = at.get(track[end]), off = track[end === 'a' ? 'offA' : 'offB']; return p && (off ? [p[0] + off[0], p[1] + off[1]] : p); }
+
 /** How many tracks stand beyond reach, and by how much in all (metres). */
 export function beyondReach(at, tracks) {
   let count = 0, metres = 0;
-  for (const track of tracks) { const a = at.get(track.a), b = at.get(track.b); if (!a || !b) continue; const excess = Math.hypot(b[0] - a[0], b[1] - a[1]) - track.reach; if (excess > 0) { count++; metres += excess; } }
+  for (const track of tracks) { const a = standOf(at, track, 'a'), b = standOf(at, track, 'b'); if (!a || !b) continue; const excess = Math.hypot(b[0] - a[0], b[1] - a[1]) - track.reach; if (excess > 0) { count++; metres += excess; } }
   return { count, metres: Math.round(metres) };
 }

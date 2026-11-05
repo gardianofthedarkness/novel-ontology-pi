@@ -543,6 +543,10 @@ export async function strandDemo(novelDir, options) {
     // A building that borrowed a lot of its street's form (terrain spawning's building level, docs/v2/borrow-and-spawn.md §6)
     // stands on that lot exactly, at its offset from the street, and is not sampled; a tenant (a composite building's part)
     // at its host's.
+    // A place the floating terrain moved (L19, world-engine/terrain/float.mjs; its site's `at`, beside the holder it was
+    // floated in) stands there, over where it would be sampled, while it is held by that same place; one standing on a
+    // borrowed lot (a borrow, a tenant) never floats.
+    const floatedAt = (id, holder) => { const site = terrain?.sites?.[id]; return site?.floated && Array.isArray(site.at) && site.by !== 'borrow' && site.by !== 'tenant' && (!site.floated.parent || site.floated.parent === holder) ? { at: [site.at[0], site.at[1]] } : {}; };
     const lotOf = (holder, id) => { const site = terrain?.sites?.[id]; return terrain?.mode === 'spawn' && (site?.by === 'borrow' || site?.by === 'tenant') && site.parent === holder && Array.isArray(site.toward) ? { at: site.toward } : null; };
     notes.build = { areas: areas.length, byName: areas.filter(area => !scaleOf(area.id)).length, dwelling: Object.entries(dwelling).map(([id, host]) => `${name(id)} in ${name(host)}`), unscaled: placeTree.filter(place => !scaleOf(place.id) && !areaScale(place.id)).length };
     for (const scene of chosen) {
@@ -555,7 +559,7 @@ export async function strandDemo(novelDir, options) {
         // A building the place tree puts in no larger place dwells at a random spot of the central build until the text names where it is.
         const holder = C.holderFor(canvas, host, scaleOf(scene.placeId) ?? 'building', scene.placeId);
         const unit = { id: scene.placeId, label: name(scene.placeId), kind: 'building', r: gridRadius(scene.placeId) };
-        C.addUnit(canvas, holder, { ...unit, ...memberAt(holder, unit) });
+        C.addUnit(canvas, holder, { ...unit, ...memberAt(holder, unit), ...floatedAt(unit.id, holder) });
         dwellingUnits[scene.placeId] = host; notes.build.dwelling.push(`${name(scene.placeId)} in ${name(host)}`);
         continue;
       }
@@ -564,14 +568,14 @@ export async function strandDemo(novelDir, options) {
         // until the text names where it is), so it stands in a city rather than on bare ground.
         const area = `tmp:${scene.placeId}`;
         if (!canvas.places[area]) { C.bear(canvas, { id: area, label: `round ${name(scene.placeId)}`, scale: 'district', parent: null, landscape: 'residential' }); canvas.places[area].temporary = true; }
-        C.addUnit(canvas, area, { id: scene.placeId, label: name(scene.placeId), kind: 'building', r: gridRadius(scene.placeId) });
+        C.addUnit(canvas, area, { id: scene.placeId, label: name(scene.placeId), kind: 'building', r: gridRadius(scene.placeId), ...floatedAt(scene.placeId, area) });
         continue;
       }
       const holder = C.holderFor(canvas, open.at(-1), scaleOf(scene.placeId) ?? 'building', scene.placeId), picked = C.sampledIn(canvas, open.at(-1), holder) || guessed(scene.placeId);
       // Near where the terrain step put the building (the site on the chain it stands for) in this holder.
       const site = [...chain].reverse().find(at => terrain?.sites?.[at]), near = site && terrain.sites[site].parent === holder ? terrain.sites[site].toward : undefined;
       const lot = lotOf(holder, scene.placeId), unit = { id: scene.placeId, label: name(scene.placeId), kind: 'building', r: gridRadius(scene.placeId), ...(picked && !lot ? { sampled: open.at(-1) } : {}) };
-      C.addUnit(canvas, holder, { ...unit, ...memberAt(holder, unit), ...(lot ?? {}) }, near);
+      C.addUnit(canvas, holder, { ...unit, ...memberAt(holder, unit), ...(lot ?? {}), ...floatedAt(unit.id, holder) }, near);
     }
     // Every other building, room and unnamed place of the tree (a v2 reading's EM² places among them), laid out as the
     // scenes' are, buildings before the rooms they hold: in the area the tree puts it in (sampled into one of a city's
@@ -595,7 +599,7 @@ export async function strandDemo(novelDir, options) {
       // A pool's member is sampled there (blinking) as a place the tree puts only in a city is.
       const holder = C.holderFor(canvas, host, scale, place.id), picked = !area || C.sampledIn(canvas, host, holder) || guessed(place.id) || !!canvas.places[holder]?.pool;
       const lot = lotOf(holder, place.id), unit = { id: place.id, label: name(place.id), kind, r, ...(picked && !lot ? { sampled: area ?? 'build' } : {}) };
-      C.addUnit(canvas, holder, { ...unit, ...memberAt(holder, unit), ...(lot ?? {}) });
+      C.addUnit(canvas, holder, { ...unit, ...memberAt(holder, unit), ...(lot ?? {}), ...floatedAt(unit.id, holder) });
       if (!area) { dwellingUnits[place.id] = host; notes.build.dwelling.push(`${name(place.id)} in ${name(host)}`); }
     }
     // Borrowing (docs/v2/world-engine-v2.md §2.0.12, §2.0.13): a pool's member Jev decided borrows its pool's ground in the

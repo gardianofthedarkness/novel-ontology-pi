@@ -28,3 +28,11 @@ test('siblings are kept clear of each other', () => {
   const a = out.at.get('a');
   assert.ok(Math.hypot(a[0] - 50, a[1]) >= 24 - 1e-6);
 });
+
+test('a track is measured where its people stand (the place plus its offset), and the move carries them', () => {
+  const places = new Map([['a', place(0, 0, 30, false)], ['b', place(100, 0, 1)]]);
+  const far = [{ a: 'a', b: 'b', reach: 200, offB: [800, 0] }];
+  assert.equal(beyondReach(new Map([['a', [0, 0]], ['b', [100, 0]]]), far).count, 1, 'the spot is near, but its people stand 900 m off');
+  const out = relax({ places, tracks: far });
+  assert.ok(out.at.get('b')[0] < 100, 'pulled back toward a, though its spot already stood within reach');
+});

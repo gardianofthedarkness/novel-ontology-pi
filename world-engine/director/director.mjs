@@ -551,7 +551,16 @@ export async function direct(novelDir, { reading, readingPath = null, prefilm = 
         sceneRecord.revised = [];
         for (const who of present) {
           const from = was.get(who), revised = revisedAt(who);
-          if (revised !== null && revised !== undefined) { positions[who] = [revised, from?.[1] ?? 0]; sceneRecord.revised.push(who); continue; }
+          // A smoothed start is walked to from where they were, never jumped to (the user, 2026-11-05: "a person can't just
+          // disappear without a path"; a second pass from W10's smoothing put 89 people at their revised starts, 31 jumps in
+          // the first quarter).
+          if (revised !== null && revised !== undefined) {
+            sceneRecord.revised.push(who);
+            if (!from || from[0] === revised) { positions[who] = [revised, from?.[1] ?? 0]; continue; }
+            const a_ = at(from[0]), b_ = at(revised), metres_ = Math.hypot(a_[0] - b_[0], a_[2] - b_[2]);
+            positions[who] = from; travels.push({ who, from, dest: revised, ...(frameMetres && metres_ <= frameMetres ? {} : { route: true }), smoothed: true });
+            continue;
+          }
           if (from && here.includes(who)) { positions[who] = from; sceneRecord.carried.push(who); continue; }
           const dest = beside(who);
           if (dest === null || dest === undefined) { if (from) positions[who] = from; continue; }

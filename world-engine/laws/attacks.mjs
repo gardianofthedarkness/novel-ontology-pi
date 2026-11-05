@@ -10,8 +10,8 @@
 // Pure: points in metres ([x, y, z]), lots as the world has them (cells of CELL m, floors of FLOOR m).
 
 export const CELL = 2, FLOOR = 3;
-/** What a person can do without an ability or a weapon: a fist's reach, a throw's range; no explosion. */
-export const PERSON = { close: { reach: 2 }, line: { range: 30 } };
+/** What a person can do without an ability or a weapon: a fist's reach with a step (3 m), a throw's range; no explosion. */
+export const PERSON = { close: { reach: 3 }, line: { range: 30 } };
 
 /** The limits a blow of this kind has: the attacker's own, else the weapon's they hold, else a person's; null when none can. */
 export function limitsOf(kind, { own = null, weapons = [] } = {}) {
