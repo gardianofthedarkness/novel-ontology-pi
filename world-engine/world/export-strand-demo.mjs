@@ -48,6 +48,25 @@ const BUILDING_OF = { school: ['school', 4], dormitory: ['home', 8], house: ['ho
 /** Edge-cost factors by kind [walk, climb, descend, jump, fall, sky arc]: a fall is cheap only for someone falling; jumps and arcs for someone running or falling. */
 const FACTORS = { walk: [1, 1, 1, 3, 6, 3], run: [1, 1, 1, 1, 4, 1], fall: [1, 1, 1, 1, 0.15, 1] };
 const classOf = how => how === 'fall' ? 'fall' : how === 'run' ? 'run' : 'walk';
+/**
+ * A way of moving as the path integral weighs it (the user, 2026-11-05: abilities): the edge factors and the temperature.
+ * Walking, running and falling as before; `climb:<m>` a run that may go up and down building walls no higher than its
+ * climb (the walls' kinds by height: up to 10 m, 30 m, higher); `agile:<×>` a run that costs `×` times less a metre on the
+ * level and on stairs (agility: "it takes less effort to move"), its temperature lowered with it so the walk sum still
+ * converges and the cheaper metres change which routes are likely.
+ */
+const specs = new Map();
+function specOf(how, temperature) {
+  const key = String(how ?? 'walk');
+  if (specs.has(key)) return specs.get(key);
+  const [kind, value] = key.split(':'), number = Number(value), walls = [Infinity, Infinity, Infinity];
+  let factors = [...FACTORS[classOf(key)], ...walls], T = temperature({ step: 2, arcCost: 7 }), name = classOf(key);
+  if (kind === 'climb' && number > 0) { factors = [...FACTORS.run, number >= 6 ? 1.5 : Infinity, number >= 25 ? 1.5 : Infinity, number >= 100 ? 1.5 : Infinity]; name = `climb:${number >= 100 ? 'high' : number >= 25 ? 'mid' : 'low'}`; }
+  if (kind === 'agile' && number > 1) { const f = Math.min(10, number); factors = [1 / f, 1 / Math.sqrt(f), 1 / Math.sqrt(f), ...FACTORS.run.slice(3), ...walls]; T = temperature({ step: 2 / f, arcCost: 7 }); name = `agile:${f}`; }
+  const spec = { key: name, factors, T };
+  specs.set(key, spec);
+  return spec;
+}
 /** Until the damage question is asked of Jev: a reading of the event summary, from the strongest words down. */
 const DAMAGE_WORDS = [[4, /倒塌|崩塌|摧毁|炸毁|夷为平地|粉碎|坍塌/], [3, /爆炸|炸|轰|电磁炮|炮击|冲击波/], [2, /劈|砍|击穿|砸|撞|射|开火|斩|雷击|闪电/]];
 export const damageDegree = text => DAMAGE_WORDS.find(([, pattern]) => pattern.test(text))?.[0] ?? 0;
@@ -185,8 +204,9 @@ export async function strandDemo(novelDir, options) {
     const points = [...targets, ...(from === null ? [] : [from])].map(id => W.nodePos(world, id)), pad = 40;
     const box = { x0: Math.min(...points.map(p => p.x)) - pad, x1: Math.max(...points.map(p => p.x)) + pad, z0: Math.min(...points.map(p => p.z)) - pad, z1: Math.max(...points.map(p => p.z)) + pad };
     const built = graphOf({ x: (box.x0 + box.x1) / 2, z: (box.z0 + box.z1) / 2 }, Math.max(box.x1 - box.x0, box.z1 - box.z0) / 2);
-    const cacheKey = `${built.version}|${key}|${classOf(how)}|${[box.x0, box.x1, box.z0, box.z1].map(Math.round).join(',')}`;
-    if (!fields.has(cacheKey)) { const part = W.windowOf(built.graph, box), field = solveWalk(part.graph, targets.map(id => part.local[id]).filter(n => n >= 0), { T, kappa, lambda, factors: FACTORS[classOf(how)] }); fields.set(cacheKey, { ...field, part }); }
+    const spec = specOf(how, ({ step, arcCost }) => 0.6 * temperatureBound({ step, kappa: 1, lambda: 8, floorHeight: 3, arcCost }));
+    const cacheKey = `${built.version}|${key}|${spec.key}|${[box.x0, box.x1, box.z0, box.z1].map(Math.round).join(',')}`;
+    if (!fields.has(cacheKey)) { const part = W.windowOf(built.graph, box), field = solveWalk(part.graph, targets.map(id => part.local[id]).filter(n => n >= 0), { T: spec.T, kappa, lambda, factors: spec.factors }); fields.set(cacheKey, { ...field, part }); }
     return fields.get(cacheKey);
   };
   const sampleWalk = (graph, field, start, heading, rng) => { if (!field.part) return walkSample(graph, field, start, heading, rng); const at = field.part.local[start]; if (at < 0) return null; const path = walkSample(field.part.graph, field, at, heading, rng); return path && path.map(n => field.part.ids[n]); };

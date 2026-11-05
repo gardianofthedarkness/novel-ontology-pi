@@ -420,6 +420,16 @@ export function worldGraph(world: World, standing: Uint8Array[], things: PlacedT
       }
       if (ok) add(node, nodeId(world, i + dx, j + dz, k), dx, dz, SKELETON_CELL * Math.hypot(dx, dz), EDGE.walk);
     }
+    // Up a building's outer wall to its roof, and down again (pathIntegral.ts WALL_KINDS): from the street beside it, the
+    // edge's kind by the wall's height; only a climber's way of moving walks them.
+    if (here.type === 1 && k === 0) for (const [dx, dz] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
+      const index = world.lotAt.get(cellKey(i + dx, j + dz));
+      if (index === undefined || index < 0 || index >= HALL_LOT) continue;
+      const floors = world.lots[index].floors, roof = what(i + dx, j + dz, floors);
+      if (roof.type !== 4 || roof.lot !== index) continue;
+      const height = floors * FLOOR_HEIGHT, wall = height <= 10 ? EDGE.wallLow : height <= 30 ? EDGE.wallMid : EDGE.wallHigh, top = nodeId(world, i + dx, j + dz, floors);
+      add(node, top, 0, 0, 2 + height, wall, UP); add(top, node, 0, 0, 2 + height / 2, wall, DOWN);
+    }
     // A building's stairs go on down through its basements, a floor at a time.
     const stairAt = (index: number) => { if (index < 0 || index >= HALL_LOT) return false; const lot = world.lots[index], at = lot ? localCell(lot, i, j) : null; if (!at) return false; const cell = cellIndex(lot.skeleton, at[0], at[1], 0); return !!standing[index]?.[cell] && lot.skeleton.cells[cell] === STAIR; };
     const between = (level: number, cost: number) => add(node, nodeId(world, i, j, level), 0, 0, cost, level < k ? EDGE.descend : EDGE.climb, level < k ? DOWN : UP);

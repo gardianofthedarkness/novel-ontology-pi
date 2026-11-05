@@ -132,6 +132,18 @@ export async function direct(novelDir, { reading, readingPath = null, prefilm = 
   // flying height, by its name, and the slots that are vehicles or weapons by id (drawn as what they are, not as people).
   const propSheet = JSON.parse(await readFile(join(novelDir, '..', '..', 'universe', 'props.json'), 'utf8').catch(() => 'null'));
   const propOf = name => propSheet?.labels?.[name] ?? null, slotProp = id => (propSheet?.ids?.[id] ? propOf(propSheet.ids[id]) : null);
+  // The settei cast's ability sheet (universe/abilities.json): what each person can do to move. A move goes one of those
+  // ways only where the pre-film notes say the line has it in use (a move's or a journey's `ability`, in-use.json).
+  const abilitySheet = JSON.parse(await readFile(join(novelDir, '..', '..', 'universe', 'abilities.json'), 'utf8').catch(() => 'null'));
+  /** The way a move goes: the ability its note has in use, as the person's sheet allows it (else the move's own way). */
+  const howFor = (person, ability, otherwise) => {
+    const move = abilitySheet?.people?.[person]?.move ?? {};
+    if (ability === 'climb' && move.climb) return `climb:${move.climb.height}`;
+    if (ability === 'agility' && move.agility) return `agile:${move.agility.factor}`;
+    if (ability === 'appear' && move.appear) return `teleport:${move.appear.reach}`;
+    if (ability === 'flight' && move.flight) return 'flight';
+    return otherwise;
+  };
   const reviewed = await R.applyAnswers(novelDir).catch(error => ({ error: String(error.message ?? error) }));
   const pins = await R.loadPins(novelDir), lastRun = await R.latestRun(novelDir);
   const oldLog = lastRun ? (await readFile(join(novelDir, 'stage', 'world', 'log', `${lastRun}.jsonl`), 'utf8').catch(() => '')).split('\n').filter(Boolean).map(row => JSON.parse(row)) : [];
@@ -309,6 +321,14 @@ export async function direct(novelDir, { reading, readingPath = null, prefilm = 
         const metres = id => { const p = W.nodePos(world, id); return { x: p.x, y: p.y, z: p.z }; };
         walk.failed = null; walk.code = null; walk.replay = { key, from: from[0], targets: targets.slice(0, 8), how, at: { from: metres(from[0]), ...(targets.length ? { to: metres(targets[0]) } : {}) } };
         if (!targets.length) { walk.failed = 'no place to stand there'; walk.code = 'NO_TARGET'; return null; }
+        // Appearing (within its reach) and flying go straight to the nearest target, through no walk; a target beyond an
+        // appearing's reach is run to.
+        if (String(how).startsWith('teleport') || how === 'flight') {
+          const here = metres(from[0]), reach = how === 'flight' ? Infinity : Number(String(how).split(':')[1]) || 30;
+          const target = targets.map(id => ({ id, d: Math.hypot(metres(id).x - here.x, metres(id).z - here.z) })).sort((a, b) => a.d - b.d)[0];
+          if (target && target.d <= reach) { const path = [from[0], target.id]; path.ensemble = []; path.how = how === 'flight' ? 'flight' : 'teleport'; return path; }
+          how = 'run';
+        }
         const field = E.solve(scene.placeId, key, targets, how, from[0]), built = E.graphOf(W.nodePos(world, from[0]));
         const path = E.sampleWalk(built.graph, field, from[0], from[1], seeded(key));
         if (path) path.ensemble = Array.from({ length: 6 }, (_, n) => E.sampleWalk(built.graph, field, from[0], from[1], seeded(`${key}|${n}`))).filter(Boolean);
@@ -874,7 +894,7 @@ export async function direct(novelDir, { reading, readingPath = null, prefilm = 
             if (!path) { cardRecord.moves.push({ person, why, moved: false, ...(walk.code ? { code: walk.code, replay: walk.replay } : {}) }); (cardRecord.laws ??= []).push({ law: 'L10', who: person, verdict: 'held', why: walk.failed ?? why ?? 'no walk there', ...(walk.code ? { code: walk.code } : {}) }); return; }
             // Several moves of one person in one card (steps, then an implied move) are one walk on the page.
             const key = `${scene.id}|${card.id}|${person}`, earlier = E.moves.get(key);
-            E.moves.set(key, { person, how: how === 'run' || earlier?.how === 'run' ? 'run' : 'walk', path: earlier ? [...earlier.path, ...path.slice(1)] : [...path], ensemble: path.ensemble ?? [] });
+            E.moves.set(key, { person, how: path.how ?? (String(how).startsWith('climb') || String(how).startsWith('agile') || how === 'run' || earlier?.how === 'run' ? 'run' : 'walk'), path: earlier ? [...earlier.path, ...path.slice(1)] : [...path], ensemble: path.ensemble ?? [] });
             positions[person] = [path.at(-1), positions[person][1]];
             cardRecord.moves.push({ person, why, moved: true, steps: path.length, to: said(at(path.at(-1))) });
           };
@@ -1118,6 +1138,8 @@ export async function direct(novelDir, { reading, readingPath = null, prefilm = 
               }
             }
             if (!targets?.length) { cardRecord.moves.push({ ...moveRecord, moved: false, why: 'no place to stand there', code: 'NO_TARGET' }); return; }
+            // The key animator's move goes the way its note has in use (an ability the person's sheet gives them).
+            how2 = howFor(person, hint?.ability, how2);
             const path = walk(scene, slug, positions[person], targets, how2);
             moveTo(person, path, how2, path ? null : walk.failed);
             Object.assign(cardRecord.moves.at(-1), moveRecord);
@@ -1166,7 +1188,7 @@ export async function direct(novelDir, { reading, readingPath = null, prefilm = 
             const fits = node => (box ? true : node.lot === lot || Math.hypot(node.x - centre[0], node.z - centre[2]) <= radius);
             const wanted = nodes.filter(node => fits(node) && (roofward ? node.type === FA.TYPE.roof : node.type === FA.TYPE.outdoor));
             const targets = (wanted.length ? wanted : nodes.filter(fits)).sort((a, b) => Math.hypot(a.x - here[0], a.z - here[2]) - Math.hypot(b.x - here[0], b.z - here[2])).slice(0, 40).map(node => node.id);
-            const how = roofward || journey.manner === 'run' || journey.manner === 'zigzag through alleys' ? 'run' : 'walk';
+            const how = howFor(person, journey.ability ?? far?.ability, roofward || journey.manner === 'run' || journey.manner === 'zigzag through alleys' ? 'run' : 'walk');
             let path = targets.length ? walk(scene, `${scene.id}|${card.id}|${person}|journey`, positions[person], targets, how) : null, airborne = false;
             // A leap, flight or climb the walk graph has no way for (no air edges: tower to tower, scene 26) goes straight
             // through the air to the nearest target, recorded as such (L12 checks the ability).
@@ -1255,7 +1277,8 @@ export async function direct(novelDir, { reading, readingPath = null, prefilm = 
             for (const entry of mine.slice(0, 3)) {
               const target = gradedTarget(person, entry, frameHere);
               if (target === null) { cardRecord.moves.push({ person, direction: entry.motion, moved: false, why: 'digest: no spot to step to', by: 'digest' }); continue; }
-              moveTo(person, walk(scene, `${scene.id}|${card.id}|${person}|${entry.sentence}|${entry.motion}`, positions[person], [target], entry.how === 'run' ? 'run' : 'walk'), entry.how, `digest: ${moveWords(entry)}`, { quiet: true });
+              const way = howFor(person, entry.ability, entry.how === 'run' ? 'run' : 'walk');
+              moveTo(person, walk(scene, `${scene.id}|${card.id}|${person}|${entry.sentence}|${entry.motion}`, positions[person], [target], way), way, `digest: ${moveWords(entry)}${entry.ability ? ` (${entry.ability})` : ''}`, { quiet: true });
               Object.assign(cardRecord.moves.at(-1), { direction: entry.motion, line: entry.sentence, by: 'digest' });
             }
           };
