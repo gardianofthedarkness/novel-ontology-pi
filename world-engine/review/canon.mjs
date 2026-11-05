@@ -20,7 +20,7 @@
 //   a split                 someone the two-places law puts in two places more than once: a question for the review
 import { createHash } from 'node:crypto';
 import { appendFile, readFile, writeFile } from 'node:fs/promises';
-import { join } from 'node:path';
+import { dirname, join } from 'node:path';
 import { playedLine } from '../laws/check-run.mjs';
 import { settleSpeakers } from './speakers.mjs';
 
@@ -196,7 +196,9 @@ export async function toCanon(novelDir, { run, reading, speakers = true }) {
   const page = await readJson(join(novelDir, 'stage', 'simulation', 'runs', 'director', `${run}.page.json`));
   const peopleOf = new Map((reading.cards ?? []).map(card => [card.id, card.people ?? []]));
   // Without speakers (the user, 2026-11-03: a run on actions and items only), no line's speaker is settled or held.
-  const settled = page && speakers ? settleSpeakers({ cards: playedLine({ record, page, reading }).cards, reading, pins, peopleOf: id => peopleOf.get(id) ?? [], route: routeOf(pins, 'speaker') }) : [];
+  // The voices' picks for the lines the reading was unsure of (experiments/v2/voices.mjs: voices.json beside the reading).
+  const readingAt = (await readJson(join(novelDir, 'stage', 'director', 'reading-path.json')))?.path, voices = readingAt ? (await readJson(join(dirname(readingAt), 'voices.json')))?.lines ?? null : null;
+  const settled = page && speakers ? settleSpeakers({ cards: playedLine({ record, page, reading }).cards, reading, pins, peopleOf: id => peopleOf.get(id) ?? [], route: routeOf(pins, 'speaker'), voices }) : [];
   const entities = foldById(await readJsonl(join(ontology, 'entities.jsonl'))), relations = await readJsonl(join(ontology, 'relations.jsonl'));
   const spawn = await readJson(join(novelDir, 'stage', 'world', 'spawn.json'));
   const placed = page ? worldPlaces({ page, spawn, script, record, arrivals: playedLine({ record, page, reading }).arrivals }) : null;

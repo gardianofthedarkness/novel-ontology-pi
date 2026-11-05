@@ -126,3 +126,30 @@ export function decodeExchange(lines, { stay = Math.log(0.2), addressed = Math.l
   for (let n = back.length - 1; n >= 0; n--) { at = back[n][at]; out.unshift(states[at]); }
   return out;
 }
+
+/**
+ * Every line's speaker decoded, the known ones clamped. `lines` in reading order: `{ id, quote, who (known) or null, to,
+ * exchange, candidates }`; `vectorOf(id)` a unit vector; `w` the weights (voices-eval.mjs tunes them: tv, tl, wv, wp, k,
+ * stay, recency); `window` 1 (each conversation alone) or 3 (with the one before and after, each line its own
+ * candidates); `recency` gives those who spoke in the two neighbouring conversations a lift. Returns id → { who, margin,
+ * candidates } for the lines not known (margin: the line's own scores' lead, before decoding).
+ */
+export function decodeLines({ lines, vectorOf, w, window = 1, recency = false }) {
+  const known = lines.filter(line => line.who), voices = trainVoices(known), index = known.map(line => ({ who: line.who, vector: vectorOf(line.id) }));
+  const groups = [], at = new Map();
+  for (const line of lines) { if (!at.has(line.exchange)) { at.set(line.exchange, groups.length); groups.push([]); } groups[at.get(line.exchange)].push(line); }
+  const everyone = [...voices.by.keys()];
+  const scored = groups.map(group => group.map(line => {
+    const candidates = line.candidates.length ? line.candidates : everyone;
+    const voice = normalised(voiceScores(voices, line.quote, candidates), w.tv), lookup = normalised(lookupScores(index, vectorOf(line.id), candidates, { k: w.k }), w.tl);
+    return { line, candidates, both: combined([{ scores: voice, weight: w.wv }, { scores: lookup, weight: 1 }, { scores: priorScores(voices, candidates), weight: w.wp }]) };
+  }));
+  const decode = (rows, bonus = null) => decodeExchange(rows.map(({ line, both }) => ({ scores: normalised(bonus ? combined([{ scores: both }, { scores: Object.fromEntries(Object.keys(both).map(who => [who, bonus.has(who) ? w.recency : 0])) }]) : both), known: line.who ?? undefined, to: line.to })), { stay: Math.log(w.stay) });
+  const out = new Map();
+  scored.forEach((rows, g) => {
+    const before = window === 3 || recency ? scored[g - 1] ?? [] : [], after = window === 3 || recency ? scored[g + 1] ?? [] : [];
+    const picks = window === 3 ? decode([...before, ...rows, ...after]).slice(before.length, before.length + rows.length) : decode(rows, recency ? new Set([...before, ...after].map(row => row.line.who).filter(Boolean)) : null);
+    rows.forEach(({ line, candidates, both }, n) => { if (!line.who) out.set(line.id, { who: picks[n], margin: Math.round(pick(both).margin * 100) / 100, candidates }); });
+  });
+  return out;
+}

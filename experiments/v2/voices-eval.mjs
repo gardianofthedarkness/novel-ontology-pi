@@ -61,33 +61,41 @@ function runFold(f, w) {
   const knownOf = line => (hidden.has(line.id) ? null : line.who);
   const out = new Map();
   const byExchange = new Map(); for (const line of lines) (byExchange.get(line.exchange) ?? byExchange.set(line.exchange, []).get(line.exchange)).push(line);
-  for (const group of byExchange.values()) {
-    const scored = group.map(line => {
-      const candidates = line.candidates.length ? line.candidates : [...count.keys()];
-      const voice = V.normalised(V.voiceScores(voices, line.quote, candidates), w.tv), lookup = V.normalised(V.lookupScores(index, vectors[line.id], candidates, { k: w.k }), w.tl);
-      const both = V.combined([{ scores: voice, weight: w.wv }, { scores: lookup, weight: 1 }, { scores: V.priorScores(voices, candidates), weight: w.wp }]);
-      return { line, candidates, voice, lookup, both };
-    });
-    const decoded = V.decodeExchange(scored.map(({ line, both }) => ({ scores: V.normalised(both), known: knownOf(line), to: line.to })), { stay: Math.log(w.stay) });
-    const decodedBare = V.decodeExchange(scored.map(({ line, both }) => ({ scores: V.normalised(both), known: knownOf(line) })), { stay: Math.log(w.stay) });
+  const scoreLine = (line, candidates) => {
+    const voice = V.normalised(V.voiceScores(voices, line.quote, candidates), w.tv), lookup = V.normalised(V.lookupScores(index, vectors[line.id], candidates, { k: w.k }), w.tl);
+    const both = V.combined([{ scores: voice, weight: w.wv }, { scores: lookup, weight: 1 }, { scores: V.priorScores(voices, candidates), weight: w.wp }]);
+    return { line, candidates, voice, lookup, both };
+  };
+  const groups = [...byExchange.values()], scoredOf = groups.map(group => group.map(line => scoreLine(line, line.candidates.length ? line.candidates : [...count.keys()])));
+  const decode = (rows, { to = true, bonus = null } = {}) => V.decodeExchange(rows.map(({ line, both }) => ({ scores: V.normalised(bonus ? V.combined([{ scores: both }, { scores: Object.fromEntries(Object.keys(both).map(who => [who, bonus.has(who) ? w.recency : 0])) }]) : both), known: knownOf(line), ...(to ? { to: line.to } : {}) })), { stay: Math.log(w.stay) });
+  groups.forEach((group, g) => {
+    const scored = scoredOf[g], decoded = decode(scored), decodedBare = decode(scored, { to: false });
+    // The two neighbouring conversations (the one before, the one after, in reading order).
+    const before = scoredOf[g - 1] ?? [], after = scoredOf[g + 1] ?? [];
+    const window = decode([...before, ...scored, ...after]).slice(before.length, before.length + scored.length);
+    const union = [...new Set([...before, ...scored, ...after].flatMap(row => row.candidates))];
+    const unionRows = [...before, ...scored, ...after].map(row => scoreLine(row.line, union)), windowUnion = decode(unionRows).slice(before.length, before.length + scored.length);
+    const recent = new Set([...before, ...after].map(row => knownOf(row.line)).filter(Boolean)), recency = decode(scored, { bonus: recent });
     scored.forEach(({ line, candidates, voice, lookup, both }, n) => {
       if (!hidden.has(line.id)) return;
       const prior = candidates.reduce((best, who) => ((count.get(who) ?? 0) > (count.get(best) ?? -1) ? who : best), candidates[0]);
       const twoBack = group.slice(0, n).filter(other => knownOf(other)).at(-2), alternation = twoBack && candidates.includes(twoBack.who) ? twoBack.who : prior;
-      out.set(line.id, { prior, alternation, voice: V.pick(voice).who, lookup: V.pick(lookup).who, both: V.pick(both).who, margin: V.pick(both).margin, exchange: decoded[n], exchangeNoAddressee: decodedBare[n], candidates, voices, index, lookupScores: lookup });
+      out.set(line.id, { prior, alternation, voice: V.pick(voice).who, lookup: V.pick(lookup).who, both: V.pick(both).who, margin: V.pick(both).margin, exchange: decoded[n], exchangeNoAddressee: decodedBare[n], window3: window[n], window3Union: windowUnion[n], recency: recency[n], candidates, voices, index, lookupScores: lookup });
     });
-  }
+  });
   return out;
 }
-const WAYS = ['prior', 'alternation', 'voice', 'lookup', 'both', 'exchange', 'exchangeNoAddressee'];
+const WAYS = ['prior', 'alternation', 'voice', 'lookup', 'both', 'exchange', 'exchangeNoAddressee', 'window3', 'window3Union', 'recency'];
 const score = (results, filter = () => true) => { const rows = known.filter(line => results.has(line.id) && filter(line)); return { n: rows.length, ...Object.fromEntries(WAYS.map(way => [way, Math.round(1000 * rows.filter(line => results.get(line.id)[way] === line.who).length / Math.max(1, rows.length)) / 10])) }; };
 
 // Tuning on fold 0.
 let best = null;
 for (const tv of [0.5, 1, 2]) for (const tl of [0.5, 1, 2]) for (const wv of [0.5, 1, 2]) for (const wp of [0, 0.5, 1]) for (const stay of [0.15, 0.3]) for (const k of [8, 20]) {
-  const w = { tv, tl, wv, wp, stay, k }, s = score(runFold(0, w)), value = s.exchange + s.both;
+  const w = { tv, tl, wv, wp, stay, k, recency: Math.log(2) }, s = score(runFold(0, w)), value = s.exchange + s.both;
   if (!best || value > best.value) best = { w, value, s };
 }
+// The neighbours' boost tuned after, on fold 0 too.
+for (const recency of [Math.log(1.5), Math.log(3), Math.log(5)]) { const w = { ...best.w, recency }, s = score(runFold(0, w)); if (s.recency > best.s.recency) best = { ...best, w, s }; }
 console.error('tuned on fold 0:', JSON.stringify(best.w), JSON.stringify(best.s));
 const results = new Map(); for (const f of [1, 2, 3, 4]) for (const [id, entry] of runFold(f, best.w)) results.set(id, entry);
 const report = { lines: lines.length, known: known.length, weights: best.w, covered: Math.round(1000 * known.filter(line => line.candidates.includes(line.who)).length / known.length) / 10,

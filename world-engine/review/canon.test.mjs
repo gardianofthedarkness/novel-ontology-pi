@@ -89,3 +89,12 @@ test('a split is asked when someone is twice in two places at once', () => {
   const held = canonOf({ ...input, ledger }).filter(entry => entry.file === 'held');
   assert.deepEqual(held.map(entry => [entry.record.kind, entry.record.who, entry.record.where.length]), [['split', 'char_1', 2]]);
 });
+
+test('a line the reading was unsure of is settled by its voice when Jev guessed the same; no guess or another name, held', async () => {
+  const { settleSpeakers } = await import('./speakers.mjs');
+  const cards = [{ scene: 's', card: 'c', positions: { a: { x: 0, y: 0, z: 0 }, b: { x: 2, y: 0, z: 0 } }, lines: [{ id: 'l1' }, { id: 'l2' }, { id: 'l3' }] }];
+  const roles = { l1: { kind: 'spoken', who: { id: null, answer: 'none', confidence: 0.3 } }, l2: { kind: 'spoken', who: { id: null, answer: 'b', confidence: 0.4 } }, l3: { kind: 'spoken', who: { id: null, answer: 'a', confidence: 0.4 } } };
+  const voices = { l1: { who: 'a' }, l2: { who: 'b' }, l3: { who: 'b' } };
+  const out = Object.fromEntries(settleSpeakers({ cards, reading: { roles }, voices }).map(entry => [entry.line, `${entry.by}:${entry.gate}:${entry.who ?? '-'}`]));
+  assert.deepEqual(out, { l1: 'voice:held:-', l2: 'voice:applied:b', l3: 'voice:held:-' });
+});
