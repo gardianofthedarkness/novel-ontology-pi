@@ -197,6 +197,8 @@ let total = 0;
 // A dialogue card's spoken lines (the director's cards, each line with its kind and speaker): the card lasts long enough to
 // read them (SAY a character), each line shown in a bubble over its speaker for its share of the card.
 const SAY = 0.16;
+// Blows (the director's fights, an event's `blows`): each plays BLOW seconds after the one before, from BLOW_FROM in.
+const BLOW = 1.1, BLOW_FROM = 0.35;
 function buildTimeline() {
   segments.length = 0; eventStart.clear(); sceneStart.clear(); for (const key of Object.keys(placeHits)) delete placeHits[key];
   const sayings = new Map((data.director?.cards ?? []).map((card) => [`${card.scene}|${card.event}`, card.lines.filter((line) => line.kind === "spoken" && line.text.trim())]));
@@ -230,7 +232,7 @@ function buildTimeline() {
       if (event.hit) hitsSoFar[keyOf(scene.place)]++;
       const moves = event.moves.map((move) => ({ ...move, time: timing(place, move) }));
       const said = sayings.get(`${scene.id}|${eventIndex}`) ?? [], chars = said.reduce((sum, line) => sum + line.text.length, 0);
-      const length = Math.max(READ, event.hit ? 2.6 : 0, chars ? chars * SAY + 0.6 : 0, ...moves.map((move) => move.time.total + 0.6));
+      const length = Math.max(READ, event.hit ? 2.6 : 0, chars ? chars * SAY + 0.6 : 0, event.blows?.length ? BLOW_FROM + event.blows.length * BLOW + 0.5 : 0, ...moves.map((move) => move.time.total + 0.6));
       let from = 0;
       const says = said.map((line) => { const span = ((length - 0.6) * line.text.length) / chars, entry = { ...line, from, to: from + span }; from += span; return entry; });
       segments.push({ kind: "event", scene, index, eventIndex, event, place, held, start: clock, end: clock + length, positions: { ...positions }, moves, hits: hitsSoFar[keyOf(scene.place)], says });
@@ -662,6 +664,68 @@ const crowdShape = new THREE.CapsuleGeometry(0.22, 0.75, 3, 8), crowdLooks = new
 const propLook = new THREE.MeshBasicMaterial({ color: 0xffd36e, transparent: true, opacity: 0.35, depthWrite: false }), propEdges = new THREE.LineBasicMaterial({ color: 0xffd36e, transparent: true, opacity: 0.9 });
 sharedMaterials.add(propLook); sharedMaterials.add(propEdges);
 crowdShape.userData.shared = true;
+// Vehicles (the settei cast's kinds, world-engine/digest/settei.mjs KINDS): a car is one of the baked CC0 cars when the
+// page carries it (apps/playground/tools/vehicle-models.mjs), every other kind is built from parts in metres at the kind's
+// own size; each form comes out at unit size (length along x, standing on y = 0) for the caller to scale to the thing's
+// size. Rotors spin (spinners, turned each frame).
+const VEHICLE_DIMS = { "a car": [4.5, 1.5, 1.9], "a van or a truck": [6.5, 2.6, 2.4], "a bus": [11, 3, 2.5], "a train or a carriage": [20, 3.4, 3], "a motorbike or a bicycle": [2, 1.1, 0.7], "a helicopter": [12, 3.5, 3], "an aircraft": [35, 8, 30], "a drone": [0.6, 0.25, 0.6], "a boat": [9, 2.5, 3] };
+const spinners = [];
+function vehicleForm(kind, model, fill, edges) {
+  const dims = VEHICLE_DIMS[kind];
+  if (!dims && !model) return null;
+  const form = new THREE.Group(), inner = new THREE.Group(); form.add(inner);
+  const part = (geometry, x, y, z, parent = inner) => { const group = new THREE.Group(); group.add(new THREE.Mesh(geometry, fill), new THREE.LineSegments(new THREE.EdgesGeometry(geometry, 30), edges)); group.position.set(x, y, z); parent.add(group); return group; };
+  const box = (w, h, d, x, y, z, parent) => part(new THREE.BoxGeometry(w, h, d), x, y, z, parent);
+  const wheel = (r, w, x, z) => part(new THREE.CylinderGeometry(r, r, w, 14).rotateX(Math.PI / 2), x, r, z);
+  const spin = (group, axis, speed) => { spinners.push({ group, axis, speed }); return group; };
+  const shell = model ? shellOf(model) : null;
+  if (shell) {
+    // The kit's cars lie along z: turned to lie along x, scaled to unit size.
+    const body = new THREE.Group(); body.add(new THREE.Mesh(shell.fill, fill), new THREE.LineSegments(shell.edges, edges)); body.rotation.y = Math.PI / 2; inner.add(body);
+    inner.scale.set(1 / shell.size.z, 1 / shell.size.y, 1 / shell.size.x); return form;
+  }
+  const [L, H, W] = dims;
+  if (kind === "a car") { box(4.4, 0.8, 1.9, 0, 0.75, 0); box(2.3, 0.62, 1.7, -0.25, 1.46, 0); for (const x of [1.4, -1.4]) for (const z of [0.85, -0.85]) wheel(0.36, 0.25, x, z); }
+  else if (kind === "a van or a truck") { box(1.8, 2.0, 2.3, 2.3, 1.35, 0); box(4.4, 2.3, 2.4, -1.05, 1.45, 0); for (const x of [2.3, -0.4, -2.5]) for (const z of [1.0, -1.0]) wheel(0.46, 0.3, x, z); }
+  else if (kind === "a bus") { box(11, 2.4, 2.5, 0, 1.6, 0); box(10.2, 0.75, 2.56, 0, 2.15, 0); for (const x of [3.8, -3.6]) for (const z of [1.05, -1.05]) wheel(0.5, 0.3, x, z); }
+  else if (kind === "a train or a carriage") { for (const x of [-6.8, 0, 6.8]) { box(6.4, 2.9, 3, x, 1.75, 0); box(6.0, 0.7, 3.06, x, 2.3, 0); box(1.4, 0.4, 2.2, x - 2.2, 0.2, 0); box(1.4, 0.4, 2.2, x + 2.2, 0.2, 0); } }
+  else if (kind === "a motorbike or a bicycle") {
+    for (const x of [0.65, -0.65]) part(new THREE.TorusGeometry(0.33, 0.05, 8, 20), x, 0.36, 0);
+    box(1.2, 0.07, 0.07, 0, 0.62, 0).rotation.z = 0.12; box(0.07, 0.6, 0.07, 0.55, 0.75, 0).rotation.z = -0.3; box(0.07, 0.07, 0.62, 0.65, 1.05, 0); box(0.36, 0.08, 0.2, -0.35, 0.86, 0);
+  }
+  else if (kind === "a helicopter") {
+    part(new THREE.SphereGeometry(1, 16, 12).scale(2.6, 1.4, 1.4), 1.6, 1.7, 0); part(new THREE.CylinderGeometry(0.18, 0.32, 6.2, 10).rotateZ(Math.PI / 2), -3.6, 2.0, 0);
+    box(1.1, 1.5, 0.1, -6.4, 2.5, 0); for (const z of [0.95, -0.95]) { box(4.2, 0.1, 0.12, 1.4, 0.06, z); box(0.1, 0.55, 0.1, 2.4, 0.33, z); box(0.1, 0.55, 0.1, 0.4, 0.33, z); }
+    box(0.18, 0.5, 0.18, 1.6, 3.25, 0);
+    const rotor = spin(new THREE.Group(), "y", 22); rotor.position.set(1.6, 3.5, 0); inner.add(rotor); box(11.5, 0.05, 0.38, 0, 0, 0, rotor); box(0.38, 0.05, 11.5, 0, 0, 0, rotor);
+    const tail = spin(new THREE.Group(), "z", 30); tail.position.set(-6.4, 2.6, 0.18); inner.add(tail); box(0.14, 1.7, 0.04, 0, 0, 0, tail);
+  }
+  else if (kind === "an aircraft") {
+    part(new THREE.CylinderGeometry(1.9, 1.9, 29, 16).rotateZ(Math.PI / 2), -1, 4, 0); part(new THREE.SphereGeometry(1.9, 16, 10).scale(3, 1, 1), 13.5, 4, 0);
+    box(7, 0.4, 30, 1, 3.4, 0); box(3, 0.3, 10, -14.5, 4.6, 0); box(4, 5, 0.3, -14.5, 6.8, 0);
+    for (const z of [6, -6]) part(new THREE.CylinderGeometry(0.8, 0.8, 3.5, 12).rotateZ(Math.PI / 2), 2.2, 2.4, z);
+  }
+  else if (kind === "a drone") {
+    box(0.2, 0.08, 0.2, 0, 0.12, 0); box(0.78, 0.03, 0.04, 0, 0.15, 0).rotation.y = Math.PI / 4; box(0.78, 0.03, 0.04, 0, 0.15, 0).rotation.y = -Math.PI / 4;
+    for (const [x, z] of [[0.27, 0.27], [0.27, -0.27], [-0.27, 0.27], [-0.27, -0.27]]) { const rotor = spin(new THREE.Group(), "y", 40); rotor.position.set(x, 0.19, z); inner.add(rotor); box(0.24, 0.01, 0.03, 0, 0, 0, rotor); }
+  }
+  else if (kind === "a boat") {
+    box(6.5, 1.3, 3, -1.25, 0.65, 0);
+    part(new THREE.ExtrudeGeometry(new THREE.Shape([new THREE.Vector2(0, -1.5), new THREE.Vector2(2.5, 0), new THREE.Vector2(0, 1.5)]), { depth: 1.3, bevelEnabled: false }).rotateX(-Math.PI / 2), 2.0, 0, 0);
+    box(2.6, 1.2, 2.2, -1.6, 1.9, 0);
+  }
+  inner.scale.set(1 / L, 1 / H, 1 / W);
+  return form;
+}
+// Where a vehicle faces: the way it last moved, turned to smoothly.
+const headings = new Map();
+function headTo(id, pawn, dt) {
+  const last = headings.get(id), p = pawn.position;
+  if (!last) { headings.set(id, { x: p.x, z: p.z, yaw: pawn.rotation.y }); return; }
+  const dx = p.x - last.x, dz = p.z - last.z;
+  if (Math.hypot(dx, dz) > 0.02) { const want = Math.atan2(-dz, dx); let turn = want - last.yaw; turn = Math.atan2(Math.sin(turn), Math.cos(turn)); last.yaw += turn * (1 - Math.exp(-dt * 6)); pawn.rotation.y = last.yaw; }
+  last.x = p.x; last.z = p.z;
+}
 const crowdLook = (colour) => { if (!crowdLooks.has(colour)) { const look = new THREE.MeshStandardMaterial({ color: new THREE.Color(colour), transparent: true, opacity: 0.8 }); sharedMaterials.add(look); crowdLooks.set(colour, look); } return crowdLooks.get(colour); };
 for (const [id, person] of Object.entries(data.people)) {
   // The crowd (M9): its field's samples as small plain figures, no halo, no name: a crowd, not people.
@@ -670,16 +734,91 @@ for (const [id, person] of Object.entries(data.people)) {
   // A slot the settei cast says is a vehicle or a weapon (an observation helicopter, a car, a gun): drawn as that, at its
   // size and (a helicopter, a drone) its flying height, not as a person.
   if (person.prop?.shape) {
-    const pawn = new THREE.Group(), [w, h, d] = person.prop.size, form = new THREE.Group(), fill = shapeGeometry(person.prop.shape);
-    form.add(new THREE.Mesh(fill, propLook), new THREE.LineSegments(new THREE.EdgesGeometry(fill), propEdges)); form.scale.set(w, h, d); form.position.y = person.prop.airborne ?? 0; pawn.add(form);
-    const body = form.children[0], name = label(person.name, person.color, 24); name.position.y = (person.prop.airborne ?? 0) + h + 1.4; pawn.add(name);
-    body.userData.shared = true; pawns.set(id, { pawn, body }); continue;
+    const pawn = new THREE.Group(), [w, h, d] = person.prop.size, vehicle = vehicleForm(person.prop.kind, person.prop.model, propLook, propEdges), form = vehicle ?? new THREE.Group();
+    if (!vehicle) { const fill = shapeGeometry(person.prop.shape); form.add(new THREE.Mesh(fill, propLook), new THREE.LineSegments(new THREE.EdgesGeometry(fill), propEdges)); }
+    form.scale.set(w, h, d); form.position.y = person.prop.airborne ?? 0; pawn.add(form);
+    const body = new THREE.Mesh(), name = label(person.name, person.color, 24); name.position.y = (person.prop.airborne ?? 0) + h + 1.4; pawn.add(name);
+    body.userData.shared = true; pawns.set(id, { pawn, body, vehicle: !!vehicle, lift: (person.prop.airborne ?? 0) + h / 2 }); continue;
   }
   const tint = new THREE.Color(person.color), pawn = new THREE.Group();
   const body = new THREE.Mesh(new THREE.CapsuleGeometry(0.35, 0.95, 4, 12), new THREE.MeshStandardMaterial({ color: tint, emissive: tint, emissiveIntensity: 0.7, transparent: true })); body.position.y = 0.82; pawn.add(body);
   const halo = new THREE.Mesh(new THREE.RingGeometry(0.55, 0.8, 24), new THREE.MeshBasicMaterial({ color: tint, transparent: true, opacity: 0.55, side: THREE.DoubleSide, depthWrite: false })); halo.rotation.x = -Math.PI / 2; halo.position.y = 0.05; pawn.add(halo);
   const name = label(person.name, person.color, 26); name.position.y = 2.5; pawn.add(name);
   pawns.set(id, { pawn, body });
+}
+// Blows (the director's fights; laws/attacks.mjs's three kinds), played over the event that has them, each from its
+// attacker to its target as they stand that moment:
+//   line   a beam: a charge at the attacker, the beam shot out to the target, a flash where it lands;
+//   close  the attacker lunges in and back, a burst where it lands, the target thrown back (aside when dodged);
+//   area   a shot lobbed to the target, an explosion as large as the attacker's radius, a ring along the ground.
+// A blow L21 held (beyond what the attacker can do there) fizzles halfway, red, and lands nothing.
+const blowFx = new THREE.Group(); blowFx.renderOrder = 3;
+const fxSphere = new THREE.SphereGeometry(1, 18, 12), fxBeam = new THREE.CylinderGeometry(1, 1, 1, 12, 1, true), fxRing = new THREE.RingGeometry(0.82, 1, 48).rotateX(-Math.PI / 2), fxBurst = new THREE.RingGeometry(0.55, 1, 6);
+for (const geometry of [fxSphere, fxBeam, fxRing, fxBurst]) geometry.userData.shared = true;
+let blowSegment = null, blowList = [];
+const fxLook = (color, opacity = 1) => new THREE.MeshBasicMaterial({ color: new THREE.Color(color), transparent: true, opacity, blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide });
+function makeBlow(blow) {
+  const tint = blow.held ? "#ff5a5a" : blow.kind === "area" ? "#ff9a3c" : blow.kind === "close" ? "#fff1b8" : data.people[blow.attacker]?.color ?? "#7ce6ff";
+  const mesh = (geometry, look) => { const part = new THREE.Mesh(geometry, look); part.visible = false; part.frustumCulled = false; blowFx.add(part); return part; };
+  return { blow, charge: mesh(fxSphere, fxLook(tint, 0.9)), core: mesh(fxBeam, fxLook("#ffffff", 0.95)), glow: mesh(fxBeam, fxLook(tint, 0.45)), flash: mesh(fxSphere, fxLook(tint, 0.9)), burst: mesh(fxBurst, fxLook(tint, 0.9)), ring: mesh(fxRing, fxLook(tint, 0.8)), shell: mesh(fxSphere, fxLook("#ffd2a0", 0.5)) };
+}
+function clearBlows() { for (const part of [...blowFx.children]) { blowFx.remove(part); part.material.dispose(); } blowList = []; }
+const easeOut = (u) => 1 - (1 - u) ** 3, clamp01 = (u) => Math.min(1, Math.max(0, u)), UP = new THREE.Vector3(0, 1, 0);
+/** A beam's piece (a unit cylinder along y) stretched from a to b, as thick as r. */
+function stretch(part, a, b, r) { const along = b.clone().sub(a), length = along.length(); if (length < 1e-3) { part.visible = false; return; } part.position.copy(a).addScaledVector(along, 0.5); part.quaternion.setFromUnitVectors(UP, along.divideScalar(length)); part.scale.set(r, length, r); part.visible = true; }
+/** Where a pawn's blow comes from or lands: its chest, or a vehicle's middle at its flying height. */
+function chestOf(id) { const entry = pawns.get(id); if (!entry?.pawn?.parent) return null; return entry.pawn.position.clone().add(new THREE.Vector3(0, entry.lift ?? 1.25, 0)); }
+function playBlows(segment, elapsed) {
+  const blows = !quiet && segment.kind === "event" ? segment.event.blows ?? [] : [];
+  if (blowSegment !== segment) { clearBlows(); blowSegment = segment; blowList = blows.map(makeBlow); if (!blowFx.parent) world.add(blowFx); }
+  blowList.forEach((fx, k) => {
+    for (const part of [fx.charge, fx.core, fx.glow, fx.flash, fx.burst, fx.ring, fx.shell]) part.visible = false;
+    const t = elapsed - (BLOW_FROM + k * BLOW), { blow } = fx;
+    if (t < 0 || t > 1.4) return;
+    let from = chestOf(blow.attacker), to = chestOf(blow.target);
+    if (!from && !to) return;
+    from ??= to.clone().add(new THREE.Vector3(-4, 0.5, 0)); to ??= from.clone().add(new THREE.Vector3(4, -0.2, 0));
+    const way = to.clone().sub(from).setY(0), metres = way.length() || 1; way.divideScalar(metres);
+    const missed = blow.outcome === "dodged" || blow.outcome === "missed", aside = new THREE.Vector3(-way.z, 0, way.x);
+    if (missed) to.addScaledVector(aside, 1.4);
+    const stop = blow.held ? from.clone().lerp(to, 0.5) : to;
+    if (blow.kind === "line") {
+      if (t < 0.25) { fx.charge.visible = true; fx.charge.position.copy(from); fx.charge.scale.setScalar(0.1 + 0.4 * (t / 0.25)); fx.charge.material.opacity = 0.9; }
+      const reach = clamp01((t - 0.2) / 0.12), fade = 1 - clamp01((t - 0.6) / 0.2);
+      if (t >= 0.2 && fade > 0) {
+        const head = from.clone().lerp(stop, easeOut(reach)), flicker = 0.85 + 0.15 * Math.sin(t * 90);
+        stretch(fx.core, from, head, 0.07 * flicker); stretch(fx.glow, from, head, 0.3 * flicker);
+        fx.core.material.opacity = 0.95 * fade; fx.glow.material.opacity = 0.45 * fade;
+      }
+      const u = (t - 0.32) / 0.5;
+      if (u >= 0 && u <= 1) {
+        fx.flash.visible = true; fx.flash.position.copy(stop); fx.flash.scale.setScalar(blow.held ? 0.2 + 0.4 * u : 0.3 + 1.2 * easeOut(u)); fx.flash.material.opacity = 0.9 * (1 - u);
+        if (!blow.held) { fx.ring.visible = true; fx.ring.position.set(stop.x, Math.max(0.05, stop.y - 1.1), stop.z); fx.ring.scale.setScalar(0.5 + 2.2 * easeOut(u)); fx.ring.material.opacity = 0.8 * (1 - u); }
+      }
+    } else if (blow.kind === "close") {
+      // The lunge (in by up to a metre short of the target, and back), the burst where it lands, the target thrown.
+      const lunge = t < 0.15 ? t / 0.15 : t < 0.45 ? 1 - (t - 0.15) / 0.3 : 0, a = pawns.get(blow.attacker)?.pawn, b = pawns.get(blow.target)?.pawn;
+      if (a?.parent) a.position.addScaledVector(way, Math.min(1.2, Math.max(0, metres - 0.9)) * lunge);
+      const hitU = (t - 0.12) / 0.45;
+      if (b?.parent && !blow.held && hitU >= 0 && hitU <= 1) b.position.addScaledVector(missed ? aside : way, (missed ? 0.9 : 0.6) * Math.sin(Math.PI * hitU));
+      if (!blow.held && !missed && hitU >= 0 && hitU <= 1) {
+        const at = to.clone().addScaledVector(way, -0.35);
+        fx.flash.visible = true; fx.flash.position.copy(at); fx.flash.scale.setScalar(0.15 + 0.6 * easeOut(hitU)); fx.flash.material.opacity = 0.95 * (1 - hitU);
+        fx.burst.visible = true; fx.burst.position.copy(at); fx.burst.lookAt(camera.position); fx.burst.rotation.z += hitU * 2; fx.burst.scale.setScalar(0.3 + 1.1 * easeOut(hitU)); fx.burst.material.opacity = 0.9 * (1 - hitU);
+      } else if (blow.held && t < 0.4) { fx.flash.visible = true; fx.flash.position.copy(stop); fx.flash.scale.setScalar(0.25); fx.flash.material.opacity = 0.6 * (1 - t / 0.4); }
+    } else {
+      // The shot lobbed along an arc, then the explosion and its ring.
+      const ground = to.clone().setY(to.y - 1.1), fly = clamp01(t / 0.55), arc = 2 + metres * 0.25;
+      if (t < 0.55) { const p = from.clone().lerp(blow.held ? stop : ground, fly); p.y += arc * 4 * fly * (1 - fly); fx.charge.visible = true; fx.charge.position.copy(p); fx.charge.scale.setScalar(0.35); fx.charge.material.opacity = 0.95; }
+      const u = (t - 0.55) / 0.8, r = blow.held ? 0.8 : blow.radius ?? 4;
+      if (u >= 0 && u <= 1) {
+        const at = blow.held ? stop : ground;
+        fx.shell.visible = true; fx.shell.position.copy(at); fx.shell.scale.setScalar(Math.max(0.1, r * easeOut(u))); fx.shell.material.opacity = 0.5 * (1 - u);
+        fx.flash.visible = true; fx.flash.position.copy(at); fx.flash.scale.setScalar(Math.max(0.1, r * 0.45 * easeOut(Math.min(1, u * 2)))); fx.flash.material.opacity = 0.95 * (1 - clamp01(u * 1.6));
+        if (!blow.held) { fx.ring.visible = true; fx.ring.position.set(at.x, at.y + 0.08, at.z); fx.ring.scale.setScalar(Math.max(0.1, r * 1.6 * easeOut(u))); fx.ring.material.opacity = 0.8 * (1 - u); }
+      }
+    }
+  });
 }
 // The smoother's clouds (docs/v2/world-ontology.md §5a, W5b), sent by World · Live for the card it shows: each person's
 // spots, bigger and brighter as they are likelier, and a dashed line from where they were played to where the smoothed
@@ -1065,7 +1204,7 @@ let posed = null;
 let seeing = !capture;
 const things = (data.things ?? []).map((thing) => {
   const piece = new THREE.Group(), frame = new THREE.Group(), depth = thing.depth ?? (thing.shape === "box" ? Math.max(1.2, thing.size * 0.35) : thing.size);
-  const forms = { flat: hologram(thing.model, thing.shape), standing: thing.shape === "donut" && !thing.model ? hologram(null, "donut", true) : null };
+  const forms = { flat: (VEHICLE_DIMS[thing.kind] || thing.vehicleModel ? vehicleForm(thing.kind, thing.vehicleModel, thingMaterial, thingEdges) : null) ?? hologram(thing.model, thing.shape), standing: thing.shape === "donut" && !thing.model ? hologram(null, "donut", true) : null };
   piece.add(forms.flat, frame); if (forms.standing) piece.add(forms.standing);
   const tag = label(thing.name.slice(0, 12), "#ffd36e", 24); tag.position.y = thing.height + 1.6; piece.add(tag);
   piece.visible = false; world.add(piece);
@@ -1402,7 +1541,9 @@ function frame(now) {
   clouds.visible = devMode !== "raw";
   const blink = 0.25 + 0.75 * Math.abs(Math.sin(performance.now() / 260));
   for (const flash of devBlinks) for (const part of flash.children) part.material.opacity = part.geometry.type === "RingGeometry" ? 0.25 + 0.55 * blink : blink;
-  for (const [id, { pawn, body }] of pawns) {
+  for (const spinner of spinners) spinner.group.rotation[spinner.axis] += dt * spinner.speed;
+  for (const [id, { pawn, body, vehicle }] of pawns) {
+    if (vehicle && pawn.parent) headTo(id, pawn, dt);
     const move = segment.moves.find((entry) => entry.person === id), node = segment.positions[id];
     const travel = segment.kind === "macro" && segment.travels.find((entry) => entry.migration.person === id);
     const held = !posed && !present.has(id) && place?.world ? segment.held?.[id] ?? null : null, heldPlace = held ? data.places[held.place] : null;
@@ -1415,6 +1556,7 @@ function frame(now) {
     if (!body.userData.shared) { body.material.depthTest = p.y > -1; body.material.opacity = held ? 0.4 : p.fade ?? 1; }
     if (move) { movers.push(pawn.position); for (const line of pathLines) if (line.move === move && !line.ensemble && !line.tube) line.object.geometry.setDrawRange(0, Math.max(1, p.k)); }
   }
+  playBlows(segment, elapsed);
   for (const line of pathLines) if (line.ensemble) line.object.material.opacity = 0.22 * Math.min(1, elapsed / 0.5);
   // The line being said, in a bubble over its speaker (or, unsure who says it, over the card's first person present).
   const saying = segment.kind === "event" && !quiet ? (readLine ? segment.says?.find((line) => line.id === readLine) ?? null : segment.says?.find((line) => elapsed >= line.from && elapsed < line.to)) : null;
@@ -1687,6 +1829,24 @@ window.__follow = () => { const segment = segmentAt(time), cam = segment?.event?
   return { scene: segment?.scene.id ?? null, kind: segment?.kind ?? null, event: segment?.eventIndex ?? null, segments: segments.length, newest: segments.at(-1) ? { scene: segments.at(-1).scene.id, start: Math.round(segments.at(-1).start * 10) / 10 } : null,
     camera: cam ? { cut: cam.cut ?? null, radius: cam.radius, elevation: cam.elevation } : null, pose: pose ? pose.target.toArray().map(Math.round) : null, onIt: cameraSegment === segment, follow, glide: !!glide, cuts, pin: pin ? { id: pin.id, r: Math.round(pin.r) } : null, pinGlide: !!pinGlide, focus: focusOf(segment).map((p) => [Math.round(p.x), Math.round(p.z)]), cast: Object.keys(segment.scene.starts ?? {}).length, held: [...pawns.entries()].filter(([id, { pawn }]) => pawn.parent && !(id in (segment.scene.starts ?? {}))).map(([id]) => id), reading: readLine, bubble: bubble?.userData.line?.id ?? null }; };
 /** For checking a replay: where the timeline and the camera stand. */
+// The blows on the line (when each plays, its kind, who) and a jump to a moment, paused: for checking the fights' pictures.
+window.__blows = () => segments.filter((segment) => segment.kind === "event" && segment.event.blows?.length).flatMap((segment) => segment.event.blows.map((blow, k) => ({ at: segment.start + BLOW_FROM + k * BLOW, scene: segment.scene.id, ...blow })));
+window.__vehicles = () => [...pawns].filter(([, entry]) => entry.vehicle).map(([id]) => ({ id, kind: data.people[id].prop.kind, model: data.people[id].prop.model ?? null, shown: !!pawns.get(id).pawn.parent, at: pawns.get(id).pawn.parent ? pawns.get(id).pawn.position.toArray().map(Math.round) : null }));
+window.__goto = (at) => { time = Math.max(0, Math.min(total, at)); playing = false; follow = false; glide = null; return time; };
+window.__cam = controls;
+// The vehicles side by side at their kinds' sizes, where the camera looks (a car per model given): for checking the forms.
+let gallery = null;
+window.__gallery = (entries) => {
+  if (gallery) { world.remove(gallery); gallery = null; }
+  if (!entries?.length) return null;
+  gallery = new THREE.Group(); let x = 0;
+  for (const [kind, model = null] of entries) { const form = vehicleForm(kind, model, propLook, propEdges), [L, H, W] = VEHICLE_DIMS[kind]; form.scale.set(L, H, W); form.position.set(x + L / 2, 0, 0); gallery.add(form); x += L + 2; }
+  gallery.position.copy(controls.target).add(new THREE.Vector3(-x / 2, -controls.target.y, 0)); world.add(gallery);
+  return Math.round(x);
+};
+window.__fx = () => ({ segment: blowSegment?.scene?.id ?? null, quiet, kind: blowSegment?.kind, eventBlows: blowSegment?.event?.blows?.length ?? null, inWorld: !!blowFx.parent, parts: blowList.map((fx) => ({ kind: fx.blow.kind, attacker: !!pawns.get(fx.blow.attacker)?.pawn?.parent, target: !!pawns.get(fx.blow.target)?.pawn?.parent, shown: Object.entries(fx).filter(([key, part]) => part?.isMesh && part.visible).map(([key, part]) => `${key}@${part.position.toArray().map(Math.round)}×${part.scale.toArray().map((v) => v.toFixed(2))}`) })) });
+window.__pawnAt = (id) => { const pawn = pawns.get(id)?.pawn; return pawn?.parent ? pawn.position.toArray() : null; };
+window.__vehicleTime = (id) => segments.find((segment) => segment.kind === "event" && id in segment.scene.starts)?.start ?? null;
 window.__replay = () => ({ time, total, playing, stopAt, speed, follow, glide: glide ? { start: glide.start, seconds: glide.seconds } : null, replaying, camera: camera.position.toArray().map(Math.round), target: controls.target.toArray().map(Math.round) });
 function replayCard({ scene, event, camera: cam = null, once = false, slow = false, speed: pace = null, follow: keep = false }) {
   const segment = segments.find((entry) => entry.kind === "event" && entry.scene.id === scene && entry.eventIndex === event);

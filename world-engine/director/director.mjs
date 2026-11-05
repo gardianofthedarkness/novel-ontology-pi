@@ -132,6 +132,10 @@ export async function direct(novelDir, { reading, readingPath = null, prefilm = 
   // flying height, by its name, and the slots that are vehicles or weapons by id (drawn as what they are, not as people).
   const propSheet = JSON.parse(await readFile(join(novelDir, '..', '..', 'universe', 'props.json'), 'utf8').catch(() => 'null'));
   const propOf = name => propSheet?.labels?.[name] ?? null, slotProp = id => (propSheet?.ids?.[id] ? propOf(propSheet.ids[id]) : null);
+  // A car is drawn as one of the baked CC0 cars (apps/playground/tools/vehicle-models.mjs): a taxi or a police car by its
+  // name, any other one of the three plain cars by a seed; every other vehicle the page builds from parts.
+  const vehicleModels = JSON.parse(await readFile(new URL('../../apps/playground/src/data/vehicleModels.json', import.meta.url), 'utf8').catch(() => 'null'));
+  const carModel = (prop, name) => { if (prop?.kind !== 'a car' || !vehicleModels) return null; const label = String(name ?? ''); if (/taxi|cab|\u51fa\u79df|\u30bf\u30af\u30b7\u30fc/i.test(label)) return 'car-taxi'; if (/police|patrol|\u8b66|\u30d1\u30c8\u30ab\u30fc/i.test(label)) return 'car-police'; const plain = ['car-sedan', 'car-hatchback', 'car-stationwagon']; return plain[[...label].reduce((sum, c) => sum + c.charCodeAt(0), 0) % plain.length]; };
   // The settei cast's ability sheet (universe/abilities.json): what each person can do to move. A move goes one of those
   // ways only where the pre-film notes say the line has it in use (a move's or a journey's `ability`, in-use.json).
   const abilitySheet = JSON.parse(await readFile(join(novelDir, '..', '..', 'universe', 'abilities.json'), 'utf8').catch(() => 'null'));
@@ -264,7 +268,7 @@ export async function direct(novelDir, { reading, readingPath = null, prefilm = 
     // A thing's form (the user, 2026-11-05: "objects needs to be assigned with a shape and size"): its sheet's shape and
     // size where the settei cast has it (a "not a thing" not drawn), else a box of the size the notes give.
     const formOf = thing => { const prop = propOf(thing.name); if (prop?.shape === null) return null; if (prop?.size) return { shape: prop.shape, size: prop.size[0], height: prop.size[1], depth: prop.size[2], airborne: prop.airborne ?? 0, kind: prop.kind }; const w = Math.max(0.2, Math.min(6, thing.size)); return { shape: 'box', size: w, height: Math.max(0.2, w * 0.6), depth: w, airborne: 0, kind: null }; };
-    const thingsOnPage = () => [...things.values()].filter(thing => thing.placed.length && formOf(thing)).map(thing => { const form = formOf(thing); return { id: thing.id, name: thing.name, aliases: [], model: null, theme: null, switched: false, shape: form.shape, size: form.size, height: form.height, depth: form.depth, kind: form.kind, placed: thing.placed, struct: null }; });
+    const thingsOnPage = () => [...things.values()].filter(thing => thing.placed.length && formOf(thing)).map(thing => { const form = formOf(thing); return { id: thing.id, name: thing.name, aliases: [], model: null, theme: null, switched: false, shape: form.shape, size: form.size, height: form.height, depth: form.depth, kind: form.kind, ...(carModel({ kind: form.kind }, thing.name) ? { vehicleModel: carModel({ kind: form.kind }, thing.name) } : {}), placed: thing.placed, struct: null }; });
     try {
       // The page as far as the loop has played, loaded again only when the world has grown (or a scene is done).
       const reload = async () => {
@@ -283,13 +287,13 @@ export async function direct(novelDir, { reading, readingPath = null, prefilm = 
       // A scene's piece of the line on the page's grid as it stands now.
       function pieceOf({ scene, run }) {
         const starts = Object.fromEntries(Object.entries(run.starts).map(([who, value]) => [who, dense(value[0])]));
-        const events = scene.events.map(event => ({ id: event.id, actors: event.actors ?? [], text: event.text, camera: event.camera ?? null, spots: [], hit: E.hits?.get(event.id) ?? null, hitThings: null, trace: null,
+        const events = scene.events.map(event => ({ id: event.id, actors: event.actors ?? [], text: event.text, camera: event.camera ?? null, spots: [], hit: E.hits?.get(event.id) ?? null, blows: E.blows?.get(event.id) ?? [], hitThings: null, trace: null,
           moves: scene.cast.map(person => E.moves.get(`${scene.id}|${event.id}|${person}`)).filter(Boolean).map(move => ({ person: move.person, how: move.how, with: null, path: move.path.map(dense), ensemble: (move.ensemble ?? []).map(other => other.map(dense)) })) }));
         return { scene: scene.id, starts, events, cast: scene.cast, grid: gridKey() };
       }
       // Each unnamed place's first unit (the world script's `scene`), for the live view to show it only once that unit has landed.
       const bornOf = new Map();
-      const withLine = data => ({ ...data, people: Object.fromEntries(Object.entries(data.people ?? {}).map(([id, person]) => { const prop = slotProp(id); return [id, prop?.shape ? { ...person, prop: { kind: prop.kind, shape: prop.shape, size: prop.size, airborne: prop.airborne ?? 0 } } : person]; })), macro: (data.macro ?? []).map(node => (bornOf.has(node.id) ? { ...node, born: bornOf.get(node.id) } : node)), things: [...(data.things ?? []), ...thingsOnPage()], scenes: data.scenes.map(entry => { const piece = played.has(entry.id) ? pieceOf(played.get(entry.id)) : null; return piece ? { ...entry, starts: piece.starts, events: piece.events, cast: piece.cast, landed: true } : { ...entry, landed: false }; }) });
+      const withLine = data => ({ ...data, people: Object.fromEntries(Object.entries(data.people ?? {}).map(([id, person]) => { const prop = slotProp(id); return [id, prop?.shape ? { ...person, prop: { kind: prop.kind, shape: prop.shape, size: prop.size, airborne: prop.airborne ?? 0, ...(prop.vehicle ? { vehicle: true } : {}), ...(carModel(prop, propSheet?.ids?.[id] ?? person.name) ? { model: carModel(prop, propSheet?.ids?.[id] ?? person.name) } : {}) } } : person]; })), models: { ...(data.models ?? {}), ...(vehicleModels?.models ?? {}) }, macro: (data.macro ?? []).map(node => (bornOf.has(node.id) ? { ...node, born: bornOf.get(node.id) } : node)), things: [...(data.things ?? []), ...thingsOnPage()], scenes: data.scenes.map(entry => { const piece = played.has(entry.id) ? pieceOf(played.get(entry.id)) : null; return piece ? { ...entry, starts: piece.starts, events: piece.events, cast: piece.cast, landed: true } : { ...entry, landed: false }; }) });
       const dense = id => { const { i, j, k } = W.cellOf(world, id), g = page.world; return ((k + g.ok) * g.NZ + (j + g.oj)) * g.NX + (i + g.oi); };
       const at = id => { const p = W.nodePos(world, id); return [p.x, p.y, p.z]; };
       const lotOf = (x, z) => world.lotAt.get(W.cellKey(Math.floor(x / CELL), Math.floor(z / CELL)));
@@ -1212,6 +1216,9 @@ export async function direct(novelDir, { reading, readingPath = null, prefilm = 
           // questions; the target's state is recorded (conditions, for the ontology's state).
           const fight = async () => {
             const exchanges = card.sentences.flatMap(id => exchangesAt.get(id) ?? []);
+            // The card's blows as the page plays them (a beam, a blow up close, an explosion: strand-demo.html, blowFx);
+            // set again whole when the card is taken again.
+            const blows = []; (E.blows ??= new Map()).set(card.id, blows);
             for (const exchange of exchanges) {
               const entry = { ...exchange, by: 'reader' };
               const a = exchange.attacker && positions[exchange.attacker] ? at(positions[exchange.attacker][0]) : null, t = exchange.target && positions[exchange.target] ? at(positions[exchange.target][0]) : null;
@@ -1252,6 +1259,7 @@ export async function direct(novelDir, { reading, readingPath = null, prefilm = 
                 const limits = AT.limitsOf(kind, { own: abilitySheet?.people?.[exchange.attacker]?.attack, weapons });
                 const verdict = AT.attackCheck({ kind, from: at(positions[exchange.attacker][0]), to: at(positions[exchange.target][0]), limits, lots: world.lots });
                 if (verdict) { (cardRecord.laws ??= []).push({ ...verdict, who: exchange.attacker, line: exchange.sentence }); entry.attackKind = kind; entry.limits = limits; }
+                blows.push({ attacker: exchange.attacker, target: exchange.target, kind, outcome: entry.outcome ?? null, held: verdict?.verdict === 'held', ...(kind === 'area' ? { radius: limits?.radius ?? 4 } : {}), by: limits?.by ?? null });
               }
             }
           };
