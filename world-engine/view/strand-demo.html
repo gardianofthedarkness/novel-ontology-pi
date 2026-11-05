@@ -1109,25 +1109,52 @@ function peoplePose(segment) {
   return { target, position: target.clone().add(new THREE.Vector3(spread * 1.1 + 10, spread * 1.3 + 14, spread * 1.5 + 16)) };
 }
 function glideTo(id, seconds, start = time) { glide = { to: poseFor(id), start, seconds }; }
-/** Cuts: Follow through the photographer's shots; off (the default), the steady watch view. */
+/** Cuts: Follow through the photographer's shots; off (the default), the pinned camera. */
 let cuts = new URLSearchParams(location.search).has("cuts");
 /**
- * The steady view of a card: its actors and movers where they stand as it begins and where their walks end (else everyone
- * there), framed whole from 50° above, at least 30 m off, turned as the camera already is (the view never spins on its own).
+ * The pinned camera. Its centre is locked to an area's pin: the smallest building, street or district whose round holds
+ * every one of the card's actors and movers where they stand now (else a square of the ground at the action's scale, a
+ * cell of a fixed grid), never one far larger than the action. It keeps its pin while they stay within it; when they leave
+ * it (someone gone far off, the line on another strand), the camera glides to the new pin, straight across if it is near,
+ * else rising over both and down, timed in seconds of the clock (a held live frame still finishes it). The distance is
+ * the area's size, the angle 50° from above, turned as the viewer left it.
  */
-function watchPose(segment) {
-  const place = segment.place, entry = built.get(segment.scene.place);
-  if (!place?.world || !entry) return null;
-  const real = (id) => !data.people[id]?.crowd, nodes = [];
-  for (const id of new Set([...(segment.event?.actors ?? []), ...segment.moves.map((move) => move.person)].filter(real))) if (segment.positions[id] != null) nodes.push(segment.positions[id]);
-  for (const move of segment.moves) if (real(move.person) && move.path?.length) nodes.push(move.path.at(-1));
-  if (!nodes.length) for (const id of Object.keys(segment.scene.starts).filter(real)) if (segment.positions[id] != null) nodes.push(segment.positions[id]);
-  if (!nodes.length) return null;
-  const points = nodes.map((node) => at(place, node)), x = points.reduce((sum, p) => sum + p.x, 0) / points.length, y = points.reduce((sum, p) => sum + p.y, 0) / points.length, z = points.reduce((sum, p) => sum + p.z, 0) / points.length;
-  const spread = Math.max(0, ...points.map((p) => Math.hypot(p.x - x, p.z - z))), target = new THREE.Vector3(x - entry.cx, y + 1, z - entry.cz), distance = Math.max(30, spread * 2.4 + 14);
+const PIN_SCALES = new Set(["building", "street", "district", "city"]);
+let pin = null, pinGlide = null, pinChecked = 0;
+function focusOf(segment) {
+  const real = (id) => !data.people[id]?.crowd, shown = (id) => { const entry = pawns.get(id); return entry?.pawn?.parent ? entry.pawn.position.clone() : null; };
+  let points = [...new Set([...(segment.event?.actors ?? []), ...(segment.moves ?? []).map((move) => move.person)])].filter(real).map(shown).filter(Boolean);
+  if (!points.length) points = Object.keys(segment.scene.starts ?? {}).filter(real).map(shown).filter(Boolean);
+  return points;
+}
+function areaFor(points) {
+  const c = points.reduce((sum, p) => sum.add(p), new THREE.Vector3()).divideScalar(points.length), spread = Math.max(0, ...points.map((p) => Math.hypot(p.x - c.x, p.z - c.z))), need = Math.max(spread, 12);
+  const holds = (area, slack) => points.every((p) => Math.hypot(p.x - area.cx, p.z - area.cz) <= area.r * slack + 6), fitting = (area) => area.r <= Math.max(3 * need, 60);
+  if (pin && holds(pin, 1.25) && fitting(pin)) return { area: pin, c, need };
+  const unlanded = new Set(data.scenes.filter((scene) => scene.landed === false).map((scene) => scene.id));
+  let best = null;
+  for (const [id, spot] of macroAt) {
+    if (!PIN_SCALES.has(spot.scale) || (spot.born && unlanded.has(spot.born))) continue;
+    const area = { id, cx: spot.cx, cz: spot.cz, r: Math.max(spot.r ?? 0, 12) };
+    if (fitting(area) && holds(area, 1.1) && (!best || area.r < best.r)) best = area;
+  }
+  if (best) return { area: best, c, need };
+  const cell = Math.max(40, Math.ceil((need * 2) / 40) * 40), gx = Math.round(c.x / cell) * cell, gz = Math.round(c.z / cell) * cell;
+  return { area: { id: `cell:${cell}:${gx}:${gz}`, cx: gx, cz: gz, r: Math.max(cell * 0.75, need) }, c, need };
+}
+function pinCamera(segment) {
+  const points = focusOf(segment);
+  if (!points.length) return;
+  const { area, c, need } = areaFor(points);
+  // The same pin, and the camera on it (or on its way there): nothing to do. A frame handed the pin mid-glide goes on to it.
+  if (pin && area.id === pin.id && (pinGlide || Math.hypot(controls.target.x - area.cx, controls.target.z - area.cz) < 2)) { pin = area; return; }
+  const target = new THREE.Vector3(area.cx, Math.max(1, c.y + 1), area.cz), distance = Math.min(700, Math.max(30, Math.max(area.r * 1.4, need * 2.2) + 18));
   const away = camera.position.clone().sub(controls.target).setY(0); if (away.lengthSq() < 1) away.set(0.6, 0, 0.8); away.normalize();
-  const up = THREE.MathUtils.degToRad(50);
-  return { target, position: target.clone().add(away.multiplyScalar(Math.cos(up) * distance).setY(Math.sin(up) * distance)) };
+  const up = THREE.MathUtils.degToRad(50), to = { target, position: target.clone().add(away.multiplyScalar(Math.cos(up) * distance).setY(Math.sin(up) * distance)) };
+  const across = controls.target.distanceTo(target);
+  pin = area;
+  if (across < 0.5 && Math.abs(camera.position.distanceTo(controls.target) - distance) < 2) return;
+  pinGlide = { ...glideFrom({ to, direct: across < 150 }), t0: performance.now(), seconds: Math.min(4, Math.max(1.4, 1.4 + across / 350)) };
 }
 /** The glide's way, from wherever the camera is when it starts: out over both places, across, and down. */
 function glideFrom(glide) {
@@ -1215,17 +1242,25 @@ function frame(now) {
   if (shownPlace !== segment.scene.place) {
     if (shownPlace === null) { const pose = poseFor(segment.scene.place); camera.position.copy(pose.position); controls.target.copy(pose.target); }
     else if (segment.kind === "macro") glideTo(segment.scene.place, segment.glide.seconds, segment.start + segment.glide.from);
-    else { const pose = peoplePose(segment); if (pose) glide = { to: pose, start: time, seconds: 2.6, direct: true }; else glideTo(segment.scene.place, 2.6); }
+    else if (!(follow && !cuts)) { const pose = peoplePose(segment); if (pose) glide = { to: pose, start: time, seconds: 2.6, direct: true }; else glideTo(segment.scene.place, 2.6); }
     shownPlace = segment.scene.place;
   }
   // Follow (the user, 2026-11-05: "we want to at least stably watch what happens"): by default a steady view of each card's
   // people and where their walks end, from above at a slant, turned as the viewer left it, moving only when the people do;
   // with Cuts, the photographer's shot of each card (the director's camera, docs/v2/director-camera.md) as it begins.
-  if (follow && segment.kind === "event" && cameraSegment !== segment && (!cuts || segment.event.camera)) {
+  if (follow && cuts && segment.kind === "event" && cameraSegment !== segment && segment.event.camera) {
     cameraSegment = segment;
-    let pose = cuts ? producerPose(segment.scene.id, segment.event.camera) : watchPose(segment);
-    if (!cuts && pose && pose.target.distanceTo(controls.target) < 6 && Math.abs(pose.position.distanceTo(pose.target) - camera.position.distanceTo(controls.target)) < 10) pose = null;
-    if (pose) glide = { to: pose, start: time, seconds: cuts ? 0.9 : 1.6, direct: true };
+    const pose = producerPose(segment.scene.id, segment.event.camera);
+    if (pose) glide = { to: pose, start: time, seconds: 0.9, direct: true };
+  }
+  // The pinned camera (the default; the user, 2026-11-05: "one continuous camera is borrowed by different casts, and
+  // there is a lock of center per area and scale"): the camera turns round an area's pin, not round people.
+  if (follow && !cuts && segment.kind !== "macro") { glide = null; if (cameraSegment !== segment || now - pinChecked > 700) { cameraSegment = segment; pinChecked = now; pinCamera(segment); } }
+  if (pinGlide) {
+    const u = Math.min(1, (now - pinGlide.t0) / (pinGlide.seconds * 1000)), e = u < 0.5 ? 2 * u * u : 1 - (-2 * u + 2) ** 2 / 2;
+    const bend = (a, b, c) => a.clone().multiplyScalar((1 - e) ** 2).add(b.clone().multiplyScalar(2 * (1 - e) * e)).add(c.clone().multiplyScalar(e * e));
+    camera.position.copy(bend(pinGlide.from.position, pinGlide.mid.position, pinGlide.to.position)); controls.target.copy(bend(pinGlide.from.target, pinGlide.mid.target, pinGlide.to.target));
+    if (u >= 1 || !follow || cuts) pinGlide = null;
   }
   if (glide && time >= glide.start) {
     if (!glide.from) glide = glideFrom(glide);
@@ -1329,13 +1364,13 @@ function frame(now) {
   } else if (bubble) { world.remove(bubble); bubble.material.map.dispose(); bubble.material.dispose(); bubble = null; }
   // Live mode: following is following Jev's focus — the camera and where it looks glide together toward the moment's
   // focus (a whole place away too), and the distance eases toward one that frames it, so each new frame carries on smoothly.
-  if (liveMode && follow && !glide && liveFocus() && !segment.event?.camera) {
+  if (liveMode && follow && cuts && !glide && liveFocus() && !segment.event?.camera) {
     const f = liveFocus(), ease = 1 - Math.exp(-dt * 1.6), shift = new THREE.Vector3(f.x, 2, f.z).sub(controls.target).multiplyScalar(ease);
     controls.target.add(shift); camera.position.add(shift);
     const away = camera.position.clone().sub(controls.target), distance = away.length(), framed = Math.min(Math.max(distance, 40 + 2 * f.r), 160 + 4 * f.r);
     if (Math.abs(framed - distance) > 0.5) camera.position.copy(controls.target).add(away.setLength(distance + (framed - distance) * ease));
   }
-  else if (follow && movers.length && (!glide || time < glide.start)) { const centre = movers.reduce((sum, p) => sum.add(p), new THREE.Vector3()).divideScalar(movers.length); controls.target.lerp(new THREE.Vector3(centre.x, Math.max(2, centre.y), centre.z), 0.03); }
+  else if (follow && cuts && movers.length && (!glide || time < glide.start)) { const centre = movers.reduce((sum, p) => sum.add(p), new THREE.Vector3()).divideScalar(movers.length); controls.target.lerp(new THREE.Vector3(centre.x, Math.max(2, centre.y), centre.z), 0.03); }
   // The world as explored by now: chunks and the faint city's copies of buildings since stood up.
   if (!capture && now - lastCull > 400) { lastCull = now; cullByInterest(entry); }
   // A deep facility's name shows only while the street is seen through.
@@ -1469,18 +1504,18 @@ if (liveMode) {
     if (event.data?.type === "dispose") { renderer.dispose(); renderer.forceContextLoss(); return; }
     if (event.data?.type !== "camera") return;
     camera.position.fromArray(event.data.position); controls.target.fromArray(event.data.target); controls.update();
-    shownPlace = segmentAt(time).scene.place; glide = null; follow = event.data.follow ?? follow; adopted = true;
+    shownPlace = segmentAt(time).scene.place; glide = null; pinGlide = null; if (event.data.pin) pin = event.data.pin; follow = event.data.follow ?? follow; adopted = true;
   });
   const LAG = 12;
   function catchUp() { const newest = segments.at(-1); if (newest && newest.start - time > LAG) { time = newest.start; cameraSegment = null; playing = true; } }
   // A new frame reports its camera only once it has the one handed over (or after 2 s with none), never its default first.
   let adopted = false;
   // `follow` as the world view's Follow Jev sees it: a replay the viewer picked follows its people, but that is not Jev.
-  const tellCamera = () => parent.postMessage({ type: "camera", run: data.live.run, position: camera.position.toArray(), target: controls.target.toArray(), follow: follow && !replaying }, origin);
+  const tellCamera = () => parent.postMessage({ type: "camera", run: data.live.run, position: camera.position.toArray(), target: controls.target.toArray(), follow: follow && !replaying, pin }, origin);
   // Turning or zooming is the viewer taking the camera: following stops, and the world view keeps this frame while a
   // finger is down (it swaps the next moment in when it is lifted, with the camera where it was left).
   let told = 0, held = 0;
-  const take = () => { follow = false; glide = null; tellCamera(); parent.postMessage({ type: "interact" }, origin); };
+  const take = () => { follow = false; glide = null; pinGlide = null; tellCamera(); parent.postMessage({ type: "interact" }, origin); };
   // Raw input on the stage, so a touch is caught however the orbit controls take it: a finger or button down holds the
   // frame, lifting it lets the next moment in; a wheel or pinch takes the camera too.
   renderer.domElement.addEventListener("pointerdown", () => { held++; take(); parent.postMessage({ type: "touch", active: true }, origin); });
@@ -1572,7 +1607,7 @@ function producerPose(sceneId, cam) {
 /** For checking Follow Jev live: the card being played, whether it carries the photographer's camera, and where that puts the view. */
 window.__follow = () => { const segment = segmentAt(time), cam = segment?.event?.camera ?? null, pose = cam ? producerPose(segment.scene.id, cam) : null;
   return { scene: segment?.scene.id ?? null, kind: segment?.kind ?? null, event: segment?.eventIndex ?? null, segments: segments.length, newest: segments.at(-1) ? { scene: segments.at(-1).scene.id, start: Math.round(segments.at(-1).start * 10) / 10 } : null,
-    camera: cam ? { cut: cam.cut ?? null, radius: cam.radius, elevation: cam.elevation } : null, pose: pose ? pose.target.toArray().map(Math.round) : null, onIt: cameraSegment === segment, follow, glide: !!glide }; };
+    camera: cam ? { cut: cam.cut ?? null, radius: cam.radius, elevation: cam.elevation } : null, pose: pose ? pose.target.toArray().map(Math.round) : null, onIt: cameraSegment === segment, follow, glide: !!glide, cuts, pin: pin ? { id: pin.id, r: Math.round(pin.r) } : null, pinGlide: !!pinGlide, focus: focusOf(segment).map((p) => [Math.round(p.x), Math.round(p.z)]) }; };
 /** For checking a replay: where the timeline and the camera stand. */
 window.__replay = () => ({ time, total, playing, stopAt, speed, follow, glide: glide ? { start: glide.start, seconds: glide.seconds } : null, replaying, camera: camera.position.toArray().map(Math.round), target: controls.target.toArray().map(Math.round) });
 function replayCard({ scene, event, camera: cam = null, once = false, slow = false, speed: pace = null, follow: keep = false }) {
