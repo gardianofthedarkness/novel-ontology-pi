@@ -163,6 +163,19 @@ export async function addDirectorNote(workspace, body) {
   await appendFile(notesFile(workspace), `${JSON.stringify(note)}\n`, { mode: 0o644 });
   return note;
 }
+/**
+ * The book's album as World · Live shows it (the user, 2026-11-05: "the picture detection and portrait system never wired
+ * in in v2"): its pictures on their sentences (src/v2/album.ts) and each character's bound portrait (album.mjs, which
+ * serves only the files its records list). Ids only: the images come from api/album-asset.
+ */
+export async function directorAlbum(workspace) {
+  const { albumProjection } = await import('./album.mjs');
+  const rows = (await readFile(resolve(workspace, 'ontology', 'entities.jsonl'), 'utf8').catch(() => '')).split('\n').filter(Boolean).flatMap(line => { try { return [JSON.parse(line)]; } catch { return []; } });
+  const labels = new Map();
+  for (const entity of rows) if (entity?.kind === 'Character' && typeof entity.id === 'string') labels.set(entity.id, (entity.names?.find(name => name?.kind === 'canonical') ?? entity.names?.[0])?.text ?? entity.id);
+  const view = await albumProjection(workspace, labels);
+  return { pictures: view.pictures.map(({ id, kind, sentenceId, sceneId }) => ({ id, kind, sentenceId, sceneId: sceneId ?? null })), portraits: view.portraits.map(({ id, entityId, entityLabel }) => ({ id, entityId, entityLabel })) };
+}
 /** The reading as the reader shows it (stage/director/reading.json: kinds, detected names and what they mean); null before a run. */
 export async function directorReading(workspace) {
   return readFile(resolve(workspace, 'stage', 'director', 'reading.json'), 'utf8').then(JSON.parse, () => null);

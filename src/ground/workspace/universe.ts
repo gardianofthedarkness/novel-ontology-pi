@@ -114,9 +114,16 @@ const DERIVED: RegExp[] = [
   /^vol-[^/]+\/novel\/stage\/simulation\/live(?:\/|\.json$)/, /(^|\/)\.DS_Store$/, /\.tmp$/, /(^|\/)\.lock(\/|$)/,
 ];
 
+/**
+ * The book's album (src/v2/album.ts; v1's album and portraits): its pictures and portraits are the published book's, as its
+ * text is, and its records are made from them, never by a run. Kept with the book as its text is: never snapshotted,
+ * restored, or exported (another user makes them from their own EPUB: novel album import, novel album assign).
+ */
+const ALBUM = /^vol-[^/]+\/novel\/(?:assets\/|ontology\/(?:illustrations\.jsonl|album\.json|portraits\.jsonl|portrait-tasks\.jsonl)$)/;
+
 /** How a library-relative path is kept: tracked state, a run's own file, derived (never kept), or the book's text. */
 export function classify(rel: string): { kind: Kind; run?: string } {
-  if (/^vol-[^/]+\/novel\/source\//.test(rel)) return { kind: "source" };
+  if (/^vol-[^/]+\/novel\/source\//.test(rel) || ALBUM.test(rel)) return { kind: "source" };
   if (DERIVED.some(rule => rule.test(rel))) return { kind: "derived" };
   for (const rule of RUN_FILES) { const found = rel.match(rule); if (found) return { kind: "run", run: found[1] }; }
   return { kind: "state" };
@@ -396,7 +403,7 @@ export async function exportSnapshot(root: string, id: string, out: string, { pa
   const manifest: BundleManifest = {
     format: BUNDLE_FORMAT, version: 1, exportedAt: new Date().toISOString(), library: basename(paths.root), snapshots: chain, runFiles,
     sources: Object.fromEntries(Object.entries(snapshot.books).map(([book, state]) => [book, state.source])),
-    note: "Import with: novel universe import <this bundle> <library-dir> [--source vol-<n>=<your copy of the book>]. The books' text is not included; bring your own copy (checked by sha256).",
+    note: "Import with: novel universe import <this bundle> <library-dir> [--source vol-<n>=<your copy of the book>]. The books' text and pictures are not included: bring your own copy (checked by sha256), and make each book's album from your EPUB (novel album import <library>/vol-<n>/novel <book.epub>, then novel album assign for its portraits).",
   };
   await writeFile(join(folder, "bundle.json"), JSON.stringify(manifest, null, 1) + "\n");
   if (staging) { try { await run("tar", ["-czf", resolve(out), "-C", staging, basename(folder)]); } finally { await rm(staging, { recursive: true, force: true }); } }

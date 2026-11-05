@@ -27,6 +27,8 @@
   #mrows { list-style: none; margin: 0; padding: 0; overflow: auto; min-height: 0; display: grid; gap: 4px; align-content: start; }
   #mrows li { display: grid; gap: 2px; padding: 7px 9px; border: 1px solid var(--line); border-radius: 8px; cursor: pointer; }
   #mrows li.now { border-color: var(--jev); } #mrows li:focus-visible { outline: 2px solid var(--accent); }
+  #mrows .faces { display: flex; gap: 4px; align-items: center; } #mrows .faces img { width: 22px; height: 22px; border-radius: 50%; object-fit: cover; border: 1px solid var(--line); }
+  #mrows .faces em { font-size: 11px; font-style: normal; color: var(--accent); border: 1px solid var(--line); border-radius: 6px; padding: 0 5px; }
   #mrows .name { font-size: 12px; color: var(--accent); display: flex; gap: 6px; align-items: center; } #mrows .what { font-size: 13px; color: var(--ink); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   #mrows .chip { width: 8px; height: 8px; border-radius: 2px; display: inline-block; flex: none; }
   .strands.tree svg { display: block; width: 100%; height: auto; touch-action: manipulation; overflow: visible; }
@@ -168,6 +170,13 @@
   /* Reading along: the sentence being read at the foot of the screen, edged in its kind's colour; the same one lit in the text. */
   .sub { --k: var(--narration); position: fixed; z-index: 6; left: 50%; transform: translateX(-50%); bottom: calc(max(12px, env(safe-area-inset-bottom)) + 52px); width: min(680px, calc(100vw - 24px)); box-sizing: border-box; background: var(--panel); border: 1px solid var(--line); border-left: 4px solid var(--k); border-radius: 10px; padding: 8px 12px; font-size: 16px; line-height: 1.65; color: var(--ink); backdrop-filter: blur(6px); }
   .sub b { color: var(--k); margin-right: 6px; font-weight: 600; }
+  /* The album (src/v2/album.ts): a speaker's portrait before their line; the book's picture at its sentence, read along. */
+  .sub img.face { width: 30px; height: 30px; border-radius: 50%; object-fit: cover; vertical-align: middle; margin-right: 6px; border: 2px solid var(--k); }
+  .pic { position: fixed; z-index: 6; right: max(12px, env(safe-area-inset-right)); bottom: calc(max(12px, env(safe-area-inset-bottom)) + 140px); width: min(220px, 34vw); margin: 0; background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 6px; cursor: zoom-in; box-sizing: border-box; }
+  .pic img { display: block; width: 100%; height: auto; border-radius: 6px; }
+  .pic.big { inset: 0; margin: auto; width: min(92vw, 720px); height: fit-content; max-height: 92vh; overflow: auto; cursor: zoom-out; z-index: 20; }
+  .book figure.album { margin: 12px 0; text-align: center; }
+  .book figure.album img { max-width: 100%; max-height: 70vh; border-radius: 6px; }
   /* A phone on its side (the user, 2026-11-02): the world on the left with the bar and the line being read under it, the
      reader docked on the right at full height, the top panel cut to its first lines. */
   @media (orientation: landscape) and (max-height: 520px) {
@@ -209,7 +218,8 @@
 <section class="blist dev" id="dlist" hidden aria-label="Developer mode"><header><b>Dev · what the data were and what was smoothed</b><span id="dsum">Pick a played sentence in Read: its card's records show here.</span></header><div class="devbody" id="dbody"></div></section>
 <section class="blist" id="slist" hidden aria-label="Where everyone begins"><header><b>Spawn</b><span id="ssum">No spawning yet.</span></header><ol id="srows"></ol></section>
 <section class="asks" id="asks" hidden aria-label="Jev's questions"><header><span>Jev's questions · each with its exact prompt and pictures</span><a id="asksFull" href="live" target="_blank" rel="noopener">Full page</a></header><iframe id="asksFrame" title="Jev's questions, live"></iframe></section>
-<div class="sub" id="sub" hidden aria-live="polite"><b id="subwho"></b><span id="subtx"></span></div>
+<div class="sub" id="sub" hidden aria-live="polite"><img class="face" id="subface" alt="" hidden><b id="subwho"></b><span id="subtx"></span></div>
+<figure class="pic" id="pic" hidden title="The book's picture here (tap to enlarge)"><img id="picimg" alt="The book's picture at this sentence"></figure>
 <nav class="bar"><button id="bgo" hidden>Continue ▶</button><button id="bauto" hidden aria-pressed="false">Auto</button><button id="mopen" aria-pressed="false" aria-controls="mlist" title="Jump to any unit played so far">Menu</button><button id="next" hidden>Next step</button><button id="runOn" hidden aria-pressed="false">Run on</button><button id="traces" aria-pressed="true" title="Every way walked so far, faint; the card now's bright and tappable">Traces</button><button id="follow" aria-pressed="true">Follow Jev</button><button id="under" aria-pressed="false">Underground</button><button id="dopen" aria-pressed="false" title="Developer mode: the raw observations beside what was smoothed, and every record of the card">Dev</button><button id="clouds" aria-pressed="true" title="Where each person may have been, given everything the text says (the smoother)">Clouds</button><button id="live" aria-pressed="false" aria-controls="asks" title="Every Jev step: its exact input, pictures and answers">Jev debugger</button><button id="bopen" aria-pressed="false" aria-controls="blist">Buildings</button><button id="copen" aria-pressed="false" aria-controls="clist">Read</button><button id="sopen" aria-pressed="false" aria-controls="slist">Spawn</button><button id="cutsW" aria-pressed="false" title="Follow through the photographer's cuts (else a steady view of each card's people)">Cuts</button><a id="play" href="./">Replay</a></nav>
 <script>
 (() => {
@@ -253,6 +263,17 @@
   // time as the reader scrolls): every sentence as written; those of a card played are underlined (green where someone moved)
   // and tapped play it in this world, the camera free; Continue plays on to the next move and stops there.
   const volume = new URLSearchParams(location.search).get("volume") ?? "active";
+  // The album (the user, 2026-11-05: "the picture detection and portrait system never wired in in v2"; play/album.json):
+  // the book's pictures on their sentences (the front matter on the first) and each character's portrait, bound by name.
+  let picturesAt = new Map(), faceOf = new Map(), pictureScenes = new Set(), picFrom = -1;
+  const albumAsset = (id) => `../api/album-asset?volume=${encodeURIComponent(volume)}&id=${encodeURIComponent(id)}`;
+  const albumLoaded = (async () => {
+    const album = await fetch(`album.json${location.search}`, { cache: "no-store" }).then((r) => (r.ok ? r.json() : null)).catch(() => null);
+    for (const picture of album?.pictures ?? []) if (picture.sentenceId) (picturesAt.get(picture.sentenceId) ?? picturesAt.set(picture.sentenceId, []).get(picture.sentenceId)).push(picture);
+    for (const picture of album?.pictures ?? []) if (picture.kind === "story" && picture.sceneId) pictureScenes.add(picture.sceneId);
+    for (const portrait of album?.portraits ?? []) if (!faceOf.has(portrait.entityId)) faceOf.set(portrait.entityId, albumAsset(portrait.id));
+  })();
+  const portraitsMessage = () => ({ type: "portraits", portraits: Object.fromEntries(faceOf) });
   let pieceSeq = 0, lastPiece = null;
   let cards = [], cardKey = "", cardAt = -1, cardOfSentence = new Map(), rspeed = 2, nextBlock = 0, loading = false, bookDone = false;
   const says = (m) => `${esc(m.name)}: ${m.moved ? `went${m.direction && m.direction !== "stays" ? ` (arrow ${esc(m.direction)}${m.how ? `, ${esc(m.how)}` : ""})` : ""} to ${esc(m.to ?? "?")}${m.spot && m.spot !== "none" ? ` · spot: ${esc(m.spot)}` : m.boxed ? ` · boxed${m.height ? `, ${esc(m.height)}` : ""}` : ""}` : m.direction === "stays" ? "stays" : `did not move${m.why ? ` (${esc(m.why)})` : ""}`}`;
@@ -417,6 +438,8 @@
   const whenOf = (node) => (node ? String(node).split(":").slice(2).map((part) => (/^\d/.test(part) ? part : part.replace(/-/g, " "))).join(" · ") || "the story" : "");
   const forkOfCard = (card) => unitOf.get(card.scene)?.fork ?? card.scene, clockOf = (card) => unitOf.get(card.scene)?.clock ?? [Infinity, Infinity];
   const sendAll = (message) => { for (const frame of [shown, next]) frame?.contentWindow.postMessage(message, origin); };
+  albumLoaded.then(() => sendAll(portraitsMessage()));
+  $("pic").addEventListener("click", () => $("pic").classList.toggle("big"));
   const strandsUpdate = (director) => { units = director?.units ?? []; unitOf = new Map(units.map((unit) => [unit.id, unit])); forkIds = [...new Set(units.map((unit) => unit.fork))]; renderStrands(); buildTimeline(); };
   // The strands as a tree on story time: x is the time tree's order, units on the same time in the order they are told
   // (the narration complies with the strands, so this is never against a strand's own order); y a lane per strand in the
@@ -532,6 +555,10 @@
       const lane = forkIds.indexOf(unitOf.get(unit)?.fork), li = document.createElement("li"); li.tabIndex = 0; if (unit === current) li.className = "now";
       const hit = find && text.includes(find) ? entry.cards.flatMap((card) => card.lines).find((line) => line.text.includes(find))?.text : null;
       li.innerHTML = `<span class="name"><i class="chip" style="background:${lane >= 0 ? STRAND[lane % STRAND.length] : "#8a98a6"}"></i>Unit ${Number(unit.slice(-6))}${lane >= 0 ? ` · strand ${lane + 1}` : ""}${unitOf.get(unit)?.when ? ` · ${esc(whenOf(unitOf.get(unit).when))}` : ""} · ${entry.cards.length} card${entry.cards.length === 1 ? "" : "s"}</span><span class="what">${esc(clipText(hit ?? entry.cards[0].lines[0]?.text ?? "", 80))}</span>`;
+      // Who speaks in it with a portrait, and whether the book has a picture there (the album).
+      const faced = [...new Set(entry.cards.flatMap((card) => card.lines.map((line) => line.who)).filter((id) => id && faceOf.has(id)))].slice(0, 6);
+      const pictured = pictureScenes.has(unit);
+      if (faced.length || pictured) li.insertAdjacentHTML("beforeend", `<span class="faces">${faced.map((id) => `<img src="${esc(faceOf.get(id))}" alt="${esc(valueOf(id))}" title="${esc(valueOf(id))}">`).join("")}${pictured ? "<em>picture</em>" : ""}</span>`);
       const go = () => { fold("mopen", "mlist", false); fold("copen", "clist", true); jumpTo(entry.n); };
       li.addEventListener("click", go); li.addEventListener("keydown", (event) => { if (event.key === "Enter") go(); });
       rows.push(li);
@@ -592,6 +619,12 @@
     $("sub").style.setProperty("--k", `var(--${kind})`);
     $("subwho").textContent = kind === "spoken" ? `${line?.who ? valueOf(line.who) : "?"}:` : "";
     $("subtx").textContent = sentence.text;
+    const face = kind === "spoken" && line?.who ? faceOf.get(line.who) : null;
+    $("subface").hidden = !face; if (face && $("subface").getAttribute("src") !== face) $("subface").src = face;
+    // A story picture shows from its sentence for the next few read (the cover and front pages stay in the book).
+    const here = indexOf.get(sentence.id) ?? -1, picture = (picturesAt.get(sentence.id) ?? []).find((entry) => entry.kind === "story");
+    if (picture) { $("picimg").src = albumAsset(picture.id); $("pic").hidden = false; picFrom = here; }
+    else if (picFrom >= 0 && (here < picFrom || here - picFrom > 6)) { $("pic").hidden = true; $("pic").classList.remove("big"); picFrom = -1; }
     for (const span of $("book").querySelectorAll(".s.reading")) span.classList.remove("reading");
     const spans = $("book").querySelectorAll(`.s[data-id="${sentence.id}"]`);
     for (const span of spans) span.classList.add("reading");
@@ -681,6 +714,8 @@
     for (const sentence of allSentences.slice(rendered)) {
       if (!para || sentence.paragraph) { para = document.createElement("p"); $("bmore").before(para); }
       const span = document.createElement("span"); span.className = "s"; span.dataset.id = sentence.id; span.textContent = sentence.text; para.append(span);
+      // Without the EPUB, the album's pictures after the sentence they hang on (with the EPUB, they stand where it has them).
+      for (const picture of picturesAt.get(sentence.id) ?? []) { const figure = document.createElement("figure"), img = document.createElement("img"); figure.className = "album"; img.loading = "lazy"; img.alt = `picture ${picture.id} (${picture.kind})`; img.src = albumAsset(picture.id); figure.append(img); $("bmore").before(figure); para = null; }
     }
     rendered = allSentences.length;
   };
@@ -696,7 +731,7 @@
   };
   const loadBlock = async () => {
     if (loading || bookDone) return; loading = true;
-    try { await (epub === false ? loadText() : loadEpub()); } finally { loading = false; }
+    try { await albumLoaded; await (epub === false ? loadText() : loadEpub()); } finally { loading = false; }
     markWords(); mark();
     if (!bookDone && $("book").scrollHeight <= $("book").clientHeight * 2) loadBlock();
   };
@@ -830,7 +865,7 @@
       $("way").hidden = false; $("way").innerHTML = `${esc(message.name)} · ${esc(message.how ?? "walk")} · unit ${Number(String(message.scene).slice(-6))} · card ${message.event + 1} · <a href="#">Jev steps ↗</a>`;
       $("way").querySelector("a").addEventListener("click", (e) => { e.preventDefault(); openDebug(message.scene, message.event); });
     }
-    if (message?.type === "ready" && next && event.source === next.contentWindow) { next.moment = message.moment; if (lastPiece) next.contentWindow.postMessage({ ...lastPiece, type: "extend" }, origin); ready = true; swap(); }
+    if (message?.type === "ready" && next && event.source === next.contentWindow) { next.contentWindow.postMessage(portraitsMessage(), origin); next.moment = message.moment; if (lastPiece) next.contentWindow.postMessage({ ...lastPiece, type: "extend" }, origin); ready = true; swap(); }
     if (message?.type === "failed" && next && event.source === next.contentWindow) drop(next);
   });
   const load = (run) => {

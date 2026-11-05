@@ -45,6 +45,9 @@ test("classify: state, a run's files, derived, the text", () => {
   assert.deepEqual(classify("vol-1/novel/stage/simulation/runs/director/d1.page.json"), { kind: "run", run: "d1" });
   for (const rel of ["vol-1/novel/ontology/graph.lbug", "vol-1/novel/stage/director/cache/x.json", "vol-1/novel/stage/director/shots/a.png", "vol-1/novel/stage/simulation/live/page.json", "vol-1/novel/stage/simulation/live.json"]) assert.equal(classify(rel).kind, "derived", rel);
   assert.equal(classify("vol-1/novel/source/source.txt").kind, "source");
+  // The book's album is the book's, as its text is: not a run's state.
+  for (const rel of ["vol-1/novel/assets/ill_0009.jpg", "vol-1/novel/assets/portraits/a.png", "vol-1/novel/ontology/illustrations.jsonl", "vol-1/novel/ontology/album.json", "vol-1/novel/ontology/portraits.jsonl"]) assert.equal(classify(rel).kind, "source", rel);
+  assert.equal(classify("vol-1/novel/ontology/entities.jsonl").kind, "state");
 });
 
 test("libraryOf finds the library and the book from a novel folder", async () => {

@@ -12,7 +12,7 @@ import { resolveAlbumAsset } from './album.mjs';
 import { configuredLibraryBindings, readLibraryLive, withLibraryLive } from './library-live.mjs';
 import { readUniverseTimePlace } from './universe-time-place.mjs';
 import { runReport, reportPage } from './run-report.mjs';
-import { addDirectorNote, directorDev, directorFile, directorReading, directorNotes, directorReview, pagePolicy, liveFrames, livePicture, liveState, liveWorld, simulationLivePage, simulationNowPage, simulationPage, simulationVendor, simulationWorldPage, terrainStep } from './sim-play.mjs';
+import { addDirectorNote, directorAlbum, directorDev, directorFile, directorReading, directorNotes, directorReview, pagePolicy, liveFrames, livePicture, liveState, liveWorld, simulationLivePage, simulationNowPage, simulationPage, simulationVendor, simulationWorldPage, terrainStep } from './sim-play.mjs';
 
 const requestLimit = 15000;
 const maximumLifetime = 240 * 60 * 1000;
@@ -240,11 +240,12 @@ export async function createViewer({ port = 4324, origin, expiresAt, readLive = 
         send(200, html, { 'Content-Type': types['.html'], 'Content-Security-Policy': pagePolicy(html), 'Cache-Control': 'no-store' });
         return;
       }
-      if (scopedPath === '/play/notes' || scopedPath === '/play/notes.json' || scopedPath === '/play/reading.json' || scopedPath === '/play/review.json') {
+      if (scopedPath === '/play/notes' || scopedPath === '/play/notes.json' || scopedPath === '/play/reading.json' || scopedPath === '/play/review.json' || scopedPath === '/play/album.json') {
         // Notes on the director's cards (sim-play.mjs directorNotes): added from World · Live's reader, read by both; and
         // the reading as the reader shows it (kinds, detected names).
         const volume = url.searchParams.get('volume') ?? 'active';
         if (!resolveWorkspace || volume !== 'active' && (!/^[1-9]\d*$/.test(volume) || !Number.isSafeInteger(Number(volume)))) { send(404); request.resume(); return; }
+        if (scopedPath === '/play/album.json') { send(200, JSON.stringify(await bounded(async () => directorAlbum(await resolveWorkspace(volume)))), { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store' }); return; }
         if (scopedPath === '/play/reading.json') { const view = await bounded(async () => directorReading(await resolveWorkspace(volume))); if (!view) { send(404); return; } send(200, JSON.stringify(view), { 'Content-Type': 'application/json; charset=utf-8' }); return; }
         if (scopedPath === '/play/review.json') { const view = await bounded(async () => directorReview(await resolveWorkspace(volume))); if (!view) { send(404); return; } send(200, JSON.stringify(view), { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store' }); return; }
         if (scopedPath === '/play/notes.json') { send(200, JSON.stringify(await bounded(async () => directorNotes(await resolveWorkspace(volume)))), { 'Content-Type': 'application/json; charset=utf-8' }); return; }

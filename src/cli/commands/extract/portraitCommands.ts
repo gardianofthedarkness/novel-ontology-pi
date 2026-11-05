@@ -71,10 +71,14 @@ async function cropper(novelDir: string, check: boolean, env: NodeJS.ProcessEnv)
 
 export async function portraitReadiness(novelDir: string) {
   const source = await storedSource(novelDir);
-  if (!source) return { ready: false, reason: "source_binding_required" };
+  if (!source) return { ready: false as const, reason: "source_binding_required" };
   const text = await readFile(join(novelDir, "source", source.file), "utf8");
   if (sourceHash(text) !== source.sha256) throw new Error("Stored source changed; restore before portrait assignment");
   const blocks = cutBlocks(text, source.blockSize);
+  // A v2 book's characters come from its v2 reading (the canon it wrote), not from reviewed v1 packets per block: the
+  // reading done is the volume's extraction finished (docs/v2/universe-snapshots.md; src/v2/album.ts).
+  const manifest = JSON.parse(await readFile(join(novelDir, "ontology", "manifest.json"), "utf8").catch(() => "{}"));
+  if (manifest.v2Reading) return readinessAfterExtraction(novelDir, blocks.length);
   const audit = await rows(join(novelDir, "events.jsonl"));
   const applied = new Set(audit.flatMap((row) => {
     const event = row.event as { type?: string; changesetId?: string } | undefined;
@@ -87,15 +91,20 @@ export async function portraitReadiness(novelDir: string) {
     catch (error) { if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error; }
     if (packet?.status !== "approved" || !applied.has(`cs_${block.id}`)) unfinished++;
   }
-  if (!blocks.length || unfinished) return { ready: false, reason: "finish_volume_extraction_and_review", unfinishedBlocks: unfinished };
+  if (!blocks.length || unfinished) return { ready: false as const, reason: "finish_volume_extraction_and_review", unfinishedBlocks: unfinished };
+  return readinessAfterExtraction(novelDir, blocks.length);
+}
+
+async function readinessAfterExtraction(novelDir: string, blocks: number) {
+  if (!blocks) return { ready: false as const, reason: "finish_volume_extraction_and_review", unfinishedBlocks: 0 };
   const illustrations = await rows(join(novelDir, "ontology", "illustrations.jsonl"));
-  if (!illustrations.length) return { ready: false, reason: "album_missing_use_matching_epub_intake" };
+  if (!illustrations.length) return { ready: false as const, reason: "album_missing_use_matching_epub_intake" };
   const byId = new Map<string, Entity>();
   for (const entity of await rows(join(novelDir, "ontology", "entities.jsonl"))) byId.set(entity.id as string, entity as unknown as Entity);
   const characters = [...byId.values()].filter((entity) => entity.kind === "Character");
   const portraits = await loadPortraits(novelDir);
   const bound = new Set(portraits.map((portrait) => portrait.entityId));
-  return { ready: true, characters: characters.length, pictures: illustrations.length, withoutPortrait: characters.filter((character) => !bound.has(character.id)).length };
+  return { ready: true as const, characters: characters.length, pictures: illustrations.length, withoutPortrait: characters.filter((character) => !bound.has(character.id)).length };
 }
 
 export async function albumAssign(novelDir: string, check = false, env: NodeJS.ProcessEnv = process.env) {

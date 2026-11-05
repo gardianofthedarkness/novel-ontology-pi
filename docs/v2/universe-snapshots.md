@@ -52,7 +52,7 @@ What a snapshot keeps (`classify`):
 | state | everything else under `universe/`, `vol-<n>/novel/`, `vol-<n>/reading/` | by content, restored |
 | a run's files | `stage/world/{log,ledger,smoothed}/<run>`, `stage/director/runs/<run>/`, `stage/simulation/runs/director/<run>.page.json` | named, never copied or removed |
 | derived | `graph.lbug`, `cache*/`, `stage/director/{shots,page}/`, `stage/simulation/live*` | not kept: rebuilt or reshown |
-| text | `vol-<n>/novel/source/` | not kept: checked by `ontology/source.json`'s sha256 |
+| the book | `vol-<n>/novel/source/`; the album (`assets/`, `ontology/{illustrations.jsonl,album.json,portraits.jsonl}`, [album.md](album.md)) | not kept: the text checked by `ontology/source.json`'s sha256; the album made again from the importer's EPUB |
 
 ## Snapshot kinds
 
@@ -86,7 +86,7 @@ novel universe import w11.tgz <their-library> --source vol-1=<their copy of the 
 
 The bundle (`bundle.json`, `objects/`, `runs/`) holds the `after` and its `before` (so the importer can rerun the book),
 every content they name, and the files of the runs the `after` holds; run pages (~135 MB each) only with `--pages`. It never
-holds the books' text, the caches, the pictures or the host's files (links, tokens). The importer brings their own copy of
+holds the books' text or album pictures, the caches, the run pictures or the host's files (links, tokens). The importer brings their own copy of
 each book, checked against the sha256 the book names; every path in the bundle must stay inside a library, and every
 content is checked against its hash. W11's result: 4.7 MB packed (49 MB unpacked, without pages); imported, the new library
 stands at exactly W11's files.

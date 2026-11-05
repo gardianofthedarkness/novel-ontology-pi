@@ -1,3 +1,4 @@
+import { importV2Album } from "../../../v2/album.js";
 /** `novel album` — EPUB illustration import + anchor listing + portrait finalization. */
 import { readFile } from "node:fs/promises";
 import { join } from "node:path";
@@ -17,6 +18,9 @@ import type { Block } from "../../../digger/intake/blocks.js";
 import type { Entity } from "../../../ground/ontology/types.js";
 
 export async function albumImport(novelDir: string, epubPath: string) {
+  // A v2 book (its text read by the v2 flow, not extracted from this EPUB): its pictures are anchored by their words.
+  const manifest = JSON.parse(await readFile(join(novelDir, "ontology", "manifest.json"), "utf8").catch(() => "{}"));
+  if (manifest.v2Reading) return { v2: true, ...await importV2Album(novelDir, epubPath) };
   return importEpubAlbum(novelDir, epubPath);
 }
 

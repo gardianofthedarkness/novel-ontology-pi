@@ -331,15 +331,27 @@ function capLabels() {
     const base = (sprite.userData.base ??= sprite.scale.clone());
     sprite.getWorldPosition(labelAt);
     const share = base.y / Math.max(0.1, labelAt.distanceTo(camera.position) * k);
-    sprite.scale.copy(base).multiplyScalar(share > LABEL_MOST ? LABEL_MOST / share : 1);
+    const most = sprite.userData.most ?? LABEL_MOST; sprite.scale.copy(base).multiplyScalar(share > most ? most / share : 1);
   }
 }
-function label(text, fill = "#ffffff", size = 28) {
+/** A face drawn round at (x, y), `d` across, ringed in `ring` (a portrait from the book's album). */
+function drawFace(ctx, image, x, y, d, ring) {
+  ctx.save(); ctx.beginPath(); ctx.arc(x + d / 2, y + d / 2, d / 2, 0, Math.PI * 2); ctx.clip();
+  const side = Math.min(image.naturalWidth, image.naturalHeight); ctx.drawImage(image, (image.naturalWidth - side) / 2, (image.naturalHeight - side) / 2, side, side, x, y, d, d); ctx.restore();
+  ctx.beginPath(); ctx.arc(x + d / 2, y + d / 2, d / 2 - 1, 0, Math.PI * 2); ctx.lineWidth = 3; ctx.strokeStyle = ring; ctx.stroke();
+}
+function label(text, fill = "#ffffff", size = 28, face = null) {
   const canvas = document.createElement("canvas"), ctx = canvas.getContext("2d"), font = `600 ${size}px system-ui, "PingFang SC", sans-serif`;
-  ctx.font = font; const width = Math.ceil(ctx.measureText(text).width) + 16; canvas.width = width; canvas.height = size + 14;
-  ctx.font = font; ctx.textBaseline = "middle"; ctx.fillStyle = "rgba(6,12,18,.65)"; ctx.fillRect(0, 0, width, canvas.height); ctx.fillStyle = fill; ctx.fillText(text, 8, canvas.height / 2);
+  // With a portrait (the album), the face stands before the name, as tall as the label, a little taller.
+  const tall = face ? Math.round(size * 2.2) : size + 14, lead = face ? tall + 6 : 0;
+  ctx.font = font; const width = Math.ceil(ctx.measureText(text).width) + 16 + lead; canvas.width = width; canvas.height = tall;
+  ctx.font = font; ctx.textBaseline = "middle"; ctx.fillStyle = "rgba(6,12,18,.65)"; ctx.fillRect(lead ? tall / 2 : 0, face ? (tall - size - 14) / 2 : 0, width - (lead ? tall / 2 : 0), size + 14); ctx.fillStyle = fill; ctx.fillText(text, 8 + lead, canvas.height / 2);
+  if (face) drawFace(ctx, face, 0, 0, tall, fill);
   const texture = new THREE.CanvasTexture(canvas); texture.colorSpace = THREE.SRGBColorSpace;
-  const sprite = new THREE.Sprite(new THREE.SpriteMaterial({ map: texture, depthTest: false, transparent: true })); sprite.scale.set(width / canvas.height * 1.3, 1.3, 1); sprite.renderOrder = 10;
+  const high = face ? 1.3 * tall / (size + 14) : 1.3;
+  const sprite = new THREE.Sprite(new THREE.SpriteMaterial({ map: texture, depthTest: false, transparent: true })); sprite.scale.set(width / canvas.height * high, high, 1); sprite.renderOrder = 10;
+  // Capped on screen as a plain label is (its name the same size beside the others), the face the taller part.
+  if (face) sprite.userData.most = LABEL_MOST * high / 1.3;
   sprite.userData.text = text; labels.add(sprite);
   return sprite;
 }
@@ -348,16 +360,19 @@ function label(text, fill = "#ffffff", size = 28) {
  * the speaker's colour (dashed grey when who says it is unsure).
  */
 let bubble = null;
-function speechBubble(text, edge) {
+function speechBubble(text, edge, face = null) {
   const size = 30, per = 16, rows = [];
   for (let at = 0; at < text.length && rows.length < 5; at += per) rows.push(text.slice(at, at + per));
   if (rows.length * per < text.length) rows[4] = `${rows[4].slice(0, per - 1)}…`;
   const canvas = document.createElement("canvas"), ctx = canvas.getContext("2d"), font = `500 ${size}px system-ui, "PingFang SC", sans-serif`;
-  ctx.font = font; const width = Math.ceil(Math.max(...rows.map((row) => ctx.measureText(row).width))) + 36, height = rows.length * (size + 10) + 28, tail = 18;
+  // A speaker's portrait (the album) at the bubble's left, the line beside it.
+  const lead = face ? 84 : 0;
+  ctx.font = font; const width = Math.ceil(Math.max(...rows.map((row) => ctx.measureText(row).width))) + 36 + lead, height = Math.max(rows.length * (size + 10) + 28, face ? 100 : 0), tail = 18;
   canvas.width = width; canvas.height = height + tail;
   ctx.fillStyle = "rgba(246,250,252,.96)"; ctx.strokeStyle = edge ?? "#8a9aa6"; ctx.lineWidth = 4; if (!edge) ctx.setLineDash([10, 8]);
   ctx.beginPath(); ctx.roundRect(2, 2, width - 4, height - 4, 18); ctx.moveTo(width / 2 - 14, height - 3); ctx.lineTo(width / 2, height + tail - 2); ctx.lineTo(width / 2 + 14, height - 3); ctx.fill(); ctx.stroke();
-  ctx.font = font; ctx.fillStyle = "#0b1620"; ctx.textBaseline = "top"; rows.forEach((row, n) => ctx.fillText(row, 18, 16 + n * (size + 10)));
+  ctx.font = font; ctx.fillStyle = "#0b1620"; ctx.textBaseline = "top"; rows.forEach((row, n) => ctx.fillText(row, 18 + lead, 16 + n * (size + 10)));
+  if (face) drawFace(ctx, face, 14, 14, 72, edge ?? "#8a9aa6");
   const texture = new THREE.CanvasTexture(canvas); texture.colorSpace = THREE.SRGBColorSpace;
   const sprite = new THREE.Sprite(new THREE.SpriteMaterial({ map: texture, depthTest: false, transparent: true }));
   const tall = 0.9 * rows.length + 0.9; sprite.scale.set((tall * canvas.width) / canvas.height, tall, 1); sprite.renderOrder = 11;
@@ -659,6 +674,24 @@ function drawSkeletons(id, entry, count, settling = null) {
 
 // People: a glowing pawn and a name each; a shadow when off the ground.
 const pawns = new Map();
+// Portraits (the book's album, sent by World · Live: the user, 2026-11-05, "the picture detection and portrait system never
+// wired in in v2"): each loaded face, by person id, drawn before their name and on their bubbles.
+const faces = new Map();
+function portraitsArrived(portraits) {
+  for (const [id, url] of Object.entries(portraits ?? {})) {
+    if (faces.has(id) || typeof url !== "string" || !url.startsWith("../api/album-asset?")) continue;
+    const image = new Image();
+    image.onload = () => {
+      faces.set(id, image);
+      const entry = pawns.get(id);
+      if (!entry?.name) return;
+      const fresh = label(entry.person.name, entry.person.color, 26, image); fresh.position.copy(entry.name.position);
+      entry.pawn.remove(entry.name); labels.delete(entry.name); entry.name.material.map.dispose(); entry.name.material.dispose();
+      entry.pawn.add(fresh); entry.name = fresh;
+    };
+    image.src = url;
+  }
+}
 const crowdShape = new THREE.CapsuleGeometry(0.22, 0.75, 3, 8), crowdLooks = new Map();
 // The look of a slot drawn as the thing it is (a vehicle, a weapon): the things' gold, a little brighter.
 const propLook = new THREE.MeshBasicMaterial({ color: 0xffd36e, transparent: true, opacity: 0.35, depthWrite: false }), propEdges = new THREE.LineBasicMaterial({ color: 0xffd36e, transparent: true, opacity: 0.9 });
@@ -755,8 +788,8 @@ for (const [id, person] of Object.entries(data.people)) {
   const tint = new THREE.Color(person.color), pawn = new THREE.Group();
   const body = new THREE.Mesh(new THREE.CapsuleGeometry(0.35, 0.95, 4, 12), new THREE.MeshStandardMaterial({ color: tint, emissive: tint, emissiveIntensity: 0.7, transparent: true })); body.position.y = 0.82; pawn.add(body);
   const halo = new THREE.Mesh(new THREE.RingGeometry(0.55, 0.8, 24), new THREE.MeshBasicMaterial({ color: tint, transparent: true, opacity: 0.55, side: THREE.DoubleSide, depthWrite: false })); halo.rotation.x = -Math.PI / 2; halo.position.y = 0.05; pawn.add(halo);
-  const name = label(person.name, person.color, 26); name.position.y = 2.5; pawn.add(name);
-  pawns.set(id, { pawn, body });
+  const name = label(person.name, person.color, 26, faces.get(id) ?? null); name.position.y = 2.5; pawn.add(name);
+  pawns.set(id, { pawn, body, name, person });
 }
 // Blows (the director's fights; laws/attacks.mjs's three kinds), played over the event that has them, each from its
 // attacker to its target as they stand that moment:
@@ -1576,7 +1609,7 @@ function frame(now) {
   const saying = segment.kind === "event" && !quiet ? (readLine ? segment.says?.find((line) => line.id === readLine) ?? null : segment.says?.find((line) => elapsed >= line.from && elapsed < line.to)) : null;
   const speaker = saying ? [saying.who, ...(segment.event.actors ?? [])].map((id) => id && pawns.get(id)?.pawn).find((pawn) => pawn?.parent) : null;
   if (saying && speaker) {
-    if (bubble?.userData.line !== saying) { if (bubble) { world.remove(bubble); bubble.material.map.dispose(); bubble.material.dispose(); } bubble = speechBubble(saying.text, saying.who ? data.people[saying.who]?.color ?? "#ffffff" : null); bubble.userData.line = saying; world.add(bubble); }
+    if (bubble?.userData.line !== saying) { if (bubble) { world.remove(bubble); bubble.material.map.dispose(); bubble.material.dispose(); } bubble = speechBubble(saying.text, saying.who ? data.people[saying.who]?.color ?? "#ffffff" : null, saying.who ? faces.get(saying.who) ?? null : null); bubble.userData.line = saying; world.add(bubble); }
     bubble.position.copy(speaker.position).add(new THREE.Vector3(0, 3.3 + bubble.scale.y / 2, 0));
   } else if (bubble) { world.remove(bubble); bubble.material.map.dispose(); bubble.material.dispose(); bubble = null; }
   // Live mode: following is following Jev's focus — the camera and where it looks glide together toward the moment's
@@ -1699,6 +1732,7 @@ if (liveMode) {
     // Unframed (a page on its own, or a check), its own camera messages are not a world view's.
     if (parent === window && event.data?.type === "camera") return;
     if (event.data?.type === "follow") { follow = !!event.data.on; return; }
+    if (event.data?.type === "portraits") { portraitsArrived(event.data.portraits); return; }
     if (event.data?.type === "cuts") { cuts = !!event.data.on; cameraSegment = null; return; }
     // Reading along (the user, 2026-11-05: the bubbles ran ahead of the reader): the line the reader is on, so a card's
     // bubble shows that line for as long as it is being read, none otherwise.
