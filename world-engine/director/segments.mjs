@@ -126,3 +126,28 @@ export function strandsFile(script, { scriptProjection, storyStrands }) {
   const forks = [...new Set(forkOf.values())].map(id => ({ id, scenes: order.filter(scene => forkOf.get(scene.id) === id).map(scene => scene.id) }));
   return { version: 1, from: 'v2-script-segments', order: 'story', scenes: script.scenes.map(scene => ({ id: scene.id, parent: scene.parent ?? null, fork: forkOf.get(scene.id) ?? null, layer: strands.layer.get(scene.id) ?? null, lane: strands.lane.get(scene.id) ?? null, continues: strands.continues?.get(scene.id) ?? null, entries: entries.get(scene.id) ?? [] })), forks, checks: strands.checks, strands };
 }
+
+/**
+ * Whether the narration order complies with the objective stranding (the user, 2026-11-04: "the narration order complies
+ * with the objective stranding"): the units are played in reading order, and each lands on its strand. Within a strand,
+ * a unit must come after the unit it continues and every unit its people enter from, and its place on the story's clock
+ * never goes back. Returns the problems, each { unit, kind, other }; empty when the order complies.
+ */
+export function storyOrderProblems(script, strands) {
+  const order = new Map((script?.scenes ?? []).map((entry, n) => [entry.id, n])), problems = [], lastClock = new Map();
+  for (const entry of strands?.scenes ?? []) {
+    const n = order.get(entry.id);
+    if (n === undefined) continue;
+    if (entry.continues && order.get(entry.continues) > n) problems.push({ unit: entry.id, kind: 'continues a later unit', other: entry.continues });
+    for (const enter of entry.entries ?? []) if (enter.from && order.get(enter.from) > n) problems.push({ unit: entry.id, kind: `${enter.person} enters from a later unit`, other: enter.from });
+  }
+  const forkOf = new Map((strands?.scenes ?? []).map(entry => [entry.id, entry.fork ?? entry.id]));
+  for (const entry of script?.scenes ?? []) {
+    const fork = forkOf.get(entry.id) ?? entry.id, clock = entry.clock?.[0];
+    if (typeof clock !== 'number') continue;
+    const before = lastClock.get(fork);
+    if (before && clock < before.clock - 1e-9) problems.push({ unit: entry.id, kind: 'goes back on its strand\'s clock', other: before.unit });
+    if (!before || clock >= before.clock) lastClock.set(fork, { unit: entry.id, clock });
+  }
+  return problems;
+}

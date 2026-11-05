@@ -409,7 +409,9 @@
     }));
     $("strands").hidden = !forkIds.length;
   };
-  const pickStrand = (fork) => { strandPick = fork; sendAll({ type: "strand", fork }); renderStrands(); buildTimeline(true); markStrand(); };
+  // Touching a strand, the timeline or a card is looking somewhere else: Follow Jev goes off (the user, 2026-11-04).
+  const unfollow = () => { if ($("follow").getAttribute("aria-pressed") !== "true") return; showFollow(false); if (camera) camera.follow = false; sendAll({ type: "follow", on: false }); };
+  const pickStrand = (fork, quiet = false) => { if (!quiet) unfollow(); strandPick = fork; sendAll({ type: "strand", fork }); renderStrands(); buildTimeline(true); markStrand(); };
   const buildTimeline = (jump = false) => {
     const atEnd = Number($("tslider").value) >= Number($("tslider").max);
     timeline = cards.map((card, n) => ({ card, n })).filter(({ card }) => strandPick === null || forkOfCard(card) === strandPick).sort((a, b) => clockOf(a.card)[0] - clockOf(b.card)[0] || clockOf(a.card)[1] - clockOf(b.card)[1] || a.n - b.n);
@@ -429,7 +431,8 @@
   // A replay or Continue keeps Follow as it is (the user, 2026-11-03: in World · Live the camera stayed put while people
   // walked off, where the Player follows them): the frame glides to the card's view, then follows its people if Follow is on.
   const send = (message) => { const on = $("follow").getAttribute("aria-pressed") === "true"; for (const frame of [shown, next]) frame?.contentWindow.postMessage({ ...message, follow: on }, origin); };
-  const playCard = (n) => { const card = cards[n]; if (!card) return; showCard(n, false); send({ type: "replay", scene: card.scene, event: card.event, camera: card.camera, once: true, speed: rspeed }); };
+  // A card the viewer picks is replayed with its people followed (the user, 2026-11-03), and Follow Jev goes off.
+  const playCard = (n) => { const card = cards[n]; if (!card) return; unfollow(); showCard(n, false); for (const frame of [shown, next]) frame?.contentWindow.postMessage({ type: "replay", scene: card.scene, event: card.event, camera: card.camera, once: true, speed: rspeed, follow: true }, origin); };
   // Continue: on from where the world is to the end of the next card (a dialogue plays its lines in bubbles).
   // Auto reads along (the user, 2026-11-02: no sentence of the book skipped, at the reader's own pace): the book sentence by
   // sentence from where the reader is, each at the foot of the screen for as long as it takes to read (`cps` characters a
@@ -636,10 +639,12 @@
   /** A frame that could not start its 3D view (or never got ready): dropped, the shown one stays, and the moment is loaded again. */
   const drop = (frame) => { if (next !== frame) return; next = null; ready = false; page = shownPage; retire(frame); queue(); };
   const showFollow = (on) => $("follow").setAttribute("aria-pressed", String(on));
+  // Follow Jev on: every strand again, and the newest card landed on them, seen as the photographer frames it.
   $("follow").addEventListener("click", () => {
     const on = $("follow").getAttribute("aria-pressed") !== "true";
     showFollow(on); if (camera) camera.follow = on;
-    for (const frame of [shown, next]) frame?.contentWindow.postMessage({ type: "follow", on }, origin);
+    if (on) { if (strandPick !== null) pickStrand(null, true); setAuto(false); $("replaying").hidden = true; }
+    for (const frame of [shown, next]) frame?.contentWindow.postMessage(on ? { type: "live", follow: true } : { type: "follow", on }, origin);
   });
   // Seeing underground: the street turns clear and the levels below it show (each frame clears it on its own while
   // someone is down there).

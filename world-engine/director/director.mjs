@@ -145,6 +145,9 @@ export async function direct(novelDir, { reading, readingPath = null, prefilm = 
   record.smoothing = smoothed ? { from: lastRun, moments: Object.values(smoothed.people).reduce((n, list) => n + list.length, 0), revisions: smoothed.revisions.length, starts: startsMoved.size, onStage: onStage.proposals.length } : null;
   record.review = { applied: reviewed, from: lastRun, pins: { present: Object.keys(pins.present).length, remote: Object.keys(pins.remote).length, kind: Object.keys(pins.kind).length, arrive: Object.keys(pins.arrive).length, stays: Object.keys(pins.stays).length, meet: pins.meet.length } };
   record.revisions = [];
+  // The narration order against the objective stranding (segments.mjs storyOrderProblems): units play in reading order and
+  // land on their strands; none may continue, take its people from, or go back on the clock of a unit played after it.
+  { const problems = SG.storyOrderProblems(seg.script, segStrands); record.storyOrder = { units: seg.script?.scenes?.length ?? 0, complies: !problems.length, problems: problems.slice(0, 20), count: problems.length }; }
   const save = () => writeFile(join(out, 'run.json'), JSON.stringify(record, null, 1));
   // Every run keeps its own records (the user, 2026-11-02: as much record as possible), in stage/director/runs/<run>/:
   // the pins it began with, its log line by line as it plays, and at its end its record, the laws over it and Jev's
@@ -156,6 +159,7 @@ export async function direct(novelDir, { reading, readingPath = null, prefilm = 
   const say = log;
   log = (...args) => { say(...args); appendFile(join(runDir, 'run.log'), `${new Date().toISOString()} ${args.map(arg => (typeof arg === 'string' ? arg : JSON.stringify(arg))).join(' ')}\n`).catch(() => {}); };
   log(`run ${runId}: ${from} – ${to}, model ${jev.modelId}${workModel ? `, system 2 ${workModel.modelId ?? 'on'}` : ', system 2 off'}${agent ? ', review sent to the main agent' : ''}`);
+  log(record.storyOrder.complies ? `story order: the narration complies with the strands (${record.storyOrder.units} units)` : `story order: ${record.storyOrder.count} units out of their strands' order, e.g. ${JSON.stringify(record.storyOrder.problems.slice(0, 3))}`);
   let calls = 0;
   /**
    * What the player shows of the run (strand-demo.html's card list): every card played, in order, with its own lines as
@@ -264,7 +268,9 @@ export async function direct(novelDir, { reading, readingPath = null, prefilm = 
           moves: scene.cast.map(person => E.moves.get(`${scene.id}|${event.id}|${person}`)).filter(Boolean).map(move => ({ person: move.person, how: move.how, with: null, path: move.path.map(dense), ensemble: (move.ensemble ?? []).map(other => other.map(dense)) })) }));
         return { scene: scene.id, starts, events, cast: scene.cast, grid: gridKey() };
       }
-      const withLine = data => ({ ...data, things: [...(data.things ?? []), ...thingsOnPage()], scenes: data.scenes.map(entry => { const piece = played.has(entry.id) ? pieceOf(played.get(entry.id)) : null; return piece ? { ...entry, starts: piece.starts, events: piece.events, cast: piece.cast } : entry; }) });
+      // Each unnamed place's first unit (the world script's `scene`), for the live view to show it only once that unit has landed.
+      const bornOf = new Map();
+      const withLine = data => ({ ...data, macro: (data.macro ?? []).map(node => (bornOf.has(node.id) ? { ...node, born: bornOf.get(node.id) } : node)), things: [...(data.things ?? []), ...thingsOnPage()], scenes: data.scenes.map(entry => { const piece = played.has(entry.id) ? pieceOf(played.get(entry.id)) : null; return piece ? { ...entry, starts: piece.starts, events: piece.events, cast: piece.cast, landed: true } : { ...entry, landed: false }; }) });
       const dense = id => { const { i, j, k } = W.cellOf(world, id), g = page.world; return ((k + g.ok) * g.NZ + (j + g.oj)) * g.NX + (i + g.oi); };
       const at = id => { const p = W.nodePos(world, id); return [p.x, p.y, p.z]; };
       const lotOf = (x, z) => world.lotAt.get(W.cellKey(Math.floor(x / CELL), Math.floor(z / CELL)));
@@ -343,6 +349,7 @@ export async function direct(novelDir, { reading, readingPath = null, prefilm = 
       })();
       const bornAt = new Map(), born = (place, rank) => { for (let id = place, guard = 0; id && guard < 12; id = script.places?.[id]?.parent ?? null, guard++) if (!(bornAt.get(id) <= rank)) bornAt.set(id, rank); };
       for (const entry of script.scenes) if (entry.place) born(entry.place, storyRank.get(entry.id));
+      for (const [id, place] of Object.entries(script.places ?? {})) if (place?.unnamed && place.scene) bornOf.set(id, place.scene);
       // A place first told inside a unit (the world script's `scene`: the alley of unit 8 in a unit placed at its district)
       // has happened there too.
       for (const [id, place] of Object.entries(script.places ?? {})) if (place?.scene && storyRank.has(place.scene)) born(id, storyRank.get(place.scene));

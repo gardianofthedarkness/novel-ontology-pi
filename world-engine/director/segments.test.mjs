@@ -62,3 +62,12 @@ test('a unit the reading typed whole keeps its own kind over the blocks', () => 
   assert.equal(unit.type, 'confrontation');
   assert.equal(unit.distribution.confrontation, 0.8);
 });
+
+test('the narration order complies with the stranding: nothing continues, enters from or goes back on its strand before it is played', async () => {
+  const { storyOrderProblems } = await import('./segments.mjs');
+  const script = { scenes: [{ id: 'a', clock: [0, 1] }, { id: 'b', clock: [1, 2] }, { id: 'c', clock: [0.5, 1] }] };
+  const fine = { scenes: [{ id: 'a', fork: 'a' }, { id: 'b', fork: 'a', continues: 'a', entries: [{ person: 'p', from: 'a' }] }, { id: 'c', fork: 'c' }] };
+  assert.deepEqual(storyOrderProblems(script, fine), [], 'c is earlier in story time, but on its own strand');
+  const wrong = { scenes: [{ id: 'a', fork: 'a', continues: 'b' }, { id: 'b', fork: 'a', entries: [{ person: 'p', from: 'c' }] }, { id: 'c', fork: 'a' }] };
+  assert.deepEqual(storyOrderProblems(script, wrong).map(problem => problem.kind), ['continues a later unit', 'p enters from a later unit', 'goes back on its strand\'s clock']);
+});

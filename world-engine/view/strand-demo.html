@@ -193,7 +193,12 @@ function buildTimeline() {
   const sayings = new Map((data.director?.cards ?? []).map((card) => [`${card.scene}|${card.event}`, card.lines.filter((line) => line.kind === "spoken" && line.text.trim())]));
   let clock = 0;
   const hitsSoFar = {};
+  // A live director's line (its scenes say whether they have landed): only the units landed so far, so the line ends at the
+  // newest one, where Follow Jev looks, never at a unit of the range still to be played.
+  // (`final` is no sign of the end here: the director's snapshots all say so; a unit not landed yet is.)
+  const landedOnly = liveMode && data.scenes.some((scene) => scene.landed === false) && data.scenes.some((scene) => scene.landed);
   for (const [index, scene] of data.scenes.entries()) {
+    if (landedOnly && !scene.landed) continue;
     const place = data.places[scene.place], positions = { ...scene.starts };
     hitsSoFar[keyOf(scene.place)] ??= 0;
     // People coming from another place: the macro view first, in 2D.
@@ -236,7 +241,7 @@ const segmentAt = (t) => { let low = 0, high = segments.length - 1; while (low <
 // its own disc (a staged building's on a lot of the place holding it); its circle holds its children. A temporary area (an
 // unnamed district or street of a place, holding what is known only to lie in it) is drawn fainter; a dwelling place (one
 // the ontology puts in no larger place, at a random spot of the central build until it is named) says where it dwells.
-const macroAt = new Map(data.macro.map((node) => [node.id, { x: node.spotX, z: node.spotZ, cx: node.x, cz: node.z, r: node.r, depth: node.depth, label: node.label, scale: node.scale, temporary: !!node.temporary, dwelling: node.dwelling ? data.macro.find((other) => other.id === node.dwelling)?.label ?? node.dwelling : null, sampled: node.sampled ? (node.sampled === "build" ? "the build" : data.macro.find((other) => other.id === node.sampled)?.label ?? node.sampled) : null, dwells: node.dwells ? data.macro.find((other) => other.id === node.dwells)?.label ?? node.dwells : null, forJev: !!node.forJev, unbuilt: !!node.unbuilt, size: node.size ?? null, spare: !!node.spare }]));
+const macroAt = new Map(data.macro.map((node) => [node.id, { born: node.born ?? null, x: node.spotX, z: node.spotZ, cx: node.x, cz: node.z, r: node.r, depth: node.depth, label: node.label, scale: node.scale, temporary: !!node.temporary, dwelling: node.dwelling ? data.macro.find((other) => other.id === node.dwelling)?.label ?? node.dwelling : null, sampled: node.sampled ? (node.sampled === "build" ? "the build" : data.macro.find((other) => other.id === node.sampled)?.label ?? node.sampled) : null, dwells: node.dwells ? data.macro.find((other) => other.id === node.dwells)?.label ?? node.dwells : null, forJev: !!node.forJev, unbuilt: !!node.unbuilt, size: node.size ?? null, spare: !!node.spare }]));
 
 // The 3D stage.
 const host = $("stage"), renderer = new THREE.WebGLRenderer({ antialias: true });
@@ -289,13 +294,36 @@ const mats = {
   debris: new THREE.MeshBasicMaterial({ color: 0xfff1dc, transparent: true, opacity: 0.95 }),
 };
 
+// Every label made, so none fills the view when the camera is close: a label keeps its size in metres, but never stands
+// taller than LABEL_MOST of the view (the user, 2026-11-04: the photographer's close shots, where a name tag or a place's
+// name a few metres off covered the people).
+const labels = new Set(), LABEL_MOST = 0.045, labelAt = new THREE.Vector3();
+// An unnamed place exists from the unit it is first told in (the user, 2026-11-04: places in story time; the narration
+// complying with the stranding): in a live director's line, its pin, name and sky name wait for that unit to land.
+let bornShown = null;
+function showBorn() {
+  const landed = new Set(data.scenes.filter((scene) => scene.landed !== false).map((scene) => scene.id)), live = data.scenes.some((scene) => scene.landed === false), key = live ? landed.size : -1;
+  if (key === bornShown) return; bornShown = key;
+  for (const mark of placeMarks) if (mark.born) for (const part of mark.parts) part.visible = !live || landed.has(mark.born);
+}
+function capLabels() {
+  const k = 2 * Math.tan(THREE.MathUtils.degToRad(camera.fov) / 2);
+  for (const sprite of labels) {
+    if (!sprite.parent) { if (sprite.userData.base) labels.delete(sprite); continue; }
+    if (sprite.material.sizeAttenuation === false) continue;
+    const base = (sprite.userData.base ??= sprite.scale.clone());
+    sprite.getWorldPosition(labelAt);
+    const share = base.y / Math.max(0.1, labelAt.distanceTo(camera.position) * k);
+    sprite.scale.copy(base).multiplyScalar(share > LABEL_MOST ? LABEL_MOST / share : 1);
+  }
+}
 function label(text, fill = "#ffffff", size = 28) {
   const canvas = document.createElement("canvas"), ctx = canvas.getContext("2d"), font = `600 ${size}px system-ui, "PingFang SC", sans-serif`;
   ctx.font = font; const width = Math.ceil(ctx.measureText(text).width) + 16; canvas.width = width; canvas.height = size + 14;
   ctx.font = font; ctx.textBaseline = "middle"; ctx.fillStyle = "rgba(6,12,18,.65)"; ctx.fillRect(0, 0, width, canvas.height); ctx.fillStyle = fill; ctx.fillText(text, 8, canvas.height / 2);
   const texture = new THREE.CanvasTexture(canvas); texture.colorSpace = THREE.SRGBColorSpace;
   const sprite = new THREE.Sprite(new THREE.SpriteMaterial({ map: texture, depthTest: false, transparent: true })); sprite.scale.set(width / canvas.height * 1.3, 1.3, 1); sprite.renderOrder = 10;
-  sprite.userData.text = text;
+  sprite.userData.text = text; labels.add(sprite);
   return sprite;
 }
 /**
@@ -716,7 +744,7 @@ for (const [id, spot] of macroAt) {
   const tag = label(spot.scale ? `${spot.label} · ${spot.scale}${spot.temporary ? " · temporary" : ""}${spot.dwelling ? ` · dwelling in ${spot.dwelling} until named` : spot.dwells ? ` · in a building of ${spot.dwells}` : spot.sampled ? ` · sampled in ${spot.sampled}${spot.forJev ? " · for Jev" : ""}` : ""}${done ? " · settled" : open ? (spot.forJev ? " · open, for Jev" : " · open") : ""}` : spot.label, spot.spare ? "#8a96a0" : done ? "#5fe08a" : guess ? "#ffd36e" : strand ? "#ffffff" : spot.temporary ? "#7f95a3" : "#9fb4c3", 30); tag.position.set(spot.cx, pin.top + size * 1.1, spot.cz - size * 1.3); tag.scale.multiplyScalar(size); world.add(tag);
   if (guess) sampledSpots.push({ pin, tag });
   pin.group.traverse((part) => { part.userData.place = id; }); tag.userData.place = id; clickable.push(...(spot.spare ? [] : [pin.group]), tag);
-  placeMarks.push({ id, parts: [pin.group, tag] });
+  const mark = { id, born: spot.born, parts: [pin.group, tag] }; placeMarks.push(mark);
   // A street's, a district's, a city's (a region's) name in the sky (the user's call, 2026-10-31): the higher its level, the
   // higher and larger, a faint line down to its middle, so each range is found and picked at any zoom. The live view's
   // only (Jev's stills carry their own names, sized by the zoom engine), unless a still asks for them (?sky).
@@ -726,7 +754,7 @@ for (const [id, spot] of macroAt) {
     const name = label(spot.label, sky.colour, 40), aspect = name.scale.x / name.scale.y;
     name.material.sizeAttenuation = false; name.scale.set(aspect * sky.size, sky.size, 1); name.position.set(spot.cx, sky.height, spot.cz); name.material.opacity = 0.85; name.userData.place = id;
     const tether = new THREE.Line(new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(spot.cx, 0, spot.cz), new THREE.Vector3(spot.cx, sky.height, spot.cz)]), new THREE.LineBasicMaterial({ color: sky.colour, transparent: true, opacity: 0.25, depthTest: false }));
-    tether.renderOrder = 8; world.add(name, tether); clickable.push(name);
+    tether.renderOrder = 8; world.add(name, tether); clickable.push(name); mark.parts.push(name, tether);
   }
 }
 /**
@@ -1055,6 +1083,7 @@ function extendLine({ scene, starts = null, events = null, cast = null, grid = n
   if (starts) own.starts = starts;
   if (events) own.events = events;
   if (cast) own.cast = cast;
+  own.landed = true;
   if (focus && data.live) data.live.focus = focus;
   buildTimeline(); buildHitTimes(); traceUnits = null;
   for (const entry of built.values()) entry.shownHits = -1;
@@ -1295,7 +1324,7 @@ function frame(now) {
   decor(time); blinkProposal(now); blinkSampled(now); playSettle(now);
   if (seeing && !sheetView) seeThrough(entry, segment, now, dt, elapsed);
   if (focusGlide) { const u = Math.min(1, (performance.now() - focusGlide.start) / 600), e = u * u * (3 - 2 * u); controls.target.lerpVectors(focusGlide.fromTarget, focusGlide.toTarget, e); camera.position.lerpVectors(focusGlide.fromCamera, focusGlide.toCamera, e); if (u >= 1) focusGlide = null; }
-  if (sheetView) renderer.render(sheetView.scene, sheetView.camera); else { controls.update(); renderer.render(world, camera); } if (!shownNotice) { shownNotice = true; document.querySelector(".notice")?.remove(); } requestAnimationFrame(frame);
+  if (sheetView) renderer.render(sheetView.scene, sheetView.camera); else { controls.update(); if (liveMode) showBorn(); capLabels(); renderer.render(world, camera); } if (!shownNotice) { shownNotice = true; document.querySelector(".notice")?.remove(); } requestAnimationFrame(frame);
 }
 
 /**
@@ -1393,9 +1422,13 @@ if (liveMode) {
     if (event.data?.type === "follow") { follow = !!event.data.on; return; }
     if (event.data?.type === "replay") { replayCard(event.data); return; }
     if (event.data?.type === "continue") { continueTo(event.data); return; }
-    if (event.data?.type === "extend") { extendLine(event.data); return; }
+    // Follow Jev (the user, 2026-11-04: "follow jev follows the photographer's current view on the newest segment landed on
+    // the strands"): a frame following, and not replaying a card the viewer picked, keeps up with the newest card landed;
+    // more than LAG seconds of play behind, it goes straight to that card, its camera the photographer's.
+    if (event.data?.type === "extend") { const grown = extendLine(event.data); if (grown && follow && !replaying && stopAt === null) catchUp(); return; }
     if (event.data?.type === "speed") { speed = event.data.speed ?? speed; return; }
-    if (event.data?.type === "live") { replaying = null; stopAt = null; playing = true; speed = 2; time = total - 0.001; return; }
+    // Back to live (Follow Jev turned on, or Now): the newest card landed, from its start, followed.
+    if (event.data?.type === "live") { replaying = null; stopAt = null; playing = true; speed = 2; time = Math.max(0, (segments.at(-1)?.start ?? total) - 0.001); cameraSegment = null; if (event.data.follow !== undefined) follow = !!event.data.follow; return; }
     if (event.data?.type === "underground") { xray = !!event.data.on; return; }
     if (event.data?.type === "traces") { tracesOn = !!event.data.on; return; }
     if (event.data?.type === "strand") { strandFocus = event.data.fork ?? null; return; }
@@ -1410,9 +1443,12 @@ if (liveMode) {
     camera.position.fromArray(event.data.position); controls.target.fromArray(event.data.target); controls.update();
     shownPlace = segmentAt(time).scene.place; glide = null; follow = event.data.follow ?? follow; adopted = true;
   });
+  const LAG = 12;
+  function catchUp() { const newest = segments.at(-1); if (newest && newest.start - time > LAG) { time = newest.start; cameraSegment = null; playing = true; } }
   // A new frame reports its camera only once it has the one handed over (or after 2 s with none), never its default first.
   let adopted = false;
-  const tellCamera = () => parent.postMessage({ type: "camera", run: data.live.run, position: camera.position.toArray(), target: controls.target.toArray(), follow }, origin);
+  // `follow` as the world view's Follow Jev sees it: a replay the viewer picked follows its people, but that is not Jev.
+  const tellCamera = () => parent.postMessage({ type: "camera", run: data.live.run, position: camera.position.toArray(), target: controls.target.toArray(), follow: follow && !replaying }, origin);
   // Turning or zooming is the viewer taking the camera: following stops, and the world view keeps this frame while a
   // finger is down (it swaps the next moment in when it is lifted, with the camera where it was left).
   let told = 0, held = 0;
@@ -1505,6 +1541,10 @@ function producerPose(sceneId, cam) {
   if (cam.elevation != null) { const length = offset.length(), level = new THREE.Vector3(offset.x, 0, offset.z).normalize(), up = THREE.MathUtils.degToRad(cam.elevation); offset.copy(level.multiplyScalar(Math.cos(up) * length)).setY(Math.max(2 - target.y, Math.sin(up) * length)); }
   return { target, position: target.clone().add(offset) };
 }
+/** For checking Follow Jev live: the card being played, whether it carries the photographer's camera, and where that puts the view. */
+window.__follow = () => { const segment = segmentAt(time), cam = segment?.event?.camera ?? null, pose = cam ? producerPose(segment.scene.id, cam) : null;
+  return { scene: segment?.scene.id ?? null, kind: segment?.kind ?? null, event: segment?.eventIndex ?? null, segments: segments.length, newest: segments.at(-1) ? { scene: segments.at(-1).scene.id, start: Math.round(segments.at(-1).start * 10) / 10 } : null,
+    camera: cam ? { cut: cam.cut ?? null, radius: cam.radius, elevation: cam.elevation } : null, pose: pose ? pose.target.toArray().map(Math.round) : null, onIt: cameraSegment === segment, follow, glide: !!glide }; };
 /** For checking a replay: where the timeline and the camera stand. */
 window.__replay = () => ({ time, total, playing, stopAt, speed, follow, glide: glide ? { start: glide.start, seconds: glide.seconds } : null, replaying, camera: camera.position.toArray().map(Math.round), target: controls.target.toArray().map(Math.round) });
 function replayCard({ scene, event, camera: cam = null, once = false, slow = false, speed: pace = null, follow: keep = false }) {
