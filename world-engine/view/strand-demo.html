@@ -280,7 +280,9 @@ const ambient = new THREE.AmbientLight(0xffffff, 0.75); world.add(ambient); cons
 // the day; a unit with none takes the hour halfway between the parts round it on its date: vol 1's units between the late
 // night of the 24th and its evening are its day), and the view eases towards it as the play goes. A viewer's only: a page
 // taking Jev's pictures (?capture) keeps the night it always had, so no picture Jev is asked about changes.
-const PART_HOURS = { midnight: 0, "late-night": 2, "before-dawn": 4.5, dawn: 6, "early-morning": 7, morning: 9, forenoon: 10.5, noon: 12, midday: 12, afternoon: 15, "late-afternoon": 16.5, dusk: 18, sunset: 18, evening: 19.5, night: 22, "late-evening": 21.5 };
+// The story time's parts of the day (src/digger/timeplace/lexicon.ts; the calendar's minute ranges, solidifier/calendar):
+// each at an hour inside its range.
+const PART_HOURS = { midnight: 0, "late-night": 2, "before-dawn": 4.5, dawn: 6, "early-morning": 7, morning: 9, forenoon: 10.5, noon: 12, midday: 12, daytime: 12.5, afternoon: 15, "after-school": 16.5, "late-afternoon": 16.5, dusk: 18, sunset: 18, evening: 19.5, night: 22, "late-evening": 21.5 };
 const hourOfNode = (node) => {
   const tail = String(node ?? "").split(":").slice(3).join(":");
   if (/^\d{1,2}:\d{2}$/.test(tail)) { const [h, m] = tail.split(":").map(Number); return h + m / 60; }
