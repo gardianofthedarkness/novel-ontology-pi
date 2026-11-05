@@ -1121,6 +1121,8 @@ function peoplePose(segment) {
 function glideTo(id, seconds, start = time) { glide = { to: poseFor(id), start, seconds }; }
 /** Cuts: Follow through the photographer's shots; off (the default), the pinned camera. */
 let cuts = new URLSearchParams(location.search).has("cuts");
+/** Reading along: the sentence the reader is on (World · Live's Auto), else null and the bubbles keep the card's own time. */
+let readLine = null;
 /**
  * The pinned camera. Its centre is locked to an area's pin: the smallest building, street or district whose round holds
  * every one of the card's actors and movers where they stand now (else a square of the ground at the action's scale, a
@@ -1384,7 +1386,7 @@ function frame(now) {
   }
   for (const line of pathLines) if (line.ensemble) line.object.material.opacity = 0.22 * Math.min(1, elapsed / 0.5);
   // The line being said, in a bubble over its speaker (or, unsure who says it, over the card's first person present).
-  const saying = segment.kind === "event" && !quiet ? segment.says?.find((line) => elapsed >= line.from && elapsed < line.to) : null;
+  const saying = segment.kind === "event" && !quiet ? (readLine ? segment.says?.find((line) => line.id === readLine) ?? null : segment.says?.find((line) => elapsed >= line.from && elapsed < line.to)) : null;
   const speaker = saying ? [saying.who, ...(segment.event.actors ?? [])].map((id) => id && pawns.get(id)?.pawn).find((pawn) => pawn?.parent) : null;
   if (saying && speaker) {
     if (bubble?.userData.line !== saying) { if (bubble) { world.remove(bubble); bubble.material.map.dispose(); bubble.material.dispose(); } bubble = speechBubble(saying.text, saying.who ? data.people[saying.who]?.color ?? "#ffffff" : null); bubble.userData.line = saying; world.add(bubble); }
@@ -1511,6 +1513,9 @@ if (liveMode) {
     if (parent === window && event.data?.type === "camera") return;
     if (event.data?.type === "follow") { follow = !!event.data.on; return; }
     if (event.data?.type === "cuts") { cuts = !!event.data.on; cameraSegment = null; return; }
+    // Reading along (the user, 2026-11-05: the bubbles ran ahead of the reader): the line the reader is on, so a card's
+    // bubble shows that line for as long as it is being read, none otherwise.
+    if (event.data?.type === "reading") { readLine = event.data.line ?? null; return; }
     if (event.data?.type === "replay") { replayCard(event.data); return; }
     if (event.data?.type === "continue") { continueTo(event.data); return; }
     // Follow Jev (the user, 2026-11-04: "follow jev follows the photographer's current view on the newest segment landed on
@@ -1635,7 +1640,7 @@ function producerPose(sceneId, cam) {
 /** For checking Follow Jev live: the card being played, whether it carries the photographer's camera, and where that puts the view. */
 window.__follow = () => { const segment = segmentAt(time), cam = segment?.event?.camera ?? null, pose = cam ? producerPose(segment.scene.id, cam) : null;
   return { scene: segment?.scene.id ?? null, kind: segment?.kind ?? null, event: segment?.eventIndex ?? null, segments: segments.length, newest: segments.at(-1) ? { scene: segments.at(-1).scene.id, start: Math.round(segments.at(-1).start * 10) / 10 } : null,
-    camera: cam ? { cut: cam.cut ?? null, radius: cam.radius, elevation: cam.elevation } : null, pose: pose ? pose.target.toArray().map(Math.round) : null, onIt: cameraSegment === segment, follow, glide: !!glide, cuts, pin: pin ? { id: pin.id, r: Math.round(pin.r) } : null, pinGlide: !!pinGlide, focus: focusOf(segment).map((p) => [Math.round(p.x), Math.round(p.z)]), cast: Object.keys(segment.scene.starts ?? {}).length, held: [...pawns.entries()].filter(([id, { pawn }]) => pawn.parent && !(id in (segment.scene.starts ?? {}))).map(([id]) => id) }; };
+    camera: cam ? { cut: cam.cut ?? null, radius: cam.radius, elevation: cam.elevation } : null, pose: pose ? pose.target.toArray().map(Math.round) : null, onIt: cameraSegment === segment, follow, glide: !!glide, cuts, pin: pin ? { id: pin.id, r: Math.round(pin.r) } : null, pinGlide: !!pinGlide, focus: focusOf(segment).map((p) => [Math.round(p.x), Math.round(p.z)]), cast: Object.keys(segment.scene.starts ?? {}).length, held: [...pawns.entries()].filter(([id, { pawn }]) => pawn.parent && !(id in (segment.scene.starts ?? {}))).map(([id]) => id), reading: readLine, bubble: bubble?.userData.line?.id ?? null }; };
 /** For checking a replay: where the timeline and the camera stand. */
 window.__replay = () => ({ time, total, playing, stopAt, speed, follow, glide: glide ? { start: glide.start, seconds: glide.seconds } : null, replaying, camera: camera.position.toArray().map(Math.round), target: controls.target.toArray().map(Math.round) });
 function replayCard({ scene, event, camera: cam = null, once = false, slow = false, speed: pace = null, follow: keep = false }) {

@@ -21,6 +21,14 @@
   /* The strands as a tree on story time (the user, 2026-11-04): each strand a lane, each unit a bar where it stands on the
      story's clock (in the time tree's order), a branch where a strand comes off another, the line where the shown card is. */
   .strands.tree { display: block; }
+  /* The story menu: every unit played, its strand, its time and its first line; a search over their text. */
+  #mlist .mbody { display: grid; grid-template-rows: auto 1fr; gap: 8px; min-height: 0; padding: 8px 10px 10px; }
+  #mlist input { font: inherit; font-size: 14px; color: var(--ink); background: var(--bg); border: 1px solid var(--line); border-radius: 8px; padding: 7px 10px; min-width: 0; }
+  #mrows { list-style: none; margin: 0; padding: 0; overflow: auto; min-height: 0; display: grid; gap: 4px; align-content: start; }
+  #mrows li { display: grid; gap: 2px; padding: 7px 9px; border: 1px solid var(--line); border-radius: 8px; cursor: pointer; }
+  #mrows li.now { border-color: var(--jev); } #mrows li:focus-visible { outline: 2px solid var(--accent); }
+  #mrows .name { font-size: 12px; color: var(--accent); display: flex; gap: 6px; align-items: center; } #mrows .what { font-size: 13px; color: var(--ink); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  #mrows .chip { width: 8px; height: 8px; border-radius: 2px; display: inline-block; flex: none; }
   .strands.tree svg { display: block; width: 100%; height: auto; touch-action: manipulation; overflow: visible; }
   .strands.tree .lane { cursor: pointer; } .strands.tree .lane:focus { outline: none; } .strands.tree .lane:focus-visible .hit { stroke: var(--accent); stroke-width: .8; }
   .strands.tree .axis { display: flex; justify-content: space-between; font-size: 10px; color: var(--dim); margin-top: 2px; }
@@ -197,11 +205,12 @@
 <div class="legend">The engine's own player, at each moment it plays: drawn round <b>where Jev looks</b> and <b>where the people are</b> (within 112 m, gone beyond 160 m), never round the camera.</div>
 <section class="blist" id="blist" hidden aria-label="The buildings"><header><b>Buildings</b><span id="bsum">No building level yet.</span></header><ol id="brows"></ol></section>
 <section class="blist reader" id="clist" hidden aria-label="The novel, read along"><header><b>Read</b><span id="csum">The whole text; underlined sentences were played (➜: someone moved). Tap one to play it here.</span></header><div class="keys" aria-label="Sentence kinds"><span class="k-spoken">dialogue</span><span class="k-action">action</span><span class="k-environment">environment</span><span class="k-thought">thought</span><span class="k-fact">fact</span><span class="k-narration">narration</span><span class="m-person">person</span><span class="m-place">place</span><span class="m-thing">thing</span><span class="m-time">time</span></div><div class="now"><div class="meta" id="cmeta">Nothing playing.</div><div class="ctl"><button id="rgo">Continue ▶</button><button id="rauto" aria-pressed="false">Auto</button><button data-cps="5" aria-pressed="false">Read slow</button><button data-cps="8" aria-pressed="true">normal</button><button data-cps="14" aria-pressed="false">fast</button><button id="cagain">↺ Replay</button><button data-rspeed="1" aria-pressed="false">1×</button><button data-rspeed="2" aria-pressed="true">2×</button><button data-rspeed="4" aria-pressed="false">4×</button><button id="cnow">Back to now</button></div><details class="why" id="cwhy"><summary>Why · Jev's questions, the laws, the review and our notes <span id="cnotecount"></span></summary><div id="claws" class="qa"></div><div id="cqa" class="qa"></div><div class="notes"><ol id="cnotes"></ol><textarea id="cnote" rows="2" placeholder="What looks wrong in this card? (where, who, what the text says)"></textarea><div class="ctl"><button id="csend">Add note</button><button id="call">All notes</button><a id="creportgo" class="btn" target="_blank" rel="noopener" href="report">Run report</a></div><ol id="callnotes" hidden></ol></div></details></div><div class="book" id="book"><div class="more" id="bmore">Opening the book…</div></div></section>
+<section class="blist" id="mlist" hidden aria-label="Story menu"><header><b>Story</b><span id="msum">Every unit played so far: tap one to go there.</span></header><div class="mbody"><input id="mfind" type="search" placeholder="Find a word, a name, or a unit number" aria-label="Find in the story"><ol id="mrows"></ol></div></section>
 <section class="blist dev" id="dlist" hidden aria-label="Developer mode"><header><b>Dev · what the data were and what was smoothed</b><span id="dsum">Pick a played sentence in Read: its card's records show here.</span></header><div class="devbody" id="dbody"></div></section>
 <section class="blist" id="slist" hidden aria-label="Where everyone begins"><header><b>Spawn</b><span id="ssum">No spawning yet.</span></header><ol id="srows"></ol></section>
 <section class="asks" id="asks" hidden aria-label="Jev's questions"><header><span>Jev's questions · each with its exact prompt and pictures</span><a id="asksFull" href="live" target="_blank" rel="noopener">Full page</a></header><iframe id="asksFrame" title="Jev's questions, live"></iframe></section>
 <div class="sub" id="sub" hidden aria-live="polite"><b id="subwho"></b><span id="subtx"></span></div>
-<nav class="bar"><button id="bgo" hidden>Continue ▶</button><button id="bauto" hidden aria-pressed="false">Auto</button><button id="next" hidden>Next step</button><button id="runOn" hidden aria-pressed="false">Run on</button><button id="traces" aria-pressed="true" title="Every way walked so far, faint; the card now's bright and tappable">Traces</button><button id="follow" aria-pressed="true">Follow Jev</button><button id="under" aria-pressed="false">Underground</button><button id="dopen" aria-pressed="false" title="Developer mode: the raw observations beside what was smoothed, and every record of the card">Dev</button><button id="clouds" aria-pressed="true" title="Where each person may have been, given everything the text says (the smoother)">Clouds</button><button id="live" aria-pressed="false" aria-controls="asks" title="Every Jev step: its exact input, pictures and answers">Jev debugger</button><button id="bopen" aria-pressed="false" aria-controls="blist">Buildings</button><button id="copen" aria-pressed="false" aria-controls="clist">Read</button><button id="sopen" aria-pressed="false" aria-controls="slist">Spawn</button><button id="cutsW" aria-pressed="false" title="Follow through the photographer's cuts (else a steady view of each card's people)">Cuts</button><a id="play" href="./">Replay</a></nav>
+<nav class="bar"><button id="bgo" hidden>Continue ▶</button><button id="bauto" hidden aria-pressed="false">Auto</button><button id="mopen" aria-pressed="false" aria-controls="mlist" title="Jump to any unit played so far">Menu</button><button id="next" hidden>Next step</button><button id="runOn" hidden aria-pressed="false">Run on</button><button id="traces" aria-pressed="true" title="Every way walked so far, faint; the card now's bright and tappable">Traces</button><button id="follow" aria-pressed="true">Follow Jev</button><button id="under" aria-pressed="false">Underground</button><button id="dopen" aria-pressed="false" title="Developer mode: the raw observations beside what was smoothed, and every record of the card">Dev</button><button id="clouds" aria-pressed="true" title="Where each person may have been, given everything the text says (the smoother)">Clouds</button><button id="live" aria-pressed="false" aria-controls="asks" title="Every Jev step: its exact input, pictures and answers">Jev debugger</button><button id="bopen" aria-pressed="false" aria-controls="blist">Buildings</button><button id="copen" aria-pressed="false" aria-controls="clist">Read</button><button id="sopen" aria-pressed="false" aria-controls="slist">Spawn</button><button id="cutsW" aria-pressed="false" title="Follow through the photographer's cuts (else a steady view of each card's people)">Cuts</button><a id="play" href="./">Replay</a></nav>
 <script>
 (() => {
   const $ = (id) => document.getElementById(id), query = location.search, origin = location.origin;
@@ -423,7 +432,7 @@
     if (!forkIds.length) return;
     const card = cards[cardAt] ?? cards.at(-1);
     const latest = cards.at(-1)?.scene, landedTo = latest ? units.findIndex((unit) => unit.id === latest) : -1;
-    const key = [forkIds.length, landedTo, card?.scene, strandPick, units.length].join("|");
+    const key = [forkIds.length, landedTo, card?.scene, strandPick, units.length, readUnit].join("|");
     if (key === treeKey) return; treeKey = key;
     const order = units.map((unit, k) => ({ unit, k })).sort((a, b) => (a.unit.clock?.[0] ?? Infinity) - (b.unit.clock?.[0] ?? Infinity) || a.k - b.k), col = new Map(order.map(({ unit }, n) => [unit.id, n]));
     const W = 400, GUT = 18, ROW = 8.5, TOP = 4, FOOT = 13, H = TOP + forkIds.length * ROW + FOOT, N = Math.max(1, order.length), step = (W - GUT - 4) / N;
@@ -461,14 +470,24 @@
         const landed = k <= landedTo, x = X(unit.id), w = Math.max(1.4, step * 0.85);
         g.append(svgEl("rect", { x: (x - w / 2).toFixed(2), y: (Y(fork) - 2.6).toFixed(1), width: w.toFixed(2), height: 5.2, rx: 0.8, fill: colour, opacity: dim ? (landed ? 0.25 : 0.08) : landed ? 0.95 : 0.22 }));
       }
-      g.addEventListener("click", () => pickStrand(strandPick === fork ? null : fork));
+      // A tap on a unit's bar (or within a few of the lane's units of it) goes there, in the reader and the world; anywhere
+      // else on the lane picks the strand.
+      g.addEventListener("click", (event) => {
+        const point = svg.createSVGPoint(); point.x = event.clientX; point.y = event.clientY;
+        const at = point.matrixTransform(svg.getScreenCTM().inverse()), near = mine.map(({ unit }) => ({ unit, d: Math.abs(X(unit.id) - at.x) })).sort((a, b) => a.d - b.d)[0];
+        if (near && near.d <= Math.max(5, step * 3) && near.unit.id && cards.some((c) => c.scene === near.unit.id)) jumpToUnit(near.unit.id);
+        else pickStrand(strandPick === fork ? null : fork);
+      });
       g.addEventListener("keydown", (event) => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); pickStrand(strandPick === fork ? null : fork); } });
       svg.append(g);
     });
+    // Where the reader is (the sentence read along, or the middle of the book as it is scrolled), when it is not the card shown.
+    const reader = readUnit ? unitOf.get(readUnit) : null;
+    if (reader && reader.id !== shown?.id && col.has(reader.id)) { const x = X(reader.id); svg.append(svgEl("line", { x1: x, x2: x, y1: 1, y2: H - FOOT + 2, stroke: "#e8f4ff", "stroke-width": 0.8, "stroke-dasharray": "2 1.5", opacity: 0.8 })); }
     // The shown card's place on story time: a vertical line across every lane.
     if (shown && col.has(shown.id)) { const x = X(shown.id); svg.append(svgEl("line", { x1: x, x2: x, y1: 1, y2: H - FOOT + 2, stroke: "#ffd36e", "stroke-width": 1.1 })); svg.append(svgEl("circle", { cx: x, cy: 1.6, r: 1.7, fill: "#ffd36e" })); }
     const axis = document.createElement("div"); axis.className = "axis";
-    axis.innerHTML = `<span>${forkIds.length} strands · ${landedTo + 1} of ${units.length} units landed</span><span>story time →</span>`;
+    axis.innerHTML = `<span>${forkIds.length} strands · ${landedTo + 1} of ${units.length} units landed</span><span>tap a bar to go there · story time →</span>`;
     box.replaceChildren(svg, axis);
   };
   // The panel folds (a phone: folded at first, then as the viewer left it).
@@ -476,6 +495,57 @@
   const setFold = (on) => { document.querySelector(".hud").classList.toggle("folded", on); $("fold").textContent = on ? "Strands ▾" : "Fold ▴"; $("fold").setAttribute("aria-expanded", String(!on)); };
   { let stored = null; try { stored = localStorage.getItem(FOLD); } catch {} setFold(stored === null ? matchMedia("(max-width: 560px)").matches : stored === "1"); }
   $("fold").addEventListener("click", (event) => { event.stopPropagation(); const on = !document.querySelector(".hud").classList.contains("folded"); setFold(on); try { localStorage.setItem(FOLD, on ? "1" : "0"); } catch {} });
+  // Going to a point of the story (the menu, the strand tree, the timeline; the user, 2026-11-05): the book loaded as far as
+  // the card's first line and turned to it, reading along going on from there (it starts the card as the line comes up),
+  // else the card played in the world.
+  let readingLine = null, readUnit = null;
+  const jumpTo = async (n) => {
+    const card = cards[n]; if (!card) return;
+    const id = card.lines[0]?.id, found = () => id && $("book").querySelector(`.s[data-id="${id}"]`);
+    for (let k = 0; k < 60 && id && !found() && !bookDone; k++) { if (loading) await new Promise((done) => setTimeout(done, 80)); else await loadBlock(); }
+    const at = indexOf.get(id); if (at !== undefined) cursor = at;
+    found()?.scrollIntoView({ block: "center" }); readAt(id);
+    if (auto) { unfollow(); showCard(n, false); setAuto(true); return; }
+    playCard(n);
+  };
+  const jumpToUnit = (unit) => { let n = cards.findIndex((card) => card.scene === unit); if (n < 0) { const k = units.findIndex((entry) => entry.id === unit); n = cards.findIndex((card) => units.findIndex((entry) => entry.id === card.scene) > k); } if (n >= 0) jumpTo(n); };
+  // Where the reader is in the story (the sentence read along, or the one in the middle of the book as it is scrolled):
+  // the strand tree marks it beside the card the world shows.
+  const readAt = (id) => { const n = cardOfSentence.get(id); const unit = n === undefined ? null : cards[n].scene; if (unit && unit !== readUnit) { readUnit = unit; renderStrands(); } };
+  let bookLook = 0;
+  $("book").addEventListener("scroll", () => {
+    const now = Date.now(); if (now - bookLook < 250) return; bookLook = now;
+    const box = $("book").getBoundingClientRect(); if (!box.height) return;
+    for (const dy of [0, -40, 40, -90, 90]) { const span = document.elementFromPoint(box.left + box.width / 2, box.top + box.height / 2 + dy)?.closest?.(".s"); if (span && cardOfSentence.has(span.dataset.id)) { readAt(span.dataset.id); break; } }
+  });
+  // The story menu: every unit played so far, in reading order, with its strand, its time and its first line; a search over
+  // the units' text (or a unit's number).
+  const clipText = (text, size) => (text.length > size ? `${text.slice(0, size - 1)}…` : text);
+  const renderMenu = () => {
+    if ($("mlist").hidden) return;
+    const find = $("mfind").value.trim(), byUnit = new Map();
+    cards.forEach((card, n) => { const entry = byUnit.get(card.scene) ?? byUnit.set(card.scene, { n, cards: [] }).get(card.scene); entry.cards.push(card); });
+    const current = cards[cardAt]?.scene, rows = [];
+    for (const [unit, entry] of byUnit) {
+      const text = entry.cards.flatMap((card) => card.lines.map((line) => line.text)).join("");
+      if (find && !text.includes(find) && String(Number(unit.slice(-6))) !== find) continue;
+      const lane = forkIds.indexOf(unitOf.get(unit)?.fork), li = document.createElement("li"); li.tabIndex = 0; if (unit === current) li.className = "now";
+      const hit = find && text.includes(find) ? entry.cards.flatMap((card) => card.lines).find((line) => line.text.includes(find))?.text : null;
+      li.innerHTML = `<span class="name"><i class="chip" style="background:${lane >= 0 ? STRAND[lane % STRAND.length] : "#8a98a6"}"></i>Unit ${Number(unit.slice(-6))}${lane >= 0 ? ` · strand ${lane + 1}` : ""}${unitOf.get(unit)?.when ? ` · ${esc(whenOf(unitOf.get(unit).when))}` : ""} · ${entry.cards.length} card${entry.cards.length === 1 ? "" : "s"}</span><span class="what">${esc(clipText(hit ?? entry.cards[0].lines[0]?.text ?? "", 80))}</span>`;
+      const go = () => { fold("mopen", "mlist", false); fold("copen", "clist", true); jumpTo(entry.n); };
+      li.addEventListener("click", go); li.addEventListener("keydown", (event) => { if (event.key === "Enter") go(); });
+      rows.push(li);
+    }
+    $("mrows").replaceChildren(...rows);
+    $("msum").textContent = find ? `${rows.length} of ${byUnit.size} units` : `${byUnit.size} units played · tap one to go there`;
+    $("mrows").querySelector(".now")?.scrollIntoView({ block: "center" });
+  };
+  $("mopen").addEventListener("click", () => {
+    const on = $("mopen").getAttribute("aria-pressed") !== "true";
+    fold("mopen", "mlist", on);
+    if (on) { for (const [button, panel] of [["copen", "clist"], ["bopen", "blist"], ["sopen", "slist"], ["live", "asks"]]) fold(button, panel, false); renderMenu(); $("mfind").focus({ preventScroll: true }); }
+  });
+  $("mfind").addEventListener("input", renderMenu);
   // Touching a strand, the timeline or a card is looking somewhere else: Follow Jev goes off (the user, 2026-11-04).
   const unfollow = () => { if ($("follow").getAttribute("aria-pressed") !== "true") return; showFollow(false); if (camera) camera.follow = false; sendAll({ type: "follow", on: false }); };
   const pickStrand = (fork, quiet = false) => { if (!quiet) unfollow(); strandPick = fork; sendAll({ type: "strand", fork }); renderStrands(); buildTimeline(true); markStrand(); };
@@ -486,7 +556,7 @@
     if (atEnd || jump) $("tslider").value = $("tslider").max; tlabel();
   };
   const tlabel = () => { const entry = timeline[Number($("tslider").value)]; if (entry) $("tlabel").textContent = `${whenOf(unitOf.get(entry.card.scene)?.when)} · unit ${Number(entry.card.scene.slice(-6))} · card ${entry.n + 1}`; };
-  $("tslider").addEventListener("input", () => { tlabel(); const entry = timeline[Number($("tslider").value)]; if (entry) playCard(entry.n); });
+  $("tslider").addEventListener("input", () => { tlabel(); const entry = timeline[Number($("tslider").value)]; if (entry) jumpTo(entry.n); });
   const markStrand = () => {
     for (const span of $("book").querySelectorAll(".s")) { const n = cardOfSentence.get(span.dataset.id); span.classList.toggle("other", strandPick !== null && n !== undefined && forkOfCard(cards[n]) !== strandPick); }
     const latest = strandPick !== null ? timeline.at(-1) : null; if (latest) $("book").querySelector(`.s[data-id="${latest.card.lines[0]?.id}"]`)?.scrollIntoView({ block: "center" });
@@ -535,14 +605,14 @@
       if (!sentence) { setAuto(false); return; }
       const n = cardOfSentence.get(sentence.id);
       if (n !== undefined && cards[n].lines[0]?.id === sentence.id) { await cardDone; if (!auto || run !== along) return; startCard(n); }
-      subtitle(sentence);
+      subtitle(sentence); readingLine = sentence.id; sendAll({ type: "reading", line: sentence.id }); readAt(sentence.id);
       await new Promise((done) => setTimeout(done, Math.max(1200, (norm(sentence.text).length / cps) * 1000)));
       if (run === along) cursor++;
     }
   };
   const setAuto = (on) => {
     auto = on; for (const id of ["rauto", "bauto"]) $(id).setAttribute("aria-pressed", String(on));
-    if (on) { if (!cursor && cardAt >= 0) cursor = indexOf.get(cards[cardAt].lines[0]?.id) ?? 0; cardDone = Promise.resolve(); readAlong(); } else { along++; $("sub").hidden = true; }
+    if (on) { if (!cursor && cardAt >= 0) cursor = indexOf.get(cards[cardAt].lines[0]?.id) ?? 0; cardDone = Promise.resolve(); readAlong(); } else { along++; $("sub").hidden = true; readingLine = null; sendAll({ type: "reading", line: null }); }
   };
   for (const button of document.querySelectorAll("[data-cps]")) button.addEventListener("click", () => { cps = Number(button.dataset.cps); for (const other of document.querySelectorAll("[data-cps]")) other.setAttribute("aria-pressed", String(other === button)); });
   for (const id of ["rauto", "bauto"]) $(id).addEventListener("click", () => setAuto(!auto));
@@ -734,7 +804,7 @@
     ready = false;
     if (camera) next.contentWindow.postMessage({ ...camera, type: "camera" }, origin);
     next.contentWindow.postMessage({ type: "underground", on: $("under").getAttribute("aria-pressed") === "true" }, origin);
-    next.contentWindow.postMessage({ type: "traces", on: tracesOn }, origin); next.contentWindow.postMessage({ type: "strand", fork: strandPick }, origin); next.contentWindow.postMessage({ type: "cuts", on: cutsOn }, origin);
+    next.contentWindow.postMessage({ type: "traces", on: tracesOn }, origin); next.contentWindow.postMessage({ type: "strand", fork: strandPick }, origin); next.contentWindow.postMessage({ type: "cuts", on: cutsOn }, origin); next.contentWindow.postMessage({ type: "reading", line: readingLine }, origin);
     const old = shown; shown = next; next = null; shownMoment = shown.moment ?? shownMoment; shownPage = page;
     shown.classList.remove("waiting"); $("empty").hidden = true;
     if (old) setTimeout(() => retire(old), 450);
