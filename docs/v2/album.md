@@ -21,6 +21,17 @@ its words are a teaser quoting a later page, or not in the book's text at all. A
 16 pictures (the cover, 2 plates, 4 front pages, 9 story pictures), 8 story pictures anchored on their sentences, the last on
 the book's last sentence.
 
+## In the reading
+
+The user, 2026-11-05: *"first make it part of the reading pipeline"*. `node experiments/v2/read.mjs <novel-dir> <out-dir> --epub
+<book.epub>` makes the album as part of the reading (`readingAlbum`): the pictures anchored on the sentences read, written in
+v1's shape under `<out>/v2/album` with the chart's people as its characters, so the portrait cropper (run when
+`NOVEL_PORTRAIT_PYTHON` names its Python; skipped and said so otherwise) binds faces to the reading's own ids; and the book's
+front and back matter in `<out>/v2/front.json`: the EPUB's text before the book's first sentence (title, credits, synopsis,
+character introductions) and after its last (the afterword), in paragraphs. The book's text starts at the prologue, so
+none of it was read before. `experiments/v2/workspace.mjs` carries the album into the book it makes. Vol 1's reading again
+from its cache (no request paid): 16 pictures, 8 anchored, 70 paragraphs before the book and 27 after, 5 portraits bound.
+
 ## Portraits
 
 `novel album assign <library>/vol-1/novel` runs v1's cropper ([tools/album-portraits](../../tools/album-portraits/README.md):

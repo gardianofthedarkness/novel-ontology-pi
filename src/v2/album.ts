@@ -69,6 +69,53 @@ export function anchorByText(albumText: string, offset: number, index: ReturnTyp
 
 export interface V2IllustrationRecord extends IllustrationRecord { anchor: { by: TextAnchor["by"]; chars: number } }
 
+/** The book's front and back matter: the EPUB's text before the book's first sentence and after its last, in paragraphs. */
+export interface BookMatter { before: string[]; after: string[] }
+
+function matterOf(albumText: string, sentences: { id: string; text: string }[]): BookMatter {
+  const raw: number[] = [];
+  let squeezed = "";
+  for (let at = 0; at < albumText.length; at++) if (!/\s/.test(albumText[at])) { squeezed += albumText[at]; raw.push(at); }
+  const paragraphs = (text: string) => text.split(/\n\s*\n/).map(part => part.replace(/\s+/g, " ").trim()).filter(Boolean);
+  const first = squeeze(sentences[0]?.text ?? "").slice(0, 12), last = squeeze(sentences.at(-1)?.text ?? "").slice(-12);
+  const from = first ? squeezed.indexOf(first) : -1, to = last ? squeezed.lastIndexOf(last) : -1;
+  return { before: from > 0 ? paragraphs(albumText.slice(0, raw[from])) : [], after: to >= 0 && to + last.length < raw.length ? paragraphs(albumText.slice(raw[to + last.length - 1] + 1)) : [] };
+}
+
+/** The album of a book: each EPUB picture with its kind and its anchor on the book's sentences, and the book's front and back matter. */
+export function albumOf(sentences: { id: string; text: string }[], epubBytes: Buffer) {
+  const index = sentenceIndex(sentences), walk = walkEpub(epubBytes), archive = unzipAll(epubBytes), chapters = splitChapters(walk.text);
+  const byKind: Record<IllustrationKind, number> = { cover: 0, plate: 0, story: 0, paratext: 0 }, records: V2IllustrationRecord[] = [];
+  let from = 0;
+  walk.images.forEach((ref, i) => {
+    const chapter = [...chapters].reverse().find(entry => ref.charOffset >= entry.startOffset) ?? chapters[0];
+    const kind = classifyKind({ isCover: ref.isCover, inSpine: ref.inSpine, spineIndex: ref.spineIndex, bookHasMarkedCover: walk.hasMarkedCover, chapterTitle: chapter?.title ?? null, docTextChars: ref.docTextChars });
+    byKind[kind]++;
+    // The front matter (the cover, plates, pages before the first chapter) hangs on the book's first sentence: its words
+    // are a teaser quoting a later page (vol 1's fifth picture) or not in the book's text at all. A story picture whose
+    // words are not found is past the book's last found words (the back cover after the afterword): its last sentence.
+    const front = kind !== "story";
+    const found = front ? null : anchorByText(walk.text, ref.charOffset, index, from);
+    const anchor: TextAnchor = front ? { sentenceId: index.ids[0] ?? null, by: "front", chars: 0 } : found!.sentenceId ? found! : { sentenceId: index.ids.at(-1) ?? null, by: "end", chars: 0 };
+    if (found?.sentenceId) from = found.at;
+    const id = `ill_${String(i + 1).padStart(4, "0")}`, ext = extname(ref.sourcePath).toLowerCase().replace(/[^a-z0-9]/g, "") || "bin";
+    records.push({ id, asset: `assets/${id}.${ext}`, sourcePath: ref.sourcePath, charOffset: ref.charOffset, sentenceId: anchor.sentenceId, blockId: anchor.sentenceId?.split("_")[0] ?? null, chapterIndex: chapter?.index ?? 0, kind, spineIndex: ref.spineIndex, anchor: { by: anchor.by, chars: anchor.chars } });
+  });
+  for (const record of records) if (!archive.get(record.sourcePath)) throw new Error(`EPUB image missing from archive: ${record.sourcePath}`);
+  return { records, byKind, title: walk.title, archive, matter: matterOf(walk.text, sentences) };
+}
+
+/** An album written in v1's shape under `dir`: assets/ill_NNNN.*, ontology/illustrations.jsonl and ontology/album.json. */
+async function writeAlbum(dir: string, album: ReturnType<typeof albumOf>, epubPath: string, sourceText: string | null) {
+  await mkdir(join(dir, "assets"), { recursive: true, mode: 0o700 }); await mkdir(join(dir, "ontology"), { recursive: true, mode: 0o700 });
+  for (const record of album.records) await writeFile(join(dir, record.asset), album.archive.get(record.sourcePath)!, { mode: 0o600 });
+  await writeFile(join(dir, "ontology", "illustrations.jsonl"), album.records.map(record => JSON.stringify(record)).join("\n") + (album.records.length ? "\n" : ""), { mode: 0o600 });
+  await writeFile(join(dir, "ontology", "album.json"), JSON.stringify({ epubFile: basename(epubPath), title: album.title, sourceText, importedAt: new Date().toISOString(), imageCount: album.records.length, anchoredBy: "text" }, null, 2), { mode: 0o600 });
+}
+
+const anchoredCount = (records: V2IllustrationRecord[]) => records.filter(record => record.anchor.by === "after" || record.anchor.by === "before").length;
+const unanchoredOf = (records: V2IllustrationRecord[]) => records.filter(record => !(record.anchor.by === "after" || record.anchor.by === "before")).map(record => `${record.id} (${record.kind}, ${record.anchor.by})`);
+
 /**
  * The EPUB's pictures into a v2 book: assets/ill_NNNN.*, ontology/illustrations.jsonl anchored on the book's own
  * sentence ids by their words, ontology/album.json. The book's text is never changed.
@@ -79,35 +126,25 @@ export async function importV2Album(novelDir: string, epubPath: string): Promise
   if (files.length !== 1) throw new Error("the book needs one stored text (source/) to anchor its pictures on");
   const text = await readFile(join(novelDir, "source", files[0]), "utf8");
   const sentences = (bound ? cutBlocks(text, bound.blockSize) : cutBlocks(text)).flatMap(block => sectionBlock(block.text, block.index).sentences);
-  const index = sentenceIndex(sentences);
-  const epubBytes = await readFile(epubPath), walk = walkEpub(epubBytes), archive = unzipAll(epubBytes), chapters = splitChapters(walk.text);
+  const album = albumOf(sentences, await readFile(epubPath));
   const lock = join(novelDir, "ontology", ".album.lock");
   await mkdir(lock);
-  try {
-    await mkdir(join(novelDir, "assets"), { recursive: true });
-    const byKind: Record<IllustrationKind, number> = { cover: 0, plate: 0, story: 0, paratext: 0 }, records: V2IllustrationRecord[] = [];
-    let from = 0;
-    walk.images.forEach((ref, i) => {
-      const chapter = [...chapters].reverse().find(entry => ref.charOffset >= entry.startOffset) ?? chapters[0];
-      const kind = classifyKind({ isCover: ref.isCover, inSpine: ref.inSpine, spineIndex: ref.spineIndex, bookHasMarkedCover: walk.hasMarkedCover, chapterTitle: chapter?.title ?? null, docTextChars: ref.docTextChars });
-      byKind[kind]++;
-      // The front matter (the cover, plates, pages before the first chapter) hangs on the book's first sentence: its words
-      // are a teaser quoting a later page (vol 1's fifth picture) or not in the book's text at all. A story picture whose
-      // words are not found is past the book's last found words (the back cover after the afterword): its last sentence.
-      const front = kind !== "story";
-      const found = front ? null : anchorByText(walk.text, ref.charOffset, index, from);
-      const anchor: TextAnchor = front ? { sentenceId: index.ids[0] ?? null, by: "front", chars: 0 } : found!.sentenceId ? found! : { sentenceId: index.ids.at(-1) ?? null, by: "end", chars: 0 };
-      if (found?.sentenceId) from = found.at;
-      const id = `ill_${String(i + 1).padStart(4, "0")}`, ext = extname(ref.sourcePath).toLowerCase().replace(/[^a-z0-9]/g, "") || "bin";
-      records.push({ id, asset: `assets/${id}.${ext}`, sourcePath: ref.sourcePath, charOffset: ref.charOffset, sentenceId: anchor.sentenceId, blockId: anchor.sentenceId?.split("_")[0] ?? null, chapterIndex: chapter?.index ?? 0, kind, spineIndex: ref.spineIndex, anchor: { by: anchor.by, chars: anchor.chars } });
-    });
-    for (const record of records) {
-      const bytes = archive.get(record.sourcePath);
-      if (!bytes) throw new Error(`EPUB image missing from archive: ${record.sourcePath}`);
-      await writeFile(join(novelDir, record.asset), bytes, { mode: 0o600 });
-    }
-    await writeFile(join(novelDir, "ontology", "illustrations.jsonl"), records.map(record => JSON.stringify(record)).join("\n") + (records.length ? "\n" : ""), { mode: 0o600 });
-    await writeFile(join(novelDir, "ontology", "album.json"), JSON.stringify({ epubFile: basename(epubPath), title: walk.title, sourceText: `source/${files[0]}`, importedAt: new Date().toISOString(), imageCount: records.length, anchoredBy: "text" }, null, 2), { mode: 0o600 });
-    return { illustrations: records.length, byKind, anchored: records.filter(record => record.anchor.by === "after" || record.anchor.by === "before").length, unanchored: records.filter(record => !(record.anchor.by === "after" || record.anchor.by === "before")).map(record => `${record.id} (${record.kind}, ${record.anchor.by})`) };
-  } finally { await rmdir(lock); }
+  try { await writeAlbum(novelDir, album, epubPath, `source/${files[0]}`); }
+  finally { await rmdir(lock); }
+  return { illustrations: album.records.length, byKind: album.byKind, anchored: anchoredCount(album.records), unanchored: unanchoredOf(album.records) };
+}
+
+/**
+ * The reading's album (the user, 2026-11-05: "first make it part of the reading pipeline"): the book's pictures anchored on
+ * the sentences the reading read, written in v1's shape under <reading>/v2/album with the chart's people as its characters
+ * (ontology/entities.jsonl, so the portrait cropper binds faces to the reading's own ids), and the book's front and back
+ * matter (the synopsis, the character introductions, the afterword: what the book's text starts after and ends before) in
+ * <reading>/v2/front.json. The workspace made from the reading takes both (experiments/v2/workspace.mjs).
+ */
+export async function readingAlbum(v2Dir: string, sentences: { id: string; text: string }[], epubPath: string, people: { id: string; names: string[] }[]) {
+  const album = albumOf(sentences, await readFile(epubPath)), dir = join(v2Dir, "album");
+  await writeAlbum(dir, album, epubPath, null);
+  await writeFile(join(dir, "ontology", "entities.jsonl"), people.map(person => JSON.stringify({ id: person.id, kind: "Character", names: person.names.map((text, k) => ({ text, kind: k ? "alias" : "canonical" })) })).join("\n") + (people.length ? "\n" : ""), { mode: 0o600 });
+  await writeFile(join(v2Dir, "front.json"), JSON.stringify({ version: 1, epubFile: basename(epubPath), ...album.matter, pictures: album.records.filter(record => record.anchor.by === "front").map(record => ({ id: record.id, kind: record.kind })) }, null, 1), { mode: 0o600 });
+  return { dir, illustrations: album.records.length, byKind: album.byKind, anchored: anchoredCount(album.records), unanchored: unanchoredOf(album.records), front: { before: album.matter.before.length, after: album.matter.after.length, chars: [...album.matter.before, ...album.matter.after].join("").length } };
 }

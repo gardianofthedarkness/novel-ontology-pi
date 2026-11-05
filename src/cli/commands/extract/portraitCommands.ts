@@ -32,7 +32,8 @@ async function cropperPath(): Promise<string> {
   }
 }
 
-async function cropper(novelDir: string, check: boolean, env: NodeJS.ProcessEnv): Promise<Record<string, unknown>> {
+/** v1's portrait cropper (tools/album-portraits/portraits.py) on a folder in an album's shape; `check` asks only whether it can run. */
+export async function cropper(novelDir: string, check: boolean, env: NodeJS.ProcessEnv): Promise<Record<string, unknown>> {
   const childEnv: NodeJS.ProcessEnv = { PYTHONUTF8: "1", PYTHONDONTWRITEBYTECODE: "1" };
   for (const key of ["PATH", "HOME", "TMPDIR", "XDG_CACHE_HOME", "HF_HOME", "HF_HUB_CACHE", "HF_HUB_OFFLINE", "TRANSFORMERS_OFFLINE"]) {
     if (env[key] !== undefined) childEnv[key] = env[key];

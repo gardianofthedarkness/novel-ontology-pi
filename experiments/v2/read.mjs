@@ -8,7 +8,9 @@
 //
 //   npm run build
 //   JEV_MODEL=jev-1.14.0 WORK_LLM_MODEL=deepseek-chat node experiments/v2/read.mjs <novel-dir> <out-dir> [--blocks 1-2]
-//     [--lister model|lexicon] [--lexicon <roster.json>]
+//     [--lister model|lexicon] [--lexicon <roster.json>] [--epub <book.epub>]
+// --epub: the book's album as part of the reading (<out>/v2/album, <out>/v2/front.json; src/v2/album.ts): its pictures on the
+// sentences read, its front and back matter, the faces on its plates bound to the chart's people (NOVEL_PORTRAIT_PYTHON).
 // --lister lexicon lists by string match the name forms of a roster (an earlier base layer's roster.json) and the times the
 // time lexicon finds: a stand-in for the work model, never finding a name the roster does not have.
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
@@ -18,7 +20,7 @@ import { fileURLToPath, pathToFileURL } from 'node:url';
 const repository = resolve(dirname(fileURLToPath(import.meta.url)), '..', '..');
 const load = path => import(pathToFileURL(`${repository}/${path}`).href);
 
-export async function read(novelDir, outDir, { blocks: range = null, lister: listerKind = 'model', lexicon = null, decisions = null, work = null } = {}) {
+export async function read(novelDir, outDir, { blocks: range = null, lister: listerKind = 'model', lexicon = null, decisions = null, work = null, epub = null } = {}) {
   const { loadBlocks, worldBase } = await load('dist/src/v2/extraction/base.js');
   const { readFlow } = await load('dist/src/v2/extraction/flow.js');
   const { modelLister, lexiconLister } = await load('dist/src/v2/extraction/listing.js');
@@ -64,6 +66,20 @@ export async function read(novelDir, outDir, { blocks: range = null, lister: lis
   await mkdir(v2, { recursive: true, mode: 0o700 }); await mkdir(baseDir, { recursive: true, mode: 0o700 });
   const write = (folder, name, data) => writeFile(join(folder, name), data, { mode: 0o600 });
   const entities = [...result.chart.entities.values()], times = [...result.chart.times.values()];
+  // The album (the user, 2026-11-05: "the picture detection and portrait system never wired in in v2"; "first make it part of
+  // the reading pipeline"): with the book's EPUB, its pictures anchored on the sentences read (src/v2/album.ts), the book's
+  // front and back matter kept (front.json), and the faces on its plates cropped and bound to the chart's people by their
+  // captions (tools/album-portraits, local; skipped and said so when its Python packages are not installed).
+  let album = null;
+  if (epub) {
+    const { readingAlbum } = await load('dist/src/v2/album.js'), { cropper } = await load('dist/src/cli/commands/extract/portraitCommands.js');
+    const people = entities.filter(entity => entity.category === 'person' && /^char_/.test(entity.id)).map(entity => ({ id: entity.id, names: [...entity.proper, ...entity.names.filter(name => !entity.proper.includes(name))] }));
+    album = await readingAlbum(v2, [...text].map(([id, sentence]) => ({ id, text: sentence })), resolve(epub), people);
+    const ready = await cropper(album.dir, true, process.env).catch(error => ({ ready: false, error: String(error.message ?? error) }));
+    album.portraits = ready.ready ? await cropper(album.dir, false, process.env).then(made => ({ bound: made.created ?? 0, notFound: made.notFoundCount ?? null }), error => ({ error: String(error.message ?? error) })) : { skipped: ready.missingPackages?.length ? `the cropper's packages are missing (${ready.missingPackages.join(', ')}); set NOVEL_PORTRAIT_PYTHON` : ready.error ?? 'not ready' };
+    console.error(`album: ${album.illustrations} pictures, ${album.anchored} anchored on their sentences; front matter ${album.front.before} paragraphs, back ${album.front.after}; portraits ${JSON.stringify(album.portraits)}`);
+    album = { ...album, dir: undefined };
+  }
   const outcomes = result.em.flatMap(batch => batch.results).reduce((sum, entry) => ({ ...sum, [entry.outcome]: (sum[entry.outcome] ?? 0) + 1 }), {});
   const summary = {
     book: novelDir, blocks: blocks.map(block => block.id), sentences: text.size, lister: listerKind, jev: live.modelId, wallMs: Date.now() - started, paidRequests: paid,
@@ -106,6 +122,7 @@ export async function read(novelDir, outDir, { blocks: range = null, lister: lis
     chart: { person: entities.filter(entity => entity.category === 'person').length, thing: entities.filter(entity => entity.category === 'thing').length,
       thingTypes: Object.fromEntries(['object', 'vehicle', 'weapon'].map(type => [type, entities.filter(entity => entity.category === 'thing' && entity.type === type).length])),
       concept: entities.filter(entity => entity.category === 'concept').length, conceptsOwned: entities.filter(entity => entity.owners?.length).length, place: entities.filter(entity => entity.category === 'place').length, time: times.length },
+    album,
     steps: result.steps,
   };
   await Promise.all([
@@ -137,8 +154,8 @@ export async function read(novelDir, outDir, { blocks: range = null, lister: lis
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
   const args = process.argv.slice(2), flag = name => { const at = args.indexOf(name); return at >= 0 ? args[at + 1] : null; };
   const [novelDir, outDir] = args.filter((arg, index) => !arg.startsWith('--') && !args[index - 1]?.startsWith('--'));
-  if (!novelDir || !outDir) throw new Error('Usage: node experiments/v2/read.mjs <novel-dir> <out-dir> [--blocks 1-2] [--lister model|lexicon] [--lexicon <roster.json>]');
+  if (!novelDir || !outDir) throw new Error('Usage: node experiments/v2/read.mjs <novel-dir> <out-dir> [--blocks 1-2] [--lister model|lexicon] [--lexicon <roster.json>] [--epub <book.epub>]');
   const blocks = flag('--blocks')?.split('-').map(Number) ?? null;
-  const summary = await read(resolve(novelDir), resolve(outDir), { blocks: blocks ? [blocks[0], blocks[1] ?? blocks[0]] : null, lister: flag('--lister') ?? 'model', lexicon: flag('--lexicon') });
+  const summary = await read(resolve(novelDir), resolve(outDir), { blocks: blocks ? [blocks[0], blocks[1] ?? blocks[0]] : null, lister: flag('--lister') ?? 'model', lexicon: flag('--lexicon'), epub: flag('--epub') });
   console.log(JSON.stringify({ ...summary, steps: undefined }, null, 1));
 }

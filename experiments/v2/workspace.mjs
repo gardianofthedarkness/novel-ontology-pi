@@ -57,7 +57,14 @@ export async function v2Workspace(sourceDir, outDir, novelDir) {
     writeFile(join(novelDir, 'ontology', 'relations.jsonl'), lines(canon.relations), { mode: 0o600 }),
     ...['state-changes.jsonl', 'timelines.jsonl', 'branches.jsonl'].map(name => writeFile(join(novelDir, 'ontology', name), '', { mode: 0o600 })),
   ]);
-  return { novelDir, scenes: canon.scenes.length, entities: canon.entities.length, events: canon.events.length, relations: canon.relations.length, script: await writeScript(outDir, novelDir, read) };
+  // The reading's album (read.mjs --epub): its pictures and portraits, in v1's shape, into the book (its people's ids are
+  // the chart's, as the canon's are).
+  const albumDir = join(outDir, 'v2', 'album'), album = await stat(join(albumDir, 'ontology', 'illustrations.jsonl')).then(() => true, () => false);
+  if (album) {
+    await cp(join(albumDir, 'assets'), join(novelDir, 'assets'), { recursive: true });
+    for (const name of ['illustrations.jsonl', 'album.json', 'portraits.jsonl']) await cp(join(albumDir, 'ontology', name), join(novelDir, 'ontology', name)).catch(error => { if (error.code !== 'ENOENT') throw error; });
+  }
+  return { novelDir, album, scenes: canon.scenes.length, entities: canon.entities.length, events: canon.events.length, relations: canon.relations.length, script: await writeScript(outDir, novelDir, read) };
 }
 
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
