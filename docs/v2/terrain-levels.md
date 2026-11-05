@@ -73,7 +73,7 @@ The world is one column. Each place stands in one **level**, a medium with its o
 | underwater | water | 0 to the seabed | m | swimming, submarines | light fades with depth, drag, currents, muffled blasts |
 | shallow underground | soil | 0 to 25 m | m | halls (as built) | as built: confined blasts, dents |
 | deep underground | rock | 20 to 110 m | m | halls (as built) | as built: cave-ins |
-| underground city | rock, a cavern | 30 to 300 m | m | a city's streets on a cavern floor | a ceiling for a sky; the cavern's roof span (§8) |
+| underground world, city | rock, a cavern | 30 to 300 m | m | an area's streets on the deep floor; up by the virtual elevator | a hard ceiling far up (§8.6); a city's ceiling lit as its sky (§8.7) |
 
 ### 3.1 How a place gets its level (the terrain cast)
 
@@ -100,7 +100,7 @@ marked moving (§6.3). Vol 1 should come out all land and underground; the check
 - **Falling** joins every level: anyone in the air without flight falls under gravity with drag (a person reaches about
   55 m/s), into water (a splash, §4.3) or onto the ground (an impact, as a blow).
 
-## 4. Water (stage 2)
+## 4. Water (stage 3)
 
 ### 4.1 Bodies of water
 
@@ -150,7 +150,7 @@ as smeared streaks), the depth's colour through it (clear in the shallows, dark 
 crests and at the shore, the ripples' normals on top. Fog and the weather as on land. Checked like the weather: every body
 (sea, lake, river) by the times of day by calm, breezy and a gale, with and without rain, and each disturbance.
 
-## 5. Underwater (stage 3)
+## 5. Underwater (stage 4)
 
 - **Light:** fades with depth (most of the red gone by 5 m, little light below 50 m), the colour toward blue-green; the
   surface seen from below as a bright, wavering ceiling; caustics on the seabed in the shallows by day.
@@ -159,7 +159,7 @@ crests and at the shore, the ripples' normals on top. Fog and the weather as on 
 - **Blasts:** water carries a blast farther and harder than air; a bubble column and a surge at the surface above (§4.3).
 - **The seabed:** the depth field's surface, sand or rock; wrecks and things that sank lie on it.
 
-## 6. The air (stage 4)
+## 6. The air (stage 5)
 
 ### 6.1 Bands
 
@@ -177,7 +177,7 @@ A ship, an aircraft, a spacecraft is a **moving place**: a room or a building wh
 it move with it; its interior is built once, as a building's; its path comes from the scenes (where it sets off, where it
 is said to be). Its scale stays the size ladder's (building or room); its level is where it is (water, air, orbit).
 
-## 7. Space (stage 5)
+## 7. Space (stage 6)
 
 - **The zoom ladder goes on** past a region: the planet (its curve, the atmosphere a glowing rim lit by the sun, night
   side with city lights), then orbit (places in it: satellites, stations), then the sky's stars.
@@ -186,22 +186,148 @@ is said to be). Its scale stays the size ladder's (building or room); its level 
 - **Moving:** orbits, not routes; a launch and a re-entry pass through the levels (the air bands, the clouds).
 - **Physics:** no air: no drag, no sound, no fire's smoke rising; a beam's light unscattered.
 
-## 8. Underground cities (stage 6)
+## 8. The underground in two layers, and ceilings (stage 2)
 
-A new hall kind, **cavern**: a void as large as a district (100 m to several km across, 20 to 200 m high), in hard rock
-deep enough to hold its span (the bands of docs/underground-design.md §2.1, extended: a cavern needs the hard band and a
-vaulted roof, or pillars). Its floor is filled as a city (cityFill on the cavern's outline, with the landscape type the
-text gives: a market, homes, a facility), its ceiling lit as its sky (lamps, or none), and it is reached by shafts, ramps
-or a subway line. Destruction follows the halls' rules at the cavern's scale: a confined blast, the roof-span test, a
-cave-in to a dome; a cave-in of a shallow cavern dents the surface, never destroys it (§0.3 of the underground design).
-Built when a book first has one.
+The user, 2026-11-05, after W12: *"Looks like we really need to build the layering of terrain system. I think for
+underground we can do with ground skin interaction near ground layer and space like without ceiling deep underground
+layer. We need to figure out how to deal with ceilings."*
+
+Then, on the questions: *"1 yes it can break through. For deep level I would go up to terrain loop area thing. I think we
+actually already have a underground option, but jev never picks anything larger than building level to go underground.
+Maybe we need implicit casts to leave a note to certain area that it's highly likely an underground area with or without
+ceiling. The fact of without ceiling isn't actually without ceiling, but conceptually too deep and wide that it feels like
+an underground world, it would still hit the ceiling if high enough but it can't penetrate, and if anyone comes back up
+to the ground they have a dense enough virtual elevator to do so."*
+
+What W12 (d20261105181503) showed:
+- **No underground place.** Scenes 120–131 really are underground (an escape up stairs to the street), and the reread says so, but the scenes stand at the whole city's place. Their underground moves found no hall, and half of scene 123's moves did not play.
+- **One shared walk graph.** 7 arrivals failed only because a deep lab's lift (90 m at a flat cost of 24) was inside a street route's walk graph window. To stay within the lift's cost, the solver's guide is scaled almost to nothing, and on a 100–136 m leg the walk's start weight falls to zero.
+
+Both come from the street and the underground sharing one walk graph and one notion of "up".
+
+### 8.1 Two layers
+
+| | Near-ground layer | Deep layer |
+| --- | --- | --- |
+| Depth | 0 to 25 m: basements, malls at −7 m, stations and tunnels at −12 m | below 20 m: storm water at −40 to −50 m, deep facilities at −80 to −100 m, and **underground worlds**: whole areas the terrain loop places down there (§8.5) |
+| Its ceiling | **the ground skin:** the street's slab and the soil over the hall. One sheet: the hall's ceiling below, the street above (§8.4) | **a hard ceiling, far up:** so deep and wide that it feels like none, as space does. It is hit if one goes high enough, but never penetrated (§8.6) |
+| With the surface | through the skin: entrances and stairs, dents, breaches, light and sound through openings | its own shafts and lifts, and a dense virtual elevator everywhere (§8.6); a cave-in never reaches the street (decided 2026-10-30) |
+| Drawing | the street see-through over it, as now; the skin's underside as the hall's ceiling, cut away toward the camera | no lid: the camera looks straight in, and the void's walls fade into the dark |
+| Moving | walking on hall floors; a leap or a flight stops under the skin | walking on the floor; a leap or a flight stops only at the hard ceiling |
+
+The two overlap from 20 to 25 m, as the halls' two Jev intervals do (docs/underground-design.md §0.2): Jev still picks one of two, and the box finds the hall. A place's band from §3.1 is its layer.
+
+### 8.2 Layers are separate walk graphs, joined by ways
+
+- **Each layer is its own walk graph:** the surface (with the buildings), the near-ground layer, the deep layer.
+- **The ways between layers are portals:** station stairs, mall entrances, basement ramps, shaft lifts and ladders, a breach in the skin (§8.4), and the deep layer's virtual elevator (§8.6).
+- **A route across layers is solved in two steps:**
+  1. first a short path over the portals: which stairs, which lift;
+  2. then one walk per layer, each solved inside that layer only.
+- **What this fixes:** no surface leg's window ever holds a lift, so the solver's guide is never scaled down for one (the 7 W12 failures). A lift's cost (24 for any depth) is paid once, on the portal path.
+- **L10 learns more:** "no way there" also says which layer the way is missing in.
+
+### 8.3 Ceilings
+
+A ceiling belongs to the level a person is in; it is not geometry laid everywhere. Five kinds:
+
+| Ceiling | Where | What it is |
+| --- | --- | --- |
+| the sky | the surface, the air | open: the story sky, its weather and clouds (docs/v2/sky.md) |
+| a floor slab | inside a building | as built: the floor above |
+| the ground skin | the near-ground layer | a shared, breakable sheet (§8.4) |
+| the hard ceiling | the deep layer | far up and never drawn: hit, never penetrated (§8.6) |
+| a cavern sky | an underground city (§8.7) | a dome lit as its sky: lamps, or dark |
+
+What a ceiling decides, one rule each:
+- **The camera:** a ceiling never hides the people under it.
+  - The skin is see-through while anyone shown is below it, as now.
+  - A hall's ceiling is drawn only from below, and fades out within a few metres of the camera.
+  - The deep layer has no lid to fade.
+- **The sky:** under any ceiling but the sky, there is no sun, rain, snow, fog or cloud layer.
+  - The light is the hall's own, by its kind: a mall's warm lamps, a deep facility's hard white, a storm-water channel nearly dark.
+  - Under a breach in the skin, the sky shows through. Its light falls in as a shaft (the cloud hole's shaft, reused), and rain or snow falls through the hole.
+- **Moving:**
+  - A leap, a flight or a thrown body under a ceiling stops at it, a body's height below. Misaka's magnetic leaps underground stay under the skin.
+  - A fall from above is stopped by a ceiling unless there is a breach.
+- **Blows:**
+  - A blast is confined, as built. Its upward reach stops at the ceiling; against the skin, it can breach it (§8.4).
+  - A beam fired upward under a ceiling hits it. Under the skin, it can breach it.
+  - Only a beam that reaches the open sky tears the clouds: `cutsClouds` checks the level first.
+  - In the deep layer, a beam or a blast that reaches the hard ceiling is stopped by it and marks it, never breaks through.
+- **Earshot:** a ceiling stops sound between levels. A talk across the skin is remote unless an open way (stairs, a breach) is within earshot. L6 then holds fewer talks between people one level apart.
+
+### 8.4 The ground skin
+
+The skin is one sheet per region over the near-ground layer, derived from the city model. Over each hall it is the street's slab with the hall's cover beneath: the hall's depth less its height. Each of its cells is a street cell above and a ceiling cell below: one state serves both.
+- **A dent** (decided 2026-10-30): a cave-in that reaches the skin drops it by at most 3 m, and it stays walkable.
+- **A breach** (the user, 2026-11-05: "yes it can break through"): a blow strong enough to break the skin's cells opens a hole. A cell breaks at the soil band's bond of 3, plus 4 for a lining.
+  - Through the hole, people and things can drop (a fall), the sky's light, rain and snow come in, sound carries, and the camera sees through.
+  - A hole is a portal (§8.2), so a route can use it: down as a drop, up only for those who leap or fly.
+- **Load:** a heavy thing on the street over a shallow hall (a crashed vehicle, rubble) presses on the skin. Past what the span holds, the underground's roof test runs (docs/underground-design.md §4.3). This is how a fight in the street reaches the mall below it.
+- **Entrances** are holes made on purpose: stairs, with a roof over them.
+
+### 8.5 Which areas lie underground: the casts' note and the terrain loop
+
+**Today:** the terrain loop asks every part's height with the underground's slices first. But a city or a district is never offered them (the user's gate of 2026-11-01, in `terrain-spawn.mjs`), so only a street, a building or a room can go under the street. An area that is underground as a whole, like an underground world, a district below the city, or a whole facility zone, has no way to be placed there.
+
+**The note:** a pre-film cast leaves one on each place the text puts underground: how likely it is, and which layer.
+- **Who writes it:** the set dresser, which already reads a scene's environment facts and the buildings named. Each place's note gathers what its scenes say:
+  - its underground facts (W12's reading has them, such as "underground (implied, 80%)");
+  - its stairs down and lifts;
+  - the words for no sky.
+- **What it says:**
+  - near the street, with a ceiling: the skin;
+  - or deep, an underground world, its ceiling too far to feel;
+  - with how sure, and the sentences.
+- **What it is:** a view input kept per place like the scale, never canon.
+
+**The terrain loop reads the note:**
+- **The gate is lifted for a noted area:** a city or a district with a sure note is offered the underground's slices, as a street is now.
+- **Two slices only,** as Jev's choices underground always are: near the street (under the skin), or an underground world (deep).
+- **An area answered deep** is laid out in the deep layer by the terrain loop as any area is: its kind, its box, its height. Its streets and buildings stand on the deep floor, and its height sets where its hard ceiling is (§8.6).
+- **An area with no note** keeps today's gate.
+
+**Places inside an underground area** (its streets, buildings and rooms) inherit its layer, so a scene in one is underground without being asked again. That is what scenes 120–131 lacked.
+
+### 8.6 The deep layer's ceiling, and the virtual elevator
+
+**The hard ceiling.** An underground world has a ceiling, but it is so high and so wide that from inside it reads as open, the way space does.
+- **Where:** the area's own height (what the terrain loop answered) plus a margin, and no less than a floor above its tallest building.
+- **Drawing:** none. The view fades into the dark above, as the deep layer's walls do.
+- **Moving:** a leap, a flight or a thrown body that goes high enough hits it, and stops.
+- **Blows:** a blast or a beam that reaches it is stopped and marks it, and never breaks through.
+- **The street above:** no cave-in, blast or beam from the deep layer ever reaches the street.
+
+**The virtual elevator.** Nobody in the deep layer has to find a shaft to get back up. Like the virtual subway of a long trip (`laws.mjs` tripTime: run to a virtual station, ride, run from the far one), the deep layer has a lift everywhere:
+- **Where:** a grid of virtual lifts over every deep area, dense enough that no one walks more than about 30 m to one (one every 40 m).
+- **Joins:** each lift's foot, on the deep floor, to the nearest open ground on the street above it. It is a portal (§8.2), so a route up or down is a walk to the nearest lift, the ride, and a walk from its top.
+- **Time:** the ride takes its depth at a lift's speed, about 5 m/s, plus a wait. It is not a flat cost, so a deep world is farther from the street than a basement is.
+- **What is built:** no shaft. A lift in use is drawn as a faint column while someone rides it.
+- **The text first:** a lift, a shaft or a ramp the text names is built as a real one, and routes prefer it; the virtual grid only fills in.
+
+### 8.7 Underground cities (stage 7)
+
+A new hall kind in the deep layer, the **cavern**:
+- **Size:** a void as large as a district, 100 m to several km across and 20 to 200 m high.
+- **Where:** in hard rock deep enough to hold its span. This extends the bands of docs/underground-design.md §2.1: a cavern needs the hard band and a vaulted roof, or pillars.
+- **Inside:** its floor is filled as a city (cityFill on the cavern's outline, with the landscape type the text gives: a market, homes, a facility).
+- **Its ceiling** is the deep layer's one exception: drawn as a faint dome lit as its sky (lamps, or dark). In physics it is still the hard ceiling (§8.6).
+- **Ways in:** shafts, ramps or a subway line, all of them portals, with the virtual elevator (§8.6) filling in.
+- **How it is placed:** as an underground world (§8.5), whose floor is filled as a city.
+- **Destruction** follows the halls' rules at the cavern's scale: a confined blast, the roof-span test, a cave-in to a dome. A deep cavern's cave-in never reaches the street.
+
+It is built when a book first has one.
 
 ## 9. Records
 
-- Per place: its medium and band, how sure, from what (kept as the scale is; never canon).
+- Per place: its medium and band, how sure, from what (kept as the scale is; never canon). An underground band is the
+  place's layer (§8.1).
+- Per region: the ground skin over its near-ground halls (derived; rebuilt when its halls or streets change), and the
+  portals between the layers.
 - Per region of water: its bodies' outlines and depth profiles (derived from the place model; rebuilt when it changes).
-- Per run: the disturbances (splashes, wakes, rings, falls), with the blows and the holes in the clouds, so a replay is
-  the same.
+- Per run: the disturbances (splashes, wakes, rings, falls), the skin's dents and breaches, with the blows and the holes
+  in the clouds, so a replay is the same.
 - Per book's snapshot: as the universe snapshots keep everything else (docs/v2/universe-snapshots.md).
 
 ## 10. Order of work
@@ -211,12 +337,14 @@ book it is for reads right.
 
 | Stage | What | Done when | Paid |
 | --- | --- | --- | --- |
-| 1 | Each place's level (§3.1) and routes that know the medium (§3.2) | vol 1's places come out land and underground; vols 3 and 4's sea, air and orbit places are found; L10 says by what means | cents (one or two Jev questions per place) |
-| 2 | Water: bodies, waves by the weather, the ripple field, floating, drawing (§4) | sheets: sea, lake, river by the times of day by calm, breezy, gale, with rain, and each disturbance | none |
-| 3 | Underwater (§5) | sheets: depths by times of day, a blast underwater | none |
-| 4 | The air: bands, flyers, falling, moving places (§6) | a flyer's route over the towers; a fall into water and onto the ground; a ship and an aircraft carrying people | none |
-| 5 | Space (§7) | the zoom from a room to orbit and back; a launch | none |
-| 6 | Underground cities (§8) | when a book has one: its cavern built, walked, and a cave-in | none |
+| 1 | Each place's level (§3.1), with the set dresser's underground note and the terrain loop's gate lifted for noted areas (§8.5); the layers as separate walk graphs joined by portals, the virtual elevator among them (§8.2, §8.6); routes that know the medium (§3.2) | vol 1's places come out land and underground (scenes 120–131 in the near-ground layer); vols 3 and 4's sea, air and orbit places are found; W12's 7 lift failures walk; L10 says by what means and in which layer | cents (one or two Jev questions per place; the note rides on the set dresser's reading) |
+| 2 | The underground's two layers and ceilings: the skin, breaches and load, the deep layer's hard ceiling, the sky and light under a ceiling, leaps and beams stopped by a ceiling, earshot (§8.1–8.6) | sheets: each hall kind and an underground world, by day and night, with the camera above, at and below the skin; a breach by a blast and by a beam, with rain falling through; a leap stopped by the hard ceiling; a ride up the virtual elevator; vol 1's first quarter rehearsed with no underground move unplayed | none |
+| 3 | Water: bodies, waves by the weather, the ripple field, floating, drawing (§4) | sheets: sea, lake, river by the times of day by calm, breezy, gale, with rain, and each disturbance | none |
+| 4 | Underwater (§5) | sheets: depths by times of day, a blast underwater | none |
+| 5 | The air: bands, flyers, falling, moving places (§6) | a flyer's route over the towers; a fall into water and onto the ground; a ship and an aircraft carrying people | none |
+| 6 | Space (§7) | the zoom from a room to orbit and back; a launch | none |
+| 7 | Underground cities (§8.7) | when a book has one: its cavern built, walked, and a cave-in | none |
 
-Open questions for the user, taken stage by stage: whether swimming is allowed for anyone (or only where the text says
-they swim); how a moving place's path is drawn when the text only says where it set off and where it arrived.
+Open questions for the user, taken stage by stage:
+- whether swimming is allowed for anyone, or only where the text says they swim;
+- how a moving place's path is drawn when the text only says where it set off and where it arrived.
