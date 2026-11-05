@@ -177,8 +177,18 @@ the frame plus one "leaves the frame toward …"; a "none" goes on to the map al
 in-betweens the reframe holds, follows (a camera that moves), lets someone exit frame, or splits the cut where the one
 who left acts or speaks again in it (a storyboard retake, `cut_…~2`). The camera is the frame's. The key check (L6, L10)
 and the rush check (every law the card holds) record their faults but cannot retake yet, so faults pass with faults.
-Still to do: key retakes (the keys asked again with the failed law, positions rolled back), cuts of different waves
-played side by side, and the debugger's timeline of tasks.
+Still to do: cuts of different waves played side by side, and the debugger's timeline of tasks.
+
+**Key retakes** (4cfeefb; the user, 2026-11-04: "let's implement the retake"). The key check (the animation director's)
+runs right after the keys: a key with no way there (L10) or that puts its mover where the script supervisor's sure notes
+say they are not (L14) is sent back when Jev made it. The mover is put back where they stood (position, the card's walk,
+its moves and laws rolled back) and the key animator is asked again with a retake note (what was chosen, why it failed),
+the failed spots or directions no longer offered and staying a choice; at most two retakes, then the attempt with the
+fewest faults is kept (its state restored). A key made by rule (a graded step, a journey, a follower) passes as it is.
+First quarter, stand-in: 6 cards retaken (12 retakes), 1 fixed, 5 passed with their first attempt kept; 27 more Jev
+calls (109 → 136, +25%). The stand-in ignores the note and answers by its call count, so only a paid run can say how often
+a retake fixes a key; and every extra question shifts the stand-in's later answers (L6 2 → 6, all in unit 64, long after
+the retakes), which is the stand-in's, not the world's.
 
 First quarter, stand-in rehearsal (e677904 against 909265b): laws unchanged (L6 2, L9 1, L10 1), jumps 11 → 9, 222
 moves (212); 146 cuts in 90 waves (cuts in one wave share no one), 12 layout retakes (8 two on one cell, 6 tightened
