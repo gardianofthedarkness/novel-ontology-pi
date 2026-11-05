@@ -316,19 +316,60 @@ const keyedLight = (hour) => {
   return { sky: mix(a.sky, b.sky), ambient: mix(a.ambient, b.ambient), ambientI: num(a.ambientI, b.ambientI), sun: mix(a.sun, b.sun), sunI: num(a.sunI, b.sunI), day: num(a.day, b.day),
     sunAt: up ? new THREE.Vector3(Math.cos(arc) * 80, 12 + Math.sin(arc) * 80, 25) : new THREE.Vector3(30, 70, 20) };
 };
-const daylight = { on: !capture, sky: new THREE.Color(0x060c12), day: 0, phase: null, hour: null };
+const daylight = { on: !capture, sky: new THREE.Color(0x060c12), day: 0, phase: null, hour: null, said: null };
+// The story sky (world-engine/digest/sky.mjs, sent by World · Live as play/sky.json): each unit's hour, weather and lying
+// snow; the time tree's hours stand where it has none. The weather drawn: falling snow or rain round what the camera looks
+// at, a greyer sky, a dimmer sun and nearer fog when overcast, a white sheet on the ground where snow lies.
+let skyUnits = null;
+const OVERCAST = { cloudy: 0.4, rain: 0.5, snow: 0.35, storm: 0.6, fog: 0.55 }, FOG_NEAR = { cloudy: 0.9, rain: 0.8, snow: 0.7, storm: 0.6, fog: 0.45 };
+const baseFog = { near: defaultFog.near, far: defaultFog.far };
+// A soft round flake (a point is drawn square without one).
+function flakeTexture() {
+  const canvas = document.createElement("canvas"); canvas.width = canvas.height = 32; const ctx = canvas.getContext("2d"), glow = ctx.createRadialGradient(16, 16, 0, 16, 16, 16);
+  glow.addColorStop(0, "rgba(255,255,255,1)"); glow.addColorStop(0.45, "rgba(255,255,255,0.8)"); glow.addColorStop(1, "rgba(255,255,255,0)");
+  ctx.fillStyle = glow; ctx.fillRect(0, 0, 32, 32); const texture = new THREE.CanvasTexture(canvas); texture.colorSpace = THREE.SRGBColorSpace; return texture;
+}
+const fallers = (count, makeGeometry, material) => { const u = new Float32Array(count * 3); for (let i = 0; i < u.length; i++) u[i] = Math.random(); const object = makeGeometry(count); object.material = material; object.frustumCulled = false; object.renderOrder = 8; object.visible = false; world.add(object); return { u, object }; };
+const snowFall = fallers(2600, (n) => { const g = new THREE.BufferGeometry(); g.setAttribute("position", new THREE.BufferAttribute(new Float32Array(n * 3), 3)); return new THREE.Points(g); }, new THREE.PointsMaterial({ color: 0xffffff, size: 0.4, sizeAttenuation: true, transparent: true, opacity: 0, depthWrite: false, map: flakeTexture(), alphaTest: 0.02 }));
+const rainFall = fallers(1400, (n) => { const g = new THREE.BufferGeometry(); g.setAttribute("position", new THREE.BufferAttribute(new Float32Array(n * 6), 3)); return new THREE.LineSegments(g); }, new THREE.LineBasicMaterial({ color: 0xb8c8d8, transparent: true, opacity: 0, depthWrite: false }));
+const snowSheet = new THREE.Mesh(new THREE.PlaneGeometry(mapReach * 2.4, mapReach * 2.4), new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0, depthWrite: false }));
+snowSheet.rotation.x = -Math.PI / 2; snowSheet.position.y = 0.06; snowSheet.renderOrder = 1; snowSheet.visible = false; world.add(snowSheet);
+function weatherTick(weather, sure, lying, dt) {
+  const center = controls.target, box = Math.min(600, Math.max(30, camera.position.distanceTo(center) * 1.2)), k = Math.min(1, dt * 1.2), strength = Math.min(1, sure / 0.6);
+  const ease = (material, to) => { material.opacity += (to - material.opacity) * k; return material.opacity > 0.01; };
+  // Snow drifts down and sways; rain falls fast in streaks; each wraps round the box the camera looks into.
+  for (const [fall, on, speed, sway, streak] of [[snowFall, weather === "snow" || (weather === "storm" && daylight.day < 0.3), 2.2, 0.6, 0], [rainFall, weather === "rain" || weather === "storm", 22, 0, box * 0.03]]) {
+    const visible = ease(fall.object.material, on ? 0.85 * strength : 0); fall.object.visible = visible;
+    if (!visible) continue;
+    const position = fall.object.geometry.attributes.position, u = fall.u, n = u.length / 3, t = performance.now() / 1000;
+    for (let i = 0; i < n; i++) {
+      u[i * 3 + 1] -= (speed * dt) / box; if (u[i * 3 + 1] < 0) u[i * 3 + 1] += 1;
+      const x = center.x + (u[i * 3] - 0.5) * box + (sway ? Math.sin(t * 0.8 + i) * sway : 0), y = center.y + (u[i * 3 + 1] - 0.1) * box * 0.6, z = center.z + (u[i * 3 + 2] - 0.5) * box;
+      if (streak) { position.setXYZ(i * 2, x, y, z); position.setXYZ(i * 2 + 1, x, y - streak, z); } else position.setXYZ(i, x, y, z);
+    }
+    position.needsUpdate = true;
+    if (!streak) fall.object.material.size = box / 140;
+  }
+  snowSheet.visible = ease(snowSheet.material, lying ? (daylight.day > 0.5 ? 0.3 : 0.16) : 0);
+}
 function daylightTick(unitId, dt) {
   if (!daylight.on) return;
-  const hour = unitHours.get(unitId);
+  const told = skyUnits?.[unitId] ?? null, hour = told?.hour ?? unitHours.get(unitId);
   if (hour === null || hour === undefined) return;
-  const target = keyedLight(hour), k = Math.min(1, dt * 1.5);
+  const weather = told?.sure >= 0.3 ? told.weather : null, target = keyedLight(hour), k = Math.min(1, dt * 1.5);
+  // Overcast: the sky toward grey (by day a light grey, by night a dark one), the sun dimmer, the fog nearer.
+  const grey = OVERCAST[weather] ?? 0;
+  if (grey) { target.sky.lerp(new THREE.Color(target.day > 0.5 ? 0x8d98a4 : 0x141a21), grey); target.sunI *= 1 - grey * 0.6; }
+  const near = FOG_NEAR[weather] ?? 1;
+  if (world.fog === defaultFog) { defaultFog.near += (baseFog.near * near - defaultFog.near) * k; defaultFog.far += (baseFog.far * near - defaultFog.far) * k; }
+  weatherTick(weather, told?.sure ?? 0, !!told?.lying, dt);
   daylight.sky.lerp(target.sky, k); daylight.day += (target.day - daylight.day) * k; daylight.hour = hour;
   world.background.copy(daylight.sky); world.fog?.color.copy(daylight.sky); defaultFog.color.copy(daylight.sky);
   ambient.color.lerp(target.ambient, k); ambient.intensity += (target.ambientI - ambient.intensity) * k;
   sun.color.lerp(target.sun, k); sun.intensity += (target.sunI - sun.intensity) * k; sun.position.lerp(target.sunAt, k);
   // World · Live's panels follow (light by day, warm at dawn and dusk, dark by night).
-  const phase = daylight.day > 0.6 ? "day" : daylight.day > 0.25 ? "twilight" : "night";
-  if (phase !== daylight.phase) { daylight.phase = phase; if (parent !== window) parent.postMessage({ type: "daylight", phase, hour }, location.origin); }
+  const phase = daylight.day > 0.6 ? "day" : daylight.day > 0.25 ? "twilight" : "night", said = `${phase}|${told?.daypart ?? ""}|${weather ?? ""}|${!!told?.lying}`;
+  if (said !== daylight.said) { daylight.said = said; daylight.phase = phase; if (parent !== window) parent.postMessage({ type: "daylight", phase, hour, daypart: told?.daypart ?? null, weather, lying: !!told?.lying }, location.origin); }
 }
 const camera = new THREE.PerspectiveCamera(42, 1, 0.5, Math.max(4000, mapReach * 4)), controls = new OrbitControls(camera, renderer.domElement);
 controls.enableDamping = true; controls.maxPolarAngle = Math.PI * 0.47; controls.minDistance = 10; controls.maxDistance = Math.max(1600, mapReach * 1.8);
@@ -1791,7 +1832,8 @@ if (liveMode) {
     if (parent === window && event.data?.type === "camera") return;
     if (event.data?.type === "follow") { follow = !!event.data.on; return; }
     if (event.data?.type === "portraits") { portraitsArrived(event.data.portraits); return; }
-    if (event.data?.type === "daylightMode") { daylight.on = !!event.data.on && !capture; if (!daylight.on) { world.background.set(0x060c12); world.fog?.color.set(0x060c12); defaultFog.color.set(0x060c12); ambient.color.set(0xffffff); ambient.intensity = 0.75; sun.color.set(0xffffff); sun.intensity = 0.75; sun.position.set(30, 70, 20); daylight.sky.set(0x060c12); daylight.day = 0; daylight.phase = null; parent.postMessage({ type: "daylight", phase: "night", hour: null }, origin); } return; }
+    if (event.data?.type === "sky") { skyUnits = event.data.units ?? null; return; }
+    if (event.data?.type === "daylightMode") { daylight.on = !!event.data.on && !capture; if (!daylight.on) { world.background.set(0x060c12); world.fog?.color.set(0x060c12); defaultFog.color.set(0x060c12); ambient.color.set(0xffffff); ambient.intensity = 0.75; sun.color.set(0xffffff); sun.intensity = 0.75; sun.position.set(30, 70, 20); daylight.sky.set(0x060c12); daylight.day = 0; daylight.phase = null; daylight.said = null; for (const object of [snowFall.object, rainFall.object, snowSheet]) { object.visible = false; object.material.opacity = 0; } defaultFog.near = baseFog.near; defaultFog.far = baseFog.far; parent.postMessage({ type: "daylight", phase: "night", hour: null }, origin); } return; }
     if (event.data?.type === "cuts") { cuts = !!event.data.on; cameraSegment = null; return; }
     // Reading along (the user, 2026-11-05: the bubbles ran ahead of the reader): the line the reader is on, so a card's
     // bubble shows that line for as long as it is being read, none otherwise.

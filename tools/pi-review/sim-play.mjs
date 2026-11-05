@@ -164,6 +164,18 @@ export async function addDirectorNote(workspace, body) {
   return note;
 }
 /**
+ * The story sky (world-engine/digest/sky.mjs; experiments/v2/sky.mjs: sky.json beside the reading the run played): each
+ * unit's time of day, hour, weather and lying snow, for the world's look. Null before the step has run.
+ */
+export async function directorSky(workspace) {
+  // Beside the reading the run played, else the book's own reading (a library's vol-<n>/reading).
+  const at = await readFile(resolve(workspace, 'stage', 'director', 'reading-path.json'), 'utf8').then(JSON.parse, () => null);
+  const read = path => readFile(path, 'utf8').then(JSON.parse, () => null);
+  const sky = (at?.path ? await read(resolve(at.path, '..', 'sky.json')) : null) ?? await read(resolve(workspace, '..', 'reading', 'sky.json'));
+  return sky ? { units: Object.fromEntries(Object.entries(sky.units ?? {}).map(([id, unit]) => [id, { daypart: unit.daypart?.value ?? null, hour: unit.hour ?? null, weather: unit.weather?.value ?? null, sure: unit.weather?.sure ?? 0, lying: !!unit.lying }])) } : null;
+}
+
+/**
  * The book's album as World · Live shows it (the user, 2026-11-05: "the picture detection and portrait system never wired
  * in in v2"): its pictures on their sentences (src/v2/album.ts) and each character's bound portrait (album.mjs, which
  * serves only the files its records list). Ids only: the images come from api/album-asset.

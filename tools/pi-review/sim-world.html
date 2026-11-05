@@ -22,6 +22,7 @@
   iframe.waiting { opacity: 0; pointer-events: none; }
   .hud { position: fixed; z-index: 5; left: max(12px, env(safe-area-inset-left)); top: max(12px, env(safe-area-inset-top)); max-width: min(440px, calc(100vw - 24px)); background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 10px 12px; display: grid; gap: 6px; }
   .hud h1 { margin: 0; font-size: 13px; letter-spacing: .06em; text-transform: uppercase; color: var(--accent); }
+  .hud .sky { color: var(--dim); font-size: 12px; } .hud .sky:empty { display: none; }
   .row { color: var(--dim); font-size: 12px; }
   .jev { color: var(--jev); font-size: 12px; }
   .counts { font-variant-numeric: tabular-nums; color: var(--dim); font-size: 11px; }
@@ -212,6 +213,7 @@
 <section class="hud" aria-live="polite">
   <h1><span>World · live</span><button class="fold" id="fold" type="button" aria-expanded="true" aria-controls="strands">Fold ▴</button></h1>
   <div class="row" id="where"></div>
+  <div class="row sky" id="skyword" aria-label="The story's time of day and weather"></div>
   <div class="counts" id="ground"></div>
   <div class="jev" id="jev"></div>
   <div class="row" id="replaying" hidden></div>
@@ -283,6 +285,10 @@
     for (const portrait of album?.portraits ?? []) if (!faceOf.has(portrait.entityId)) faceOf.set(portrait.entityId, albumAsset(portrait.id));
   })();
   const portraitsMessage = () => ({ type: "portraits", portraits: Object.fromEntries(faceOf) });
+  // The story sky (play/sky.json, world-engine/digest/sky.mjs): each unit's hour, weather and lying snow, for the world.
+  let sky = null;
+  const skyLoaded = fetch(`sky.json${location.search}`, { cache: "no-store" }).then((r) => (r.ok ? r.json() : null)).catch(() => null).then((value) => { sky = value; return value; });
+  const skyMessage = () => ({ type: "sky", units: sky?.units ?? null });
   let pieceSeq = 0, lastPiece = null;
   let cards = [], cardKey = "", cardAt = -1, cardOfSentence = new Map(), rspeed = 2, nextBlock = 0, loading = false, bookDone = false;
   const says = (m) => `${esc(m.name)}: ${m.moved ? `went${m.direction && m.direction !== "stays" ? ` (arrow ${esc(m.direction)}${m.how ? `, ${esc(m.how)}` : ""})` : ""} to ${esc(m.to ?? "?")}${m.spot && m.spot !== "none" ? ` · spot: ${esc(m.spot)}` : m.boxed ? ` · boxed${m.height ? `, ${esc(m.height)}` : ""}` : ""}` : m.direction === "stays" ? "stays" : `did not move${m.why ? ` (${esc(m.why)})` : ""}`}`;
@@ -448,6 +454,7 @@
   const forkOfCard = (card) => unitOf.get(card.scene)?.fork ?? card.scene, clockOf = (card) => unitOf.get(card.scene)?.clock ?? [Infinity, Infinity];
   const sendAll = (message) => { for (const frame of [shown, next]) frame?.contentWindow.postMessage(message, origin); };
   albumLoaded.then(() => sendAll(portraitsMessage()));
+  skyLoaded.then(() => { if (sky) sendAll(skyMessage()); });
   $("pic").addEventListener("click", () => $("pic").classList.toggle("big"));
   const strandsUpdate = (director) => { units = director?.units ?? []; unitOf = new Map(units.map((unit) => [unit.id, unit])); forkIds = [...new Set(units.map((unit) => unit.fork))]; renderStrands(); buildTimeline(); };
   // The strands as a tree on story time: x is the time tree's order, units on the same time in the order they are told
@@ -874,7 +881,11 @@
     if (event.origin !== origin) return;
     const message = event.data;
     if (message?.type === "camera" && shown && event.source === shown.contentWindow) { camera = message; showFollow(!!message.follow); }
-    if (message?.type === "daylight" && shown && event.source === shown.contentWindow) { if ($("daylight").getAttribute("aria-pressed") === "true" && message.phase !== "night") document.documentElement.dataset.daylight = message.phase; else delete document.documentElement.dataset.daylight; }
+    if (message?.type === "daylight" && shown && event.source === shown.contentWindow) {
+      if ($("daylight").getAttribute("aria-pressed") === "true" && message.phase !== "night") document.documentElement.dataset.daylight = message.phase; else delete document.documentElement.dataset.daylight;
+      // The sky in words under the world's title: the time of day and the weather.
+      if ($("skyword")) $("skyword").textContent = message.daypart ? `${message.daypart}${message.weather && !["clear", "unknown"].includes(message.weather) ? ` · ${message.weather}` : ""}${message.lying ? " · snow on the ground" : ""}` : "";
+    }
     if (message?.type === "touch" && shown && event.source === shown.contentWindow) { touching = message.active; lastTouch = Date.now(); if (!touching) swap(); }
     if (message?.type === "interact" && shown && event.source === shown.contentWindow) lastTouch = Date.now();
     // A way tapped in the world: who, which card, and that card's Jev steps.
@@ -882,7 +893,7 @@
       $("way").hidden = false; $("way").innerHTML = `${esc(message.name)} · ${esc(message.how ?? "walk")} · unit ${Number(String(message.scene).slice(-6))} · card ${message.event + 1} · <a href="#">Jev steps ↗</a>`;
       $("way").querySelector("a").addEventListener("click", (e) => { e.preventDefault(); openDebug(message.scene, message.event); });
     }
-    if (message?.type === "ready" && next && event.source === next.contentWindow) { next.contentWindow.postMessage(portraitsMessage(), origin); if ($("daylight").getAttribute("aria-pressed") !== "true") next.contentWindow.postMessage({ type: "daylightMode", on: false }, origin); next.moment = message.moment; if (lastPiece) next.contentWindow.postMessage({ ...lastPiece, type: "extend" }, origin); ready = true; swap(); }
+    if (message?.type === "ready" && next && event.source === next.contentWindow) { next.contentWindow.postMessage(portraitsMessage(), origin); if (sky) next.contentWindow.postMessage(skyMessage(), origin); if ($("daylight").getAttribute("aria-pressed") !== "true") next.contentWindow.postMessage({ type: "daylightMode", on: false }, origin); next.moment = message.moment; if (lastPiece) next.contentWindow.postMessage({ ...lastPiece, type: "extend" }, origin); ready = true; swap(); }
     if (message?.type === "failed" && next && event.source === next.contentWindow) drop(next);
   });
   const load = (run) => {

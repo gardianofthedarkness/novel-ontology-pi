@@ -32,6 +32,7 @@ Read them by the sections named here rather than from the top.
 | [album.md](album.md) | The book's pictures anchored on v2's own sentences by their words, its people's portraits, and where World · Live shows them |
 | [introduction.md](introduction.md) | The book's introduction read before the book: standing facts, the cast's other names, people it names as one, portraits by elimination |
 | [stills.md](stills.md) | The stills cast: each book picture read by Jev with the text around it, its faces against the portraits; notes, picture facts and speakers |
+| [sky.md](sky.md) | The story sky: each unit's time of day and weather from the text, carried and smoothed, drawn in the world (daylight, snow, rain, fog) |
 | [world-engine.html](world-engine.html) | The reader's version of the journal up to the terrain's start |
 
 ## Stage 1: Extraction — done
