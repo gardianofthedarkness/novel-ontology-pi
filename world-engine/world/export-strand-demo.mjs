@@ -53,7 +53,7 @@ const classOf = how => how === 'fall' ? 'fall' : how === 'run' ? 'run' : 'walk';
  * Walking, running and falling as before; `climb:<m>` a run that may go up and down building walls no higher than its
  * climb (the walls' kinds by height: up to 10 m, 30 m, higher); `agile:<×>` a run that costs `×` times less a metre on the
  * level and on stairs (agility: "it takes less effort to move"), its temperature lowered with it so the walk sum still
- * converges and the cheaper metres change which routes are likely.
+ * converges and the cheaper metres change which routes are likely; `ride:<×>` a vehicle on the level ground at × a run.
  */
 const specs = new Map();
 function specOf(how, temperature) {
@@ -62,6 +62,8 @@ function specOf(how, temperature) {
   const [kind, value] = key.split(':'), number = Number(value), walls = [Infinity, Infinity, Infinity];
   let factors = [...FACTORS[classOf(key)], ...walls], T = temperature({ step: 2, arcCost: 7 }), name = classOf(key);
   if (kind === 'climb' && number > 0) { factors = [...FACTORS.run, number >= 6 ? 1.5 : Infinity, number >= 25 ? 1.5 : Infinity, number >= 100 ? 1.5 : Infinity]; name = `climb:${number >= 100 ? 'high' : number >= 25 ? 'mid' : 'low'}`; }
+  // `ride:<×>` (riding, world-engine/digest/mounts.mjs): a vehicle on the level ground at × a run, no stairs, jumps or walls.
+  if (kind === 'ride' && number > 0) { const f = Math.min(10, number); factors = [1 / f, Infinity, Infinity, Infinity, Infinity, Infinity, ...walls]; T = temperature({ step: 2 / f, arcCost: 7 }); name = `ride:${f}`; }
   if (kind === 'agile' && number > 1) { const f = Math.min(10, number); factors = [1 / f, 1 / Math.sqrt(f), 1 / Math.sqrt(f), ...FACTORS.run.slice(3), ...walls]; T = temperature({ step: 2 / f, arcCost: 7 }); name = `agile:${f}`; }
   const spec = { key: name, factors, T };
   specs.set(key, spec);

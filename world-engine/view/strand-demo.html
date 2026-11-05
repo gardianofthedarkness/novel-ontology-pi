@@ -152,7 +152,7 @@ const flight = (a, b) => {
   return { v, T: D / (v * Math.cos(ELEVATION)) };
 };
 const along = (a, b, arc, f) => { const t = f * arc.T; return { x: a.x + (b.x - a.x) * f, z: a.z + (b.z - a.z) * f, y: a.y + arc.v * Math.sin(ELEVATION) * t - G * t * t / 2 }; };
-const SPEED = { walk: 1.4, run: 3.6, sneak: 0.8, "climb up": 1.1, "go down": 1.4, fall: 1.6, dragged: 1.2 };
+const SPEED = { walk: 1.4, run: 3.6, sneak: 0.8, "climb up": 1.1, "go down": 1.4, fall: 1.6, dragged: 1.2, ride: 12 };
 const GROUND_COLOR = [0x0c1822, 0x112532, 0x173444, 0x15293a, 0x112532];
 
 const at = (place, node) => { const i = node % place.NX - (place.oi ?? 0), j = Math.floor(node / place.NX) % place.NZ - (place.oj ?? 0), k = Math.floor(node / (place.NX * place.NZ)) - (place.ok ?? 0); return { x: (i + 0.5) * CELL, z: (j + 0.5) * CELL, y: k * FLOOR, i, j, k }; };
@@ -716,6 +716,18 @@ function vehicleForm(kind, model, fill, edges) {
   }
   inner.scale.set(1 / L, 1 / H, 1 / W);
   return form;
+}
+// A ride on a vehicle that is not on the stage itself (the director's `mount`, world-engine/digest/mounts.mjs): the
+// vehicle drawn under its rider while the ride plays, facing the way they go.
+function showMount(entry, mount) {
+  const want = mount ? `${mount.kind}|${(mount.size ?? []).join(",")}` : null;
+  if (entry.mountKey === want) return;
+  if (entry.mountForm) { entry.pawn.remove(entry.mountForm); entry.mountForm = null; }
+  entry.mountKey = want;
+  if (!mount) return;
+  const form = vehicleForm(mount.kind, mount.kind === "a car" && data.models?.["car-sedan"] ? "car-sedan" : null, propLook, propEdges);
+  if (!form) return;
+  const [L, H, W] = mount.size ?? VEHICLE_DIMS[mount.kind]; form.scale.set(L, H, W); entry.pawn.add(form); entry.mountForm = form;
 }
 // Where a vehicle faces: the way it last moved, turned to smoothly.
 const headings = new Map();
@@ -1542,9 +1554,11 @@ function frame(now) {
   const blink = 0.25 + 0.75 * Math.abs(Math.sin(performance.now() / 260));
   for (const flash of devBlinks) for (const part of flash.children) part.material.opacity = part.geometry.type === "RingGeometry" ? 0.25 + 0.55 * blink : blink;
   for (const spinner of spinners) spinner.group.rotation[spinner.axis] += dt * spinner.speed;
-  for (const [id, { pawn, body, vehicle }] of pawns) {
-    if (vehicle && pawn.parent) headTo(id, pawn, dt);
+  for (const [id, pawnEntry] of pawns) {
+    const { pawn, body, vehicle } = pawnEntry;
     const move = segment.moves.find((entry) => entry.person === id), node = segment.positions[id];
+    showMount(pawnEntry, move?.mount ?? null);
+    if ((vehicle || pawnEntry.mountForm) && pawn.parent) headTo(id, pawn, dt); else if (pawn.rotation.y) { pawn.rotation.y = 0; headings.delete(id); }
     const travel = segment.kind === "macro" && segment.travels.find((entry) => entry.migration.person === id);
     const held = !posed && !present.has(id) && place?.world ? segment.held?.[id] ?? null : null, heldPlace = held ? data.places[held.place] : null;
     const p = posed ? (posed[id] == null ? null : at(place, posed[id])) : !present.has(id) ? (heldPlace?.world ? at(heldPlace, held.node) : null) : move ? position(place, move, elapsed) : node == null ? null : at(place, node);
@@ -1834,6 +1848,7 @@ window.__blows = () => segments.filter((segment) => segment.kind === "event" && 
 window.__vehicles = () => [...pawns].filter(([, entry]) => entry.vehicle).map(([id]) => ({ id, kind: data.people[id].prop.kind, model: data.people[id].prop.model ?? null, shown: !!pawns.get(id).pawn.parent, at: pawns.get(id).pawn.parent ? pawns.get(id).pawn.position.toArray().map(Math.round) : null }));
 window.__goto = (at) => { time = Math.max(0, Math.min(total, at)); playing = false; follow = false; glide = null; return time; };
 window.__cam = controls;
+window.__moveTime = (scene, person) => { const segment = segments.find((entry) => entry.kind === "event" && entry.scene.id === scene && entry.moves.some((move) => move.person === person)); const move = segment?.moves.find((entry) => entry.person === person); return segment ? { start: segment.start, total: move.time.total } : null; };
 // The vehicles side by side at their kinds' sizes, where the camera looks (a car per model given): for checking the forms.
 let gallery = null;
 window.__gallery = (entries) => {

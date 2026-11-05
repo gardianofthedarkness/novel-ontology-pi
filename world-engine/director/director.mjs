@@ -27,7 +27,7 @@ const { passScene } = await import('./pass.mjs');
 const { withSystem2 } = await import('./system2.mjs');
 const { writeWorldLog } = await import('../log/write-log.mjs');
 const R = await import('../review/review.mjs'), C6 = await import('../review/canon.mjs'), SM = await import('../smoother/smoother.mjs'), OC = await import('../smoother/occupation.mjs');
-const WF = await import('./workflow.mjs'), AT = await import('../laws/attacks.mjs'), IU = await import('../digest/in-use.mjs'), CF = await import('../crowd/field.mjs'), DG = await import('../digest/digest.mjs'), FA = await import('../digest/facts.mjs'), G = await import('./gate.mjs'), LW = await import('../laws/laws.mjs');
+const WF = await import('./workflow.mjs'), AT = await import('../laws/attacks.mjs'), IU = await import('../digest/in-use.mjs'), MT = await import('../digest/mounts.mjs'), CF = await import('../crowd/field.mjs'), DG = await import('../digest/digest.mjs'), FA = await import('../digest/facts.mjs'), G = await import('./gate.mjs'), LW = await import('../laws/laws.mjs');
 import { copyFile } from 'node:fs/promises';
 
 const CELL = 2, FLOOR = 3, PRESENT = new Set(['speaks', 'acts', 'addressed']);
@@ -140,7 +140,13 @@ export async function direct(novelDir, { reading, readingPath = null, prefilm = 
   // ways only where the pre-film notes say the line has it in use (a move's or a journey's `ability`, in-use.json).
   const abilitySheet = JSON.parse(await readFile(join(novelDir, '..', '..', 'universe', 'abilities.json'), 'utf8').catch(() => 'null'));
   /** The way a move goes: the ability its note has in use, as the person's sheet allows it (else the move's own way). */
-  const howFor = (person, ability, otherwise) => {
+  // Riding (world-engine/digest/mounts.mjs): what carries someone (a person, a vehicle slot, or a vehicle the lines name,
+  // `item:<label>`) has a sheet as abilities do; a ridden move goes the carrier's way, a vehicle's own move its own.
+  const carrierOf = id => { if (!id) return null; if (id.startsWith('item:')) return MT.carrierSheet({ prop: propOf(id.slice(5)) }); const prop = slotProp(id); return prop?.vehicle ? MT.carrierSheet({ prop }) : MT.carrierSheet({ person: abilitySheet?.people?.[id] ?? { move: {} } }); };
+  const ownVehicle = id => { const prop = slotProp(id); return prop?.vehicle ? MT.carrierSheet({ prop }) : null; };
+  const howFor = (person, ability, otherwise, riding = null) => {
+    if (riding && carrierOf(riding)) return MT.wayOf({ carrier: carrierOf(riding), otherwise });
+    if (ownVehicle(person)) return MT.wayOf({ carrier: ownVehicle(person), otherwise });
     const move = abilitySheet?.people?.[person]?.move ?? {};
     if (ability === 'climb' && move.climb) return `climb:${move.climb.height}`;
     if (ability === 'agility' && move.agility) return `agile:${move.agility.factor}`;
@@ -288,7 +294,7 @@ export async function direct(novelDir, { reading, readingPath = null, prefilm = 
       function pieceOf({ scene, run }) {
         const starts = Object.fromEntries(Object.entries(run.starts).map(([who, value]) => [who, dense(value[0])]));
         const events = scene.events.map(event => ({ id: event.id, actors: event.actors ?? [], text: event.text, camera: event.camera ?? null, spots: [], hit: E.hits?.get(event.id) ?? null, blows: E.blows?.get(event.id) ?? [], hitThings: null, trace: null,
-          moves: scene.cast.map(person => E.moves.get(`${scene.id}|${event.id}|${person}`)).filter(Boolean).map(move => ({ person: move.person, how: move.how, with: null, path: move.path.map(dense), ensemble: (move.ensemble ?? []).map(other => other.map(dense)) })) }));
+          moves: scene.cast.map(person => E.moves.get(`${scene.id}|${event.id}|${person}`)).filter(Boolean).map(move => ({ person: move.person, how: move.how, with: null, path: move.path.map(dense), ensemble: (move.ensemble ?? []).map(other => other.map(dense)), ...(move.mount ? { mount: move.mount } : {}) })) }));
         return { scene: scene.id, starts, events, cast: scene.cast, grid: gridKey() };
       }
       // Each unnamed place's first unit (the world script's `scene`), for the live view to show it only once that unit has landed.
@@ -339,6 +345,8 @@ export async function direct(novelDir, { reading, readingPath = null, prefilm = 
         // Why no walk was found (the user's Why panel: people chose a place and never went): where they stand is not on the
         // walk round them and their target, or the walk has no way from there to it.
         else { const off = field.part && field.part.local[from[0]] < 0; walk.failed = off ? 'where they stand is off the walk' : 'no way there on foot'; walk.code = off ? 'OFF_WALK' : 'NO_PATH'; }
+        // A ride has no way off the level ground (stairs, walls): from there it goes on foot.
+        if (!path && String(how).startsWith('ride:')) return walk(scene, `${key}|on foot`, from, targets, 'run');
         return path;
       };
       const shoot = async (name, size, options) => {
@@ -442,6 +450,8 @@ export async function direct(novelDir, { reading, readingPath = null, prefilm = 
         // standing outside the scene's place, they travel to their start in it (walked; beyond 300 m they arrive off-page).
         const own = script.scenes.find(entry => entry.id === scene.id), spawned = spawn?.scenes?.find(entry => entry.id === scene.id);
         const dg = digested.has(scene.id) ? await digested.get(scene.id) : null, prepared = prefilm?.units?.[scene.id] ?? null;
+        // Who rides what in this unit (mounts.mjs tiesOf): each tie holds from the line that first says it to the unit's end.
+        const ties = MT.tiesOf(prepared);
         const startNode = who => {
           const start = spawned?.starts.find(entry => entry.who === who);
           if (!start) return run.starts[who]?.[0] ?? null;
@@ -907,10 +917,40 @@ export async function direct(novelDir, { reading, readingPath = null, prefilm = 
             if (!path) { cardRecord.moves.push({ person, why, moved: false, ...(walk.code ? { code: walk.code, replay: walk.replay } : {}) }); (cardRecord.laws ??= []).push({ law: 'L10', who: person, verdict: 'held', why: walk.failed ?? why ?? 'no walk there', ...(walk.code ? { code: walk.code } : {}) }); return; }
             // Several moves of one person in one card (steps, then an implied move) are one walk on the page.
             const key = `${scene.id}|${card.id}|${person}`, earlier = E.moves.get(key);
-            E.moves.set(key, { person, how: path.how ?? (String(how).startsWith('climb') || String(how).startsWith('agile') || how === 'run' || earlier?.how === 'run' ? 'run' : 'walk'), path: earlier ? [...earlier.path, ...path.slice(1)] : [...path], ensemble: path.ensemble ?? [] });
+            const tie = tiesNow().find(entry => entry.who === person), offStage = tie && !positions[tie.on] ? mountOf(tie.on) : null;
+            E.moves.set(key, { person, how: path.how ?? (String(how).startsWith('ride') ? 'ride' : String(how).startsWith('climb') || String(how).startsWith('agile') || how === 'run' || earlier?.how === 'run' ? 'run' : 'walk'), path: earlier ? [...earlier.path, ...path.slice(1)] : [...path], ensemble: path.ensemble ?? [], ...(offStage ? { mount: offStage } : {}) });
             positions[person] = [path.at(-1), positions[person][1]];
-            cardRecord.moves.push({ person, why, moved: true, steps: path.length, to: said(at(path.at(-1))) });
+            cardRecord.moves.push({ person, why, moved: true, steps: path.length, to: said(at(path.at(-1))), ...(tie ? { riding: tie.on } : {}) });
+            if (!carrying) carryAlong(person, path, E.moves.get(key).how);
           };
+          // Riding (mounts.mjs): the ties in hold by this card; who moves with whom (a rider with what carries them on the
+          // stage, and everyone it carries); a vehicle off the stage drawn under its rider (the page's `mount`).
+          const tiesNow = () => { const end = lastLine(card); return ties.filter(tie => (sentenceAt.get(tie.sentence) ?? Infinity) <= end); };
+          const mountOf = id => { const prop = id.startsWith('item:') ? propOf(id.slice(5)) : slotProp(id); return prop?.vehicle ? { kind: prop.kind, size: prop.size, airborne: prop.airborne ?? 0 } : null; };
+          let carrying = false;
+          function carryAlong(person, path, how) {
+            const live = tiesNow(), carrier = live.find(tie => tie.who === person)?.on ?? person, group = new Set([carrier, ...live.filter(tie => tie.on === carrier).map(tie => tie.who)]);
+            const along = [...group].filter(other => other !== person && positions[other]);
+            if (!along.length) return;
+            carrying = true;
+            try {
+              for (const other of along) {
+                // Aboard first: one who stands apart runs to where the ride starts, then goes with it.
+                const key = `${scene.id}|${card.id}|${other}`, earlier = E.moves.get(key), from = positions[other];
+                const board = from[0] === path[0] ? [from[0]] : walk(scene, `${key}|boards|${person}`, from, [path[0]], 'run');
+                const ridden = [...(board ?? [from[0]]), ...path.slice(1)];
+                E.moves.set(key, { person: other, how, path: earlier ? [...earlier.path, ...ridden.slice(1)] : ridden, ensemble: [] });
+                positions[other] = [path.at(-1), from[1]];
+                cardRecord.moves.push({ person: other, why: `rides with ${names.get(person) ?? person}${board ? '' : ' (boards from where they stood)'}`, moved: true, steps: ridden.length, riding: carrier === other ? person : carrier });
+              }
+              // L22 · Riding: the riders with what carries them, and no more than it seats.
+              if (positions[carrier]) {
+                const riders = live.filter(tie => tie.on === carrier && positions[tie.who]).map(tie => tie.who), sheet = carrierOf(carrier), size = Math.max(2, ...(mountOf(carrier)?.size ?? [2]));
+                for (const verdict of MT.rideCheck({ carrier, riders, sheet, at: id => at(positions[id][0]), size })) (cardRecord.laws ??= []).push(verdict);
+              }
+              (cardRecord.rides ??= []).push({ carrier, with: [...group].filter(id => id !== carrier), how });
+            } finally { carrying = false; }
+          }
           const factsDue = () => {
             const end = lastLine(card), due = dg.facts.filter(fact => { const n = sentenceAt.get(fact.sentence) ?? -1; return n > factsUpTo && n <= end; });
             factsUpTo = Math.max(factsUpTo, end);
@@ -1152,7 +1192,7 @@ export async function direct(novelDir, { reading, readingPath = null, prefilm = 
             }
             if (!targets?.length) { cardRecord.moves.push({ ...moveRecord, moved: false, why: 'no place to stand there', code: 'NO_TARGET' }); return; }
             // The key animator's move goes the way its note has in use (an ability the person's sheet gives them).
-            how2 = howFor(person, hint?.ability, how2);
+            how2 = howFor(person, hint?.ability, how2, hint?.riding);
             const path = walk(scene, slug, positions[person], targets, how2);
             moveTo(person, path, how2, path ? null : walk.failed);
             Object.assign(cardRecord.moves.at(-1), moveRecord);
@@ -1201,7 +1241,7 @@ export async function direct(novelDir, { reading, readingPath = null, prefilm = 
             const fits = node => (box ? true : node.lot === lot || Math.hypot(node.x - centre[0], node.z - centre[2]) <= radius);
             const wanted = nodes.filter(node => fits(node) && (roofward ? node.type === FA.TYPE.roof : node.type === FA.TYPE.outdoor));
             const targets = (wanted.length ? wanted : nodes.filter(fits)).sort((a, b) => Math.hypot(a.x - here[0], a.z - here[2]) - Math.hypot(b.x - here[0], b.z - here[2])).slice(0, 40).map(node => node.id);
-            const how = howFor(person, journey.ability ?? far?.ability, roofward || journey.manner === 'run' || journey.manner === 'zigzag through alleys' ? 'run' : 'walk');
+            const how = howFor(person, journey.ability ?? far?.ability, roofward || journey.manner === 'run' || journey.manner === 'zigzag through alleys' ? 'run' : 'walk', journey.riding ?? far?.riding);
             let path = targets.length ? walk(scene, `${scene.id}|${card.id}|${person}|journey`, positions[person], targets, how) : null, airborne = false;
             // A leap, flight or climb the walk graph has no way for (no air edges: tower to tower, scene 26) goes straight
             // through the air to the nearest target, recorded as such (L12 checks the ability).
@@ -1256,7 +1296,9 @@ export async function direct(novelDir, { reading, readingPath = null, prefilm = 
               if (exchange.attacker && exchange.target && positions[exchange.attacker] && positions[exchange.target]) {
                 const kind = exchange.attackKind ?? IU.attackKindOf(entry);
                 const weapons = [...things.values()].filter(thing => thing.holder === exchange.attacker).map(thing => ({ label: thing.name, attack: propOf(thing.name)?.attack ?? null })).filter(entry_ => entry_.attack);
-                const limits = AT.limitsOf(kind, { own: abilitySheet?.people?.[exchange.attacker]?.attack, weapons });
+                // The attacker's own attacks merged with what carries them (a vehicle's mounted weapon; a person lends no attack).
+                const own = MT.mergedSheet(abilitySheet?.people?.[exchange.attacker], tiesNow().filter(tie => tie.who === exchange.attacker).map(tie => ({ id: tie.on, sheet: carrierOf(tie.on) }))).attack;
+                const limits = AT.limitsOf(kind, { own, weapons });
                 const verdict = AT.attackCheck({ kind, from: at(positions[exchange.attacker][0]), to: at(positions[exchange.target][0]), limits, lots: world.lots });
                 if (verdict) { (cardRecord.laws ??= []).push({ ...verdict, who: exchange.attacker, line: exchange.sentence }); entry.attackKind = kind; entry.limits = limits; }
                 blows.push({ attacker: exchange.attacker, target: exchange.target, kind, outcome: entry.outcome ?? null, held: verdict?.verdict === 'held', ...(kind === 'area' ? { radius: limits?.radius ?? 4 } : {}), by: limits?.by ?? null });
@@ -1304,7 +1346,7 @@ export async function direct(novelDir, { reading, readingPath = null, prefilm = 
             for (const entry of mine.slice(0, 3)) {
               const target = gradedTarget(person, entry, frameHere);
               if (target === null) { cardRecord.moves.push({ person, direction: entry.motion, moved: false, why: 'digest: no spot to step to', by: 'digest' }); continue; }
-              const way = howFor(person, entry.ability, entry.how === 'run' ? 'run' : 'walk');
+              const way = howFor(person, entry.ability, entry.how === 'run' ? 'run' : 'walk', entry.riding);
               moveTo(person, walk(scene, `${scene.id}|${card.id}|${person}|${entry.sentence}|${entry.motion}`, positions[person], [target], way), way, `digest: ${moveWords(entry)}${entry.ability ? ` (${entry.ability})` : ''}`, { quiet: true });
               Object.assign(cardRecord.moves.at(-1), { direction: entry.motion, line: entry.sentence, by: 'digest' });
             }
