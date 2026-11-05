@@ -154,5 +154,7 @@ export async function readPrefilm({ reading: given, script, text, work, strandsO
 /** The pre-film casts' notes beside a reading (`dir`: the reading's v2 folder): prefilm.json, else an older casts.json, with the cast ids. */
 export async function loadPrefilm(dir) {
   const read = name => readFile(join(dir, name), 'utf8').then(JSON.parse);
-  return prefilmOf(await read('prefilm.json').catch(() => read('faculties.json')).catch(() => null));
+  // With what the text has in use (in-use.json, experiments/v2/in-use.mjs) merged into the notes, where it has been made.
+  const notes = prefilmOf(await read('prefilm.json').catch(() => read('faculties.json')).catch(() => null)), inUse = await read('in-use.json').catch(() => null);
+  return inUse ? (await import('./in-use.mjs')).withInUse(notes, inUse) : notes;
 }
