@@ -156,5 +156,9 @@ export async function loadPrefilm(dir) {
   const read = name => readFile(join(dir, name), 'utf8').then(JSON.parse);
   // With what the text has in use (in-use.json, experiments/v2/in-use.mjs) merged into the notes, where it has been made.
   const notes = prefilmOf(await read('prefilm.json').catch(() => read('faculties.json')).catch(() => null)), inUse = await read('in-use.json').catch(() => null);
-  return inUse ? (await import('./in-use.mjs')).withInUse(notes, inUse) : notes;
+  const merged = inUse ? (await import('./in-use.mjs')).withInUse(notes, inUse) : notes;
+  // And each unit's setting, the set dresser's (settings.json, experiments/v2/set-dresser.mjs).
+  const settings = await read('settings.json').catch(() => null);
+  if (merged && settings) for (const [id, entry] of Object.entries(settings.units ?? {})) if (merged.units?.[id]) merged.units[id] = { ...merged.units[id], setDresser: { setting: entry.setting, sure: entry.sure } };
+  return merged;
 }

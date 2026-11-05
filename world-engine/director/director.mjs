@@ -27,7 +27,7 @@ const { passScene } = await import('./pass.mjs');
 const { withSystem2 } = await import('./system2.mjs');
 const { writeWorldLog } = await import('../log/write-log.mjs');
 const R = await import('../review/review.mjs'), C6 = await import('../review/canon.mjs'), SM = await import('../smoother/smoother.mjs'), OC = await import('../smoother/occupation.mjs');
-const WF = await import('./workflow.mjs'), CF = await import('../crowd/field.mjs'), DG = await import('../digest/digest.mjs'), FA = await import('../digest/facts.mjs'), G = await import('./gate.mjs'), LW = await import('../laws/laws.mjs');
+const WF = await import('./workflow.mjs'), AT = await import('../laws/attacks.mjs'), IU = await import('../digest/in-use.mjs'), CF = await import('../crowd/field.mjs'), DG = await import('../digest/digest.mjs'), FA = await import('../digest/facts.mjs'), G = await import('./gate.mjs'), LW = await import('../laws/laws.mjs');
 import { copyFile } from 'node:fs/promises';
 
 const CELL = 2, FLOOR = 3, PRESENT = new Set(['speaks', 'acts', 'addressed']);
@@ -1233,6 +1233,16 @@ export async function direct(novelDir, { reading, readingPath = null, prefilm = 
               } else if (t && entry.outcome === 'dodged') {
                 const p = at(positions[exchange.target][0]), side = a ? [-(p[2] - a[2]), p[0] - a[0]] : [1, 0], d = Math.hypot(...side) || 1, aim = [p[0] + side[0] / d * 2, p[2] + side[1] / d * 2], pool = near(p, 1, 3);
                 if (pool.length) moveTo(exchange.target, walk(scene, `${scene.id}|${card.id}|${exchange.target}|dodges|${exchange.sentence}`, positions[exchange.target], [pool.reduce((x, y) => (Math.hypot(y.x - aim[0], y.z - aim[1]) < Math.hypot(x.x - aim[0], x.z - aim[1]) ? y : x)).id], 'run'), 'run', `fight: dodges ${a ? names.get(exchange.attacker) ?? exchange.attacker : ''}`.trim(), { quiet: true });
+              }
+              // L21 · Attack reach (laws/attacks.mjs): the blow as the attacker can make it, after its moves: close within
+              // reach, a line within range and clear of buildings, an explosion within its range and radius; the limits the
+              // attacker's own (the settei sheet), else a weapon they hold, else a person's.
+              if (exchange.attacker && exchange.target && positions[exchange.attacker] && positions[exchange.target]) {
+                const kind = exchange.attackKind ?? IU.attackKindOf(entry);
+                const weapons = [...things.values()].filter(thing => thing.holder === exchange.attacker).map(thing => ({ label: thing.name, attack: propOf(thing.name)?.attack ?? null })).filter(entry_ => entry_.attack);
+                const limits = AT.limitsOf(kind, { own: abilitySheet?.people?.[exchange.attacker]?.attack, weapons });
+                const verdict = AT.attackCheck({ kind, from: at(positions[exchange.attacker][0]), to: at(positions[exchange.target][0]), limits, lots: world.lots });
+                if (verdict) { (cardRecord.laws ??= []).push({ ...verdict, who: exchange.attacker, line: exchange.sentence }); entry.attackKind = kind; entry.limits = limits; }
               }
             }
           };
