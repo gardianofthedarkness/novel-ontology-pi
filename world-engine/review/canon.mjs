@@ -234,8 +234,11 @@ export async function undoCanon(novelDir, { run }) {
   const mine = log.filter(entry => entry.run === run && !entry.undo && !undone.has(`${entry.run}|${entry.file}|${entry.id}|${entry.at}`));
   if (!mine.length) return { undone: 0 };
   for (const file of new Set(mine.map(entry => entry.file))) {
-    const entries = mine.filter(entry => entry.file === file), fresh = new Set(entries.filter(entry => !entry.previous).map(entry => entry.id));
-    const kept = (await readJsonl(join(ontology, file))).filter(row => !fresh.has(row.id) || row.world?.run !== run);
+    // Every row the run wrote goes (also where the record had a row before it: a second run's rows used to stay, and the
+    // first run's undo then left them, so W10 then W11 undone left W11's 535 state changes), and each row it replaced
+    // comes back after the rest (the log folds by id, last write wins).
+    const entries = mine.filter(entry => entry.file === file), written = new Set(entries.map(entry => entry.id));
+    const kept = (await readJsonl(join(ontology, file))).filter(row => !written.has(row.id) || row.world?.run !== run);
     const restored = [...new Map(entries.filter(entry => entry.previous).map(entry => [entry.id, entry.previous])).values()];
     await writeFile(join(ontology, file), [...kept, ...restored].map(row => JSON.stringify(row)).join('\n') + (kept.length + restored.length ? '\n' : ''));
   }

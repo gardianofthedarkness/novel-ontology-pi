@@ -13,6 +13,7 @@
 // --pace: seconds the live view is given to play each move before the next question (6 with --live).
 // --stand-in answers every question by rule (no model call), for trying the loop; without it Jev is asked (paid).
 import { appendFile, mkdir, readFile, writeFile } from 'node:fs/promises';
+import { existsSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { parseArgs } from 'node:util';
@@ -1677,8 +1678,39 @@ export async function direct(novelDir, { reading, readingPath = null, prefilm = 
 }
 
 if (process.argv[1] === fileURLToPath(import.meta.url)) {
-  const { values, positionals: [novelDir] } = parseArgs({ allowPositionals: true, options: { reading: { type: 'string' }, from: { type: 'string' }, to: { type: 'string' }, budget: { type: 'string' }, 'stand-in': { type: 'boolean' }, live: { type: 'boolean' }, pace: { type: 'string' }, agent: { type: 'string' }, 'no-digest': { type: 'boolean' }, 'no-speakers': { type: 'boolean' }, 'live-test': { type: 'boolean' }, 'no-prefilm': { type: 'boolean' }, 'no-faculties': { type: 'boolean' } } });
-  if (!novelDir || !values.reading || !values.from || !values.to) { console.error('usage: node world-engine/director/director.mjs <novel-dir> --reading <data.json> --from <scene> --to <scene> [--budget 60] [--stand-in] [--live]'); process.exit(2); }
+  const { values, positionals: [novelDir] } = parseArgs({ allowPositionals: true, options: { reading: { type: 'string' }, from: { type: 'string' }, to: { type: 'string' }, budget: { type: 'string' }, 'stand-in': { type: 'boolean' }, live: { type: 'boolean' }, pace: { type: 'string' }, agent: { type: 'string' }, 'no-digest': { type: 'boolean' }, 'no-speakers': { type: 'boolean' }, 'live-test': { type: 'boolean' }, 'no-prefilm': { type: 'boolean' }, 'no-faculties': { type: 'boolean' }, 'from-last': { type: 'boolean' }, 'discard-edits': { type: 'boolean' }, 'keep-edits': { type: 'boolean' }, 'no-snapshots': { type: 'boolean' } } });
+  // The universe's snapshots (src/ground/workspace/universe.ts; the user, 2026-11-05: "rerunning a previous volume returns to
+  // the snapshot before that volume to recover clean status"). In a library, a book's first run is preceded by its `before`
+  // snapshot; a rerun starts from that `before` (W11 had started on W10's smoothing, and played worse for it), unless
+  // --from-last asks for a second pass on the last run. What changed since the book's last snapshot (an unfinished run, or
+  // edits by hand) is never dropped silently: --discard-edits drops it (a guard snapshot still holds it), --keep-edits
+  // makes it the new `before`. After the run, its result is snapshotted (`after`), ready for novel universe export.
+  const U = await load('dist/src/ground/workspace/universe.js'), library = novelDir ? U.libraryOf(resolve(novelDir)) : null;
+  // A library's book reads its own reading (vol-<n>/reading/data.json) when none is named.
+  if (!values.reading && library?.book && existsSync(U.libraryPaths(library.root).book(library.book).reading.data)) values.reading = U.libraryPaths(library.root).book(library.book).reading.data;
+  if (!novelDir || !values.reading || !values.from || !values.to) { console.error('usage: node world-engine/director/director.mjs <novel-dir> --reading <data.json> --from <scene> --to <scene> [--budget 60] [--stand-in] [--live] [--from-last] [--discard-edits|--keep-edits] [--no-snapshots]'); process.exit(2); }
+  let before = null;
+  if (library?.book && !values['no-snapshots']) {
+    const book = library.book;
+    before = await U.latestSnapshot(library.root, { book, kind: 'before' });
+    // At a snapshot (any: a restore by hand leaves it at an older one) nothing is lost; else what changed since the last.
+    const at = before ? await U.matchingSnapshot(library.root) : null, last = before && !at ? await U.latestSnapshot(library.root, { book, not: ['guard'] }) : null;
+    const changed = last ? await U.changesSince(library.root, last.id) : [];
+    if (changed.length && values['keep-edits']) {
+      before = await U.takeSnapshot(library.root, { book, kind: 'before', parent: before.id, why: `edits kept for ${book}'s reruns: ${changed.slice(0, 6).map(entry => entry.path.replace(`${book}/novel/`, '')).join(', ')}${changed.length > 6 ? ` and ${changed.length - 6} more` : ''}` });
+      console.error(`snapshot ${before.id}: the edits since ${last.id} kept; ${book}'s reruns start here`);
+    } else if (changed.length && !values['discard-edits'] && !values['from-last']) {
+      console.error(`${book} changed since its snapshot ${last.id} (an unfinished run, or edits): ${changed.length} files, ${changed.slice(0, 8).map(entry => `${entry.path} (${entry.change})`).join(', ')}${changed.length > 8 ? ' …' : ''}`);
+      console.error('  --keep-edits makes them the start of this and later reruns; --discard-edits starts from the clean snapshot (a guard snapshot keeps them); --from-last plays on from them');
+      process.exit(2);
+    }
+    if (!before) { before = await U.takeSnapshot(library.root, { book, kind: 'before', why: `before ${book}'s first run` }); console.error(`snapshot ${before.id}: ${book} before its first run`); }
+    else if (values['from-last']) console.error(`--from-last: ${book} plays on from where its last run left it (a second pass), not from ${before.id}`);
+    else {
+      const restored = await U.restoreSnapshot(library.root, before.id, { why: `a rerun of ${book}` });
+      console.error(`restored ${before.id}: ${restored.written} files written, ${restored.removed} set aside${restored.guard ? ` (what it replaced is ${restored.guard})` : ''}`);
+    }
+  }
   const reading = JSON.parse(await readFile(values.reading, 'utf8'));
   let jev = standIn();
   if (!values['stand-in']) {
@@ -1706,6 +1738,11 @@ if (process.argv[1] === fileURLToPath(import.meta.url)) {
     const prefilm = values['no-prefilm'] || values['no-faculties'] ? null : await (await import('../digest/prefilm.mjs')).loadPrefilm(dirname(resolve(values.reading)));
     if (prefilm) console.error(`pre-film casts' notes from the reading step: ${Object.keys(prefilm.units ?? {}).length} units${prefilm.standIn ? ' (made by a stand-in)' : ''}`);
     const { record } = await direct(resolve(novelDir), { reading, readingPath: values.reading, prefilm, agent, digest: !values['no-digest'], speakers: !values['no-speakers'], from: values.from, to: values.to, jev, workModel, budget: values.budget ? Number(values.budget) : Infinity, live, pace: values.pace ? Number(values.pace) : values.live ? 6 : 0 });
+    if (library?.book && !values['no-snapshots']) {
+      const run = `d${String(record.startedAt).replace(/\D/g, '').slice(0, 14)}`, mode = values['stand-in'] ? 'a stand-in run' : values['from-last'] ? 'a second pass' : 'a run';
+      const after = await U.takeSnapshot(library.root, { book: library.book, kind: 'after', run, parent: before?.id ?? null, why: `${mode} of ${library.book}, ${values.from} to ${values.to}` });
+      console.error(`snapshot ${after.id}: what ${run} left (novel universe export ${library.root} ${after.id} <out.tgz> shares it)`);
+    }
     const moves = record.scenes.flatMap(scene => scene.cards.flatMap(card => card.moves));
     const second = record.scenes.flatMap(scene => [...(scene.system2 ?? []), ...scene.cards.flatMap(card => card.system2 ?? [])]);
     console.error(`system 2: ran on ${second.length} answers, the work model's used for ${second.filter(entry => entry.used === 'work').length}, differing from Jev's on ${second.filter(entry => entry.work && String(entry.work.value) !== String(entry.jev.value)).length}`);

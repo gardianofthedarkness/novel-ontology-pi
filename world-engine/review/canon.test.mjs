@@ -36,6 +36,17 @@ test('a run\'s writes to canon are logged and undone: an existing record back to
   assert.equal((await lines('scenes.jsonl')).at(-1).locationId, null, 'the scene as it was');
   assert.deepEqual((await lines('state-changes.jsonl')).map(row => row.id), ['sc_old'], 'the new record taken out, the old kept');
   assert.deepEqual(await undoCanon(dir, { run: 'r' }), { undone: 0 }, 'undone once');
+  // Two runs on the same records (W10 then W11), undone newest first: the canon as before either (the second run's rows
+  // used to stay, since the records had rows before it).
+  const original = { scenes: await readFile(join(dir, 'ontology', 'scenes.jsonl'), 'utf8') };
+  await write(['stage', 'world', 'ledger', 'r2.jsonl'], input.ledger);
+  await toCanon(dir, { run: 'r', reading }); await toCanon(dir, { run: 'r2', reading });
+  assert.equal((await lines('state-changes.jsonl')).filter(row => row.world?.run === 'r2').length, 1);
+  await undoCanon(dir, { run: 'r2' }); await undoCanon(dir, { run: 'r' });
+  const fold = rows => [...new Map(rows.map(row => [row.id, row])).values()];
+  assert.deepEqual((await lines('state-changes.jsonl')).map(row => row.id), ['sc_old'], 'neither run\'s state changes left');
+  assert.deepEqual(fold(await lines('scenes.jsonl')), fold(original.scenes.trim().split('\n').map(line => JSON.parse(line))), 'the scenes as they were');
+  assert.ok(!(await lines('timelines.jsonl').catch(() => [])).some(row => row.world), 'neither run\'s timelines left');
 });
 
 test('speakers settled by the world: Jev\'s unsure guess there; the only speaker; a guess from elsewhere held; an audit\'s no rules one out', async () => {

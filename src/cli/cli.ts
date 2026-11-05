@@ -27,6 +27,7 @@ import {
 import { llmPing, llmProbe } from "./commands/shared/llmCommands.js";
 import { ingestNovel } from "./commands/extract/ingestCommands.js";
 import { libraryCommand } from "./commands/extract/libraryCommands.js";
+import { universeCommand } from "./commands/extract/universeCommands.js";
 import { emShow, emSweep } from "./commands/extract/emCommands.js";
 import { calendarCommand } from "./commands/extract/calendarCommands.js";
 import {
@@ -79,6 +80,10 @@ const COMMANDS: Record<string, string> = {
   "novel review show|evidence|decide|apply <root> <packet> --scope book|universe|library [--universe <id>]": "One semantic gate for every faculty: paged assertions/evidence, revision-bound accept|hold|reject, staged decisions, explicit apply. Evidence uses --fact; mutations use --revision; decide uses --decisions '<JSON>'. Unreviewed assertions remain held.",
   "novel init <path>": "Create a novel workspace + bundle manifest",
   "novel library init <library-dir>": "Create a private, versioned multi-file library; no model calls",
+  "novel universe snapshots|snapshot|status|restore <library> ...": "A universe's snapshots: one before each book's first run (where a rerun starts) and one after each run; restore puts a snapshot back (what it replaces is snapshotted first)",
+  "novel universe export <library> <snapshot> <out.tgz>": "Pack a run's result (with the snapshot before it) for another user; the books' text is not included",
+  "novel universe import <bundle> <library> [--source vol-<n>=<file>]": "Start a universe from another user's bundle; your copy of each book is checked by sha256",
+  "novel universe paths|adopt <library>": "The library's fixed paths; adopt gives a library made before snapshots its first ones",
   "novel library add <library-dir> <file.epub|file.txt> [--title <title>]": "Register an immutable source by content hash; identical files deduplicate",
   "novel library show <library-dir> [--series <id> | --universe <id> | --continuity <id>]": "Inspect source identities, reviewed organization and reading order; scoped results exclude unresolved assignments",
   "novel library evidence <library-dir> <source-id> [--offset N --limit N]": "Read up to 2000 original-language characters for organization evidence; no model calls",
@@ -250,6 +255,11 @@ async function main(): Promise<void> {
 
   if (cmd === "library") {
     out(await libraryCommand(positional.slice(1)), pretty);
+    return;
+  }
+
+  if (cmd === "universe") {
+    out(await universeCommand(positional.slice(1)), pretty);
     return;
   }
 

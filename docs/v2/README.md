@@ -28,6 +28,7 @@ Read them by the sections named here rather than from the top.
 | [schema.yaml](schema.yaml) | The reading's output files, field by field |
 | [concepts.html](concepts.html) | Every concept in its stage and layer, with its code and its design (made from `src/v2/concepts.ts`) |
 | [street-compatibility.html](street-compatibility.html) | Which street kinds share ground, which uses their buildings take, which models stand for them (made from the code's tables) |
+| [universe-snapshots.md](universe-snapshots.md) | A universe's library: its fixed paths, a snapshot before each book's first run (where a rerun starts) and after each run, sharing a run's result with another user (`novel universe`) |
 | [world-engine.html](world-engine.html) | The reader's version of the journal up to the terrain's start |
 
 ## Stage 1: Extraction — done
