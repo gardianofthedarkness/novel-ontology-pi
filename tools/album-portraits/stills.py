@@ -33,7 +33,7 @@ def main() -> int:
     pictures = [p for p in pictures if p["kind"] in kinds]
 
     from PIL import Image, ImageDraw, ImageFont
-    from imgutils.detect import detect_heads
+    from imgutils.detect import detect_heads, detect_faces
     from rapidocr_onnxruntime import RapidOCR
     ocr = RapidOCR()
     out = []
@@ -44,6 +44,15 @@ def main() -> int:
         img = Image.open(path).convert("RGB"); w, h = img.size
         frac = lambda x0, y0, x1, y1: {"left": round(x0 / w, 3), "top": round(y0 / h, 3), "right": round(x1 / w, 3), "bottom": round(y1 / h, 3)}
         heads = sorted([(box, float(score)) for box, _label, score in detect_heads(img) if float(score) >= args.min_face], key=lambda entry: (entry[0][0] + entry[0][2]) / 2)
+        # Front faces only (the user, 2026-11-05: "we can leave out if it's not the front face"): a head with a face found
+        # in it (the anime face detector finds faces turned to the viewer, not the back or the top of a head). Heads turned
+        # away are counted, never asked who they are, and never a reference.
+        found = [b for b, _l, score in detect_faces(img, conf_threshold=0.3)]
+        def front(box):
+            x0, y0, x1, y1 = box
+            return any(x0 <= (f[0] + f[2]) / 2 <= x1 and y0 <= (f[1] + f[3]) / 2 <= y1 for f in found)
+        turned = [entry for entry in heads if not front(entry[0])]
+        heads = [entry for entry in heads if front(entry[0])]
         faces = [{"letter": LETTERS[k], "box": frac(*box), "score": round(score, 3)} for k, (box, score) in enumerate(heads[: len(LETTERS)])]
         result, _ = ocr(str(path))
         texts = []
@@ -77,7 +86,7 @@ def main() -> int:
             crop = img.crop(box); crop.thumbnail((SHEET_SIDE // 2, SHEET_SIDE // 2))
             square = Image.new("RGB", (SHEET_SIDE // 2, SHEET_SIDE // 2), (255, 255, 255)); square.paste(crop, ((square.width - crop.width) // 2, (square.height - crop.height) // 2))
             face["crop"] = str(sheets / f"{picture['id']}-{face['letter']}.png"); square.save(face["crop"])
-        out.append({"id": picture["id"], "kind": picture["kind"], "size": [w, h], "faces": faces, "texts": texts, "sheet": str(target)})
+        out.append({"id": picture["id"], "kind": picture["kind"], "size": [w, h], "faces": faces, "turnedAway": len(turned), "texts": texts, "sheet": str(target)})
     # The gallery: each bound portrait (ontology/portraits.jsonl, the first of each person), labelled P1, P2 … in a row.
     gallery, records = [], []
     portraits_file = album / "ontology" / "portraits.jsonl"

@@ -132,6 +132,7 @@ export function stillsBrief({ reading, text, picture, prep, gallery = [], notes 
       where: whereIn(face.box), height: `${Math.round((face.box.bottom - face.box.top) * 100)}% of the picture`,
       ...(face.match ? { portraitMatch: Object.entries(face.match).filter(([id]) => people.includes(id)).sort((a, b) => a[1] - b[1]).slice(0, 3).map(([id, difference]) => ({ who: id, difference, against: String(face.matchBy?.[id] ?? '').startsWith('face:') ? 'a face of theirs confirmed in another of the book\'s pictures' : 'their portrait', verdict: threshold === null ? null : difference <= threshold ? 'same character' : difference <= threshold * 1.4 ? 'close' : 'unlike' })) } : {}),
     }])),
+    ...(prep.turnedAway ? { turnedAway: `${prep.turnedAway} more ${prep.turnedAway === 1 ? 'person' : 'people'} with their face turned away (not lettered, not asked)` } : {}),
     texts: Object.fromEntries(prep.texts.map(entry => [entry.ref, { text: entry.text, where: whereIn(entry.box) }])),
     people: Object.fromEntries(people.map(id => [id, { name: names.get(id), ...(portraitOf.has(id) ? { portrait: portraitOf.get(id) } : {}), ...(referenceOf.has(id) ? { reference: referenceOf.get(id) } : {}), ...(introOf.get(id) ? { introduced: clip(introOf.get(id), 80) } : {}), ...(evidence[id]?.looks.length ? { looks: evidence[id].looks } : {}), ...(evidence[id]?.facts.length ? { facts: evidence[id].facts } : {}) }])),
     groups: recentGroups({ reading, people, unitIndex: at }),

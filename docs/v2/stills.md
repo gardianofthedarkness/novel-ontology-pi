@@ -104,6 +104,12 @@ reference from its own picture. The runner asks once with the references the uni
 faces, it asks again with them. Each candidate's nearest confirmed face goes to Jev beside their portrait
 (`reference_<id>`).
 
+**Front faces only** (the user, 2026-11-05: *"we can leave out if it's not the front face. We include the front faces in
+the characters gallery"*). A head counts when the anime face detector (imgutils `detect_faces`, on the whole picture) finds a
+face inside it; a back or a head turned away is counted (`turnedAway`), never lettered, asked about, or kept as a
+reference. Vol 1: ill_0012 keeps Index, Kamijou and the short-haired girl and leaves out the fur-coated figure's back and
+Accelerator turned away; ill_0015 leaves one out.
+
 **One person once in a moment.** Two faces named the same person, in the same card, in a one-moment picture, or side by side,
 keep the surer name; the other is left unnamed (`twinOf`). Kamijou's four confirmed faces made the matcher read Anna's face,
 touching his in the last picture, as his.
