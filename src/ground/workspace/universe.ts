@@ -124,7 +124,8 @@ const ALBUM = /^vol-[^/]+\/(?:novel\/(?:assets\/|ontology\/(?:illustrations\.jso
 
 /** How a library-relative path is kept: tracked state, a run's own file, derived (never kept), or the book's text. */
 export function classify(rel: string): { kind: Kind; run?: string } {
-  if (/^vol-[^/]+\/novel\/source\//.test(rel) || ALBUM.test(rel)) return { kind: "source" };
+  // The universe's face store (experiments/v2/stills.mjs): faces cut from the books' pictures, the books' art.
+  if (/^vol-[^/]+\/novel\/source\//.test(rel) || ALBUM.test(rel) || /^universe\/faces\//.test(rel)) return { kind: "source" };
   if (DERIVED.some(rule => rule.test(rel))) return { kind: "derived" };
   for (const rule of RUN_FILES) { const found = rel.match(rule); if (found) return { kind: "run", run: found[1] }; }
   return { kind: "state" };

@@ -82,7 +82,35 @@ export function recentGroups({ reading, people, unitIndex, back = 40, most = 6 }
   return [...groups.values()].sort((a, b) => a.before - b.before || b.units - a.units).slice(0, most).map(({ people: who, units, last, before }) => ({ people: who, units, last, ...(before < 0 ? { after: -before } : { before }) }));
 }
 
+/**
+ * The confirmed references nearest this picture's faces, one a candidate (a face of theirs named surely in another of the
+ * book's pictures, as the matcher found it nearest one of this picture's faces): sent as `reference_<id>`.
+ */
+export function nearestReferences(prep) {
+  const best = new Map();
+  for (const face of prep.faces) for (const [id, difference] of Object.entries(face.match ?? {})) {
+    const ref = face.matchBy?.[id];
+    if (!String(ref ?? '').startsWith('face:')) continue;
+    if (!best.has(id) || difference < best.get(id).difference) best.set(id, { ref, difference });
+  }
+  return best;
+}
+
+/**
+ * A face named surely enough to be a reference for others (ground truth for the matcher): Jev's answer at `least` or
+ * surer, and the matcher agreeing (the person Jev named is its nearest, or within its close range). Two signals, so one
+ * sure mistake does not become a reference (vol 1's ill_0015: the matcher sure Anna's face was Kamijou's; Jev not).
+ */
+export function confirmedFaces(note, prep, { least = 0.85, threshold = 0.178 } = {}) {
+  return note.faces.filter(face => {
+    if (!face.who?.startsWith('char_') || face.sure < least) return false;
+    const match = prep.faces.find(entry => entry.letter === face.letter)?.match ?? {}, ranked = Object.entries(match).sort((a, b) => a[1] - b[1]);
+    return ranked[0]?.[0] === face.who || (match[face.who] ?? Infinity) <= threshold * 1.4;
+  }).map(face => ({ entityId: face.who, picture: note.id, letter: face.letter, sure: face.sure, difference: prep.faces.find(entry => entry.letter === face.letter)?.match?.[face.who] ?? null }));
+}
+
 export function stillsBrief({ reading, text, picture, prep, gallery = [], notes = null, intro = null, window = 2, most = 160, threshold = null }) {
+  const referenceOf = new Map([...nearestReferences(prep).keys()].map(id => [id, `reference_${id}`]));
   const unitOf = new Map(reading.scenes.flatMap(scene => scene.sentences.map(id => [id, scene.id])));
   const at = Math.max(0, reading.scenes.findIndex(scene => scene.id === unitOf.get(picture.sentenceId)));
   const units = reading.scenes.slice(Math.max(0, at - window), at + window + 1), inUnits = new Set(units.map(unit => unit.id));
@@ -102,10 +130,10 @@ export function stillsBrief({ reading, text, picture, prep, gallery = [], notes 
     // difference, under its threshold the same character; the nearest three.
     faces: Object.fromEntries(prep.faces.map(face => [face.letter, {
       where: whereIn(face.box), height: `${Math.round((face.box.bottom - face.box.top) * 100)}% of the picture`,
-      ...(face.match ? { portraitMatch: Object.entries(face.match).filter(([id]) => people.includes(id)).sort((a, b) => a[1] - b[1]).slice(0, 3).map(([id, difference]) => ({ who: id, difference, verdict: threshold === null ? null : difference <= threshold ? 'same character' : difference <= threshold * 1.4 ? 'close' : 'unlike' })) } : {}),
+      ...(face.match ? { portraitMatch: Object.entries(face.match).filter(([id]) => people.includes(id)).sort((a, b) => a[1] - b[1]).slice(0, 3).map(([id, difference]) => ({ who: id, difference, against: String(face.matchBy?.[id] ?? '').startsWith('face:') ? 'a face of theirs confirmed in another of the book\'s pictures' : 'their portrait', verdict: threshold === null ? null : difference <= threshold ? 'same character' : difference <= threshold * 1.4 ? 'close' : 'unlike' })) } : {}),
     }])),
     texts: Object.fromEntries(prep.texts.map(entry => [entry.ref, { text: entry.text, where: whereIn(entry.box) }])),
-    people: Object.fromEntries(people.map(id => [id, { name: names.get(id), ...(portraitOf.has(id) ? { portrait: portraitOf.get(id) } : {}), ...(introOf.get(id) ? { introduced: clip(introOf.get(id), 80) } : {}), ...(evidence[id]?.looks.length ? { looks: evidence[id].looks } : {}), ...(evidence[id]?.facts.length ? { facts: evidence[id].facts } : {}) }])),
+    people: Object.fromEntries(people.map(id => [id, { name: names.get(id), ...(portraitOf.has(id) ? { portrait: portraitOf.get(id) } : {}), ...(referenceOf.has(id) ? { reference: referenceOf.get(id) } : {}), ...(introOf.get(id) ? { introduced: clip(introOf.get(id), 80) } : {}), ...(evidence[id]?.looks.length ? { looks: evidence[id].looks } : {}), ...(evidence[id]?.facts.length ? { facts: evidence[id].facts } : {}) }])),
     groups: recentGroups({ reading, people, unitIndex: at }),
     units: Object.fromEntries(units.map(unit => [unit.id, {
       ...(unit.id === unitOf.get(picture.sentenceId) ? { picture: `stands after ${picture.sentenceId}` } : {}),
@@ -165,6 +193,18 @@ export function stillsNote({ picture, prep, replies, cards, text, unitOf, galler
     const match = face.match ? Object.entries(face.match).sort((a, b) => a[1] - b[1])[0] : null;
     return { letter: face.letter, box: face.box, who: person, sure: who?.sure ?? 0, by: who?.by ?? null, said: who?.value ?? null, matcher: match ? { who: match[0], difference: match[1] } : null, card, unit: unitOfCard(card) };
   });
+  // One person is in one moment once: two faces of the same moment named the same person keep the surer, the other is
+  // left unnamed (vol 1: Kamijou's four confirmed faces made the matcher read Anna's face, touching his, as his).
+  // One moment: the same card, a picture of one moment, or faces side by side (within one and a half faces).
+  const oneMoment = (a, b) => {
+    if (a.card === b.card || kind?.value === 'moment') return true;
+    const size = ((a.box.bottom - a.box.top) + (b.box.bottom - b.box.top)) / 2;
+    return Math.hypot((a.box.left + a.box.right - b.box.left - b.box.right) / 2, (a.box.top + a.box.bottom - b.box.top - b.box.bottom) / 2) <= 1.5 * size;
+  };
+  for (const face of faces) {
+    const twin = faces.find(other => other !== face && other.who && other.who === face.who && oneMoment(face, other) && (other.sure > face.sure || (other.sure === face.sure && other.letter < face.letter)));
+    if (face.who && twin) { face.twinOf = twin.letter; face.who = null; }
+  }
   // Together: two people the picture shows in the same moment are there together, whatever the world had (the user,
   // 2026-11-05: "implying they are together when the world doesn't"); close where their faces are within two and a half faces.
   const near = [];

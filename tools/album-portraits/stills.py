@@ -24,6 +24,7 @@ def main() -> int:
     ap.add_argument("--kinds", default="story")
     ap.add_argument("--min-face", type=float, default=0.45)
     ap.add_argument("--min-text", type=float, default=0.6)
+    ap.add_argument("--references", help="faces confirmed before (JSON list of {id, entityId, path, picture}): matched as the portraits are")
     args = ap.parse_args()
     album = Path(args.album_dir).resolve()
     sheets = Path(args.sheets).resolve(); sheets.mkdir(parents=True, exist_ok=True)
@@ -108,24 +109,37 @@ def main() -> int:
     # Each face scored against each portrait by an anime character matcher (imgutils CCIP: contrastive character image
     # embeddings; its weights download on first use): the difference of their vectors, under the model's threshold the
     # same character. The face is taken with a little of the head round it, as the portraits are cropped.
+    # The references each face is matched against (the user, 2026-11-05: "an automatic portrait match system sampling from
+    # ground truth"): the plates' portraits, and the faces confirmed before (--references: named surely in a story picture,
+    # black and white as the story pictures are; a universe's books share them). A face is never matched against a
+    # reference from its own picture.
+    references = [{"id": f"portrait:{record['entityId']}", "entityId": record["entityId"], "path": str((album / record["portrait"]).resolve()), "picture": None} for record in records]
+    if args.references:
+        references += [entry for entry in json.loads(Path(args.references).read_text(encoding="utf8")) if Path(entry["path"]).is_file()]
     threshold = None
-    if records:
+    if references:
         from imgutils.metrics import ccip_batch_differences, ccip_default_threshold
         threshold = float(ccip_default_threshold())
-        portrait_images = [Image.open((album / record["portrait"]).resolve()).convert("RGB") for record in records]
+        reference_images = [Image.open(entry["path"]).convert("RGB") for entry in references]
         for picture_out in out:
             if not picture_out["faces"]: continue
             img = Image.open((album / next(p["asset"] for p in pictures if p["id"] == picture_out["id"])).resolve()).convert("RGB"); w, h = img.size
             crops = []
             for face in picture_out["faces"]:
                 b = face["box"]; fw, fh = (b["right"] - b["left"]) * w, (b["bottom"] - b["top"]) * h
-                crops.append(img.crop((max(0, int(b["left"] * w - 0.25 * fw)), max(0, int(b["top"] * h - 0.25 * fh)), min(w, int(b["right"] * w + 0.25 * fw)), min(h, int(b["bottom"] * h + 0.25 * fh)))))
+                crop = img.crop((max(0, int(b["left"] * w - 0.25 * fw)), max(0, int(b["top"] * h - 0.25 * fh)), min(w, int(b["right"] * w + 0.25 * fw)), min(h, int(b["bottom"] * h + 0.25 * fh))))
+                # The crop matched is the one a confirmed face is kept as (the same framing as the references).
+                face["matchCrop"] = str(sheets / f"{picture_out['id']}-{face['letter']}-match.png"); crop.save(face["matchCrop"]); crops.append(crop)
             # The model's own difference of every pair (its metric over the two features); under the threshold, the same character.
-            differences = ccip_batch_differences(portrait_images + crops)
+            differences = ccip_batch_differences(reference_images + crops)
             for k, face in enumerate(picture_out["faces"]):
-                row = differences[len(records) + k]
-                face["match"] = {record["entityId"]: round(float(row[j]), 4) for j, record in enumerate(records)}
-    print(json.dumps({"pictures": out, "gallery": gallery, "gallerySheet": str(sheets / "gallery.png") if gallery else None, "matchThreshold": threshold}, ensure_ascii=False))
+                row, best, by = differences[len(references) + k], {}, {}
+                for j, entry in enumerate(references):
+                    if entry.get("picture") == picture_out["id"]: continue
+                    value = round(float(row[j]), 4)
+                    if entry["entityId"] not in best or value < best[entry["entityId"]]: best[entry["entityId"]], by[entry["entityId"]] = value, entry["id"]
+                face["match"], face["matchBy"] = best, by
+    print(json.dumps({"pictures": out, "gallery": gallery, "gallerySheet": str(sheets / "gallery.png") if gallery else None, "matchThreshold": threshold, "references": [{"id": entry["id"], "entityId": entry["entityId"], "path": entry["path"], "picture": entry["picture"]} for entry in references]}, ensure_ascii=False))
     return 0
 
 

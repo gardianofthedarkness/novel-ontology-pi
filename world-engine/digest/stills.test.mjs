@@ -71,3 +71,19 @@ test("each candidate's own evidence: the book's words of looks beside their name
   assert.deepEqual(out.char_2.facts, [words.s3]);
   assert.deepEqual(out.char_1.looks, [], 'no word of looks beside his name');
 });
+
+test('ground truth for the matcher: a face is a reference only when Jev is sure and the matcher agrees; one person once in a moment', async () => {
+  const { confirmedFaces, nearestReferences } = await import('./stills.mjs');
+  const prep = { faces: [
+    { letter: 'A', box: { left: 0.1, top: 0.1, right: 0.3, bottom: 0.3 }, match: { char_1: 0.10, char_2: 0.30 }, matchBy: { char_1: 'face:vol-1/ill_0008/B', char_2: 'portrait:char_2' } },
+    { letter: 'B', box: { left: 0.25, top: 0.12, right: 0.45, bottom: 0.32 }, match: { char_1: 0.12, char_2: 0.20 }, matchBy: { char_1: 'face:vol-1/ill_0014/A', char_2: 'portrait:char_2' } },
+  ], texts: [] };
+  const replies = [{ key: 'kind', value: 'moments', confidence: 0.8 }, { key: 'card', value: 'c1', confidence: 0.5 },
+    { key: 'who:A', value: 'char_1', confidence: 0.99 }, { key: 'card:A', value: 'c1', confidence: 0.5 }, { key: 'who:B', value: 'char_1', confidence: 0.7 }, { key: 'card:B', value: 'c2', confidence: 0.5 }];
+  const note = stillsNote({ picture: { id: 'ill_0015', sentenceId: 's1' }, prep, replies, cards: [], text: () => '', unitOf: () => 'u1' });
+  assert.deepEqual(note.faces.map(face => [face.letter, face.who, face.twinOf ?? null]), [['A', 'char_1', null], ['B', null, 'A']], 'side by side: two faces are two people; the surer keeps the name');
+  assert.deepEqual(confirmedFaces(note, prep).map(face => [face.letter, face.entityId]), [['A', 'char_1']], 'sure, and the matcher agrees');
+  const doubtful = stillsNote({ picture: { id: 'x', sentenceId: 's1' }, prep, replies: [{ key: 'who:A', value: 'char_2', confidence: 0.95 }], cards: [], text: () => '', unitOf: () => null });
+  assert.deepEqual(confirmedFaces(doubtful, prep), [], 'Jev sure, the matcher not: no reference');
+  assert.deepEqual([...nearestReferences(prep)], [['char_1', { ref: 'face:vol-1/ill_0008/B', difference: 0.1 }]], 'the nearest confirmed face of each candidate, never a portrait');
+});

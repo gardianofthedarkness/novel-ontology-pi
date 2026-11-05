@@ -77,6 +77,7 @@ Measured on the 14 faces of vol 1 checked by eye:
 | the portrait gallery asked first | 11 | 1 | 2 |
 | + matcher, looks and facts, groups (gallery first) | 11 | 3 | 0 |
 | one decision with everything, portraits as their own pictures | 11 | 2 | 1 |
+| + references from confirmed faces, one person once in a moment | 11 | 1 | 2 |
 
 In the last, every face outside ill_0011 is right (11 of 11); ill_0011 (a posed black-and-white picture: Index with a cat
 and a parfait, the two Misakas) is wrong on all three, and every signal points away there (the matcher ranks Index third;
@@ -92,5 +93,24 @@ Accelerator right (Accelerator in its own moment, the anchor's sentence), the sh
 goggled Misaka 10032 right, Index named Kamijou (wrong), Misaka left unnamed; ill_0014's Kamijou right. Card answers are
 unsure (0.2–0.56: many cards to choose from), settings mostly not shown; 2 picture facts.
 
-**Next:** portraits sampled from the book's own confirmed faces (black and white, as the story pictures are), not only the
-colour plates: a face named surely in one picture becomes a reference for the next, and a universe's books share them.
+## References sampled from ground truth
+
+The user, 2026-11-05: *"yes build it next"*. The matcher compares a face with every reference of each candidate, not only
+their colour plate: the faces confirmed in the book's own pictures, black and white as the story pictures are, kept in the
+universe's face store (`<library>/universe/faces/`: the crop the matcher compares, a square copy for Jev, `faces.json`;
+the books' art, never exported). A face is a reference only on two signals (`confirmedFaces`): Jev at 0.85 or surer, and
+the matcher agreeing (the person Jev named is its nearest, or within its close range); a face is never matched against a
+reference from its own picture. The runner asks once with the references the universe has; when that pass confirms new
+faces, it asks again with them. Each candidate's nearest confirmed face goes to Jev beside their portrait
+(`reference_<id>`).
+
+**One person once in a moment.** Two faces named the same person, in the same card, in a one-moment picture, or side by side,
+keep the surer name; the other is left unnamed (`twinOf`). Kamijou's four confirmed faces made the matcher read Anna's face,
+touching his in the last picture, as his.
+
+Vol 1: the first pass confirmed 8 faces, a second Misaka's in ill_0011, 9 references in all, every one right. On the 14 faces
+checked by eye: 11 right, 1 wrong, 2 unnamed (before: 11, 2, 1). Misaka in ill_0011 is now found (89%, the matcher 0.134
+against her confirmed black-and-white faces); Index there is still read as Kamijou.
+
+**Next:** a later book's run starts with this book's references; references for people with none yet (Index in black and
+white) come only when one of her faces is confirmed.
