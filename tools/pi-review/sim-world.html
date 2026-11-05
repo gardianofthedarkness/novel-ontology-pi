@@ -18,6 +18,16 @@
   .counts { font-variant-numeric: tabular-nums; color: var(--dim); font-size: 11px; }
   .empty { position: fixed; inset: 0; display: grid; place-items: center; color: var(--dim); }
   .strands { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 6px; }
+  /* The strands as a tree on story time (the user, 2026-11-04): each strand a lane, each unit a bar where it stands on the
+     story's clock (in the time tree's order), a branch where a strand comes off another, the line where the shown card is. */
+  .strands.tree { display: block; }
+  .strands.tree svg { display: block; width: 100%; height: auto; touch-action: manipulation; overflow: visible; }
+  .strands.tree .lane { cursor: pointer; } .strands.tree .lane:focus { outline: none; } .strands.tree .lane:focus-visible .hit { stroke: var(--accent); stroke-width: .8; }
+  .strands.tree .axis { display: flex; justify-content: space-between; font-size: 10px; color: var(--dim); margin-top: 2px; }
+  /* Folding the panel (a phone: folded at first): only its first lines stay. */
+  .hud h1 { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+  .hud h1 .fold { font: inherit; font-size: 11px; letter-spacing: 0; text-transform: none; color: var(--dim); background: none; border: 1px solid var(--line); border-radius: 99px; padding: 2px 9px; cursor: pointer; }
+  .hud.folded .strands, .hud.folded .tline, .hud.folded .counts, .hud.folded #ground { display: none !important; }
   .strands button { font-size: 11px; padding: 2px 8px; border-radius: 99px; display: inline-flex; gap: 5px; align-items: center; }
   .strands .chip { width: 8px; height: 8px; border-radius: 2px; display: inline-block; }
   .strands .now { color: #7dffa4; } .strands .near { color: #f2c66d; }
@@ -174,7 +184,7 @@
 <body>
 <div class="empty" id="empty">Waiting for the engine to play a moment…</div>
 <section class="hud" aria-live="polite">
-  <h1>World · live</h1>
+  <h1><span>World · live</span><button class="fold" id="fold" type="button" aria-expanded="true" aria-controls="strands">Fold ▴</button></h1>
   <div class="row" id="where"></div>
   <div class="counts" id="ground"></div>
   <div class="jev" id="jev"></div>
@@ -399,16 +409,73 @@
   const forkOfCard = (card) => unitOf.get(card.scene)?.fork ?? card.scene, clockOf = (card) => unitOf.get(card.scene)?.clock ?? [Infinity, Infinity];
   const sendAll = (message) => { for (const frame of [shown, next]) frame?.contentWindow.postMessage(message, origin); };
   const strandsUpdate = (director) => { units = director?.units ?? []; unitOf = new Map(units.map((unit) => [unit.id, unit])); forkIds = [...new Set(units.map((unit) => unit.fork))]; renderStrands(); buildTimeline(); };
+  // The strands as a tree on story time: x is the time tree's order, units on the same time in the order they are told
+  // (the narration complies with the strands, so this is never against a strand's own order); y a lane per strand in the
+  // order it first comes; a unit a bar, bright once it has landed; a strand branches off the one it comes from (the
+  // strand sharing most people with its first unit among those before it, else the one the narration came from); the
+  // time tree's steps marked along the foot; the vertical line is the shown card's place. A lane tapped picks its strand
+  // (and Follow Jev goes off).
+  const SVGNS = "http://www.w3.org/2000/svg";
+  const svgEl = (name, attrs) => { const el = document.createElementNS(SVGNS, name); for (const [k, v] of Object.entries(attrs)) el.setAttribute(k, String(v)); return el; };
+  let treeKey = "";
   const renderStrands = () => {
-    const card = cards[cardAt] ?? cards.at(-1), clock = card ? clockOf(card) : null, overlap = (unit, pad) => unit.clock && clock && unit.clock[0] <= clock[1] + pad && unit.clock[1] >= clock[0] - pad;
-    $("strands").replaceChildren(...forkIds.map((fork, n) => {
-      const mine = units.filter((unit) => unit.fork === fork), now = mine.some((unit) => overlap(unit, 0)), near = !now && mine.some((unit) => overlap(unit, 1)), button = document.createElement("button");
-      button.setAttribute("aria-pressed", String(strandPick === fork)); button.title = `${mine.length} units`;
-      button.innerHTML = `<span class="chip" style="background:${STRAND[n % STRAND.length]}"></span>Strand ${n + 1}${now ? ' <span class="now">now</span>' : near ? ' <span class="near">near</span>' : ""}`;
-      button.addEventListener("click", () => pickStrand(strandPick === fork ? null : fork)); return button;
-    }));
-    $("strands").hidden = !forkIds.length;
+    const box = $("strands"); box.classList.add("tree"); box.hidden = !forkIds.length;
+    if (!forkIds.length) return;
+    const card = cards[cardAt] ?? cards.at(-1);
+    const latest = cards.at(-1)?.scene, landedTo = latest ? units.findIndex((unit) => unit.id === latest) : -1;
+    const key = [forkIds.length, landedTo, card?.scene, strandPick, units.length].join("|");
+    if (key === treeKey) return; treeKey = key;
+    const order = units.map((unit, k) => ({ unit, k })).sort((a, b) => (a.unit.clock?.[0] ?? Infinity) - (b.unit.clock?.[0] ?? Infinity) || a.k - b.k), col = new Map(order.map(({ unit }, n) => [unit.id, n]));
+    const W = 400, GUT = 18, ROW = 8.5, TOP = 4, FOOT = 13, H = TOP + forkIds.length * ROW + FOOT, N = Math.max(1, order.length), step = (W - GUT - 4) / N;
+    const X = (id) => GUT + (col.get(id) + 0.5) * step, laneOf = new Map(forkIds.map((fork, n) => [fork, n])), Y = (fork) => TOP + laneOf.get(fork) * ROW + ROW / 2;
+    const peopleOf = new Map();
+    for (const c of cards) { const set = peopleOf.get(c.scene) ?? peopleOf.set(c.scene, new Set()).get(c.scene); for (const move of c.moves ?? []) if (move.who) set.add(move.who); for (const line of c.lines ?? []) if (line.who) set.add(line.who); }
+    const svg = svgEl("svg", { viewBox: `0 0 ${W} ${H}`, role: "group", "aria-label": "Strands on story time" });
+    // The time tree's steps: a faint rule where the story's time moves on, named where there is room.
+    let lastLabel = -Infinity, lastWhen = null;
+    order.forEach(({ unit }) => {
+      const when = whenOf(unit.when); if (!when || when === lastWhen) return; lastWhen = when;
+      const x = X(unit.id) - step / 2; svg.append(svgEl("line", { x1: x, x2: x, y1: TOP, y2: H - FOOT + 2, stroke: "#8a98a6", "stroke-width": 0.3, opacity: 0.45 }));
+      if (x - lastLabel > 62) { lastLabel = x; const t = svgEl("text", { x: x + 1, y: H - 3, "font-size": 6.5, fill: "#8a98a6" }); t.textContent = when.replace(/^12-24 · /, ""); svg.append(t); }
+    });
+    forkIds.forEach((fork) => {
+      const first = units.findIndex((unit) => unit.fork === fork), unit = units[first];
+      if (first <= 0 || !unit) return;
+      const mine = peopleOf.get(unit.id), score = new Map();
+      if (mine?.size) for (const other of units.slice(0, first)) { if (other.fork === fork) continue; const theirs = peopleOf.get(other.id); if (!theirs) continue; let shared = 0; for (const who of mine) if (theirs.has(who)) shared++; if (shared) score.set(other.fork, Math.max(score.get(other.fork) ?? 0, shared + col.get(other.id) / 1e6)); }
+      const parent = [...score.entries()].sort((a, b) => b[1] - a[1])[0]?.[0] ?? units.slice(0, first).reverse().find((other) => other.fork !== fork)?.fork;
+      if (!parent || !laneOf.has(parent)) return;
+      const x = X(unit.id), lit = strandPick === null || strandPick === fork || strandPick === parent;
+      svg.append(svgEl("path", { d: `M${(x - 5).toFixed(1)} ${Y(parent).toFixed(1)} Q${x.toFixed(1)} ${Y(parent).toFixed(1)} ${x.toFixed(1)} ${Y(fork).toFixed(1)}`, fill: "none", stroke: STRAND[laneOf.get(fork) % STRAND.length], "stroke-width": 0.8, opacity: lit ? 0.75 : 0.15 }));
+    });
+    const shown = card ? unitOf.get(card.scene) : null;
+    forkIds.forEach((fork, n) => {
+      const colour = STRAND[n % STRAND.length], picked = strandPick === fork, dim = strandPick !== null && !picked;
+      const mine = units.map((unit, k) => ({ unit, k })).filter(({ unit }) => unit.fork === fork), xs = mine.map(({ unit }) => X(unit.id));
+      const now = !!shown && shown.fork === fork;
+      const g = svgEl("g", { class: "lane", role: "button", tabindex: 0, "aria-pressed": String(picked), "aria-label": `Strand ${n + 1}: ${mine.length} units${now ? ", now" : ""}` });
+      g.append(svgEl("rect", { class: "hit", x: 0, y: TOP + n * ROW, width: W, height: ROW, fill: picked ? "rgba(124,230,255,.12)" : "transparent", rx: 2 }));
+      const label = svgEl("text", { x: GUT - 3, y: Y(fork) + 2.5, "text-anchor": "end", "font-size": 7, fill: now ? "#7dffa4" : picked ? colour : "#8a98a6" }); label.textContent = String(n + 1); g.append(label);
+      if (xs.length > 1) g.append(svgEl("line", { x1: Math.min(...xs), x2: Math.max(...xs), y1: Y(fork), y2: Y(fork), stroke: colour, "stroke-width": 0.6, opacity: dim ? 0.12 : 0.4 }));
+      for (const { unit, k } of mine) {
+        const landed = k <= landedTo, x = X(unit.id), w = Math.max(1.4, step * 0.85);
+        g.append(svgEl("rect", { x: (x - w / 2).toFixed(2), y: (Y(fork) - 2.6).toFixed(1), width: w.toFixed(2), height: 5.2, rx: 0.8, fill: colour, opacity: dim ? (landed ? 0.25 : 0.08) : landed ? 0.95 : 0.22 }));
+      }
+      g.addEventListener("click", () => pickStrand(strandPick === fork ? null : fork));
+      g.addEventListener("keydown", (event) => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); pickStrand(strandPick === fork ? null : fork); } });
+      svg.append(g);
+    });
+    // The shown card's place on story time: a vertical line across every lane.
+    if (shown && col.has(shown.id)) { const x = X(shown.id); svg.append(svgEl("line", { x1: x, x2: x, y1: 1, y2: H - FOOT + 2, stroke: "#ffd36e", "stroke-width": 1.1 })); svg.append(svgEl("circle", { cx: x, cy: 1.6, r: 1.7, fill: "#ffd36e" })); }
+    const axis = document.createElement("div"); axis.className = "axis";
+    axis.innerHTML = `<span>${forkIds.length} strands · ${landedTo + 1} of ${units.length} units landed</span><span>story time →</span>`;
+    box.replaceChildren(svg, axis);
   };
+  // The panel folds (a phone: folded at first, then as the viewer left it).
+  const FOLD = "worldLive.fold";
+  const setFold = (on) => { document.querySelector(".hud").classList.toggle("folded", on); $("fold").textContent = on ? "Strands ▾" : "Fold ▴"; $("fold").setAttribute("aria-expanded", String(!on)); };
+  { let stored = null; try { stored = localStorage.getItem(FOLD); } catch {} setFold(stored === null ? matchMedia("(max-width: 560px)").matches : stored === "1"); }
+  $("fold").addEventListener("click", (event) => { event.stopPropagation(); const on = !document.querySelector(".hud").classList.contains("folded"); setFold(on); try { localStorage.setItem(FOLD, on ? "1" : "0"); } catch {} });
   // Touching a strand, the timeline or a card is looking somewhere else: Follow Jev goes off (the user, 2026-11-04).
   const unfollow = () => { if ($("follow").getAttribute("aria-pressed") !== "true") return; showFollow(false); if (camera) camera.follow = false; sendAll({ type: "follow", on: false }); };
   const pickStrand = (fork, quiet = false) => { if (!quiet) unfollow(); strandPick = fork; sendAll({ type: "strand", fork }); renderStrands(); buildTimeline(true); markStrand(); };
