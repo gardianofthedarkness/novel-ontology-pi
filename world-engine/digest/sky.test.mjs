@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { daypartOfHour, storySky, weatherWords } from './sky.mjs';
+import { cloudCut, cutsClouds, daypartOfHour, storySky, weatherWords } from './sky.mjs';
 
 const SNOWING = '\u4e0b\u96ea', LYING = '\u79ef\u96ea', CLEAR = '\u84dd\u5929', STORM = '\u6253\u96f7', SIMILE = '\u98ce\u96e8\u4e2d\u7684\u5c0f\u8239', GLOOMY = '\u9634\u6c89\u7684\u8868\u60c5';
 
@@ -41,4 +41,16 @@ test('a weather has a strength and a wind: a blizzard is heavy snow in a gale; d
   const sky = storySky({ reading: { scenes, time: { scenes: [{ scene: 'u1', node: 't:y1:12-24:night', inherited: false }, { scene: 'u2', node: 't:y1:12-24:night', inherited: true }] }, sequences: [] }, text: id => ({ a: BLIZZARD })[id] ?? '' });
   assert.deepEqual([sky.u2.weather.value, sky.u2.strength, sky.u2.wind], ['snow', 'heavy', 'gale'], 'the blizzard carries on with its strength and wind');
   assert.equal(storySky({ reading: { scenes: [scenes[0]], time: { scenes: [] }, sequences: [] }, text: () => '' }).u1.strength, 'moderate');
+});
+
+test('clouds torn: a beam through the cloud layer, with its width; never the figures of speech; a fight\u2019s words', () => {
+  const PIERCED = '\u5149\u675f\u8d2f\u7a7f\u4e86\u4e91\u5c42', WIDE = '\u76f4\u5f84\u0035\u0030\u7c73\u7684\u5149\u675f\u5c06\u4e91\u6495\u5f00', SMOKE = '\u70df\u6d88\u4e91\u6563', ABOVE = '\u4e91\u7aef\u4e4b\u4e0a\u7684\u6d1e';
+  assert.deepEqual(cloudCut(PIERCED), {});
+  assert.deepEqual(cloudCut(WIDE), { width: 50 });
+  assert.equal(cloudCut(SMOKE), null, 'vanished like smoke and clouds');
+  assert.equal(cloudCut(ABOVE), null, 'above the clouds is no cloud torn');
+  assert.ok(cutsClouds('the clouds overhead, a hole torn through them'));
+  assert.ok(!cutsClouds('concrete wall')); assert.ok(!cutsClouds(null)); assert.ok(!cutsClouds('no clouds'));
+  const sky = storySky({ reading: { scenes: [{ id: 'u1', sequence: 'q1', sentences: ['a', 'b'] }], time: { scenes: [] }, sequences: [] }, text: id => ({ b: WIDE })[id] ?? '' });
+  assert.deepEqual(sky.u1.cloudCut, { sentence: 'b', by: 'words', width: 50 });
 });

@@ -54,6 +54,26 @@ export function weatherWords(text) {
   return { counts, top, strength, wind, lying: LYING.test(words) };
 }
 
+// Clouds torn: a beam, a blast or a wind through the clouds, in the text (cloud layer, a sea of clouds, dark clouds,
+// clouds; pierced, torn open, split, cut open, blown or driven apart, scattered, broken open, a hole) and in a fight's
+// "breaks" words (the clouds a beam tears through); never the figures of speech (vanished like smoke and clouds, above the
+// clouds, the clouds of the sky as fortune). The width, where the text gives a diameter in metres or kilometres.
+const CLOUD = '(?:\\u4e91\\u5c42|\\u4e91\\u6d77|\\u4e4c\\u4e91|\\u4e91\\u6735|\\u4e91)';
+const TEAR = '(?:\\u8d2f\\u7a7f|\\u7a7f\\u900f|\\u7a7f\\u8fc7|\\u6495\\u88c2|\\u6495\\u5f00|\\u5288\\u5f00|\\u5207\\u5f00|\\u5439\\u6563|\\u9a71\\u6563|\\u51b2\\u6563|\\u6253\\u6563|\\u7834\\u5f00|\\u88c2\\u5f00|\\u7a9f\\u7abf|\\u6d1e)';
+const CLOUD_CUT = new RegExp(`${CLOUD}[^\\u3002\\uff01\\uff1f]{0,8}${TEAR}|${TEAR}[^\\u3002\\uff01\\uff1f]{0,8}${CLOUD}`);
+const NOT_CLOUD = /\u70df\u6d88\u4e91\u6563|\u4e91\u7aef|\u4e91\u9704|\u98ce\u4e91|\u4e91\u96c0|\u767d\u4e91\u82cd\u72d7/g;
+const CLOUD_WORDS = /\bclouds?\b|\bcloud (?:layer|cover|bank)s?\b|\u4e91\u5c42|\u4e91\u6d77|\u4e4c\u4e91|\u4e91\u6735/i;
+const DIAMETER = /\u76f4\u5f84[^\d\u3002]{0,4}(\d+(?:\.\d+)?)\s*(\u516c\u91cc|\u5343\u7c73|\u7c73)/;
+/** Whether a text says the clouds were torn (a beam, a blast through them), and how wide when it gives a diameter. */
+export function cloudCut(text) {
+  const plain = String(text ?? '').replace(NOT_CLOUD, '');
+  if (!CLOUD_CUT.test(plain)) return null;
+  const across = plain.match(DIAMETER), metres = across ? Number(across[1]) * (across[2] === '\u7c73' ? 1 : 1000) : null;
+  return metres ? { width: metres } : {};
+}
+/** Whether a fight's "breaks" words name the clouds (a beam tearing through them). */
+export const cutsClouds = breaks => !!breaks && CLOUD_WORDS.test(String(breaks)) && !/\bno clouds?\b/i.test(String(breaks));
+
 const tailOf = node => String(node ?? '').split(':').slice(3).join(':');
 const dateOf = node => String(node ?? '').split(':').slice(0, 3).join(':');
 
@@ -96,7 +116,10 @@ export function storySky({ reading, text, jev = {}, pictures = [] }) {
       const strength = words.strength ?? (jevWeather === weather.value && seq.strength && seq.strength !== 'moderate' ? seq.strength : null), wind = words.wind ?? (seq?.wind && seq.wind !== 'calm' ? seq.wind : null);
       if (strength) weather.strength = strength; if (wind) weather.wind = wind;
     }
-    out[scene.id] = { date: dateOf(time?.node), flashback: !!time?.flashback, daypart, weather, lying: words.lying || !!seq?.lying, ...(conflict?.length ? { conflict } : {}) };
+    // The clouds torn in this unit: the first sentence that says so.
+    let cut = null;
+    for (const id of scene.sentences) { const found = cloudCut(text(id)); if (found) { cut = { sentence: id, by: 'words', ...found }; break; } }
+    out[scene.id] = { date: dateOf(time?.node), flashback: !!time?.flashback, daypart, weather, lying: words.lying || !!seq?.lying, ...(conflict?.length ? { conflict } : {}), ...(cut ? { cloudCut: cut } : {}) };
   }
   // Pass 2: carried on within a date (never across a flashback); time of day between the parts round it.
   const ids = scenes.map(scene => scene.id);
@@ -143,5 +166,5 @@ export function storySky({ reading, text, jev = {}, pictures = [] }) {
 /** What the sky came to: units by daypart and weather, by source, the units with snow lying, the conflicts. */
 export function skySummary(units) {
   const tally = (pick) => Object.values(units).reduce((sum, unit) => { const k = pick(unit); sum[k] = (sum[k] ?? 0) + 1; return sum; }, {});
-  return { dayparts: tally(unit => unit.daypart.value), daypartBy: tally(unit => unit.daypart.by ?? 'none'), weathers: tally(unit => unit.weather.value), strengths: tally(unit => `${unit.strength ?? 'moderate'} ${unit.weather.value}`), winds: tally(unit => unit.wind ?? 'calm'), weatherBy: tally(unit => unit.weather.by ?? 'none'), lying: Object.values(units).filter(unit => unit.lying).length, conflicts: Object.values(units).filter(unit => unit.conflict).length };
+  return { dayparts: tally(unit => unit.daypart.value), daypartBy: tally(unit => unit.daypart.by ?? 'none'), weathers: tally(unit => unit.weather.value), strengths: tally(unit => `${unit.strength ?? 'moderate'} ${unit.weather.value}`), winds: tally(unit => unit.wind ?? 'calm'), weatherBy: tally(unit => unit.weather.by ?? 'none'), lying: Object.values(units).filter(unit => unit.lying).length, conflicts: Object.values(units).filter(unit => unit.conflict).length, cloudCuts: Object.values(units).filter(unit => unit.cloudCut).length };
 }

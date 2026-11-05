@@ -28,6 +28,7 @@ const { passScene } = await import('./pass.mjs');
 const { withSystem2 } = await import('./system2.mjs');
 const { writeWorldLog } = await import('../log/write-log.mjs');
 const R = await import('../review/review.mjs'), C6 = await import('../review/canon.mjs'), SM = await import('../smoother/smoother.mjs'), OC = await import('../smoother/occupation.mjs');
+const SKY = await import('../digest/sky.mjs');
 const WF = await import('./workflow.mjs'), AT = await import('../laws/attacks.mjs'), IU = await import('../digest/in-use.mjs'), MT = await import('../digest/mounts.mjs'), CF = await import('../crowd/field.mjs'), DG = await import('../digest/digest.mjs'), FA = await import('../digest/facts.mjs'), G = await import('./gate.mjs'), LW = await import('../laws/laws.mjs');
 import { copyFile } from 'node:fs/promises';
 
@@ -1330,8 +1331,11 @@ export async function direct(novelDir, { reading, readingPath = null, prefilm = 
                 const limits = AT.limitsOf(kind, { own, weapons });
                 const verdict = AT.attackCheck({ kind, from: at(positions[exchange.attacker][0]), to: at(positions[exchange.target][0]), limits, lots: world.lots });
                 if (verdict) { (cardRecord.laws ??= []).push({ ...verdict, who: exchange.attacker, line: exchange.sentence }); entry.attackKind = kind; entry.limits = limits; }
-                blows.push({ attacker: exchange.attacker, target: exchange.target, kind, outcome: entry.outcome ?? null, held: verdict?.verdict === 'held', ...(kind === 'area' ? { radius: limits?.radius ?? 4 } : {}), by: limits?.by ?? null });
+                blows.push({ attacker: exchange.attacker, target: exchange.target, kind, outcome: entry.outcome ?? null, held: verdict?.verdict === 'held', ...(kind === 'area' ? { radius: limits?.radius ?? 4 } : {}), by: limits?.by ?? null , ...(SKY.cutsClouds(exchange.breaks) ? { clouds: true } : {}) });
               }
+              // A beam the fight says tears through the clouds with no one to hit (fired at the sky): the page plays it from
+              // its attacker up through the layer (strand-demo.html, cloudHoles).
+              else if (exchange.attacker && positions[exchange.attacker] && SKY.cutsClouds(exchange.breaks)) blows.push({ attacker: exchange.attacker, target: null, kind: 'line', outcome: null, held: false, clouds: true, by: 'clouds' });
             }
           };
           // The routine director's blocking (M8): a group the text gives a formation stands in it, round where its people

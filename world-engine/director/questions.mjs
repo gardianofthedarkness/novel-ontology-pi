@@ -50,7 +50,7 @@ export const CAST_ASKS = {
     shape: { journeys: { who: '<person id>', from: '<place id>', via: '[<place id>]', to: '<place id> | words', manner: MANNERS, distance: DISTANCES, duration: 'words' } } },
   actionDirector: { unit: 'one request a fired span', system: 'You read a fight in a light novel, exchange by exchange, for those staging it.', task: 'For each exchange: who attacks whom, with what kind of attack, of what shape and range, what happens, how far anyone is thrown, what breaks.',
     given: ['the span\'s lines', 'the fighters and their known abilities', 'the scene frame'],
-    shape: { exchanges: { attacker: '<person id>', target: '<person id> | <place> | <thing>', attack: ATTACKS, shape: SHAPES, range: RANGES, outcome: OUTCOMES, knockback: 'metres', breaks: 'words | null' } } },
+    shape: { exchanges: { attacker: '<person id>', target: '<person id> | <place> | <thing>', attack: ATTACKS, shape: SHAPES, range: RANGES, outcome: OUTCOMES, knockback: 'metres', breaks: 'words (a wall, a car; the clouds a beam tears through) | null' } } },
   backgroundAction: { unit: 'one request a fired span', system: 'You read the setting of a scene of a light novel and describe its crowd and atmosphere for the stage.', task: 'The crowd (how many, who, how it moves, whether it is a named group), the weather, the light, the mood.',
     given: ['the span\'s lines', 'the reading\'s crowd slots in the scene', 'the set'],
     shape: { crowd: { present: CROWD, makeup: '[couples, shoppers, students, workers, security, onlookers, …]', flow: FLOWS, named: '<crowd slot id> | null' }, weather: 'words', light: 'words', mood: 'words' } },

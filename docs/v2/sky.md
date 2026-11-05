@@ -77,3 +77,33 @@ back, `__sky({ strike: true })` strikes lightning); every time of day by every w
 and looked at (dawn, morning, midday, afternoon, evening, night, late night by clear, partly cloudy, overcast, mist, fog,
 drizzle, rain, heavy rain, a storm and its lightning, sleet, light snow, snow, a blizzard, and snow lying under a clear
 sky).
+
+## Clouds, and holes torn in them
+
+The user, 2026-11-05: *"is there an destructible cloud system available yet?"*; *"in this book there are cases where beam
+weapons clears its diameter of clouds"*; *"It's ok other books. You need to prepare these situations to happen."* (Vol 1
+of the four in the snapshot never says it; vol 4's blue-white blade across the Los Angeles night sky is the nearest.)
+
+- **The layer.** strand-demo.html draws a cloud layer at 420 m, as much of the sky as the weather's `cloud` covers (a few
+  clouds at 0.3, most of the sky at 0.6, all of it at 0.9), from noise that drifts with the wind. It is lit by the hour
+  (white by day, toward the sun's colour at dawn and dusk, the city's glow underneath at night, darker the thicker, lit by
+  lightning) and fades into the haze toward the horizon; from inside or above it the city shows, not its underside. By
+  day its shadows fall on the ground along the sun, clearest under scattered clouds.
+- **What tears it.** A beam through the clouds, said two ways, in any book:
+  - a fight's exchange whose "breaks" words name the clouds (the action director's reading, now prompted for "the
+    clouds a beam tears through"): the director gives that blow `clouds: true`, and a beam fired at the sky with no one
+    to hit becomes a blow from its attacker alone (`world-engine/director/director.mjs`, `SKY.cutsClouds`);
+  - a unit's own words (`sky.mjs` `cloudCut`: the cloud layer, a sea of clouds, dark clouds, clouds, pierced, torn open,
+    split, blown apart, scattered, a hole; never "vanished like smoke and clouds", "above the clouds"), with the width when
+    the text gives a diameter in metres or kilometres. sky.json carries it as `cloudCut`.
+- **The hole.** The beam plays on from where it lands up into the layer and clears a hole as wide as it (120 m when
+  nothing says), its edge ragged. The hole drifts with the clouds and closes as the story goes on (gone after six units
+  or an hour and a half of story time; only at the same place and on the same date). By day the sun comes through it: no
+  shadow under it, a faint shaft and a lighter patch on the ground. A unit that says the clouds were torn with no beam
+  played opens the hole over what the camera looks at.
+- **Checked** from one camera, every cover (a few clouds, cloudy, overcast, a storm) by dawn, midday, dusk and night,
+  over the city and toward the horizon, a 160 m hole in cloudy and overcast skies from the city, the horizon and high
+  above, and a beam rising through an overcast sky at midday and dusk: `window.__sky({ cut: <metres> })`,
+  `__sky({ ..., cutBeams: true })`.
+- **Lightning** strikes 3 to 12 seconds apart (the interval had been taken in seconds against a clock in milliseconds, so
+  after the first strike a storm flashed on every frame).
