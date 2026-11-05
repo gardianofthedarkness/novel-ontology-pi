@@ -5,9 +5,8 @@
 //   by the review     the main agent answered who says it (a pin): always;
 //   by the reading    its sure speaker, there when the line was played;
 //   by the voice      the reading unsure, and the voices' pick (voices.mjs: the conversation decoded, its known lines
-//                     clamped) there and within earshot, and Jev's own guess the same (where the two agree, 95% right on
-//                     the sure lines held out; alone, 75.8%); Jev guessing no one or someone else there, held for the
-//                     review with the voice's pick (and Jev's) named;
+//                     clamped; 75.8% right on the sure lines held out) there and within earshot of whom it is said to,
+//                     whatever Jev's own guess (the user, 2026-11-05: "let's just add decoder only");
 //   by the world      the reading unsure, and Jev's own guess (at least 20%) there (and, speaking to someone there,
 //                     within earshot of them); or else, Jev guessing no one absent, exactly one person there the card
 //                     says speaks.
@@ -50,9 +49,7 @@ export function settleSpeakers({ cards, reading, pins = {}, peopleOf = () => [],
       const voice = voices?.[line.id]?.who ?? null;
       if (voice && voice !== ruledOut && here[voice] && voice !== base.to && !(base.to && (gap(here[voice], here[base.to]) > EARSHOT || Math.abs(here[voice].y - here[base.to].y) > 3))) {
         const jevSays = guess && guess !== 'none' ? guess : null;
-        if (jevSays === voice) { out.push({ ...base, who: voice, by: 'voice', gate: 'applied', why: 'their voice in this conversation, and Jev\'s guess' }); continue; }
-        if (!jevSays) { out.push({ ...base, who: null, by: 'voice', gate: 'held', why: `their voice says ${voice}; Jev guessed no one: is it them?`, voice }); continue; }
-        if (here[jevSays]) { out.push({ ...base, who: null, by: 'voice', gate: 'held', why: `their voice says ${voice}, Jev's guess (${Math.round((role.who.confidence ?? 0) * 100)}%) ${jevSays}: which?`, voice, guess: jevSays }); continue; }
+        out.push({ ...base, who: voice, by: 'voice', gate: 'applied', why: `their voice in this conversation${jevSays === voice ? ', and Jev\'s guess' : jevSays ? ` (Jev guessed ${jevSays})` : ''}` }); continue;
       }
       if (guess && guess !== 'none' && guess !== ruledOut && here[guess] && guess !== base.to && (role.who.confidence ?? 0) >= GUESS) {
         const far = base.to && (gap(here[guess], here[base.to]) > EARSHOT || Math.abs(here[guess].y - here[base.to].y) > 3);
