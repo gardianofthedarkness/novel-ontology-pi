@@ -177,10 +177,14 @@ const legOf = (placeId, path) => { const move = { how: "walk", path }, time = ti
  * map along a curve through the map walk's nodes, and into the new place to where the scene finds them. Without a route,
  * straight across the map between the two places.
  */
-function travelOf(migration) {
+function travelOf(migration, scene = null, place = null) {
   const route = migration.route, spot = (id) => data.macro.find((node) => node.id === id);
   const exit = route?.exit?.length > 1 ? legOf(migration.from, route.exit) : null, entry = route?.entry?.length > 1 ? legOf(migration.to, route.entry) : null;
-  const points = route ? route.path : [[spot(migration.from)?.spotX ?? 0, spot(migration.from)?.spotZ ?? 0], [spot(migration.to)?.spotX ?? 0, spot(migration.to)?.spotZ ?? 0]];
+  // With no route, the straight way ends where the person starts in the scene (one world: its nodes stand where the map's
+  // pins do), not at the place's pin: a scene placed at a whole city drew everyone flying to the city's middle (the user,
+  // 2026-11-05: "the straight rays").
+  const startNode = scene?.starts?.[migration.person], arrive = !route && place?.world && startNode != null ? at(place, startNode) : null;
+  const points = route ? route.path : [[spot(migration.from)?.spotX ?? 0, spot(migration.from)?.spotZ ?? 0], arrive ? [arrive.x, arrive.z] : [spot(migration.to)?.spotX ?? 0, spot(migration.to)?.spotZ ?? 0]];
   const curve = new THREE.CatmullRomCurve3(points.map(([x, z]) => new THREE.Vector3(x, 0.35, z)), false, "centripetal");
   const exitEnd = exit?.time.total ?? 0, mapEnd = exitEnd + Math.min(7, Math.max(2.4, (route?.metres ?? curve.getLength()) / 45));
   return { migration, exit, entry, curve, exitEnd, mapEnd, total: mapEnd + (entry?.time.total ?? 0) };
@@ -210,7 +214,7 @@ function buildTimeline() {
     const migrations = data.migrations.filter((migration) => migration.scene === scene.id);
     if (migrations.length) {
       // The camera rises once the first of them is out of the old place's grid, and comes down on the new place as the last arrives at its edge.
-      const travels = migrations.map(travelOf), length = Math.max(MACRO, ...travels.map((travel) => travel.total + 0.6));
+      const travels = migrations.map((migration) => travelOf(migration, scene, place)), length = Math.max(MACRO, ...travels.map((travel) => travel.total + 0.6));
       const glideFrom = Math.min(...travels.map((travel) => travel.exitEnd)), glideTo = Math.max(...travels.map((travel) => travel.mapEnd));
       segments.push({ kind: "macro", scene, index, place, start: clock, end: clock + length, positions: { ...positions }, moves: [], hits: hitsSoFar[keyOf(scene.place)], migrations, travels, glide: { from: glideFrom, seconds: Math.max(1.5, glideTo - glideFrom) } });
       clock += length;
@@ -1119,7 +1123,7 @@ let cuts = new URLSearchParams(location.search).has("cuts");
  * else rising over both and down, timed in seconds of the clock (a held live frame still finishes it). The distance is
  * the area's size, the angle 50° from above, turned as the viewer left it.
  */
-const PIN_SCALES = new Set(["building", "street", "district", "city"]);
+const PIN_SCALES = new Set(["building", "street", "district"]);
 let pin = null, pinGlide = null, pinChecked = 0;
 function focusOf(segment) {
   const real = (id) => !data.people[id]?.crowd, shown = (id) => { const entry = pawns.get(id); return entry?.pawn?.parent ? entry.pawn.position.clone() : null; };
@@ -1127,8 +1131,23 @@ function focusOf(segment) {
   if (!points.length) points = Object.keys(segment.scene.starts ?? {}).filter(real).map(shown).filter(Boolean);
   return points;
 }
-function areaFor(points) {
-  const c = points.reduce((sum, p) => sum.add(p), new THREE.Vector3()).divideScalar(points.length), spread = Math.max(0, ...points.map((p) => Math.hypot(p.x - c.x, p.z - c.z))), need = Math.max(spread, 12);
+// The people the camera pins: of the groups they stand in (each within GROUP of another), the one nearest the pin the
+// camera holds (else the largest): someone far off, or a strand elsewhere, never pulls the camera to a city's middle.
+const GROUP = 90;
+function groupOf(points) {
+  if (points.length < 2) return points;
+  const groups = [];
+  for (const p of points) {
+    const near = groups.filter((group) => group.some((q) => Math.hypot(p.x - q.x, p.z - q.z) <= GROUP));
+    if (!near.length) groups.push([p]); else { const merged = near.flat().concat([p]); for (const group of near) groups.splice(groups.indexOf(group), 1); groups.push(merged); }
+  }
+  if (groups.length === 1) return points;
+  const centre = (group) => group.reduce((sum, p) => sum.add(p), new THREE.Vector3()).divideScalar(group.length);
+  if (pin) return groups.reduce((a, b) => (Math.hypot(centre(a).x - pin.cx, centre(a).z - pin.cz) <= Math.hypot(centre(b).x - pin.cx, centre(b).z - pin.cz) ? a : b));
+  return groups.reduce((a, b) => (b.length > a.length ? b : a));
+}
+function areaFor(all) {
+  const points = groupOf(all), c = points.reduce((sum, p) => sum.add(p), new THREE.Vector3()).divideScalar(points.length), spread = Math.max(0, ...points.map((p) => Math.hypot(p.x - c.x, p.z - c.z))), need = Math.max(spread, 12);
   const holds = (area, slack) => points.every((p) => Math.hypot(p.x - area.cx, p.z - area.cz) <= area.r * slack + 6), fitting = (area) => area.r <= Math.max(3 * need, 60);
   if (pin && holds(pin, 1.25) && fitting(pin)) return { area: pin, c, need };
   const unlanded = new Set(data.scenes.filter((scene) => scene.landed === false).map((scene) => scene.id));
@@ -1138,9 +1157,11 @@ function areaFor(points) {
     const area = { id, cx: spot.cx, cz: spot.cz, r: Math.max(spot.r ?? 0, 12) };
     if (fitting(area) && holds(area, 1.1) && (!best || area.r < best.r)) best = area;
   }
-  if (best) return { area: best, c, need };
+  // Locked where the group stands when it is pinned (a place's own middle only when they are near it), so they are in the
+  // middle of the view, and held there while they stay within the area.
+  if (best) return { area: Math.hypot(c.x - best.cx, c.z - best.cz) <= best.r * 0.4 ? best : { ...best, cx: c.x, cz: c.z }, c, need };
   const cell = Math.max(40, Math.ceil((need * 2) / 40) * 40), gx = Math.round(c.x / cell) * cell, gz = Math.round(c.z / cell) * cell;
-  return { area: { id: `cell:${cell}:${gx}:${gz}`, cx: gx, cz: gz, r: Math.max(cell * 0.75, need) }, c, need };
+  return { area: { id: `cell:${cell}:${gx}:${gz}`, cx: c.x, cz: c.z, r: Math.max(cell * 0.75, need) }, c, need };
 }
 function pinCamera(segment) {
   const points = focusOf(segment);
@@ -1241,7 +1262,7 @@ function frame(now) {
   if (replaying && segment.kind === "event" && (replaying.scene !== segment.scene.id || replaying.event !== segment.eventIndex)) { replaying = { scene: segment.scene.id, event: segment.eventIndex }; if (liveMode) parent.postMessage({ type: "card", ...replaying }, location.origin); }
   if (shownPlace !== segment.scene.place) {
     if (shownPlace === null) { const pose = poseFor(segment.scene.place); camera.position.copy(pose.position); controls.target.copy(pose.target); }
-    else if (segment.kind === "macro") glideTo(segment.scene.place, segment.glide.seconds, segment.start + segment.glide.from);
+    else if (segment.kind === "macro") { if (!(follow && !cuts)) glideTo(segment.scene.place, segment.glide.seconds, segment.start + segment.glide.from); }
     else if (!(follow && !cuts)) { const pose = peoplePose(segment); if (pose) glide = { to: pose, start: time, seconds: 2.6, direct: true }; else glideTo(segment.scene.place, 2.6); }
     shownPlace = segment.scene.place;
   }
@@ -1255,7 +1276,7 @@ function frame(now) {
   }
   // The pinned camera (the default; the user, 2026-11-05: "one continuous camera is borrowed by different casts, and
   // there is a lock of center per area and scale"): the camera turns round an area's pin, not round people.
-  if (follow && !cuts && segment.kind !== "macro") { glide = null; if (cameraSegment !== segment || now - pinChecked > 700) { cameraSegment = segment; pinChecked = now; pinCamera(segment); } }
+  if (follow && !cuts) { glide = null; if (cameraSegment !== segment || now - pinChecked > 700) { cameraSegment = segment; pinChecked = now; pinCamera(segment); } }
   if (pinGlide) {
     const u = Math.min(1, (now - pinGlide.t0) / (pinGlide.seconds * 1000)), e = u < 0.5 ? 2 * u * u : 1 - (-2 * u + 2) ** 2 / 2;
     const bend = (a, b, c) => a.clone().multiplyScalar((1 - e) ** 2).add(b.clone().multiplyScalar(2 * (1 - e) * e)).add(c.clone().multiplyScalar(e * e));
