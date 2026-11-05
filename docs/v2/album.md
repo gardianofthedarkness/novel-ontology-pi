@@ -27,7 +27,8 @@ the book's last sentence.
 RapidOCR reads the plates' captions, an anime head detector crops the faces) and binds each face to a character by name
 (`ontology/portraits.jsonl`). A v2 book is ready for it once its reading is done (its characters are the reading's); v1's
 check that every block's packet was reviewed is for v1 books. The cropper needs its Python packages (`NOVEL_PORTRAIT_PYTHON`);
-the models download on first use.
+the models download on first use. Vol 1 (2026-11-05, 13 s, no model calls): 5 faces bound from its front pages and plates (Kamijou,
+Index, Last Order, Accelerator, Maidono), each checked by eye; 36 characters have no captioned face in the book's pictures.
 
 ## Where they show (World · Live)
 
