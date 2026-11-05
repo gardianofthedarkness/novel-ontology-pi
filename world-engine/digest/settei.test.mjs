@@ -1,23 +1,29 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { abilitiesFile, abilitiesToAsk, propOf, propsFile, propsToAsk, wayOf } from './settei.mjs';
+import { abilitiesFile, abilitiesToAsk, propOf, propsFile, propsToAsk, sheetOf } from './settei.mjs';
 
-test('a way from Jev: none is no way; a teleport has a reach and no height; a leap a height', () => {
-  assert.equal(wayOf({ way: { value: 'none', confidence: 0.9 } }), null);
-  assert.deepEqual(wayOf({ way: { value: 'teleport', confidence: 0.8 }, reach: { value: 'tens of metres', confidence: 0.6 } }), { way: 'teleport', reach: 30, sure: 0.8, reachSure: 0.6, sight: false });
-  assert.equal(wayOf({ way: { value: 'leap', confidence: 0.9 }, reach: { value: 'about a hundred metres', confidence: 0.9 }, height: { value: 'up to a rooftop (10–30 m)', confidence: 0.7 } }).height, 25);
+test('a sheet from Jev: a move with its limits, an attack with its; none is none', () => {
+  assert.deepEqual(sheetOf({ move: { value: 'none', confidence: 0.9 }, attack: { value: 'none', confidence: 0.9 } }), { move: null, attack: null });
+  const appear = sheetOf({ move: { value: 'appear', confidence: 0.8 }, reach: { value: 'tens of metres' }, midair: { value: 'in the air too' }, attack: { value: 'close', confidence: 0.7 }, close: { value: 'touch' } });
+  assert.deepEqual(appear.move, { kind: 'appear', sure: 0.8, reach: 30, midair: true });
+  assert.deepEqual(appear.attack, { kind: 'close', sure: 0.7, reach: 1 });
+  const blast = sheetOf({ move: { value: 'flight', confidence: 0.6 }, height: { value: 'high over the city (50 m or more)' }, attack: { value: 'area', confidence: 0.9 }, radius: { value: 'about ten metres' }, range: { value: 'about a hundred metres' } });
+  assert.deepEqual(blast.move, { kind: 'flight', sure: 0.6, height: 80 });
+  assert.deepEqual(blast.attack, { kind: 'area', sure: 0.9, radius: 10, range: 100 });
+  assert.equal(sheetOf({ move: { value: 'agility', confidence: 0.9 }, agility: { value: 'about four times as fast' } }).move.factor, 4);
 });
 
-test('the abilities file merges an ability and a person\'s own lines into one way, the further reach kept', () => {
+test('the abilities file: an ability and a person\'s own lines merged by kind, the larger limit kept; a doubtful kind held', () => {
   const file = abilitiesFile([
-    { who: 'a', concept: 'c1', way: { way: 'teleport', reach: 30, sure: 0.6 }, evidence: ['s1'] },
-    { who: 'a', way: { way: 'teleport', reach: 100, sure: 0.5 }, evidence: ['s2'] },
-    { who: 'b', way: null, evidence: ['s3'] },
-    { who: 'c', way: { way: 'ride', reach: 30, sure: 0.3 }, evidence: ['s4'] },
+    { who: 'a', concept: 'c1', sheet: { move: { kind: 'appear', sure: 0.6, reach: 30, midair: false }, attack: { kind: 'line', sure: 0.9, range: 100 } }, evidence: ['s1'] },
+    { who: 'a', sheet: { move: { kind: 'appear', sure: 0.7, reach: 100, midair: true }, attack: null }, evidence: ['s2'] },
+    { who: 'b', sheet: { move: null, attack: null }, evidence: ['s3'] },
+    { who: 'c', sheet: { move: { kind: 'flight', sure: 0.3, height: 25 }, attack: null }, evidence: ['s4'] },
   ], { names: new Map([['a', 'A']]), at: 't' });
   assert.deepEqual(Object.keys(file.people), ['a']);
-  assert.deepEqual(file.held.map(entry => entry.who), ['c'], 'a doubtful way is held');
-  assert.deepEqual(file.people.a.ways.teleport, { reach: 100, sure: 0.6 });
+  assert.deepEqual(file.people.a.move.appear, { sure: 0.7, reach: 100, midair: true });
+  assert.deepEqual(file.people.a.attack.line, { sure: 0.9, range: 100 });
+  assert.deepEqual(file.held.map(entry => [entry.who, entry.part]), [['c', 'move']]);
   assert.deepEqual(file.people.a.evidence, ['s1', 's2']);
 });
 

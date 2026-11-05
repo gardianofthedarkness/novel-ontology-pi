@@ -24,9 +24,12 @@ const formsOf = new Map((reading.chart?.entities ?? []).filter(entity => entity.
 
 // What to ask: the abilities the reading gives people; each main character's own lines that move them; every object.
 const abilities = ST.abilitiesToAsk({ reading });
-const MOVE = /跳|跃|飞|瞬间移动|空间移动|冲|奔|飘|浮|传送|骑|驾驶|开车|蹬/;
+const MOVE = /跳|跃|飞|瞬间移动|空间移动|冲|奔|飘|浮|传送|骑|驾驶|开车|蹬|墙|壁|屋顶|楼顶/;
+// A person's own lines that move them, spread over the volume (the first few alone missed what comes later: a leap
+// between towers in a later unit).
+const spread = (list, most) => (list.length <= most ? list : Array.from({ length: most }, (_, k) => list[Math.floor((k * list.length) / most)]));
 const people = (reading.chart?.entities ?? []).filter(entity => entity.type === 'person' && (entity.seen?.length ?? 0) >= 15).map(entity => {
-  const forms = formsOf.get(entity.id) ?? [], lines = [...text.keys()].filter(id => MOVE.test(line(id)) && forms.some(form => line(id).includes(form))).slice(0, 6);
+  const forms = formsOf.get(entity.id) ?? [], lines = spread([...text.keys()].filter(id => MOVE.test(line(id)) && forms.some(form => line(id).includes(form))), 8);
   return { who: entity.id, label: names.get(entity.id), sentences: lines };
 }).filter(entry => entry.sentences.length);
 const props = ST.propsToAsk({ reading, prefilm });
@@ -42,21 +45,26 @@ const modeOf = (name, task, definitions) => ({ name, task, definitions: () => de
 const choice = (key, instructions, options) => ({ key, primitive: 'choice', instructions, options: Object.keys(options), optionHints: options });
 const pick = reply => (reply ? { value: reply.value, confidence: reply.confidence ?? 0 } : null);
 
-// Abilities and people's own lines: the way, its reach, its height.
-const wayMode = modeOf('settei-ways', 'A light novel being staged in a 3D city. For each entry (a person, and an ability the story gives them or the lines that move them), say how it lets the person move beyond walking and running, how far one such move carries them, and how high. Say "none" when it does not carry them anywhere.', { ways: ST.WAYS, reach: ST.REACH, height: ST.HEIGHT });
-const wayRows = [];
+// Abilities and people's own lines: the move it gives and the attack it gives, and every limit (the ones that apply are read).
+const options = table => Object.fromEntries(Object.keys(table).map(option => [option, option]));
+const sheetMode = modeOf('settei-abilities', 'A light novel being staged in a 3D city. For each entry (a person, and an ability the story gives them or the lines that show them moving or fighting), say how it lets the person move beyond walking and running, and how it lets them attack; then its limits. Say "none" for a part it does not give.', { moves: ST.MOVES, attacks: ST.ATTACKS });
+const sheetRows = [];
 const asks = [...abilities.map(entry => ({ ...entry, kind: 'ability' })), ...people.map(entry => ({ ...entry, kind: 'lines' }))];
-for (let n = 0; n < asks.length; n += 8) {
-  const batch = asks.slice(n, n + 8), key = k => `entry_${n + k + 1}`;
+const LIMIT_ASK = {
+  agility: 'If it makes them faster: how much faster than a person?', reach: 'If they appear elsewhere: how far can one jump of it take them?', midair: 'If they appear elsewhere: can they appear in the air?',
+  climb: 'If they go up walls: how high?', height: 'If they fly: how high can they stay?', close: 'If it hits up close: how far does it reach?', range: 'If it hits from afar (a line or an explosion): how far away?', radius: 'If it explodes at a point: how wide is the blast?',
+};
+for (let n = 0; n < asks.length; n += 6) {
+  const batch = asks.slice(n, n + 6), key = k => `entry_${n + k + 1}`;
   const items = batch.map((entry, k) => [key(k), { person: names.get(entry.who) ?? entry.who, ...(entry.kind === 'ability' ? { ability: entry.label } : {}), lines: entry.sentences.map(id => clip(line(id), 220)) }]);
   const questions = batch.flatMap((entry, k) => [
-    choice(`way:${n + k}`, `How does entries.${key(k)} let ${names.get(entry.who) ?? entry.who} move beyond walking and running?`, ST.WAYS),
-    choice(`reach:${n + k}`, `How far does one such move of entries.${key(k)} carry them?`, Object.fromEntries(Object.keys(ST.REACH).map(option => [option, option]))),
-    choice(`height:${n + k}`, `How high can it take them (a leap or a flight; else the least)?`, Object.fromEntries(Object.keys(ST.HEIGHT).map(option => [option, option]))),
+    choice(`move:${n + k}`, `How does entries.${key(k)} let ${names.get(entry.who) ?? entry.who} move beyond walking and running?`, ST.MOVES),
+    choice(`attack:${n + k}`, `How does entries.${key(k)} let them attack?`, ST.ATTACKS),
+    ...Object.entries(ST.LIMITS).map(([limit, table]) => choice(`${limit}:${n + k}`, `entries.${key(k)}: ${LIMIT_ASK[limit]}`, options(table))),
   ]);
-  const { replies } = await ask(decide, wayMode, { items, questions }, null);
-  batch.forEach((entry, k) => { const answers = Object.fromEntries(['way', 'reach', 'height'].map(field => [field, pick(replies.find(reply => reply.key === `${field}:${n + k}`))])); wayRows.push({ ...entry, answers, way: ST.wayOf(answers), evidence: entry.sentences }); });
-  console.error(`ways: ${Math.min(n + 8, asks.length)} of ${asks.length}`);
+  const { replies } = await ask(decide, sheetMode, { items, questions }, null);
+  batch.forEach((entry, k) => { const answers = Object.fromEntries(['move', 'attack', ...Object.keys(ST.LIMITS)].map(field => [field, pick(replies.find(reply => reply.key === `${field}:${n + k}`))])); sheetRows.push({ ...entry, answers, sheet: ST.sheetOf(answers), evidence: entry.sentences }); });
+  console.error(`abilities: ${Math.min(n + 6, asks.length)} of ${asks.length}`);
 }
 
 // Objects: the kind and the size.
@@ -74,12 +82,24 @@ for (let n = 0; n < props.length; n += 12) {
   console.error(`props: ${Math.min(n + 12, props.length)} of ${props.length}`);
 }
 
+// Weapons: the attack each gives (the same three kinds and limits as a person's).
+const weaponRows = propRows.filter(row => ST.WEAPON_KINDS.has(row.prop?.kind));
+const weaponMode = modeOf('settei-weapons', 'A light novel being staged in a 3D city. For each weapon (with the lines it is in), say how it attacks and its limits.', { attacks: ST.ATTACKS });
+for (let n = 0; n < weaponRows.length; n += 10) {
+  const batch = weaponRows.slice(n, n + 10), key = k => `weapon_${n + k + 1}`;
+  const items = batch.map((entry, k) => [key(k), { name: entry.label, lines: entry.sentences.map(id => clip(line(id), 200)) }]);
+  const questions = batch.flatMap((entry, k) => [choice(`attack:${n + k}`, `How does entries.${key(k)} (${entry.label}) attack?`, ST.ATTACKS), ...['close', 'range', 'radius'].map(limit => choice(`${limit}:${n + k}`, `entries.${key(k)}: ${LIMIT_ASK[limit]}`, options(ST.LIMITS[limit])))]);
+  const { replies } = await ask(decide, weaponMode, { items, questions }, null);
+  batch.forEach((entry, k) => { const answers = Object.fromEntries(['attack', 'close', 'range', 'radius'].map(field => [field, pick(replies.find(reply => reply.key === `${field}:${n + k}`))])); entry.attack = ST.sheetOf(answers).attack; entry.attackAnswers = answers; });
+  console.error(`weapons: ${Math.min(n + 10, weaponRows.length)} of ${weaponRows.length}`);
+}
+
 const universe = resolve(values.universe);
 await mkdir(universe, { recursive: true });
 const at = new Date().toISOString();
-const abilitiesOut = ST.abilitiesFile(wayRows, { names, at, model: live.modelId }), propsOut = ST.propsFile(propRows, { at, model: live.modelId });
+const abilitiesOut = ST.abilitiesFile(sheetRows, { names, at, model: live.modelId }), propsOut = ST.propsFile(propRows, { at, model: live.modelId });
 await writeFile(join(universe, 'abilities.json'), JSON.stringify(abilitiesOut, null, 1));
 await writeFile(join(universe, 'props.json'), JSON.stringify(propsOut, null, 1));
-await writeFile(join(universe, 'settei-answers.json'), JSON.stringify({ at, model: live.modelId, paid, ways: wayRows.map(({ answers, ...row }) => ({ ...row, answers })), props: propRows.map(({ answers, ...row }) => ({ ...row, answers })) }, null, 1));
+await writeFile(join(universe, 'settei-answers.json'), JSON.stringify({ at, model: live.modelId, paid, abilities: sheetRows.map(({ answers, ...row }) => ({ ...row, answers })), props: propRows.map(({ answers, ...row }) => ({ ...row, answers })) }, null, 1));
 const kinds = {}; for (const row of propRows) kinds[row.prop?.kind ?? 'unanswered'] = (kinds[row.prop?.kind ?? 'unanswered'] ?? 0) + 1;
-console.log(JSON.stringify({ paid, people: Object.keys(abilitiesOut.people).length, ways: Object.values(abilitiesOut.people).reduce((n, person) => n + Object.keys(person.ways).length, 0), props: Object.keys(propsOut.labels).length, kinds }));
+console.log(JSON.stringify({ paid, people: Object.keys(abilitiesOut.people).length, moves: Object.values(abilitiesOut.people).reduce((n, person) => n + Object.keys(person.move).length, 0), attacks: Object.values(abilitiesOut.people).reduce((n, person) => n + Object.keys(person.attack).length, 0), held: abilitiesOut.held.length, weapons: weaponRows.filter(row => row.attack).length, props: Object.keys(propsOut.labels).length, kinds }));

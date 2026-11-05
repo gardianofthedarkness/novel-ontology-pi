@@ -2,9 +2,9 @@
 // objects needs to be assigned with a shape and size"). A pre-film cast that reads the volume once and writes the sheets
 // the runtime casts and physics read:
 //
-//   abilities  each person's ways of moving beyond walking (L12, docs/v2/physics-laws.md §7): leap, flight, teleport,
-//              super speed, riding, each with its reach (and height), from the abilities the reading found (concepts with
-//              their owners) and the person's own lines that move them; universe/abilities.json, by person
+//   abilities  each person's moves (agility, appearing, climbing walls, flight) and attacks (close, along a line, an
+//              explosion at a point), each with its limits, from the abilities the reading found (concepts with their
+//              owners) and the main characters' own lines; universe/abilities.json, by person (weapons: in props)
 //   props      each object's kind (a phone, a robot, a car, a helicopter, a blade…), from which its shape, its size and
 //              whether it flies: the vehicles and weapons the reading made slots, its objects, and the things the script
 //              supervisor's notes carry; universe/props.json, by label (and slot)
@@ -12,47 +12,68 @@
 // Jev picks each from a fixed list, given the lines the reading cites; nothing here is free text. This file holds the lists
 // and the tables that turn an answer into metres, and the questions; experiments/v2/settei.mjs asks them.
 
-// ── Abilities ───────────────────────────────────────────────────────────────────────────────────────────────────────
-export const WAYS = {
-  none: 'not a way of moving: it does not carry them anywhere (a power used on others, a skill, a trait)',
-  leap: 'leaps far or high: across a street, up a wall or onto a roof',
-  flight: 'flies or floats through the air',
-  teleport: 'moves instantly from one place to another without crossing the space between',
-  speed: 'runs or moves far faster than a person can',
-  ride: 'rides or drives a vehicle of their own',
+// ── Abilities (the user, 2026-11-05: "the ability should build with weapon system") ─────────────────────────────────
+// An ability is two parts. How it moves someone: agility (moving faster and with less effort: the path integral's and
+// the smoothing's cost per metre, lowered), appearing somewhere at once (a teleport, mid-air too), going up building
+// walls, staying in the air (flight). And how it attacks: up close, along a line (a beam, a bullet, a cannon), or an
+// explosion at a point. A weapon has the attack part only. The sheet says what someone can do; when the text has it in
+// use is the pre-film notes' (the script supervisor's moves, blocking's journeys, the action director's blows).
+export const MOVES = {
+  none: 'not a way of moving: it carries no one anywhere',
+  agility: 'moves far faster or with far less effort than a person: dashing, bounding, leaping from roof to roof',
+  appear: 'appears somewhere else at once (a teleport), on the ground or in the air',
+  climb: 'goes up the walls of buildings',
+  flight: 'flies, or stays up in the air',
 };
+export const ATTACKS = {
+  none: 'not an attack',
+  close: 'hits up close: a fist, a kick, a blade, a touch',
+  line: 'hits along a line from afar: a bullet, a beam, a shot, a cannon, something thrown',
+  area: 'hits an area round a point: an explosion, a blast, lightning striking a spot',
+};
+export const AGILITY = { 'a little faster than a person': 1.5, 'about twice as fast': 2, 'about four times as fast': 4, 'ten times or more': 10 };
 export const REACH = { 'a few metres': 5, 'tens of metres': 30, 'about a hundred metres': 100, 'hundreds of metres': 400, 'a kilometre or more': 1500 };
+export const MIDAIR = { 'in the air too': true, 'only onto the ground or a floor': false };
+export const CLIMB = { 'a floor or two': 6, 'up to a rooftop (10–30 m)': 25, 'any building': 300 };
 export const HEIGHT = { 'a floor or two': 6, 'up to a rooftop (10–30 m)': 25, 'high over the city (50 m or more)': 80 };
-/** How much faster than a run a way carries someone (the engine's speeds are L5's; a teleport is reach a step, no time). */
-export const SPEED_FACTOR = { leap: 1.6, flight: 3, speed: 4, ride: 6, teleport: Infinity };
+export const CLOSE = { touch: 1, 'an arm or a weapon long (under 3 m)': 3 };
+export const RANGE = { 'tens of metres': 30, 'about a hundred metres': 100, 'hundreds of metres': 400, 'a kilometre or more': 1500 };
+export const RADIUS = { 'a few metres': 3, 'about ten metres': 10, 'tens of metres': 30, 'a city block (about 80 m)': 80 };
+/** The questions of a sheet entry: the move it gives and the attack it gives, then every limit (only the ones that apply are read). */
+export const LIMITS = { agility: AGILITY, reach: REACH, midair: MIDAIR, climb: CLIMB, height: HEIGHT, close: CLOSE, range: RANGE, radius: RADIUS };
 
-/** One person's way from Jev's answers: the way, its reach, its height (leap, flight), and how sure. */
-export function wayOf(answers) {
-  // How sure: that it is this way of moving (the reach is its best guess, kept with its own sureness).
-  const way = answers.way?.value, sure = answers.way?.confidence ?? 0, reachSure = answers.reach?.confidence ?? 0;
-  if (!way || way === 'none' || !WAYS[way]) return null;
-  const out = { way, reach: REACH[answers.reach?.value] ?? REACH['tens of metres'], sure: Math.round(sure * 1000) / 1000, reachSure: Math.round(reachSure * 1000) / 1000 };
-  if (way === 'leap' || way === 'flight') out.height = HEIGHT[answers.height?.value] ?? HEIGHT['up to a rooftop (10–30 m)'];
-  if (way === 'teleport') out.sight = false;
-  return out;
+const r3 = value => Math.round(value * 1000) / 1000;
+/** One entry's sheet from Jev's answers: the move (with its limits) and the attack (with its), each with how sure Jev is of its kind. */
+export function sheetOf(answers) {
+  const value = (key, table, fallback) => table[answers[key]?.value] ?? fallback;
+  const moveKind = answers.move?.value, attackKind = answers.attack?.value;
+  const move = MOVES[moveKind] && moveKind !== 'none' ? { kind: moveKind, sure: r3(answers.move?.confidence ?? 0),
+    ...(moveKind === 'agility' ? { factor: value('agility', AGILITY, 2) } : moveKind === 'appear' ? { reach: value('reach', REACH, 30), midair: value('midair', MIDAIR, false) } : moveKind === 'climb' ? { height: value('climb', CLIMB, 25) } : { height: value('height', HEIGHT, 25) }) } : null;
+  const attack = ATTACKS[attackKind] && attackKind !== 'none' ? { kind: attackKind, sure: r3(answers.attack?.confidence ?? 0),
+    ...(attackKind === 'close' ? { reach: value('close', CLOSE, 3) } : attackKind === 'line' ? { range: value('range', RANGE, 100) } : { radius: value('radius', RADIUS, 10), range: value('range', RANGE, 100) }) } : null;
+  return { move, attack };
 }
 
-/** The abilities file (physics-laws.md §7's shape) from each person's ways, the evidence each rests on. */
-export const WAY_SURE = 0.5;
-export function abilitiesFile(entries, { names = new Map(), at = new Date().toISOString(), model = null, least = WAY_SURE } = {}) {
+/** Two sheets of one kind merged (an ability and the person's own lines): the larger of each limit, the surer. */
+const merge = (kept, next) => { if (!kept) return { ...next }; const out = { ...kept }; for (const [key, v] of Object.entries(next)) out[key] = typeof v === 'number' ? Math.max(kept[key] ?? 0, v) : typeof v === 'boolean' ? (kept[key] || v) : v; return out; };
+
+/** The abilities file: each person's moves and attacks by kind, the evidence they rest on; a kind under `least` sure held. */
+export const SHEET_SURE = 0.5;
+export function abilitiesFile(entries, { names = new Map(), at = new Date().toISOString(), model = null, least = SHEET_SURE } = {}) {
   const people = {}, held = [];
   for (const entry of entries) {
-    if (!entry.way) continue;
-    // A way Jev is under `least` sure of is held, not given (a doubtful ride would let someone cross a city).
-    if (entry.way.sure < least) { held.push({ who: entry.who, ...entry.way, evidence: entry.evidence ?? [] }); continue; }
-    const person = (people[entry.who] ??= { name: names.get(entry.who) ?? entry.who, ways: {}, evidence: [], by: 'settei', model, at });
-    const { way, ...limits } = entry.way, kept = person.ways[way];
-    // Two sources for one way (an ability and the person's own lines): the further reach, the higher, the surer.
-    person.ways[way] = kept ? { ...kept, reach: Math.max(kept.reach, limits.reach), ...(limits.height ? { height: Math.max(kept.height ?? 0, limits.height) } : {}), sure: Math.max(kept.sure, limits.sure) } : limits;
-    for (const id of entry.evidence ?? []) if (!person.evidence.includes(id)) person.evidence.push(id);
-    if (entry.concept) (person.from ??= []).push(entry.concept);
+    for (const part of ['move', 'attack']) {
+      const sheet = entry.sheet?.[part];
+      if (!sheet) continue;
+      if (sheet.sure < least) { held.push({ who: entry.who, part, ...sheet, evidence: entry.evidence ?? [] }); continue; }
+      const person = (people[entry.who] ??= { name: names.get(entry.who) ?? entry.who, move: {}, attack: {}, evidence: [], by: 'settei', model, at });
+      const { kind, ...limits } = sheet;
+      person[part][kind] = merge(person[part][kind], limits);
+      for (const id of entry.evidence ?? []) if (!person.evidence.includes(id)) person.evidence.push(id);
+      if (entry.concept && !(person.from ??= []).includes(entry.concept)) person.from.push(entry.concept);
+    }
   }
-  return { version: 1, least, people, held };
+  return { version: 2, least, people, held };
 }
 
 // ── Props ───────────────────────────────────────────────────────────────────────────────────────────────────────────
@@ -119,8 +140,10 @@ export function abilitiesToAsk({ reading, most = 4 }) {
 }
 
 /** The props file: each label's sheet, and each slot's and entity's by its id. */
+/** The kinds that are weapons: their sheet carries an attack (asked of them alone). */
+export const WEAPON_KINDS = new Set(['a small weapon', 'a heavy weapon']);
 export function propsFile(rows, { at = new Date().toISOString(), model = null } = {}) {
   const labels = {}, ids = {};
-  for (const row of rows) { if (!row.prop) continue; labels[row.label] = { ...row.prop, from: row.from, evidence: row.sentences }; for (const id of row.ids ?? []) ids[id] = row.label; }
+  for (const row of rows) { if (!row.prop) continue; labels[row.label] = { ...row.prop, ...(row.attack ? { attack: row.attack } : {}), from: row.from, evidence: row.sentences }; for (const id of row.ids ?? []) ids[id] = row.label; }
   return { version: 1, by: 'settei', model, at, labels, ids };
 }
