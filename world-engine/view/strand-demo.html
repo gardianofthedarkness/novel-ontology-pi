@@ -658,12 +658,23 @@ function drawSkeletons(id, entry, count, settling = null) {
 // People: a glowing pawn and a name each; a shadow when off the ground.
 const pawns = new Map();
 const crowdShape = new THREE.CapsuleGeometry(0.22, 0.75, 3, 8), crowdLooks = new Map();
+// The look of a slot drawn as the thing it is (a vehicle, a weapon): the things' gold, a little brighter.
+const propLook = new THREE.MeshBasicMaterial({ color: 0xffd36e, transparent: true, opacity: 0.35, depthWrite: false }), propEdges = new THREE.LineBasicMaterial({ color: 0xffd36e, transparent: true, opacity: 0.9 });
+sharedMaterials.add(propLook); sharedMaterials.add(propEdges);
 crowdShape.userData.shared = true;
 const crowdLook = (colour) => { if (!crowdLooks.has(colour)) { const look = new THREE.MeshStandardMaterial({ color: new THREE.Color(colour), transparent: true, opacity: 0.8 }); sharedMaterials.add(look); crowdLooks.set(colour, look); } return crowdLooks.get(colour); };
 for (const [id, person] of Object.entries(data.people)) {
   // The crowd (M9): its field's samples as small plain figures, no halo, no name: a crowd, not people.
   // One shape and one material a colour for the whole crowd (it was one each: some 1,300 of each in volume 1).
   if (person.crowd) { const pawn = new THREE.Group(), body = new THREE.Mesh(crowdShape, crowdLook(person.color)); body.userData.shared = true; body.position.y = 0.6; pawn.add(body); pawns.set(id, { pawn, body }); continue; }
+  // A slot the settei cast says is a vehicle or a weapon (an observation helicopter, a car, a gun): drawn as that, at its
+  // size and (a helicopter, a drone) its flying height, not as a person.
+  if (person.prop?.shape) {
+    const pawn = new THREE.Group(), [w, h, d] = person.prop.size, form = new THREE.Group(), fill = shapeGeometry(person.prop.shape);
+    form.add(new THREE.Mesh(fill, propLook), new THREE.LineSegments(new THREE.EdgesGeometry(fill), propEdges)); form.scale.set(w, h, d); form.position.y = person.prop.airborne ?? 0; pawn.add(form);
+    const body = form.children[0], name = label(person.name, person.color, 24); name.position.y = (person.prop.airborne ?? 0) + h + 1.4; pawn.add(name);
+    body.userData.shared = true; pawns.set(id, { pawn, body }); continue;
+  }
   const tint = new THREE.Color(person.color), pawn = new THREE.Group();
   const body = new THREE.Mesh(new THREE.CapsuleGeometry(0.35, 0.95, 4, 12), new THREE.MeshStandardMaterial({ color: tint, emissive: tint, emissiveIntensity: 0.7, transparent: true })); body.position.y = 0.82; pawn.add(body);
   const halo = new THREE.Mesh(new THREE.RingGeometry(0.55, 0.8, 24), new THREE.MeshBasicMaterial({ color: tint, transparent: true, opacity: 0.55, side: THREE.DoubleSide, depthWrite: false })); halo.rotation.x = -Math.PI / 2; halo.position.y = 0.05; pawn.add(halo);
@@ -1031,7 +1042,10 @@ const thingMaterial = new THREE.MeshBasicMaterial({ color: 0xffd36e, transparent
 function shapeGeometry(shape, stand = false) {
   const geometry = shape === "oval" ? new THREE.SphereGeometry(0.5, 20, 14).scale(1, 0.55, 0.7) : shape === "diamond" ? new THREE.OctahedronGeometry(0.5)
     : shape === "triangle" ? new THREE.ExtrudeGeometry(new THREE.Shape([new THREE.Vector2(-0.5, -0.5), new THREE.Vector2(0.5, -0.5), new THREE.Vector2(0, 0.5)]), { depth: 1, bevelEnabled: false }).translate(0, 0, -0.5)
-    : shape === "donut" ? new THREE.TorusGeometry(0.35, 0.15, 12, 32).rotateX(stand ? 0 : Math.PI / 2) : new THREE.BoxGeometry(1, 1, 1);
+    : shape === "donut" ? new THREE.TorusGeometry(0.35, 0.15, 12, 32).rotateX(stand ? 0 : Math.PI / 2)
+    // The settei cast's shapes (a robot's cylinder, a helicopter's or a plane's capsule lying along its length, a sign's panel).
+    : shape === "cylinder" ? new THREE.CylinderGeometry(0.5, 0.5, 1, 20) : shape === "capsule" ? new THREE.CapsuleGeometry(0.5, 1, 6, 16).rotateZ(Math.PI / 2).scale(0.5, 1, 1)
+    : shape === "panel" ? new THREE.BoxGeometry(1, 1, 0.12) : new THREE.BoxGeometry(1, 1, 1);
   geometry.computeBoundingBox(); return geometry.translate(0, -geometry.boundingBox.min.y, 0);
 }
 /** A model or shape as a gold hologram standing on y = 0. */
@@ -1050,7 +1064,7 @@ let posed = null;
 // See-through while playing (and while recording a scene), never on Jev's stills, which mask what they need themselves.
 let seeing = !capture;
 const things = (data.things ?? []).map((thing) => {
-  const piece = new THREE.Group(), frame = new THREE.Group(), depth = thing.shape === "box" ? Math.max(1.2, thing.size * 0.35) : thing.size;
+  const piece = new THREE.Group(), frame = new THREE.Group(), depth = thing.depth ?? (thing.shape === "box" ? Math.max(1.2, thing.size * 0.35) : thing.size);
   const forms = { flat: hologram(thing.model, thing.shape), standing: thing.shape === "donut" && !thing.model ? hologram(null, "donut", true) : null };
   piece.add(forms.flat, frame); if (forms.standing) piece.add(forms.standing);
   const tag = label(thing.name.slice(0, 12), "#ffd36e", 24); tag.position.y = thing.height + 1.6; piece.add(tag);

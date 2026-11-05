@@ -128,6 +128,10 @@ export async function direct(novelDir, { reading, readingPath = null, prefilm = 
   // the stage is smoothed too (occupation.mjs), and someone surely there whom the script left out is added. The reading
   // played from is recorded for the review CLI (novel reading).
   if (readingPath) await writeFile(join(out, 'reading-path.json'), JSON.stringify({ path: resolve(readingPath) }));
+  // The settei cast's prop sheet (universe/props.json, experiments/v2/settei.mjs): each object's kind, shape, size and
+  // flying height, by its name, and the slots that are vehicles or weapons by id (drawn as what they are, not as people).
+  const propSheet = JSON.parse(await readFile(join(novelDir, '..', '..', 'universe', 'props.json'), 'utf8').catch(() => 'null'));
+  const propOf = name => propSheet?.labels?.[name] ?? null, slotProp = id => (propSheet?.ids?.[id] ? propOf(propSheet.ids[id]) : null);
   const reviewed = await R.applyAnswers(novelDir).catch(error => ({ error: String(error.message ?? error) }));
   const pins = await R.loadPins(novelDir), lastRun = await R.latestRun(novelDir);
   const oldLog = lastRun ? (await readFile(join(novelDir, 'stage', 'world', 'log', `${lastRun}.jsonl`), 'utf8').catch(() => '')).split('\n').filter(Boolean).map(row => JSON.parse(row)) : [];
@@ -245,7 +249,10 @@ export async function direct(novelDir, { reading, readingPath = null, prefilm = 
     // The things people carry, put down, throw and break (the digest's items, the user, 2026-11-03: v1's item placing
     // brought back): each one's placements over the line, drawn on the page as v1's things are (a gold shape with its name).
     const things = new Map();
-    const thingsOnPage = () => [...things.values()].filter(thing => thing.placed.length).map(thing => ({ id: thing.id, name: thing.name, aliases: [], model: null, theme: null, switched: false, shape: thing.size > 1.5 ? 'box' : 'oval', size: Math.max(0.4, Math.min(6, thing.size)), height: thing.size > 1.5 ? Math.max(1, thing.size * 0.4) : Math.max(0.4, thing.size), placed: thing.placed, struct: null }));
+    // A thing's form (the user, 2026-11-05: "objects needs to be assigned with a shape and size"): its sheet's shape and
+    // size where the settei cast has it (a "not a thing" not drawn), else a box of the size the notes give.
+    const formOf = thing => { const prop = propOf(thing.name); if (prop?.shape === null) return null; if (prop?.size) return { shape: prop.shape, size: prop.size[0], height: prop.size[1], depth: prop.size[2], airborne: prop.airborne ?? 0, kind: prop.kind }; const w = Math.max(0.2, Math.min(6, thing.size)); return { shape: 'box', size: w, height: Math.max(0.2, w * 0.6), depth: w, airborne: 0, kind: null }; };
+    const thingsOnPage = () => [...things.values()].filter(thing => thing.placed.length && formOf(thing)).map(thing => { const form = formOf(thing); return { id: thing.id, name: thing.name, aliases: [], model: null, theme: null, switched: false, shape: form.shape, size: form.size, height: form.height, depth: form.depth, kind: form.kind, placed: thing.placed, struct: null }; });
     try {
       // The page as far as the loop has played, loaded again only when the world has grown (or a scene is done).
       const reload = async () => {
@@ -270,7 +277,7 @@ export async function direct(novelDir, { reading, readingPath = null, prefilm = 
       }
       // Each unnamed place's first unit (the world script's `scene`), for the live view to show it only once that unit has landed.
       const bornOf = new Map();
-      const withLine = data => ({ ...data, macro: (data.macro ?? []).map(node => (bornOf.has(node.id) ? { ...node, born: bornOf.get(node.id) } : node)), things: [...(data.things ?? []), ...thingsOnPage()], scenes: data.scenes.map(entry => { const piece = played.has(entry.id) ? pieceOf(played.get(entry.id)) : null; return piece ? { ...entry, starts: piece.starts, events: piece.events, cast: piece.cast, landed: true } : { ...entry, landed: false }; }) });
+      const withLine = data => ({ ...data, people: Object.fromEntries(Object.entries(data.people ?? {}).map(([id, person]) => { const prop = slotProp(id); return [id, prop?.shape ? { ...person, prop: { kind: prop.kind, shape: prop.shape, size: prop.size, airborne: prop.airborne ?? 0 } } : person]; })), macro: (data.macro ?? []).map(node => (bornOf.has(node.id) ? { ...node, born: bornOf.get(node.id) } : node)), things: [...(data.things ?? []), ...thingsOnPage()], scenes: data.scenes.map(entry => { const piece = played.has(entry.id) ? pieceOf(played.get(entry.id)) : null; return piece ? { ...entry, starts: piece.starts, events: piece.events, cast: piece.cast, landed: true } : { ...entry, landed: false }; }) });
       const dense = id => { const { i, j, k } = W.cellOf(world, id), g = page.world; return ((k + g.ok) * g.NZ + (j + g.oj)) * g.NX + (i + g.oi); };
       const at = id => { const p = W.nodePos(world, id); return [p.x, p.y, p.z]; };
       const lotOf = (x, z) => world.lotAt.get(W.cellKey(Math.floor(x / CELL), Math.floor(z / CELL)));
@@ -953,8 +960,9 @@ export async function direct(novelDir, { reading, readingPath = null, prefilm = 
               const held = thing.holder && positions[thing.holder] ? at(positions[thing.holder][0]) : null;
               const p = held ? [held[0] + 0.4, held[1] + (thing.size > 1.5 ? 0 : 1), held[2] + 0.3] : thing.at?.scene === scene.id ? thing.at.p : null, last = thing.placed.at(-1);
               if (!p || (last && last.scene === scene.id && Math.hypot(last.x - p[0], last.y - p[1], last.z - p[2]) < 0.3)) continue;
-              const w = Math.max(0.4, Math.min(6, thing.size)), h = thing.size > 1.5 ? Math.max(1, w * 0.4) : w;
-              thing.placed.push({ scene: scene.id, event: cardRecord.event, place: scene.placeId, x: round(p[0]), y: round(p[1]), z: round(p[2]), fit: { sx: w, sy: h, sz: w, turn: 0, stand: false, w, h, d: w } });
+              const form = formOf(thing); if (!form) continue;
+              const w = form.size, h = form.height, d = form.depth, y = p[1] + (held ? 0 : form.airborne);
+              thing.placed.push({ scene: scene.id, event: cardRecord.event, place: scene.placeId, x: round(p[0]), y: round(y), z: round(p[2]), fit: { sx: w, sy: h, sz: d, turn: 0, stand: false, w, h, d } });
             }
           };
           // Actors are there (L9): someone the card says acts or speaks, with no place in the scene, is held (a presence the
