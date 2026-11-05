@@ -29,14 +29,19 @@ const round = value => Math.round(value * 10) / 10;
 // ── The frame (the photographer) ───────────────────────────────────────────────────────────────────────────────────
 // The window a cut's camera holds: centred on its subjects, as wide as its shot size and never cutting off the people
 // it holds; `window` is metres from the centre on the ground. `camera` is what the page's camera takes.
+// The storyboard's shot size is the photographer's preference: when the cast as laid out is wider than it can hold (the
+// layout check's measure), the tightest larger size that holds them (the W10 inspection: 18 frames too tight).
+const SIZES = Object.keys(SHOT_SPAN), holds = (size, spread) => spread + BODY <= 3 * ((SHOT_SPAN[size] ?? SHOT_SPAN['medium shot']) / 2) + 6;
 export function frameOf({ points, size, angle, move, lead = null }) {
-  const span = SHOT_SPAN[size] ?? SHOT_SPAN['medium shot'];
   const centre = lead ?? (points.length ? [0, 1, 2].map(n => points.reduce((sum, p) => sum + p[n], 0) / points.length) : null);
   if (!centre) return null;
   const spread = lead ? 0 : Math.max(0, ...points.map(p => Math.hypot(p[0] - centre[0], p[2] - centre[2])));
+  const asked = size;
+  if (!holds(size, spread)) size = SIZES.slice(Math.max(0, SIZES.indexOf(size))).find(next => holds(next, spread)) ?? SIZES.at(-1);
+  const span = SHOT_SPAN[size] ?? SHOT_SPAN['medium shot'];
   const window = Math.min(MAX_WINDOW, Math.max(span / 2, spread + BODY));
   return {
-    centre: centre.map(round), window: round(window), size, angle, move, follows: FOLLOWS.has(move),
+    centre: centre.map(round), window: round(window), size, ...(asked !== size ? { asked } : {}), angle, move, follows: FOLLOWS.has(move),
     camera: { focus: { x: centre[0], z: centre[2], y0: centre[1], w: 6, d: 6, h: 3 }, radius: Math.max(span + 1.5, spread * 1.2 + 2 * BODY), elevation: ELEVATION[angle] ?? 12, yaw: 0 },
   };
 }

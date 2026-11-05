@@ -36,6 +36,8 @@ const MOVE_SURE = 0.5;
 // Human scale, the one unit kept (physics-laws.md §9): a person's height. Every other distance is a referent measured in
 // the world or a speed times the story's time.
 const BODY = 1.7;
+/** How far the layout artist and the checks look for a spot that agrees with the notes (metres; was 6 bodies, W10). */
+const FACT_SEARCH = 25;
 const seeded = text => { let h = 2166136261; for (const c of text) { h ^= c.charCodeAt(0); h = Math.imul(h, 16777619); } let s = h >>> 0; return () => { s = (s + 0x6d2b79f5) | 0; let t = Math.imul(s ^ (s >>> 15), 1 | s); t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t; return ((t ^ (t >>> 14)) >>> 0) / 4294967296; }; };
 const round = value => Math.round(value * 10) / 10;
 
@@ -210,7 +212,10 @@ export async function direct(novelDir, { reading, readingPath = null, prefilm = 
   const jevUse = { requests: 0, input: 0, output: 0, by: {} };
   record.usage = { system2: workMeter?.usage ?? null, digest: digestMeter?.usage ?? null, casts: Object.fromEntries(Object.entries(meters).map(([id, meter]) => [id, meter.usage])), jev: jevUse, workModel: workModel?.modelId ?? null };
   // Each stretch of the gate (M12): what fired there and, once played, what each fired cast found.
-  record.stretches = gate ? gate.windows.map(window => ({ scene: window.scene, first: window.first, last: window.last, type: window.type, fired: window.fired, found: {} })) : [];
+  // Only casts that wrote notes count as fired (the acting coach, prop master and first AD are not built: they were
+  // counted as fired in up to half the stretches of W10).
+  const noted = new Set(Object.values(prefilm?.units ?? {}).flatMap(unit => Object.keys(unit)));
+  record.stretches = gate ? gate.windows.map(window => ({ scene: window.scene, first: window.first, last: window.last, type: window.type, fired: prefilm ? window.fired.filter(id => noted.has(id)) : window.fired, found: {} })) : [];
   const asked = withSystem2((state, questions, options) => retried(() => jev.decide(state, questions, options), log), workMeter, { note: entry => { if (asking) (asking.system2 ??= []).push(entry); } });
   // The summarizer (Track A, digest.mjs; the user, 2026-11-03): every scene of the line read by the work model ahead of the
   // play, in reading order, the memory carried from scene to scene; the director waits for a scene's digest when it comes
@@ -753,17 +758,36 @@ export async function direct(novelDir, { reading, readingPath = null, prefilm = 
         const routeAt = (lines, subject = null, cutId = null) => ({ unit: scene.id, lines, cut: cutId ? cutLines(cutId) : lines, order: reads.sentences, cast: (desk.nodes.get(cutId)?.cast ?? []).filter(who => positions[who]), subject });
         // The script supervisor's facts the routing gives a check, tested on where the cast stands now: each binding one that
         // fails is a fault (L14), with the spot nearest that agrees where there is one in the set.
-        const factFaults = (task, lines, cutId) => {
+        const factFaults = (task, lines, cutId, radius = FACT_SEARCH) => {
           const positionOf = who => (positions[who] ? at(positions[who][0]) : null), routed = CB.route(task, routeAt(lines, null, cutId), cutBag.notes).filter(item => item.note.kind === 'fact');
           const facts = routed.map(item => item.note.raw).filter(Boolean);
           const faults = [];
           for (const who of [...new Set(facts.map(fact => fact.who))].filter(who => positions[who])) {
             const here = nodeAt(positions[who][0]), binding = facts.filter(fact => fact.who === who && FA.binding(fact)), failing = binding.filter(fact => FA.holds(fact, here, positionOf) === false);
             if (!failing.length) continue;
-            const nearby = around(here.x, here.z, 6 * BODY).nodes.filter(node => inside(node.id)).map(describe), best = FA.bestFor(binding, here, nearby, positionOf);
+            const nearby = around(here.x, here.z, radius).nodes.filter(node => inside(node.id)).map(describe), best = FA.bestFor(binding, here, nearby, positionOf);
             faults.push({ law: 'L14', who, why: failing.map(fact => FA.factWords(fact, id => names.get(id) ?? id)).join('; '), fix: best ? 'layout' : null, spot: best?.id ?? null, lines: failing.map(fact => fact.sentence) });
           }
           return { faults, notes: routed.map(item => item.id) };
+        };
+        // The unit's place a building or a room, or the set dresser's setting indoors: its people start inside.
+        const placeScale = script.places?.[scene.placeId]?.scale ?? null, setting = prepared?.setDresser;
+        const startsInside = ['building', 'room'].includes(placeScale) || (setting?.setting === 'indoors' && (setting.sure ?? 0) >= 0.5);
+        const SITE_KINDS = new Set(['indoors', 'outdoors', 'roof', 'underground']);
+        const placeByNotes = (lines, cutId, moveTo) => {
+          const positionOf = who => (positions[who] ? at(positions[who][0]) : null), facts = CB.route('layout', routeAt(lines, null, cutId), cutBag.notes).filter(item => item.note.kind === 'fact').map(item => item.note.raw).filter(Boolean);
+          let moved = false;
+          for (const who of Object.keys(positions).filter(id => (desk.nodes.get(cutId)?.cast ?? []).includes(id))) {
+            const own = facts.filter(fact => fact.who === who && FA.binding(fact));
+            if (startsInside && !own.some(fact => SITE_KINDS.has(fact.kind))) own.push({ who, kind: 'indoors', value: null, basis: 'implied', sure: 0.7, sentence: null, by: 'the place' });
+            const here = nodeAt(positions[who][0]);
+            if (!own.some(fact => FA.holds(fact, here, positionOf) === false)) continue;
+            const best = FA.bestFor(own, here, around(here.x, here.z, FACT_SEARCH).nodes.filter(node => inside(node.id)).map(describe), positionOf);
+            if (!best) continue;
+            moveTo(who, walk(scene, `${scene.id}|${cutId}|${who}|layout-notes`, positions[who], [best.id], 'walk'), 'walk', `layout: by the notes (${own.map(fact => FA.factWords(fact, id => names.get(id) ?? id)).join('; ')})`, { quiet: true });
+            moved = true;
+          }
+          return moved;
         };
         // How many cards each beat plays (a card's share of its beat's time, L17).
         const cardsInBeat = new Map();
@@ -861,7 +885,9 @@ export async function direct(novelDir, { reading, readingPath = null, prefilm = 
             const readFight = ids.some(id => read.actionDirector.has(id)), readWay = ids.some(id => read.blocking.has(id));
             let found = beat.lead, co = [];
             if (blows && goes) { found = 'mega'; co = ['combat']; } else if (blows) found = 'combat'; else if (goes) found = 'mega';
-            else if ((beat.lead === 'combat' && readFight) || (beat.lead === 'mega' && readWay)) found = 'routine';
+            // The notes are the evidence (the W10 inspection: 33 beats guessed combat had no blows): a unit with pre-film notes
+            // and no blows or journeys in the beat plays it as routine.
+            else if ((beat.lead === 'combat' && (readFight || prepared)) || (beat.lead === 'mega' && (readWay || prepared))) found = 'routine';
             if (found !== beat.lead || co.length) { for (const id of ids) { const entry = beatOf.get(id); if (entry?.n === n) beatOf.set(id, { ...entry, lead: found, gateLead: beat.lead, ...(co.length ? { with: co } : {}) }); } }
             sceneRecord.leads.push({ beat: n, type: beat.type, gate: beat.lead, lead: found, ...(co.length ? { with: co } : {}), blows, journeys: goes });
           }
@@ -971,6 +997,8 @@ export async function direct(novelDir, { reading, readingPath = null, prefilm = 
               moveTo(who, walk(scene, `${scene.id}|${card.id}|${who}|implied`, positions[who], [best.id], 'walk'), 'walk', `implied: ${words}`, { quiet: true });
               const last = cardRecord.moves.at(-1);
               if (last?.person === who) last.implied = failing.map(fact => fact.sentence);
+              // Whether each holds where they now stand (the record's `holds` is before the move).
+              const there = nodeAt(positions[who][0]); for (const entry of cardRecord.facts) if (entry.who === who && own.some(fact => fact.sentence === entry.sentence && fact.kind === entry.kind)) entry.after = FA.holds(entry, there, positionOf);
             }
           };
           // The background's routine for those the card did not move (the latest the digest says, else the scene's): those
@@ -1362,6 +1390,11 @@ export async function direct(novelDir, { reading, readingPath = null, prefilm = 
             const layoutNotes = CB.route('layout', routeAt(card.sentences, null, cut.id), cutBag.notes).map(item => item.id), frameNotes = CB.route('frame', routeAt(card.sentences, null, cut.id), cutBag.notes).map(item => item.id);
             const layoutVersion = () => ({ at: Object.fromEntries(layoutNow().map(entry => [entry.who, entry.at.map(round)])), notes: layoutNotes });
             desk.start(node, 'layout'); desk.publish(node, 'layout', layoutVersion());
+            // The layout artist places the cast by the notes before the check (the W10 inspection: at a building's unit,
+            // people "implied indoors" were laid out on the street and no retake could reach a room): each person's binding
+            // facts the routing gives the layout, and, where the unit is a building or a room or the set dresser says
+            // indoors, inside unless a fact says otherwise (a default that moves, never a fault); to the best spot in the set.
+            if (placeByNotes(card.sentences, cut.id, moveTo)) desk.publish(node, 'layout', layoutVersion());
             desk.start(node, 'frame');
             frame = null;
             frame = WF.frameOf({ points: layoutNow().map(entry => entry.at), size: cut.size, angle: cut.angle, move: cut.move }) ?? (anchorAt ? WF.frameOf({ points: [anchorAt], size: cut.size, angle: cut.angle, move: cut.move }) : null);
@@ -1380,7 +1413,11 @@ export async function direct(novelDir, { reading, readingPath = null, prefilm = 
                 const taken = new Set(Object.values(positions).map(value => value[0])), free = near(at(positions[who][0]), 0.8, 2.5).filter(entry => !taken.has(entry.id));
                 if (free.length) moveTo(who, walk(scene, `${scene.id}|${card.id}|${who}|layout`, positions[who], [free[0].id], 'walk'), 'walk', 'layout: one to a cell', { quiet: true });
               }
-              if (crowded.length || placed.length) desk.publish(node, 'layout', layoutVersion());
+              if (crowded.length || placed.length) {
+                desk.publish(node, 'layout', layoutVersion());
+                // The frame taken again round the cast as they now stand (frame after layout), unless it holds a lead only.
+                if (!frame?.holds) { const again = WF.frameOf({ points: layoutNow().map(entry => entry.at), size: cut.size, angle: cut.angle, move: cut.move }); if (again) { frame = again; desk.publish(node, 'frame', { ...frame, notes: frameNotes }); } }
+              }
               if (faults.some(fault => fault.fix === 'tighten' || fault.fix === 'frame')) {
                 const lead = card.people.find(person => positions[person.id] && person.how.some(how => how === 'speaks' || how === 'acts'))?.id ?? castNow()[0];
                 if (lead) { frame = { ...WF.frameOf({ points: [at(positions[lead][0])], lead: at(positions[lead][0]), size: cut.size, angle: cut.angle, move: cut.move }), holds: [lead] }; desk.publish(node, 'frame', { ...frame, notes: frameNotes }); }

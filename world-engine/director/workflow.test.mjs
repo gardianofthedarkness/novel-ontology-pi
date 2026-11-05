@@ -27,9 +27,13 @@ test('the frame holds its cast at its shot size, and says who stands in it', () 
 });
 
 test('the layout check finds two on one cell and a shot size that cannot hold its cast', () => {
+  // The storyboard's close-up cannot hold a cast 40 m across: the frame takes the tightest size that does (a wide shot).
   const frame = frameOf({ points: [[0, 0, 0], [40, 0, 0]], size: 'close-up', angle: 'eye level', move: 'static' });
+  assert.equal(frame.size, 'wide shot'); assert.equal(frame.asked, 'close-up');
   const faults = layoutFaults({ frame, cast: [{ who: 'a', node: 1, at: [0, 0, 0] }, { who: 'b', node: 1, at: [0, 0, 0] }, { who: 'c', node: 2, at: [40, 0, 0] }] });
-  assert.deepEqual(faults.map(fault => fault.fix), ['layout', 'tighten']);
+  assert.deepEqual(faults.map(fault => fault.fix), ['layout']);
+  // A frame given too tight (a lead's) is still a fault the check tightens.
+  assert.deepEqual(layoutFaults({ frame: { ...frame, size: 'close-up' }, cast: [{ who: 'a', node: 1, at: [0, 0, 0] }, { who: 'c', node: 2, at: [40, 0, 0] }] }).map(fault => fault.fix), ['tighten']);
   assert.deepEqual(layoutFaults({ frame: frameOf({ points: [[0, 0, 0], [3, 0, 0]], size: 'medium shot', angle: 'eye level', move: 'static' }), cast: [{ who: 'a', node: 1, at: [0, 0, 0] }, { who: 'b', node: 2, at: [3, 0, 0] }] }), []);
 });
 

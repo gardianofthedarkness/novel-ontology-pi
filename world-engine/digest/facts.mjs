@@ -7,8 +7,9 @@ const FLOOR = 3;
 /** The walk graph's node types (world.ts `what`). */
 export const TYPE = { outdoor: 1, circulation: 2, room: 3, roof: 4, underground: 5 };
 
-/** A fact strong enough to move someone: stated and fairly sure, or implied and sure. */
-export const binding = fact => (fact.basis === 'stated' ? fact.sure >= 0.5 : fact.sure >= 0.65);
+/** A fact strong enough to move someone: stated and fairly sure, or implied and sure (an implied feature, a window or a door
+ * guessed, very sure: W10's implied features failed 71%). */
+export const binding = fact => (fact.basis === 'stated' ? fact.sure >= 0.5 : fact.sure >= (fact.kind === 'feature' ? 0.85 : 0.65));
 
 /**
  * Whether a node agrees with a fact: true, false, or null when it cannot be judged. `node`: { x, y, z, type, edge (metres to
