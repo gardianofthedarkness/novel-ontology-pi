@@ -6,8 +6,17 @@
 <title>World · Live</title>
 <style>
   :root { color-scheme: dark; --bg: #060c12; --panel: #0b1620e6; --ink: #d9e3ea; --dim: #8aa0b0; --line: #1d3442; --accent: #7ce6ff; --jev: #ffd36e;
+    /* Surfaces inside the panels (buttons, rows, code, the sentence read), so the day theme can light them too. */
+    --chip: #0f2230; --raised: #10212c; --deep: #071019; --sunk: #08131b; --field: #0b1a24; --rule: #12232e; --current: #17384d; --current-ink: #fff;
     /* Sentence kinds, as the extraction report colours them. */
     --spoken: #79aae6; --thought: #b597e4; --fact: #dfac55; --action: #ef7f66; --environment: #6bc493; --narration: #a8a59f; }
+  /* Daylight (strand-demo.html daylightTick; the user, 2026-11-05): the panels light by the story's day, warm at its dawn and
+     dusk, dark by its night, as the world they sit on. */
+  :root[data-daylight="day"] { color-scheme: light; --bg: #dfe9f1; --panel: #f6f9fcec; --ink: #13212b; --dim: #4f6575; --line: #b8cad8; --accent: #0b78a0; --jev: #a86f00;
+    --chip: #e4edf4; --raised: #dbe6ee; --deep: #eef3f7; --sunk: #e9f0f5; --field: #f1f6f9; --rule: #cddae4; --current: #cfe3f1; --current-ink: #0b1a24;
+    --spoken: #2d6fb8; --thought: #7a52b8; --fact: #9a6a10; --action: #c2452c; --environment: #2f8a58; --narration: #5e5b55; }
+  :root[data-daylight="twilight"] { --bg: #1a1420; --panel: #241a28e6; --line: #4a3442; --accent: #ffb38a; }
+  html, body, .hud, .bar a, .bar button, .legend, .sub, .blist, .pic, iframe { transition: background-color .8s ease, color .8s ease, border-color .8s ease; }
   html, body { margin: 0; height: 100%; background: var(--bg); color: var(--ink); font: 13px/1.45 system-ui, -apple-system, "PingFang SC", sans-serif; overflow: hidden; }
   iframe { position: fixed; inset: 0; width: 100%; height: 100%; border: 0; background: var(--bg); transition: opacity .35s ease; }
   iframe.waiting { opacity: 0; pointer-events: none; }
@@ -69,21 +78,21 @@
   .blist.dev { left: max(12px, env(safe-area-inset-left)); right: auto; width: min(460px, calc(100vw - 24px)); }
   .devbody { overflow-y: auto; overscroll-behavior: contain; padding: 8px 10px 14px; font-size: 12px; line-height: 1.5; display: grid; gap: 10px; align-content: start; }
   .devbody .modes { display: flex; gap: 6px; flex-wrap: wrap; }
-  .devbody .modes button, .devbody .files a { font: inherit; font-size: 12px; color: var(--ink); background: #0f2230; border: 1px solid var(--line); border-radius: 99px; padding: 4px 10px; cursor: pointer; text-decoration: none; }
+  .devbody .modes button, .devbody .files a { font: inherit; font-size: 12px; color: var(--ink); background: var(--chip); border: 1px solid var(--line); border-radius: 99px; padding: 4px 10px; cursor: pointer; text-decoration: none; }
   .devbody .modes button[aria-pressed="true"] { border-color: var(--jev); color: var(--jev); }
   .devbody .files { display: flex; gap: 6px; flex-wrap: wrap; }
   .devbody table { border-collapse: collapse; width: 100%; font-variant-numeric: tabular-nums; } .devbody td, .devbody th { border-bottom: 1px solid var(--line); padding: 2px 4px; text-align: left; vertical-align: top; } .devbody th { color: var(--dim); font-weight: 600; }
-  .devbody .who { color: var(--accent); font-weight: 600; margin-top: 4px; } .devbody .raw { color: #ffb27a; } .devbody .sm { color: #7ce6ff; } .devbody .now td { background: #17384d; }
+  .devbody .who { color: var(--accent); font-weight: 600; margin-top: 4px; } .devbody .raw { color: #ffb27a; } .devbody .sm { color: #7ce6ff; } .devbody .now td { background: var(--current); }
   .devbody details { border-top: 1px solid var(--line); padding-top: 4px; } .devbody summary { cursor: pointer; color: var(--dim); }
-  .devbody pre { margin: 4px 0 0; max-height: 34vh; overflow: auto; background: #071019; border: 1px solid var(--line); border-radius: 6px; padding: 6px; font: 11px/1.4 ui-monospace, SFMono-Regular, Menlo, monospace; white-space: pre-wrap; word-break: break-all; -webkit-user-select: text; user-select: text; }
+  .devbody pre { margin: 4px 0 0; max-height: 34vh; overflow: auto; background: var(--deep); border: 1px solid var(--line); border-radius: 6px; padding: 6px; font: 11px/1.4 ui-monospace, SFMono-Regular, Menlo, monospace; white-space: pre-wrap; word-break: break-all; -webkit-user-select: text; user-select: text; }
   .devbody .copy { float: right; font-size: 11px; background: none; border: 1px solid var(--line); color: var(--dim); border-radius: 4px; cursor: pointer; }
   .blist header { display: grid; gap: 2px; padding: 8px 10px; border-bottom: 1px solid var(--line); }
   .blist header b { color: var(--accent); font-size: 12px; letter-spacing: .04em; }
   .blist header span { color: var(--dim); font-size: 11px; font-variant-numeric: tabular-nums; }
   .blist ol { list-style: none; margin: 0; padding: 4px 0; overflow-y: auto; overscroll-behavior: contain; }
-  .blist li { padding: 6px 10px; border-bottom: 1px solid #12232e; cursor: pointer; display: grid; gap: 1px; }
-  .blist li:hover, .blist li:focus-visible { background: #10212c; outline: none; }
-  .blist li.part { padding-left: 26px; background: #08131b; }
+  .blist li { padding: 6px 10px; border-bottom: 1px solid var(--rule); cursor: pointer; display: grid; gap: 1px; }
+  .blist li:hover, .blist li:focus-visible { background: var(--raised); outline: none; }
+  .blist li.part { padding-left: 26px; background: var(--sunk); }
   .blist .name { color: var(--ink); font-size: 13px; min-width: 0; overflow-wrap: anywhere; }
   .blist .what { color: var(--dim); font-size: 11px; font-variant-numeric: tabular-nums; }
   .blist .by { color: var(--accent); } .blist .by.jev { color: var(--jev); }
@@ -96,7 +105,7 @@
   .reader .now { padding: 8px 10px; border-bottom: 1px solid var(--line); display: grid; gap: 6px; }
   .reader .now .meta { color: var(--dim); font-size: 11px; line-height: 1.5; max-height: 6.2em; overflow-y: auto; }
   .reader .ctl { display: flex; flex-wrap: wrap; gap: 6px; }
-  .reader .ctl button, .reader .ctl a.btn { font: inherit; font-size: 12px; color: var(--ink); background: #0f2230; border: 1px solid var(--line); border-radius: 99px; padding: 5px 11px; cursor: pointer; text-decoration: none; }
+  .reader .ctl button, .reader .ctl a.btn { font: inherit; font-size: 12px; color: var(--ink); background: var(--chip); border: 1px solid var(--line); border-radius: 99px; padding: 5px 11px; cursor: pointer; text-decoration: none; }
   .reader .ctl button[aria-pressed="true"] { border-color: var(--jev); color: var(--jev); }
   .reader .ctl #rgo { border-color: var(--jev); color: var(--bg); background: var(--jev); }
   .reader .book { overflow-y: auto; overscroll-behavior: contain; padding: 6px 12px 40px; font-size: 15px; line-height: 1.85; color: #c9d6de; }
@@ -132,7 +141,7 @@
   .reader .book .m-desc sup { font-size: .6em; color: var(--person); margin-left: 1px; } .reader .book .m-desc.slot sup, .reader .book .m-desc.open sup { color: var(--slot); }
   .reader .keys .m-person { --k: var(--person); } .reader .keys .m-place { --k: var(--place); } .reader .keys .m-thing { --k: var(--thing); } .reader .keys .m-time { --k: var(--time); }
   .reader .now .kind { font-weight: 700; letter-spacing: .06em; text-transform: uppercase; }
-  .reader .book .s.current { background: #17384d; color: #fff; }
+  .reader .book .s.current { background: var(--current); color: var(--current-ink); }
   /* Why (the user, 2026-11-02: a frontend the reader and the developer share): the card's questions to Jev as asked, its
      answers and pictures, and notes either of us leaves on the card. */
   .reader .why { border-top: 1px solid var(--line); padding-top: 6px; max-height: 46vh; overflow-y: auto; overscroll-behavior: contain; }
@@ -154,7 +163,7 @@
   .reader .book .s.worldspoken { text-decoration: underline dotted #e8c46a; text-underline-offset: 3px; }
   .reader .notes li { margin: 3px 0; overflow-wrap: anywhere; }
   .reader .notes li small { color: var(--dim); }
-  .reader .notes textarea { width: 100%; box-sizing: border-box; font: inherit; font-size: 13px; color: var(--ink); background: #0b1a24; border: 1px solid var(--line); border-radius: 8px; padding: 6px 8px; margin: 4px 0; }
+  .reader .notes textarea { width: 100%; box-sizing: border-box; font: inherit; font-size: 13px; color: var(--ink); background: var(--field); border: 1px solid var(--line); border-radius: 8px; padding: 6px 8px; margin: 4px 0; }
   .reader .book .more { color: var(--dim); font-size: 12px; text-align: center; padding: 10px; }
   /* A phone's bar wraps to two rows: the panels stand above both. */
   /* A phone: the bar is one row, scrolled sideways, Continue and Auto first under the thumb; the panels stand above it. */
@@ -220,7 +229,7 @@
 <section class="asks" id="asks" hidden aria-label="Jev's questions"><header><span>Jev's questions · each with its exact prompt and pictures</span><a id="asksFull" href="live" target="_blank" rel="noopener">Full page</a></header><iframe id="asksFrame" title="Jev's questions, live"></iframe></section>
 <div class="sub" id="sub" hidden aria-live="polite"><img class="face" id="subface" alt="" hidden><b id="subwho"></b><span id="subtx"></span></div>
 <figure class="pic" id="pic" hidden title="The book's picture here (tap to enlarge)"><img id="picimg" alt="The book's picture at this sentence"></figure>
-<nav class="bar"><button id="bgo" hidden>Continue ▶</button><button id="bauto" hidden aria-pressed="false">Auto</button><button id="mopen" aria-pressed="false" aria-controls="mlist" title="Jump to any unit played so far">Menu</button><button id="next" hidden>Next step</button><button id="runOn" hidden aria-pressed="false">Run on</button><button id="traces" aria-pressed="true" title="Every way walked so far, faint; the card now's bright and tappable">Traces</button><button id="follow" aria-pressed="true">Follow Jev</button><button id="under" aria-pressed="false">Underground</button><button id="dopen" aria-pressed="false" title="Developer mode: the raw observations beside what was smoothed, and every record of the card">Dev</button><button id="clouds" aria-pressed="true" title="Where each person may have been, given everything the text says (the smoother)">Clouds</button><button id="live" aria-pressed="false" aria-controls="asks" title="Every Jev step: its exact input, pictures and answers">Jev debugger</button><button id="bopen" aria-pressed="false" aria-controls="blist">Buildings</button><button id="copen" aria-pressed="false" aria-controls="clist">Read</button><button id="sopen" aria-pressed="false" aria-controls="slist">Spawn</button><button id="cutsW" aria-pressed="false" title="Follow through the photographer's cuts (else a steady view of each card's people)">Cuts</button><a id="play" href="./">Replay</a></nav>
+<nav class="bar"><button id="bgo" hidden>Continue ▶</button><button id="bauto" hidden aria-pressed="false">Auto</button><button id="mopen" aria-pressed="false" aria-controls="mlist" title="Jump to any unit played so far">Menu</button><button id="next" hidden>Next step</button><button id="runOn" hidden aria-pressed="false">Run on</button><button id="traces" aria-pressed="true" title="Every way walked so far, faint; the card now's bright and tappable">Traces</button><button id="follow" aria-pressed="true">Follow Jev</button><button id="under" aria-pressed="false">Underground</button><button id="daylight" aria-pressed="true" title="The story's time of day: bright by its day, dark by its night (off: always night)">Daylight</button><button id="dopen" aria-pressed="false" title="Developer mode: the raw observations beside what was smoothed, and every record of the card">Dev</button><button id="clouds" aria-pressed="true" title="Where each person may have been, given everything the text says (the smoother)">Clouds</button><button id="live" aria-pressed="false" aria-controls="asks" title="Every Jev step: its exact input, pictures and answers">Jev debugger</button><button id="bopen" aria-pressed="false" aria-controls="blist">Buildings</button><button id="copen" aria-pressed="false" aria-controls="clist">Read</button><button id="sopen" aria-pressed="false" aria-controls="slist">Spawn</button><button id="cutsW" aria-pressed="false" title="Follow through the photographer's cuts (else a steady view of each card's people)">Cuts</button><a id="play" href="./">Replay</a></nav>
 <script>
 (() => {
   const $ = (id) => document.getElementById(id), query = location.search, origin = location.origin;
@@ -825,6 +834,13 @@
   });
   // Seeing underground: the street turns clear and the levels below it show (each frame clears it on its own while
   // someone is down there).
+  // Daylight on or off (off: the night look, always), for every world frame.
+  $("daylight").addEventListener("click", () => {
+    const on = $("daylight").getAttribute("aria-pressed") !== "true";
+    $("daylight").setAttribute("aria-pressed", String(on));
+    if (!on) delete document.documentElement.dataset.daylight;
+    sendAll({ type: "daylightMode", on });
+  });
   $("under").addEventListener("click", () => {
     const on = $("under").getAttribute("aria-pressed") !== "true";
     $("under").setAttribute("aria-pressed", String(on));
@@ -858,6 +874,7 @@
     if (event.origin !== origin) return;
     const message = event.data;
     if (message?.type === "camera" && shown && event.source === shown.contentWindow) { camera = message; showFollow(!!message.follow); }
+    if (message?.type === "daylight" && shown && event.source === shown.contentWindow) { if ($("daylight").getAttribute("aria-pressed") === "true" && message.phase !== "night") document.documentElement.dataset.daylight = message.phase; else delete document.documentElement.dataset.daylight; }
     if (message?.type === "touch" && shown && event.source === shown.contentWindow) { touching = message.active; lastTouch = Date.now(); if (!touching) swap(); }
     if (message?.type === "interact" && shown && event.source === shown.contentWindow) lastTouch = Date.now();
     // A way tapped in the world: who, which card, and that card's Jev steps.
@@ -865,7 +882,7 @@
       $("way").hidden = false; $("way").innerHTML = `${esc(message.name)} · ${esc(message.how ?? "walk")} · unit ${Number(String(message.scene).slice(-6))} · card ${message.event + 1} · <a href="#">Jev steps ↗</a>`;
       $("way").querySelector("a").addEventListener("click", (e) => { e.preventDefault(); openDebug(message.scene, message.event); });
     }
-    if (message?.type === "ready" && next && event.source === next.contentWindow) { next.contentWindow.postMessage(portraitsMessage(), origin); next.moment = message.moment; if (lastPiece) next.contentWindow.postMessage({ ...lastPiece, type: "extend" }, origin); ready = true; swap(); }
+    if (message?.type === "ready" && next && event.source === next.contentWindow) { next.contentWindow.postMessage(portraitsMessage(), origin); if ($("daylight").getAttribute("aria-pressed") !== "true") next.contentWindow.postMessage({ type: "daylightMode", on: false }, origin); next.moment = message.moment; if (lastPiece) next.contentWindow.postMessage({ ...lastPiece, type: "extend" }, origin); ready = true; swap(); }
     if (message?.type === "failed" && next && event.source === next.contentWindow) drop(next);
   });
   const load = (run) => {

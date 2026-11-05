@@ -272,7 +272,62 @@ const mapReach = Math.max(800, ...data.macro.map((node) => Math.max(Math.abs(nod
 const terrainStage = data.stage === "terrain";
 const world = new THREE.Scene(); world.background = new THREE.Color(0x060c12); world.fog = terrainStage ? new THREE.Fog(0x060c12, Math.max(1200, mapReach * 1.5), Math.max(4000, mapReach * 4)) : new THREE.Fog(0x060c12, 400, Math.max(1600, mapReach * 1.6));
 const defaultFog = world.fog;
-world.add(new THREE.AmbientLight(0xffffff, 0.75)); const sun = new THREE.DirectionalLight(0xffffff, 0.75); sun.position.set(30, 70, 20); world.add(sun);
+const ambient = new THREE.AmbientLight(0xffffff, 0.75); world.add(ambient); const sun = new THREE.DirectionalLight(0xffffff, 0.75); sun.position.set(30, 70, 20); world.add(sun);
+// Daylight (the user, 2026-11-05: "a daytime mode that turns our frontend view bright themed on daytime in the story and
+// nighttime themed on night times"), the way games do it: one time-of-day value drives the sun along its arc, and colours
+// keyed at night, dawn, day and dusk (the sky, the fog, the ambient light, the sun) are blended between keys (CRYENGINE's
+// 24-hour cycle, Unity's day/night gradients). Each unit's hour comes from its node on the story's time tree (its part of
+// the day; a unit with none takes the hour halfway between the parts round it on its date: vol 1's units between the late
+// night of the 24th and its evening are its day), and the view eases towards it as the play goes. A viewer's only: a page
+// taking Jev's pictures (?capture) keeps the night it always had, so no picture Jev is asked about changes.
+const PART_HOURS = { midnight: 0, "late-night": 2, "before-dawn": 4.5, dawn: 6, "early-morning": 7, morning: 9, forenoon: 10.5, noon: 12, midday: 12, afternoon: 15, "late-afternoon": 16.5, dusk: 18, sunset: 18, evening: 19.5, night: 22, "late-evening": 21.5 };
+const hourOfNode = (node) => {
+  const tail = String(node ?? "").split(":").slice(3).join(":");
+  if (/^\d{1,2}:\d{2}$/.test(tail)) { const [h, m] = tail.split(":").map(Number); return h + m / 60; }
+  return PART_HOURS[tail] ?? null;
+};
+const unitHours = (() => {
+  const units = data.director?.units ?? [], known = units.map((unit) => hourOfNode(unit.when)), dateOf = (unit) => String(unit.when ?? "").split(":").slice(0, 3).join(":"), out = new Map();
+  units.forEach((unit, k) => {
+    if (known[k] !== null) { out.set(unit.id, known[k]); return; }
+    let before = null, after = null;
+    for (let j = k - 1; j >= 0 && before === null; j--) if (known[j] !== null && dateOf(units[j]) === dateOf(unit)) before = known[j];
+    for (let j = k + 1; j < units.length && after === null; j++) if (known[j] !== null && dateOf(units[j]) === dateOf(unit)) after = known[j];
+    out.set(unit.id, before !== null && after !== null ? (after > before ? (before + after) / 2 : before) : before ?? after ?? null);
+  });
+  return out;
+})();
+const NIGHT = { sky: 0x060c12, ambient: 0x8ea2d0, ambientI: 0.6, sun: 0x9fb2ff, sunI: 0.35, day: 0 };
+const DAY = { sky: 0xa9c6de, ambient: 0xffffff, ambientI: 0.95, sun: 0xfff2dc, sunI: 0.95, day: 1 };
+const DAY_KEYS = [
+  { hour: 0, ...NIGHT }, { hour: 4.5, ...NIGHT, sky: 0x0b1424 },
+  { hour: 6.5, sky: 0x8a6f7e, ambient: 0xffc9a8, ambientI: 0.72, sun: 0xffa860, sunI: 0.6, day: 0.5 },
+  { hour: 9, ...DAY }, { hour: 15.5, ...DAY },
+  { hour: 18, sky: 0x7a5468, ambient: 0xffc39a, ambientI: 0.7, sun: 0xff8a4c, sunI: 0.6, day: 0.5 },
+  { hour: 20, ...NIGHT, sky: 0x0b1424 }, { hour: 24, ...NIGHT },
+];
+const keyedLight = (hour) => {
+  const h = ((hour % 24) + 24) % 24, k = Math.max(0, DAY_KEYS.findIndex((key, n) => DAY_KEYS[n + 1] && key.hour <= h && h < DAY_KEYS[n + 1].hour)), a = DAY_KEYS[k], b = DAY_KEYS[k + 1];
+  const u = (h - a.hour) / (b.hour - a.hour), e = u * u * (3 - 2 * u), mix = (x, y) => new THREE.Color(x).lerp(new THREE.Color(y), e), num = (x, y) => x + (y - x) * e;
+  // The sun along its arc from 6 to 18 (east to west), the moon high and still at night.
+  const arc = Math.PI * Math.min(1, Math.max(0, (h - 6) / 12)), up = h > 6 && h < 18;
+  return { sky: mix(a.sky, b.sky), ambient: mix(a.ambient, b.ambient), ambientI: num(a.ambientI, b.ambientI), sun: mix(a.sun, b.sun), sunI: num(a.sunI, b.sunI), day: num(a.day, b.day),
+    sunAt: up ? new THREE.Vector3(Math.cos(arc) * 80, 12 + Math.sin(arc) * 80, 25) : new THREE.Vector3(30, 70, 20) };
+};
+const daylight = { on: !capture, sky: new THREE.Color(0x060c12), day: 0, phase: null, hour: null };
+function daylightTick(unitId, dt) {
+  if (!daylight.on) return;
+  const hour = unitHours.get(unitId);
+  if (hour === null || hour === undefined) return;
+  const target = keyedLight(hour), k = Math.min(1, dt * 1.5);
+  daylight.sky.lerp(target.sky, k); daylight.day += (target.day - daylight.day) * k; daylight.hour = hour;
+  world.background.copy(daylight.sky); world.fog?.color.copy(daylight.sky); defaultFog.color.copy(daylight.sky);
+  ambient.color.lerp(target.ambient, k); ambient.intensity += (target.ambientI - ambient.intensity) * k;
+  sun.color.lerp(target.sun, k); sun.intensity += (target.sunI - sun.intensity) * k; sun.position.lerp(target.sunAt, k);
+  // World · Live's panels follow (light by day, warm at dawn and dusk, dark by night).
+  const phase = daylight.day > 0.6 ? "day" : daylight.day > 0.25 ? "twilight" : "night";
+  if (phase !== daylight.phase) { daylight.phase = phase; if (parent !== window) parent.postMessage({ type: "daylight", phase, hour }, location.origin); }
+}
 const camera = new THREE.PerspectiveCamera(42, 1, 0.5, Math.max(4000, mapReach * 4)), controls = new OrbitControls(camera, renderer.domElement);
 controls.enableDamping = true; controls.maxPolarAngle = Math.PI * 0.47; controls.minDistance = 10; controls.maxDistance = Math.max(1600, mapReach * 1.8);
 const resize = () => { const { clientWidth: w, clientHeight: h } = host; renderer.setSize(w, h, false); camera.aspect = w / h; camera.updateProjectionMatrix(); };
@@ -1483,6 +1538,7 @@ function frame(now) {
   // A card being replayed (the director's cards) stops at its end.
   if (stopAt !== null && time >= stopAt) { time = stopAt - 0.001; playing = false; stopAt = null; $("play").textContent = "▶ Play"; if (liveMode) parent.postMessage({ type: "cardEnded" }, location.origin); }
   const segment = segmentAt(time), place = segment.place, elapsed = time - segment.start, entry = buildPlace(segment.scene.place);
+  daylightTick(segment.scene.id, dt);
   if (replaying && segment.kind === "event" && (replaying.scene !== segment.scene.id || replaying.event !== segment.eventIndex)) { replaying = { scene: segment.scene.id, event: segment.eventIndex }; if (liveMode) parent.postMessage({ type: "card", ...replaying }, location.origin); }
   if (shownPlace !== segment.scene.place) {
     if (shownPlace === null) { const pose = poseFor(segment.scene.place); camera.position.copy(pose.position); controls.target.copy(pose.target); }
@@ -1733,6 +1789,7 @@ if (liveMode) {
     if (parent === window && event.data?.type === "camera") return;
     if (event.data?.type === "follow") { follow = !!event.data.on; return; }
     if (event.data?.type === "portraits") { portraitsArrived(event.data.portraits); return; }
+    if (event.data?.type === "daylightMode") { daylight.on = !!event.data.on && !capture; if (!daylight.on) { world.background.set(0x060c12); world.fog?.color.set(0x060c12); defaultFog.color.set(0x060c12); ambient.color.set(0xffffff); ambient.intensity = 0.75; sun.color.set(0xffffff); sun.intensity = 0.75; sun.position.set(30, 70, 20); daylight.sky.set(0x060c12); daylight.day = 0; daylight.phase = null; parent.postMessage({ type: "daylight", phase: "night", hour: null }, origin); } return; }
     if (event.data?.type === "cuts") { cuts = !!event.data.on; cameraSegment = null; return; }
     // Reading along (the user, 2026-11-05: the bubbles ran ahead of the reader): the line the reader is on, so a card's
     // bubble shows that line for as long as it is being read, none otherwise.
