@@ -11,8 +11,8 @@ book's pictures.
 ## One sky per unit
 
 [world-engine/digest/sky.mjs](../../world-engine/digest/sky.mjs) gives each unit a time of day (dawn, morning, midday,
-afternoon, evening, night, late night, unclear) with its hour, and a weather (clear, cloudy, rain, snow, fog, storm,
-unknown) with whether snow lies, each with where it came from and how sure. The sky is the city's at a story moment:
+afternoon, evening, night, late night, unclear) with its hour, and a weather (clear, cloudy, rain, sleet, snow, fog,
+storm, unknown), its strength and the wind, with whether snow lies, each with where it came from and how sure. The sky is the city's at a story moment:
 
 - **Time of day, strongest first:** a clock time; the unit's own time words (the time tree, not inherited); the sequence's
   heading; the stills cast's picture; Jev's reading of the sequence's implicit cues; the period's part of the day; the hour
@@ -27,18 +27,53 @@ unknown) with whether snow lies, each with where it came from and how sure. The 
   and scrap iron", a gloomy face read as overcast). What the words leave implicit (white breath, snow on shoulders, the
   light), Jev reads by the sequence.
 
-[experiments/v2/sky.mjs](../../experiments/v2/sky.mjs) asks Jev, four sequences a request, the time of day, the weather and
-whether snow lies, from each sequence's lines that tell its surroundings (cached, cents), and writes `<reading>/v2/sky.json`.
+[experiments/v2/sky.mjs](../../experiments/v2/sky.mjs) asks Jev, four sequences a request, the time of day, the weather (its
+kind, strength and wind) and whether snow lies, from each sequence's lines that tell its surroundings (cached, cents), and writes `<reading>/v2/sky.json`.
 
 Vol 1 (library 15, 12 Jev requests): snow 92 units (the 24th's night, falling again at its end), clear 190 (from "an
 unusually clear winter blue sky"), a storm in 4 (one sequence: "the storm has come", Jev reading a crowd of students
 storming in as weather; it passes with its sequence); snow lying all day. Time of day: 80 units by heading, 73 by period, 53
 by Jev, 78 between, 2 by their own words.
 
-## The world's look
+## The weather, general
 
-World · Live serves it (`play/sky.json`: beside the reading the run played, else the book's `vol-<n>/reading`) and sends it
-to the world (strand-demo.html): each unit's hour (the time tree's where the sky has none) drives the daylight keys, and the
-weather draws: falling snow (soft round flakes) and rain (streaks) round what the camera looks at, a greyer sky, a dimmer sun
-and nearer fog when overcast, a white sheet on the ground where snow lies. The title's line says the sky in words (late
-night · snow · snow on the ground). A page taking Jev's pictures stays at night, with no weather.
+The user, 2026-11-05: *"make the weather system general and manually test out all combination view style of combination
+of time and weather by researching traditional gaming weather system design"*.
+
+How games do it: a weather is a **state** (GTA's are named presets: extra sunny, clear, clouds, overcast, foggy, raining,
+thunder, light snow, snow, blizzard), and each state is a set of **target parameters** (cloud cover, precipitation and its
+amount, fog density, wind) that the look eases toward over a transition, keyed against the time of day's own keys (GTA's
+timecycle keeps one set of light keys per weather per hour). Wind is one shared input (rain's slant, snow's drift, blowing
+snow). Lightning is an event a storm fires at random. Wet ground is darker (a wet road's albedo falls to about a third).
+Fog, rain and snow close the view, and more so at night.
+
+So the reading names a weather by **kind, strength and wind**, and the world draws any of them from the same parameters:
+
+- **Kinds:** clear, cloudy, fog, rain, sleet, snow, storm (thunder; a blizzard is heavy snow in a gale, not a storm).
+- **Strength:** light, moderate, heavy (a drizzle, rain, a downpour; a few flakes, snow, thick snow; mist, fog, dense fog;
+  a few clouds, cloudy, overcast). From the words (escaped in sky.mjs: heavy rain, light rain, drizzle, heavy snow, a
+  blizzard, light snow, dense fog, thin mist, dark clouds, partly cloudy), else Jev's for the same weather.
+- **Wind:** calm, breezy (a cold wind, wind and snow), a gale (a fierce or strong wind, a blizzard, a rainstorm in a gale).
+
+strand-demo.html's `WEATHER_LOOK` gives each kind and strength its targets on eight parameters, every one 0 to 1:
+
+| parameter | what it draws |
+| --- | --- |
+| cloud | the sky toward the overcast grey of its hour (light by day, warm grey at dawn and dusk, near black at night), the sun dimmer, the light flatter |
+| rain | how many streaks fall (up to 2,400), lit by the hour |
+| snow | how many flakes fall (up to 3,600), bluish at night |
+| fog | visibility closing in round what the camera looks at (the same at every zoom), the sky whitened by day |
+| wind | rain's slant, snow's drift and sway; in snow it raises the fog (blowing snow) |
+| lightning | a flicker at random (3 to 12 s apart, more often the stronger) lighting the sky and the city |
+| wet | the ground darker (a multiply over it) |
+| lying | a sheet of snow on the ground, white by day, blue-grey by night |
+
+A unit's weather said less surely is drawn fainter (its parameters times its sureness up to 0.6). The look eases toward a
+new weather over about two seconds, the light toward a new hour faster. The title's line says the sky in words (late
+night · heavy snow · a gale · snow on the ground). A page taking Jev's pictures stays at night, with no weather.
+
+`window.__sky({ hour, weather, strength, wind, lying })` holds a sky whatever the unit (`__sky(null)` gives the story's
+back, `__sky({ strike: true })` strikes lightning); every time of day by every weather was shot from one camera with it
+and looked at (dawn, morning, midday, afternoon, evening, night, late night by clear, partly cloudy, overcast, mist, fog,
+drizzle, rain, heavy rain, a storm and its lightning, sleet, light snow, snow, a blizzard, and snow lying under a clear
+sky).

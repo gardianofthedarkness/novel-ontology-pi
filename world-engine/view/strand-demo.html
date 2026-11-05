@@ -317,11 +317,33 @@ const keyedLight = (hour) => {
     sunAt: up ? new THREE.Vector3(Math.cos(arc) * 80, 12 + Math.sin(arc) * 80, 25) : new THREE.Vector3(30, 70, 20) };
 };
 const daylight = { on: !capture, sky: new THREE.Color(0x060c12), day: 0, phase: null, hour: null, said: null };
-// The story sky (world-engine/digest/sky.mjs, sent by World · Live as play/sky.json): each unit's hour, weather and lying
-// snow; the time tree's hours stand where it has none. The weather drawn: falling snow or rain round what the camera looks
-// at, a greyer sky, a dimmer sun and nearer fog when overcast, a white sheet on the ground where snow lies.
+// The story sky (world-engine/digest/sky.mjs, sent by World · Live as play/sky.json): each unit's hour, weather (a kind, a
+// strength, the wind) and lying snow; the time tree's hours stand where it has none. The weather is general, the way games
+// key it (a weather state is a set of target parameters the look eases toward, blended with the time of day's keys, never
+// a branch per kind; docs/v2/sky.md): cloud (a greyer, flatter sky, a dimmer sun), rain, snow, fog (visibility), wind
+// (slant and drift), lightning (flashes), wet (darker ground), and snow lying.
 let skyUnits = null;
-const OVERCAST = { cloudy: 0.4, rain: 0.5, snow: 0.35, storm: 0.6, fog: 0.55 }, FOG_NEAR = { cloudy: 0.9, rain: 0.8, snow: 0.7, storm: 0.6, fog: 0.45 };
+const WEATHER_LOOK = {
+  clear: { light: {}, moderate: {}, heavy: {} },
+  cloudy: { light: { cloud: 0.3 }, moderate: { cloud: 0.6, fog: 0.08 }, heavy: { cloud: 0.85, fog: 0.15 } },
+  fog: { light: { cloud: 0.3, fog: 0.45 }, moderate: { cloud: 0.45, fog: 0.7 }, heavy: { cloud: 0.55, fog: 0.92 } },
+  rain: { light: { cloud: 0.55, rain: 0.3, fog: 0.15, wet: 0.6 }, moderate: { cloud: 0.7, rain: 0.65, fog: 0.25, wet: 0.9 }, heavy: { cloud: 0.85, rain: 1, fog: 0.4, wet: 1, wind: 0.3 } },
+  sleet: { light: { cloud: 0.6, rain: 0.2, snow: 0.2, fog: 0.2, wet: 0.6 }, moderate: { cloud: 0.7, rain: 0.35, snow: 0.35, fog: 0.3, wet: 0.75 }, heavy: { cloud: 0.8, rain: 0.55, snow: 0.55, fog: 0.4, wet: 0.9, wind: 0.3 } },
+  snow: { light: { cloud: 0.4, snow: 0.3, fog: 0.12 }, moderate: { cloud: 0.55, snow: 0.65, fog: 0.25 }, heavy: { cloud: 0.75, snow: 1, fog: 0.45, wind: 0.2 } },
+  storm: { light: { cloud: 0.85, rain: 0.7, fog: 0.3, wet: 1, wind: 0.6, lightning: 0.5 }, moderate: { cloud: 0.95, rain: 1, fog: 0.4, wet: 1, wind: 0.8, lightning: 1 }, heavy: { cloud: 1, rain: 1, fog: 0.5, wet: 1, wind: 1, lightning: 1 } },
+};
+const WIND = { calm: 0, breezy: 0.4, gale: 1 }, WX = ["cloud", "rain", "snow", "fog", "wind", "lightning", "wet", "lying"];
+/** A unit's sky as the look's targets: its kind and strength's parameters, the wind, how sure (a weather said less surely draws fainter). */
+function weatherTarget(told) {
+  const kind = WEATHER_LOOK[told?.weather] ? told.weather : "clear", sure = Math.min(1, (told?.sure ?? 0) / 0.6), look = WEATHER_LOOK[kind][told?.strength] ?? WEATHER_LOOK[kind].moderate;
+  const out = Object.fromEntries(WX.map((key) => [key, (look[key] ?? 0) * sure]));
+  out.wind = Math.max(out.wind, (WIND[told?.wind] ?? 0) * Math.max(sure, 0.5));
+  // Blowing snow: a gale in snow hides the distance (a blizzard).
+  out.fog = Math.min(1, out.fog + out.wind * out.snow * 0.4);
+  out.lying = told?.lying ? 1 : 0;
+  return out;
+}
+const wx = Object.fromEntries(WX.map((key) => [key, 0])), flash = { at: 0, next: 0, level: 0 };
 const baseFog = { near: defaultFog.near, far: defaultFog.far };
 // A soft round flake (a point is drawn square without one).
 function flakeTexture() {
@@ -329,48 +351,84 @@ function flakeTexture() {
   glow.addColorStop(0, "rgba(255,255,255,1)"); glow.addColorStop(0.45, "rgba(255,255,255,0.8)"); glow.addColorStop(1, "rgba(255,255,255,0)");
   ctx.fillStyle = glow; ctx.fillRect(0, 0, 32, 32); const texture = new THREE.CanvasTexture(canvas); texture.colorSpace = THREE.SRGBColorSpace; return texture;
 }
-const fallers = (count, makeGeometry, material) => { const u = new Float32Array(count * 3); for (let i = 0; i < u.length; i++) u[i] = Math.random(); const object = makeGeometry(count); object.material = material; object.frustumCulled = false; object.renderOrder = 8; object.visible = false; world.add(object); return { u, object }; };
-const snowFall = fallers(2600, (n) => { const g = new THREE.BufferGeometry(); g.setAttribute("position", new THREE.BufferAttribute(new Float32Array(n * 3), 3)); return new THREE.Points(g); }, new THREE.PointsMaterial({ color: 0xffffff, size: 0.4, sizeAttenuation: true, transparent: true, opacity: 0, depthWrite: false, map: flakeTexture(), alphaTest: 0.02 }));
-const rainFall = fallers(1400, (n) => { const g = new THREE.BufferGeometry(); g.setAttribute("position", new THREE.BufferAttribute(new Float32Array(n * 6), 3)); return new THREE.LineSegments(g); }, new THREE.LineBasicMaterial({ color: 0xb8c8d8, transparent: true, opacity: 0, depthWrite: false }));
-const snowSheet = new THREE.Mesh(new THREE.PlaneGeometry(mapReach * 2.4, mapReach * 2.4), new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0, depthWrite: false }));
-snowSheet.rotation.x = -Math.PI / 2; snowSheet.position.y = 0.06; snowSheet.renderOrder = 1; snowSheet.visible = false; world.add(snowSheet);
-function weatherTick(weather, sure, lying, dt) {
-  const center = controls.target, box = Math.min(600, Math.max(30, camera.position.distanceTo(center) * 1.2)), k = Math.min(1, dt * 1.2), strength = Math.min(1, sure / 0.6);
-  const ease = (material, to) => { material.opacity += (to - material.opacity) * k; return material.opacity > 0.01; };
-  // Snow drifts down and sways; rain falls fast in streaks; each wraps round the box the camera looks into.
-  for (const [fall, on, speed, sway, streak] of [[snowFall, weather === "snow" || (weather === "storm" && daylight.day < 0.3), 2.2, 0.6, 0], [rainFall, weather === "rain" || weather === "storm", 22, 0, box * 0.03]]) {
-    const visible = ease(fall.object.material, on ? 0.85 * strength : 0); fall.object.visible = visible;
-    if (!visible) continue;
-    const position = fall.object.geometry.attributes.position, u = fall.u, n = u.length / 3, t = performance.now() / 1000;
-    for (let i = 0; i < n; i++) {
-      u[i * 3 + 1] -= (speed * dt) / box; if (u[i * 3 + 1] < 0) u[i * 3 + 1] += 1;
-      const x = center.x + (u[i * 3] - 0.5) * box + (sway ? Math.sin(t * 0.8 + i) * sway : 0), y = center.y + (u[i * 3 + 1] - 0.1) * box * 0.6, z = center.z + (u[i * 3 + 2] - 0.5) * box;
-      if (streak) { position.setXYZ(i * 2, x, y, z); position.setXYZ(i * 2 + 1, x, y - streak, z); } else position.setXYZ(i, x, y, z);
+const fallers = (count, makeGeometry, material) => { const u = new Float32Array(count * 3); for (let i = 0; i < u.length; i++) u[i] = Math.random(); const object = makeGeometry(count); object.material = material; object.frustumCulled = false; object.renderOrder = 8; object.visible = false; world.add(object); return { u, count, object }; };
+const snowFall = fallers(6000, (n) => { const g = new THREE.BufferGeometry(); g.setAttribute("position", new THREE.BufferAttribute(new Float32Array(n * 3), 3)); return new THREE.Points(g); }, new THREE.PointsMaterial({ color: 0xffffff, size: 0.4, sizeAttenuation: true, transparent: true, opacity: 0, depthWrite: false, map: flakeTexture(), alphaTest: 0.02 }));
+const rainFall = fallers(2400, (n) => { const g = new THREE.BufferGeometry(); g.setAttribute("position", new THREE.BufferAttribute(new Float32Array(n * 6), 3)); return new THREE.LineSegments(g); }, new THREE.LineBasicMaterial({ color: 0xb8c8d8, transparent: true, opacity: 0, depthWrite: false }));
+const groundSheet = (material, y) => { const mesh = new THREE.Mesh(new THREE.PlaneGeometry(mapReach * 2.4, mapReach * 2.4), material); mesh.rotation.x = -Math.PI / 2; mesh.position.y = y; mesh.renderOrder = 1; mesh.visible = false; world.add(mesh); return mesh; };
+const snowSheet = groundSheet(new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0, depthWrite: false }), 0.06);
+// Wet ground: darker (a wet road's albedo falls to about a third), a multiply over what lies under it.
+const wetSheet = groundSheet(new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, premultipliedAlpha: true, blending: THREE.MultiplyBlending, depthWrite: false }), 0.05);
+function weatherTick(dt, day) {
+  // The volume falls between the camera and what it looks at (where the eye sees it, the way games keep weather round the
+  // camera), from the ground to above the camera.
+  const away = camera.position.distanceTo(controls.target), center = camera.position.clone().lerp(controls.target, 0.5), box = Math.min(600, Math.max(30, away * 0.9)), ground = controls.target.y, high = Math.max(20, camera.position.y - ground + box * 0.15), t = performance.now() / 1000;
+  const lit = new THREE.Color(0x52637a).lerp(new THREE.Color(0xc4d0dc), day);
+  // Snow drifts down, sways and blows with the wind; rain falls fast in streaks, slanted by it; each wraps round the box
+  // the camera looks into, as many as the weather's amount.
+  for (const [fall, amount, speed, sway, streak] of [[snowFall, wx.snow, 2.2 + wx.wind * 2, 0.6 + wx.wind * 1.4, 0], [rainFall, wx.rain, 22 + wx.wind * 6, 0, box * 0.03]]) {
+    const shown = Math.round(fall.count * Math.min(1, amount * 1.1)), material = fall.object.material;
+    fall.object.visible = shown > 8;
+    if (!fall.object.visible) continue;
+    material.opacity = streak ? 0.3 + 0.35 * amount + 0.15 * day : 0.75 + 0.2 * amount;
+    material.color.copy(streak ? lit : new THREE.Color(0xc9d6f0).lerp(new THREE.Color(0xffffff), day));
+    const position = fall.object.geometry.attributes.position, u = fall.u, drift = (wx.wind * (streak ? 0.5 : 0.35) * speed * dt) / box, slant = streak * wx.wind * 0.55;
+    for (let i = 0; i < shown; i++) {
+      u[i * 3 + 1] -= (speed * dt) / high; if (u[i * 3 + 1] < 0) u[i * 3 + 1] += 1;
+      u[i * 3] += drift; if (u[i * 3] > 1) u[i * 3] -= 1;
+      const x = center.x + (u[i * 3] - 0.5) * box + (sway ? Math.sin(t * 0.8 + i) * sway : 0), y = ground + u[i * 3 + 1] * high, z = center.z + (u[i * 3 + 2] - 0.5) * box;
+      if (streak) { position.setXYZ(i * 2, x, y, z); position.setXYZ(i * 2 + 1, x - slant, y - streak, z); } else position.setXYZ(i, x, y, z);
     }
+    fall.object.geometry.setDrawRange(0, streak ? shown * 2 : shown);
     position.needsUpdate = true;
-    if (!streak) fall.object.material.size = box / 140;
+    if (!streak) material.size = (box / 230) * (1 + wx.snow * 0.7);
   }
-  snowSheet.visible = ease(snowSheet.material, lying ? (daylight.day > 0.5 ? 0.3 : 0.16) : 0);
+  snowSheet.material.opacity = wx.lying * (0.3 + 0.25 * day); snowSheet.material.color.copy(new THREE.Color(0xa9b8d8).lerp(new THREE.Color(0xffffff), day)); snowSheet.visible = snowSheet.material.opacity > 0.01;
+  wetSheet.material.color.copy(new THREE.Color(0xffffff).lerp(new THREE.Color(0x5e6b78), wx.wet * 0.55)); wetSheet.visible = wx.wet > 0.02;
+}
+// Lightning: at random, more often the stronger; a bright double flicker that lights the sky and the city for a moment.
+function lightningTick(now) {
+  if (wx.lightning < 0.2) { flash.level = 0; flash.armed = false; return 0; }
+  // A storm coming on strikes first after a few seconds, never at once.
+  if (!flash.armed) { flash.armed = true; flash.next = Math.max(flash.next, now + 2000 + Math.random() * 4000); }
+  if (now >= flash.next) { flash.at = now; flash.next = now + (3 + Math.random() * 9) / wx.lightning; }
+  const s = (now - flash.at) / 1000;
+  flash.level = s < 0.08 ? 1 : s < 0.16 ? 0.25 : s < 0.24 ? 0.85 : s < 0.7 ? 0.85 * (1 - (s - 0.24) / 0.46) : 0;
+  return flash.level * Math.min(1, wx.lightning);
 }
 function daylightTick(unitId, dt) {
   if (!daylight.on) return;
-  const told = skyUnits?.[unitId] ?? null, hour = told?.hour ?? unitHours.get(unitId);
+  const told = daylight.force ?? skyUnits?.[unitId] ?? null, hour = told?.hour ?? unitHours.get(unitId);
   if (hour === null || hour === undefined) return;
-  const weather = told?.sure >= 0.3 ? told.weather : null, target = keyedLight(hour), k = Math.min(1, dt * 1.5);
-  // Overcast: the sky toward grey (by day a light grey, by night a dark one), the sun dimmer, the fog nearer.
-  const grey = OVERCAST[weather] ?? 0;
-  if (grey) { target.sky.lerp(new THREE.Color(target.day > 0.5 ? 0x8d98a4 : 0x141a21), grey); target.sunI *= 1 - grey * 0.6; }
-  const near = FOG_NEAR[weather] ?? 1;
-  if (world.fog === defaultFog) { defaultFog.near += (baseFog.near * near - defaultFog.near) * k; defaultFog.far += (baseFog.far * near - defaultFog.far) * k; }
-  weatherTick(weather, told?.sure ?? 0, !!told?.lying, dt);
+  const snap = daylight.snap > 0 ? daylight.snap-- : 0, target = keyedLight(hour), k = snap ? 1 : Math.min(1, dt * 1.5), goal = weatherTarget(told), kw = snap ? 1 : Math.min(1, dt * 0.9);
+  for (const key of WX) wx[key] += (goal[key] - wx[key]) * kw;
+  // Cloud: the sky toward the overcast grey of its time (light by day, a warm grey at dawn and dusk, near black by night),
+  // the sun dimmer, the light flatter (less coloured); fog whitens the sky by day. Rain darkens a little more.
+  const overcast = target.day > 0.5 ? new THREE.Color(0x5b5560).lerp(new THREE.Color(0x949ea8), (target.day - 0.5) * 2) : new THREE.Color(0x10151b).lerp(new THREE.Color(0x5b5560), target.day * 2);
+  target.sky.lerp(overcast, wx.cloud * 0.9).lerp(new THREE.Color(0x10151b).lerp(new THREE.Color(0xb9c1c8), target.day), wx.fog * 0.55);
+  target.sunI *= 1 - wx.cloud * 0.7; target.sun.lerp(new THREE.Color(0xdfe4ea), wx.cloud * 0.6);
+  target.ambient.lerp(new THREE.Color(0xd7dce2).lerp(new THREE.Color(0x8e9ab4), 1 - target.day), wx.cloud * 0.7); target.ambientI *= 1 - wx.rain * 0.15 - wx.cloud * 0.05;
+  // Fog: visibility closes in round what the camera looks at (a fog the same at every zoom).
+  if (world.fog === defaultFog) {
+    const away = camera.position.distanceTo(controls.target), f = wx.fog;
+    defaultFog.near = baseFog.near * (1 - f) + away * 0.25 * f; defaultFog.far = baseFog.far * (1 - f) + (away * 1.8 + 60) * f;
+  }
+  weatherTick(dt, target.day);
   daylight.sky.lerp(target.sky, k); daylight.day += (target.day - daylight.day) * k; daylight.hour = hour;
-  world.background.copy(daylight.sky); world.fog?.color.copy(daylight.sky); defaultFog.color.copy(daylight.sky);
-  ambient.color.lerp(target.ambient, k); ambient.intensity += (target.ambientI - ambient.intensity) * k;
+  ambient.color.lerp(target.ambient, k); daylight.ambientI = (daylight.ambientI ?? ambient.intensity) + (target.ambientI - (daylight.ambientI ?? ambient.intensity)) * k;
   sun.color.lerp(target.sun, k); sun.intensity += (target.sunI - sun.intensity) * k; sun.position.lerp(target.sunAt, k);
-  // World · Live's panels follow (light by day, warm at dawn and dusk, dark by night).
-  const phase = daylight.day > 0.6 ? "day" : daylight.day > 0.25 ? "twilight" : "night", said = `${phase}|${told?.daypart ?? ""}|${weather ?? ""}|${!!told?.lying}`;
-  if (said !== daylight.said) { daylight.said = said; daylight.phase = phase; if (parent !== window) parent.postMessage({ type: "daylight", phase, hour, daypart: told?.daypart ?? null, weather, lying: !!told?.lying }, location.origin); }
+  const bolt = lightningTick(performance.now()), shownSky = daylight.sky.clone().lerp(new THREE.Color(0xdde4ff), bolt * 0.75);
+  world.background.copy(shownSky); world.fog?.color.copy(shownSky); defaultFog.color.copy(shownSky);
+  ambient.intensity = daylight.ambientI + bolt * 1.4;
+  // World · Live's panels follow (light by day, warm at dawn and dusk, dark by night), and its line says the sky in words.
+  const phase = daylight.day > 0.6 ? "day" : daylight.day > 0.25 ? "twilight" : "night", weather = told?.sure >= 0.3 && told.weather !== "unknown" ? told.weather : null;
+  const said = `${phase}|${told?.daypart ?? ""}|${weather ?? ""}|${told?.strength ?? ""}|${told?.wind ?? ""}|${!!told?.lying}`;
+  if (said !== daylight.said) { daylight.said = said; daylight.phase = phase; if (parent !== window) parent.postMessage({ type: "daylight", phase, hour, daypart: told?.daypart ?? null, weather, strength: weather ? told.strength ?? null : null, wind: told?.wind ?? null, lying: !!told?.lying }, location.origin); }
 }
+// A sky held for checking every look (the time of day and weather pairs): window.__sky({ hour, weather, strength, wind,
+// lying, snap }) holds it whatever the unit (snap: at once, not eased); __sky(null) gives the story's back; __sky({ strike: true }) strikes lightning now (in
+// a storm); __sky() says the look's parameters now.
+window.__sky = (sky) => { if (sky?.strike) { flash.armed = true; flash.next = 0; } else if (sky !== undefined) { const { snap, ...held } = sky ?? {}; daylight.force = sky ? { sure: 1, daypart: daypartOfHour(held.hour ?? 12), ...held } : null; daylight.said = null; daylight.snap = snap ? 3 : 0; } return { force: daylight.force ?? null, ...Object.fromEntries(WX.map((key) => [key, Math.round(wx[key] * 100) / 100])), flash: flash.level }; };
+const daypartOfHour = (hour) => (hour < 4.5 ? "late night" : hour < 7.5 ? "dawn" : hour < 11 ? "morning" : hour < 14 ? "midday" : hour < 17.5 ? "afternoon" : hour < 21 ? "evening" : "night");
 const camera = new THREE.PerspectiveCamera(42, 1, 0.5, Math.max(4000, mapReach * 4)), controls = new OrbitControls(camera, renderer.domElement);
 controls.enableDamping = true; controls.maxPolarAngle = Math.PI * 0.47; controls.minDistance = 10; controls.maxDistance = Math.max(1600, mapReach * 1.8);
 const resize = () => { const { clientWidth: w, clientHeight: h } = host; renderer.setSize(w, h, false); camera.aspect = w / h; camera.updateProjectionMatrix(); };
@@ -1833,7 +1891,7 @@ if (liveMode) {
     if (event.data?.type === "follow") { follow = !!event.data.on; return; }
     if (event.data?.type === "portraits") { portraitsArrived(event.data.portraits); return; }
     if (event.data?.type === "sky") { skyUnits = event.data.units ?? null; return; }
-    if (event.data?.type === "daylightMode") { daylight.on = !!event.data.on && !capture; if (!daylight.on) { world.background.set(0x060c12); world.fog?.color.set(0x060c12); defaultFog.color.set(0x060c12); ambient.color.set(0xffffff); ambient.intensity = 0.75; sun.color.set(0xffffff); sun.intensity = 0.75; sun.position.set(30, 70, 20); daylight.sky.set(0x060c12); daylight.day = 0; daylight.phase = null; daylight.said = null; for (const object of [snowFall.object, rainFall.object, snowSheet]) { object.visible = false; object.material.opacity = 0; } defaultFog.near = baseFog.near; defaultFog.far = baseFog.far; parent.postMessage({ type: "daylight", phase: "night", hour: null }, origin); } return; }
+    if (event.data?.type === "daylightMode") { daylight.on = !!event.data.on && !capture; if (!daylight.on) { world.background.set(0x060c12); world.fog?.color.set(0x060c12); defaultFog.color.set(0x060c12); ambient.color.set(0xffffff); ambient.intensity = 0.75; sun.color.set(0xffffff); sun.intensity = 0.75; sun.position.set(30, 70, 20); daylight.sky.set(0x060c12); daylight.day = 0; daylight.phase = null; daylight.said = null; for (const object of [snowFall.object, rainFall.object, snowSheet, wetSheet]) object.visible = false; for (const key of WX) wx[key] = 0; flash.level = 0; daylight.ambientI = 0.75; defaultFog.near = baseFog.near; defaultFog.far = baseFog.far; parent.postMessage({ type: "daylight", phase: "night", hour: null }, origin); } return; }
     if (event.data?.type === "cuts") { cuts = !!event.data.on; cameraSegment = null; return; }
     // Reading along (the user, 2026-11-05: the bubbles ran ahead of the reader): the line the reader is on, so a card's
     // bubble shows that line for as long as it is being read, none otherwise.

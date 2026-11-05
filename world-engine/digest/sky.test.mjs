@@ -28,3 +28,17 @@ test('the sky carried on within a date: settled weather all day, a passing storm
   assert.equal(sky.u3.daypart.by, 'between'); assert.equal(sky.u3.daypart.value, 'morning', 'between the late night and the evening of the 24th');
   assert.equal(sky.u1.daypart.by, 'time words'); assert.equal(sky.u2.daypart.by, 'period');
 });
+
+test('a weather has a strength and a wind: a blizzard is heavy snow in a gale; drizzle is light rain; sleet is its own', () => {
+  const BLIZZARD = '\u66b4\u98ce\u96ea', DRIZZLE = '\u6bdb\u6bdb\u96e8', SLEET = '\u96e8\u5939\u96ea', DOWNPOUR = '\u503e\u76c6\u5927\u96e8', COLD_WIND = '\u5bd2\u98ce', THUNDER = '\u6253\u96f7';
+  assert.deepEqual((({ top, strength, wind }) => ({ top, strength, wind }))(weatherWords(BLIZZARD)), { top: 'snow', strength: 'heavy', wind: 'gale' });
+  assert.deepEqual((({ top, strength }) => ({ top, strength }))(weatherWords(DRIZZLE)), { top: 'rain', strength: 'light' });
+  assert.equal(weatherWords(SLEET).top, 'sleet');
+  assert.equal(weatherWords(DOWNPOUR).strength, 'heavy');
+  assert.equal(weatherWords(`${COLD_WIND}${SNOWING}`).wind, 'breezy');
+  assert.equal(weatherWords(THUNDER).top, 'storm');
+  const scenes = [{ id: 'u1', sequence: 'q1', sentences: ['a'] }, { id: 'u2', sequence: 'q1', sentences: ['b'] }];
+  const sky = storySky({ reading: { scenes, time: { scenes: [{ scene: 'u1', node: 't:y1:12-24:night', inherited: false }, { scene: 'u2', node: 't:y1:12-24:night', inherited: true }] }, sequences: [] }, text: id => ({ a: BLIZZARD })[id] ?? '' });
+  assert.deepEqual([sky.u2.weather.value, sky.u2.strength, sky.u2.wind], ['snow', 'heavy', 'gale'], 'the blizzard carries on with its strength and wind');
+  assert.equal(storySky({ reading: { scenes: [scenes[0]], time: { scenes: [] }, sequences: [] }, text: () => '' }).u1.strength, 'moderate');
+});

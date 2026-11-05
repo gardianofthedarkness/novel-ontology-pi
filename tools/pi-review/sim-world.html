@@ -289,6 +289,9 @@
   let sky = null;
   const skyLoaded = fetch(`sky.json${location.search}`, { cache: "no-store" }).then((r) => (r.ok ? r.json() : null)).catch(() => null).then((value) => { sky = value; return value; });
   const skyMessage = () => ({ type: "sky", units: sky?.units ?? null });
+  // A weather's name by its kind and strength (a blizzard: heavy snow in a gale).
+  const SKY_NAMES = { cloudy: { light: "a few clouds", moderate: "cloudy", heavy: "overcast" }, fog: { light: "mist", moderate: "fog", heavy: "dense fog" }, rain: { light: "drizzle", moderate: "rain", heavy: "heavy rain" }, sleet: { light: "light sleet", moderate: "sleet", heavy: "heavy sleet" }, snow: { light: "light snow", moderate: "snow", heavy: "heavy snow" }, storm: { light: "a storm", moderate: "a thunderstorm", heavy: "a violent storm" } };
+  const skyName = (weather, strength, wind) => (weather === "snow" && strength === "heavy" && wind === "gale" ? "a blizzard" : SKY_NAMES[weather]?.[strength ?? "moderate"] ?? weather);
   let pieceSeq = 0, lastPiece = null;
   let cards = [], cardKey = "", cardAt = -1, cardOfSentence = new Map(), rspeed = 2, nextBlock = 0, loading = false, bookDone = false;
   const says = (m) => `${esc(m.name)}: ${m.moved ? `went${m.direction && m.direction !== "stays" ? ` (arrow ${esc(m.direction)}${m.how ? `, ${esc(m.how)}` : ""})` : ""} to ${esc(m.to ?? "?")}${m.spot && m.spot !== "none" ? ` · spot: ${esc(m.spot)}` : m.boxed ? ` · boxed${m.height ? `, ${esc(m.height)}` : ""}` : ""}` : m.direction === "stays" ? "stays" : `did not move${m.why ? ` (${esc(m.why)})` : ""}`}`;
@@ -884,7 +887,7 @@
     if (message?.type === "daylight" && shown && event.source === shown.contentWindow) {
       if ($("daylight").getAttribute("aria-pressed") === "true" && message.phase !== "night") document.documentElement.dataset.daylight = message.phase; else delete document.documentElement.dataset.daylight;
       // The sky in words under the world's title: the time of day and the weather.
-      if ($("skyword")) $("skyword").textContent = message.daypart ? `${message.daypart}${message.weather && !["clear", "unknown"].includes(message.weather) ? ` · ${message.weather}` : ""}${message.lying ? " · snow on the ground" : ""}` : "";
+      if ($("skyword")) $("skyword").textContent = message.daypart ? `${message.daypart}${message.weather && !["clear", "unknown"].includes(message.weather) ? ` · ${skyName(message.weather, message.strength, message.wind)}` : ""}${{ breezy: " · windy", gale: message.weather === "snow" && message.strength === "heavy" ? "" : " · a gale" }[message.wind] ?? ""}${message.lying ? " · snow on the ground" : ""}` : "";
     }
     if (message?.type === "touch" && shown && event.source === shown.contentWindow) { touching = message.active; lastTouch = Date.now(); if (!touching) swap(); }
     if (message?.type === "interact" && shown && event.source === shown.contentWindow) lastTouch = Date.now();

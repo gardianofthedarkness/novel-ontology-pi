@@ -172,7 +172,7 @@ export async function directorSky(workspace) {
   const at = await readFile(resolve(workspace, 'stage', 'director', 'reading-path.json'), 'utf8').then(JSON.parse, () => null);
   const read = path => readFile(path, 'utf8').then(JSON.parse, () => null);
   const sky = (at?.path ? await read(resolve(at.path, '..', 'sky.json')) : null) ?? await read(resolve(workspace, '..', 'reading', 'sky.json'));
-  return sky ? { units: Object.fromEntries(Object.entries(sky.units ?? {}).map(([id, unit]) => [id, { daypart: unit.daypart?.value ?? null, hour: unit.hour ?? null, weather: unit.weather?.value ?? null, sure: unit.weather?.sure ?? 0, lying: !!unit.lying }])) } : null;
+  return sky ? { units: Object.fromEntries(Object.entries(sky.units ?? {}).map(([id, unit]) => [id, { daypart: unit.daypart?.value ?? null, hour: unit.hour ?? null, weather: unit.weather?.value ?? null, strength: unit.weather?.strength ?? null, wind: unit.weather?.wind ?? null, sure: unit.weather?.sure ?? 0, lying: !!unit.lying }])) } : null;
 }
 
 /**
