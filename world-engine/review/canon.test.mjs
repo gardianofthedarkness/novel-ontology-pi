@@ -109,3 +109,11 @@ test('a line the reading was unsure of is settled by its voice, whatever Jev gue
   const out = Object.fromEntries(settleSpeakers({ cards, reading: { roles }, voices }).map(entry => [entry.line, `${entry.by}:${entry.gate}:${entry.who ?? '-'}`]));
   assert.deepEqual(out, { l1: 'voice:applied:a', l2: 'voice:applied:b', l3: 'voice:applied:b' });
 });
+
+test("a line the book's picture shows someone saying is theirs, before their voice's pick, if they are there", async () => {
+  const { settleSpeakers } = await import('./speakers.mjs');
+  const cards = [{ scene: 's', card: 'c', positions: { a: { x: 0, y: 0, z: 0 }, b: { x: 2, y: 0, z: 0 } }, lines: [{ id: 'l1' }, { id: 'l2' }] }];
+  const roles = { l1: { kind: 'spoken', who: { id: null, answer: 'none', confidence: 0.3 } }, l2: { kind: 'spoken', who: { id: null, answer: 'none', confidence: 0.3 } } };
+  const out = Object.fromEntries(settleSpeakers({ cards, reading: { roles }, voices: { l1: { who: 'a' }, l2: { who: 'a' } }, pictured: { l1: 'b', l2: 'z' } }).map(entry => [entry.line, `${entry.by}:${entry.who ?? '-'}`]));
+  assert.deepEqual(out, { l1: 'picture:b', l2: 'voice:a' }, 'l2: the picture\'s speaker is not there, so the voice decides');
+});

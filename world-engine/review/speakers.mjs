@@ -25,7 +25,7 @@ const gap = (a, b) => Math.hypot(a.x - b.x, a.z - b.z);
  * `pins.speaker[line]` is the review's answer (an id, or null for none of those there); `pins.notSpeaker[line]` one the
  * review or an audit ruled out. `route: 'review'` (the class's audits too often wrong) holds what the world would settle.
  */
-export function settleSpeakers({ cards, reading, pins = {}, peopleOf = () => [], route = null, voices = null }) {
+export function settleSpeakers({ cards, reading, pins = {}, peopleOf = () => [], route = null, voices = null, pictured = null }) {
   const out = [];
   for (const card of cards) {
     const here = card.positions ?? {}, people = peopleOf(card.card);
@@ -45,6 +45,10 @@ export function settleSpeakers({ cards, reading, pins = {}, peopleOf = () => [],
       }
       // The reading unsure: Jev's own guess, if the world has them there and, speaking to someone there, within earshot.
       if (route === 'review') { out.push({ ...base, who: null, by: 'world', gate: 'held', why: 'the world\'s speakers go to the review while their audits find too many wrong' }); continue; }
+      // The book's picture shows them saying it (the stills cast: pictures.json, a line read in the picture that this
+      // sentence holds, said by the face beside it): theirs, if they are there.
+      const shown = pictured?.[line.id] ?? null;
+      if (shown && shown !== ruledOut && here[shown] && shown !== base.to) { out.push({ ...base, who: shown, by: 'picture', gate: 'applied', why: 'the book\'s picture shows them saying it' }); continue; }
       // Their voice (voices.json): the conversation's decoded pick, there and within earshot of whom it is said to.
       const voice = voices?.[line.id]?.who ?? null;
       if (voice && voice !== ruledOut && here[voice] && voice !== base.to && !(base.to && (gap(here[voice], here[base.to]) > EARSHOT || Math.abs(here[voice].y - here[base.to].y) > 3))) {

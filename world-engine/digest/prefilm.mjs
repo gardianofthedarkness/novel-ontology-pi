@@ -162,5 +162,8 @@ export async function loadPrefilm(dir) {
   // And each unit's setting, the set dresser's (settings.json, experiments/v2/set-dresser.mjs).
   const settings = await read('settings.json').catch(() => null);
   if (merged && settings) for (const [id, entry] of Object.entries(settings.units ?? {})) if (merged.units?.[id]) merged.units[id] = { ...merged.units[id], setDresser: { setting: entry.setting, sure: entry.sure } };
-  return merged;
+  // And the book's pictures, the stills cast's (pictures.json, experiments/v2/stills.mjs): each unit a picture shows gains
+  // it, its script supervisor the picture's facts (where its people are, who is near whom; basis `picture`).
+  const pictures = await read('pictures.json').catch(() => null);
+  return merged && pictures ? (await import('./stills.mjs')).withPictures(merged, pictures) : merged;
 }

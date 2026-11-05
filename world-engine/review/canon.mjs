@@ -198,7 +198,10 @@ export async function toCanon(novelDir, { run, reading, speakers = true }) {
   // Without speakers (the user, 2026-11-03: a run on actions and items only), no line's speaker is settled or held.
   // The voices' picks for the lines the reading was unsure of (experiments/v2/voices.mjs: voices.json beside the reading).
   const readingAt = (await readJson(join(novelDir, 'stage', 'director', 'reading-path.json')))?.path, voices = readingAt ? (await readJson(join(dirname(readingAt), 'voices.json')))?.lines ?? null : null;
-  const settled = page && speakers ? settleSpeakers({ cards: playedLine({ record, page, reading }).cards, reading, pins, peopleOf: id => peopleOf.get(id) ?? [], route: routeOf(pins, 'speaker'), voices }) : [];
+  // And who the book's pictures show saying a line (the stills cast's pictures.json beside the reading).
+  const pictures = readingAt ? (await readJson(join(dirname(readingAt), 'pictures.json')))?.pictures ?? [] : [];
+  const pictured = Object.fromEntries(pictures.flatMap(note => (note.texts ?? []).filter(entry => entry.kind === 'said' && entry.sentence && entry.who && (entry.sure ?? 0) >= 0.5).map(entry => [entry.sentence, entry.who])));
+  const settled = page && speakers ? settleSpeakers({ cards: playedLine({ record, page, reading }).cards, reading, pins, peopleOf: id => peopleOf.get(id) ?? [], route: routeOf(pins, 'speaker'), voices, pictured }) : [];
   const entities = foldById(await readJsonl(join(ontology, 'entities.jsonl'))), relations = await readJsonl(join(ontology, 'relations.jsonl'));
   const spawn = await readJson(join(novelDir, 'stage', 'world', 'spawn.json'));
   const placed = page ? worldPlaces({ page, spawn, script, record, arrivals: playedLine({ record, page, reading }).arrivals }) : null;
