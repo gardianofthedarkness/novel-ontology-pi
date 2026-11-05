@@ -99,9 +99,33 @@ def main() -> int:
             face = Image.open((album / record["portrait"]).resolve()).convert("RGB"); face.thumbnail((side - 8, side - 44))
             sheet.paste(face, (cx + (side - face.width) // 2, cy + 40 + (side - 40 - face.height) // 2))
             draw.text((cx + 8, cy + 4), f"P{k + 1}", fill=(200, 30, 30), font=font)
-            gallery.append({"label": f"P{k + 1}", "entityId": record["entityId"]})
+            # And each portrait on its own square (a question names it by the person: no label to read off a sheet).
+            alone = Image.open((album / record["portrait"]).resolve()).convert("RGB"); alone.thumbnail((SHEET_SIDE // 2, SHEET_SIDE // 2))
+            square = Image.new("RGB", (SHEET_SIDE // 2, SHEET_SIDE // 2), (255, 255, 255)); square.paste(alone, ((square.width - alone.width) // 2, (square.height - alone.height) // 2))
+            own = sheets / f"portrait-{record['entityId']}.png"; square.save(own)
+            gallery.append({"label": f"P{k + 1}", "entityId": record["entityId"], "sheet": str(own)})
         sheet.save(sheets / "gallery.png")
-    print(json.dumps({"pictures": out, "gallery": gallery, "gallerySheet": str(sheets / "gallery.png") if gallery else None}, ensure_ascii=False))
+    # Each face scored against each portrait by an anime character matcher (imgutils CCIP: contrastive character image
+    # embeddings; its weights download on first use): the difference of their vectors, under the model's threshold the
+    # same character. The face is taken with a little of the head round it, as the portraits are cropped.
+    threshold = None
+    if records:
+        from imgutils.metrics import ccip_batch_differences, ccip_default_threshold
+        threshold = float(ccip_default_threshold())
+        portrait_images = [Image.open((album / record["portrait"]).resolve()).convert("RGB") for record in records]
+        for picture_out in out:
+            if not picture_out["faces"]: continue
+            img = Image.open((album / next(p["asset"] for p in pictures if p["id"] == picture_out["id"])).resolve()).convert("RGB"); w, h = img.size
+            crops = []
+            for face in picture_out["faces"]:
+                b = face["box"]; fw, fh = (b["right"] - b["left"]) * w, (b["bottom"] - b["top"]) * h
+                crops.append(img.crop((max(0, int(b["left"] * w - 0.25 * fw)), max(0, int(b["top"] * h - 0.25 * fh)), min(w, int(b["right"] * w + 0.25 * fw)), min(h, int(b["bottom"] * h + 0.25 * fh)))))
+            # The model's own difference of every pair (its metric over the two features); under the threshold, the same character.
+            differences = ccip_batch_differences(portrait_images + crops)
+            for k, face in enumerate(picture_out["faces"]):
+                row = differences[len(records) + k]
+                face["match"] = {record["entityId"]: round(float(row[j]), 4) for j, record in enumerate(records)}
+    print(json.dumps({"pictures": out, "gallery": gallery, "gallerySheet": str(sheets / "gallery.png") if gallery else None, "matchThreshold": threshold}, ensure_ascii=False))
     return 0
 
 

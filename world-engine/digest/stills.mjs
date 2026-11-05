@@ -40,7 +40,49 @@ export const whereIn = box => {
  * The brief: the units around the picture (its own, and `window` before and after in reading order), their sentences
  * (raw, the nearest `most` to the picture), their cards and people, and what each unit is about, where and when.
  */
-export function stillsBrief({ reading, text, picture, prep, gallery = [], notes = null, intro = null, window = 2, most = 160 }) {
+/** Words that describe how someone looks (hair, eyes, clothes, a hat, goggles, a scarf, a coat, a nun's habit, a uniform, an eyepatch). */
+export const LOOKS = /[\u53d1\u773c\u77b3\u8863\u670d\u88d9\u5e3d\u889c]|\u62a4\u76ee\u955c|\u56f4\u5dfe|\u5916\u5957|\u4fee\u5973|\u5236\u670d|\u773c\u7f69/;
+
+/**
+ * Each candidate's own evidence (the user, 2026-11-05: "facts need to be drawn for the candidates"): how the book
+ * describes them (sentences naming them with words of looks, nearest the picture first), the reading's facts about them
+ * before it (latest first), and the introduction's line.
+ */
+export function candidateEvidence({ reading, text, people, at, order, looks = 3, facts = 2 }) {
+  const formsOf = new Map((reading.chart?.entities ?? []).map(entity => [entity.id, [...new Set([...(entity.proper ?? []), ...(entity.names ?? [])])].filter(form => form.length >= 2)]));
+  const out = {};
+  for (const id of people) {
+    const forms = formsOf.get(id) ?? [], seen = (reading.chart?.entities ?? []).find(entity => entity.id === id)?.seen ?? [];
+    // A word of looks beside one of their names (within a few characters of it), not anywhere in a sentence that names them.
+    const beside = sentence => { const line = text(sentence); return forms.some(form => { for (let k = line.indexOf(form); k >= 0; k = line.indexOf(form, k + 1)) if (LOOKS.test(line.slice(Math.max(0, k - 10), k + form.length + 14))) return true; return false; }); };
+    const described = seen.filter(beside).sort((a, b) => Math.abs(order(a) - at) - Math.abs(order(b) - at)).slice(0, looks);
+    const known = (reading.facts ?? []).filter(fact => fact.about?.some(entry => entry.id === id) && order(fact.first) < at).sort((a, b) => order(b.first) - order(a.first)).slice(0, facts);
+    out[id] = { looks: described.map(sentence => clip(text(sentence), 90)), facts: known.map(fact => clip(fact.sentences.map(text).join(''), 120)) };
+  }
+  return out;
+}
+
+/**
+ * The groups the candidates were last seen in together (the user, 2026-11-05: "if multiple characters appear they should
+ * search for a recent group they appear together, and hence implying they are together when the world doesn't"): each
+ * unit's named candidates present (its cards' people), from `back` units before the picture to two after, as distinct
+ * sets of two to ten, the most recent first, with how many units each was seen in.
+ */
+export function recentGroups({ reading, people, unitIndex, back = 40, most = 6 }) {
+  const wanted = new Set(people.filter(id => id.startsWith('char_'))), unitOfSentence = new Map(reading.scenes.flatMap(scene => scene.sentences.map(id => [id, scene.id])));
+  const present = new Map();
+  for (const card of reading.cards) { const unit = unitOfSentence.get(card.first); for (const entry of card.people ?? []) { const id = entry.id ?? entry; if (wanted.has(id)) (present.get(unit) ?? present.set(unit, new Set()).get(unit)).add(id); } }
+  const groups = new Map();
+  for (let k = Math.min(reading.scenes.length - 1, unitIndex + 2); k >= Math.max(0, unitIndex - back); k--) {
+    const unit = reading.scenes[k].id, set = [...(present.get(unit) ?? [])].sort();
+    if (set.length < 2 || set.length > 10) continue;
+    const key = set.join('+'), entry = groups.get(key) ?? { people: set, units: 0, last: unit, before: unitIndex - k };
+    entry.units++; groups.set(key, entry);
+  }
+  return [...groups.values()].sort((a, b) => a.before - b.before || b.units - a.units).slice(0, most).map(({ people: who, units, last, before }) => ({ people: who, units, last, ...(before < 0 ? { after: -before } : { before }) }));
+}
+
+export function stillsBrief({ reading, text, picture, prep, gallery = [], notes = null, intro = null, window = 2, most = 160, threshold = null }) {
   const unitOf = new Map(reading.scenes.flatMap(scene => scene.sentences.map(id => [id, scene.id])));
   const at = Math.max(0, reading.scenes.findIndex(scene => scene.id === unitOf.get(picture.sentenceId)));
   const units = reading.scenes.slice(Math.max(0, at - window), at + window + 1), inUnits = new Set(units.map(unit => unit.id));
@@ -49,14 +91,22 @@ export function stillsBrief({ reading, text, picture, prep, gallery = [], notes 
   const cards = reading.cards.filter(card => inUnits.has(unitOf.get(card.first)) && card.sentences.some(id => kept.has(id)));
   const names = new Map((reading.chart?.entities ?? []).map(entity => [entity.id, entity.proper?.[0] ?? entity.names?.[0] ?? entity.id]));
   for (const slot of reading.slots ?? []) names.set(slot.id, slot.label ?? slot.names?.[0] ?? slot.id);
-  const portraitOf = new Map(gallery.map(entry => [entry.entityId, entry.label]));
+  const portraitOf = new Map(gallery.map(entry => [entry.entityId, `portrait_${entry.entityId}`]));
   const introOf = new Map((intro?.cast ?? []).filter(entry => entry.entity).map(entry => [entry.entity, entry.line ?? null]));
   const people = [...new Set([...cards.flatMap(card => (card.people ?? []).map(entry => entry.id ?? entry)), ...gallery.map(entry => entry.entityId)])].filter(id => /^(char_|slot_)/.test(id) && names.has(id));
   const placeOf = new Map((reading.places?.settings ?? []).map(entry => [entry.scene, entry.place])), timeOf = new Map((reading.time?.scenes ?? []).map(entry => [entry.scene, entry.when ?? null]));
+  const sentenceOrder = new Map(reading.scenes.flatMap(scene => scene.sentences).map((id, k) => [id, k])), order = id => sentenceOrder.get(id) ?? -1;
+  const evidence = candidateEvidence({ reading, text, people, at: order(picture.sentenceId), order });
   const state = {
-    faces: Object.fromEntries(prep.faces.map(face => [face.letter, { where: whereIn(face.box), height: `${Math.round((face.box.bottom - face.box.top) * 100)}% of the picture` }])),
+    // Each face against the portraits of the people who could be in it (CCIP, tools/album-portraits/stills.py): the model's
+    // difference, under its threshold the same character; the nearest three.
+    faces: Object.fromEntries(prep.faces.map(face => [face.letter, {
+      where: whereIn(face.box), height: `${Math.round((face.box.bottom - face.box.top) * 100)}% of the picture`,
+      ...(face.match ? { portraitMatch: Object.entries(face.match).filter(([id]) => people.includes(id)).sort((a, b) => a[1] - b[1]).slice(0, 3).map(([id, difference]) => ({ who: id, difference, verdict: threshold === null ? null : difference <= threshold ? 'same character' : difference <= threshold * 1.4 ? 'close' : 'unlike' })) } : {}),
+    }])),
     texts: Object.fromEntries(prep.texts.map(entry => [entry.ref, { text: entry.text, where: whereIn(entry.box) }])),
-    people: Object.fromEntries(people.map(id => [id, { name: names.get(id), ...(portraitOf.has(id) ? { portrait: portraitOf.get(id) } : {}), ...(introOf.get(id) ? { introduced: clip(introOf.get(id), 80) } : {}) }])),
+    people: Object.fromEntries(people.map(id => [id, { name: names.get(id), ...(portraitOf.has(id) ? { portrait: portraitOf.get(id) } : {}), ...(introOf.get(id) ? { introduced: clip(introOf.get(id), 80) } : {}), ...(evidence[id]?.looks.length ? { looks: evidence[id].looks } : {}), ...(evidence[id]?.facts.length ? { facts: evidence[id].facts } : {}) }])),
+    groups: recentGroups({ reading, people, unitIndex: at }),
     units: Object.fromEntries(units.map(unit => [unit.id, {
       ...(unit.id === unitOf.get(picture.sentenceId) ? { picture: `stands after ${picture.sentenceId}` } : {}),
       kind: unit.type ?? null, where: names.get(placeOf.get(unit.id)) ?? placeOf.get(unit.id) ?? null, when: timeOf.get(unit.id) ?? null,
@@ -71,16 +121,17 @@ export function stillsBrief({ reading, text, picture, prep, gallery = [], notes 
 /** The questions, each a choice: the picture's kind and card; each face's person and card; the setting, time, weather, action; each text's kind and whose. */
 export function stillsQuestions({ prep, cards, people, gallery = [] }) {
   const cardOptions = [...cards.map(card => card.id), 'none'], personOptions = [...people, NOT.else, NOT.none], faceOptions = [...prep.faces.map(face => face.letter), 'none'];
-  const portraitOptions = [...gallery.map(entry => entry.label), 'none'];
+
   const choice = (key, instructions, options, optionHints) => ({ key, primitive: 'choice', instructions, options, ...(optionHints ? { optionHints } : {}) });
   return [
     choice('kind', 'What kind of picture is `picture`?', Object.keys(PICTURE_KINDS), PICTURE_KINDS),
     choice('card', 'Which card of the text does `picture` show (its main moment; the picture may stand before or after the text it shows)? none if no card.', cardOptions),
     ...prep.faces.flatMap(face => [
-      // By the face alone first: which portrait (the text's people would crowd the picture out: vol 1's ill_0011, three faces
-      // answered by who the text names most); then, for a face no portrait matches, who of the text's people.
-      ...(gallery.length ? [choice(`portrait:${face.letter}`, `Look only at the pictures: which of \`portraits\` (P1, P2 …) shows the same person as \`face_${face.letter}\`? Same hair, eyes, face and clothes; drawn in another style or colour is still the same person. none if no portrait is this person.`, portraitOptions)] : []),
-      choice(`who:${face.letter}`, `Who is the person in \`face_${face.letter}\` (boxed ${face.letter} in \`picture\`), of the people of the cards around the picture?`, personOptions),
+      // One decision with everything before it (the user, 2026-11-05: the portrait matching, the facts and the groups "all
+      // given as context to jev, he should be able to do better"): the face alone, each candidate's own portrait as its own
+      // picture (named by the person: a sheet of labelled portraits was misread, vol 1's ill_0011), the matcher's scores, how
+      // the book describes them, and the groups seen together.
+      choice(`who:${face.letter}`, `Who is the person in \`face_${face.letter}\` (boxed ${face.letter} in \`picture\`)? Compare the face with each person's own portrait picture (\`people.*.portrait\` names it) and the matcher's \`faces.${face.letter}.portraitMatch\`; then with how the book describes them (\`looks\`, \`facts\`, \`introduced\`), and with \`groups\` (several faces together are most likely a group seen together).`, personOptions),
       choice(`card:${face.letter}`, `Which card's moment is face ${face.letter} in?`, cardOptions),
     ]),
     choice('setting', 'Where is the main moment of `picture` set?', Object.keys(PLACE_SETTINGS), PLACE_SETTINGS),
@@ -108,20 +159,20 @@ export function stillsNote({ picture, prep, replies, cards, text, unitOf, galler
   const unitOfCard = id => (id && id !== 'none' ? unitOf(id) ?? null : null);
   const main = get('card'), kind = get('kind');
   const faces = prep.faces.map(face => {
-    const portrait = get(`portrait:${face.letter}`), byFace = portrait && portrait.value !== 'none' ? gallery.find(entry => entry.label === portrait.value)?.entityId ?? null : null;
-    const byText = get(`who:${face.letter}`), at = get(`card:${face.letter}`);
-    const who = byFace && portrait.sure >= least ? { value: byFace, sure: portrait.sure, by: 'portrait' } : byText ? { ...byText, by: 'text' } : null;
+    const asked = get(`who:${face.letter}`), at = get(`card:${face.letter}`), who = asked ? { ...asked, by: 'jev' } : null;
     const person = who && who.value !== NOT.else && who.value !== NOT.none && who.sure >= least ? who.value : null;
     const card = at && at.value !== 'none' ? at.value : main?.value !== 'none' ? main?.value ?? null : null;
-    return { letter: face.letter, box: face.box, who: person, sure: who?.sure ?? 0, by: who?.by ?? null, said: who?.value ?? null, portrait: portrait ? { value: portrait.value, sure: portrait.sure } : null, text: byText ? { value: byText.value, sure: byText.sure } : null, card, unit: unitOfCard(card) };
+    const match = face.match ? Object.entries(face.match).sort((a, b) => a[1] - b[1])[0] : null;
+    return { letter: face.letter, box: face.box, who: person, sure: who?.sure ?? 0, by: who?.by ?? null, said: who?.value ?? null, matcher: match ? { who: match[0], difference: match[1] } : null, card, unit: unitOfCard(card) };
   });
-  // Near: two people in the same moment whose faces are within two and a half faces of each other.
+  // Together: two people the picture shows in the same moment are there together, whatever the world had (the user,
+  // 2026-11-05: "implying they are together when the world doesn't"); close where their faces are within two and a half faces.
   const near = [];
   for (let i = 0; i < faces.length; i++) for (let j = i + 1; j < faces.length; j++) {
     const a = faces[i], b = faces[j];
-    if (!a.who || !b.who || a.who === b.who || a.card !== b.card) continue;
+    if (!a.who || !b.who || a.who === b.who || !a.card || a.card !== b.card) continue;
     const size = ((a.box.bottom - a.box.top) + (b.box.bottom - b.box.top)) / 2, dx = (a.box.left + a.box.right - b.box.left - b.box.right) / 2, dy = (a.box.top + a.box.bottom - b.box.top - b.box.bottom) / 2;
-    if (Math.hypot(dx, dy) <= 2.5 * size) near.push({ a: a.who, b: b.who, card: a.card, sure: Math.min(a.sure, b.sure) });
+    near.push({ a: a.who, b: b.who, card: a.card, sure: Math.min(a.sure, b.sure), close: Math.hypot(dx, dy) <= 2.5 * size });
   }
   const cardIds = cards.flatMap(card => card.sentences);
   const texts = prep.texts.map(entry => {

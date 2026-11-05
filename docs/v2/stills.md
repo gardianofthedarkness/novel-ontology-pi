@@ -31,9 +31,8 @@ unit's kind, place, time and the script supervisor's digest, the people who coul
 line from the introduction), each face and text placed in words.
 
 Questions (`stillsQuestions`), all choices: the picture's kind (one moment, several moments, a summary or memory, posed);
-which card it shows (before or after its anchor: v1's placement made exact); for each face, which portrait it is by the
-face alone, then who of the text's people (the text alone crowded the picture out: ill_0011's three faces were answered by
-who the text names most), and which card's moment it is in; the setting (the set dresser's kinds), time of day, weather,
+which card it shows (before or after its anchor: v1's placement made exact); for each face, who it is (one decision, below)
+and which card's moment it is in; the setting (the set dresser's kinds), time of day, weather,
 what is going on; for each text, what it is (a line said, a caption, a sign, something written, a sound, noise) and whose.
 
 ## What its notes give
@@ -50,6 +49,41 @@ what is going on; for each text, what it is (a line said, a caption, a sign, som
 
 A picture fact binds as a stated one does (digest/facts.mjs `binding`).
 
+## Telling faces apart: the context for each candidate
+
+The user, 2026-11-05: *"facts need to be drawn for the candidates. An automatic portrait match system sampling from
+ground truth … scores similarity based on image vector matching … adjacent segment character system (if multiple
+characters appear they should search for a recent group they appear together …) and the portrait source of truth
+matching system all given as context to jev"*.
+
+- **The portrait matcher:** CCIP (imgutils, contrastive anime character embeddings; 287 MB of weights, downloaded once)
+  scores each face against each portrait by the model's own difference (under 0.178, the same character): the nearest three
+  candidates with a portrait, `same character`, `close` or `unlike`.
+- **Each candidate's evidence** (`candidateEvidence`): the book's sentences with a word of looks (hair, eyes, clothes, hat,
+  goggles, scarf, coat, habit, uniform, eyepatch) beside one of their names, nearest the picture first; the reading's facts
+  about them before it; the introduction's line.
+- **Groups** (`recentGroups`): the named people each unit had (its cards' people), from 40 units before the picture to two
+  after, as distinct sets of two to ten, most recent first. People a picture shows in one moment are recorded together
+  (a `near` fact for each pair), whatever the world had.
+- **One decision a face:** the face alone, each candidate's own portrait as its own picture (named by the person: a sheet of
+  labelled portraits was misread), and all of the above. The brief is cut to 20,000 characters (the passage shrinks round the
+  picture): Jev refused one of 26,752 with its pictures.
+
+Measured on the 14 faces of vol 1 checked by eye:
+
+| Run | Right | Wrong | Unnamed |
+|---|---|---|---|
+| picture and text only | 9 | 3 | 2 |
+| the portrait gallery asked first | 11 | 1 | 2 |
+| + matcher, looks and facts, groups (gallery first) | 11 | 3 | 0 |
+| one decision with everything, portraits as their own pictures | 11 | 2 | 1 |
+
+In the last, every face outside ill_0011 is right (11 of 11); ill_0011 (a posed black-and-white picture: Index with a cat
+and a parfait, the two Misakas) is wrong on all three, and every signal points away there (the matcher ranks Index third;
+Jev reads the face as Kamijou). The matcher is sure of clear faces (Kamijou four times, Accelerator) and unsure of
+black-and-white drawings against colour portraits; one of its sure answers was wrong (Anna's face, touching Kamijou's, read
+as his).
+
 ## Vol 1 (2026-11-05, 9 story pictures, a few cents)
 
 Kinds and cards: 5 single moments, 3 several (ill_0008, ill_0012, ill_0015 in the first run), 1 posed (the back cover,
@@ -58,5 +92,5 @@ Accelerator right (Accelerator in its own moment, the anchor's sentence), the sh
 goggled Misaka 10032 right, Index named Kamijou (wrong), Misaka left unnamed; ill_0014's Kamijou right. Card answers are
 unsure (0.2–0.56: many cards to choose from), settings mostly not shown; 2 picture facts.
 
-**Known limit:** Jev tells anime faces apart only fairly (one clear miss in the eight checked; four left unnamed). An
-anime face matcher (CCIP, in the cropper's package; its weights a download) could give each face a portrait score first.
+**Next:** portraits sampled from the book's own confirmed faces (black and white, as the story pictures are), not only the
+colour plates: a face named surely in one picture becomes a reference for the next, and a universe's books share them.
