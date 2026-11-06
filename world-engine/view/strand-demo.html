@@ -153,6 +153,10 @@ const flight = (a, b) => {
 };
 const along = (a, b, arc, f) => { const t = f * arc.T; return { x: a.x + (b.x - a.x) * f, z: a.z + (b.z - a.z) * f, y: a.y + arc.v * Math.sin(ELEVATION) * t - G * t * t / 2 }; };
 const SPEED = { walk: 1.4, run: 3.6, sneak: 0.8, "climb up": 1.1, "go down": 1.4, fall: 1.6, dragged: 1.2, ride: 12 };
+// Through the air (docs/v2/terrain-levels.md §6.2): a move's `air` ranges [first, last, kind] are steps the director laid
+// over the buildings (world/air.mjs), played straight at the kind's pace, never as a hop of their own.
+const AIR_SPEED = { flight: 15, leap: 8, climb: 1.5 };
+const airOf = (move, k) => move.air?.find(([first, last]) => k > first && k <= last)?.[2] ?? null;
 const GROUND_COLOR = [0x0c1822, 0x112532, 0x173444, 0x15293a, 0x112532];
 
 const at = (place, node) => { const i = node % place.NX - (place.oi ?? 0), j = Math.floor(node / place.NX) % place.NZ - (place.oj ?? 0), k = Math.floor(node / (place.NX * place.NZ)) - (place.ok ?? 0); return { x: (i + 0.5) * CELL, z: (j + 0.5) * CELL, y: k * FLOOR, i, j, k }; };
@@ -163,8 +167,8 @@ const timing = (place, move) => {
   const steps = [0], speed = SPEED[move.how] || 1.4;
   for (let k = 1; k < move.path.length; k++) {
     const a = at(place, move.path[k - 1]), b = at(place, move.path[k]), rise = b.y - a.y, run = Math.hypot(b.x - a.x, b.z - a.z);
-    const arc = flight(a, b);
-    steps.push(steps[k - 1] + (arc ? arc.T : rise > 0 ? rise / 1.2 : rise < 0 ? (run ? Math.sqrt(-2 * rise / 9.8) : -rise / 2) : run / speed));
+    const air = airOf(move, k), arc = air ? null : flight(a, b);
+    steps.push(steps[k - 1] + (air ? Math.hypot(run, rise) / (AIR_SPEED[air] ?? 8) : arc ? arc.T : rise > 0 ? rise / 1.2 : rise < 0 ? (run ? Math.sqrt(-2 * rise / 9.8) : -rise / 2) : run / speed));
   }
   return { total: steps.at(-1) / DEMO, steps: steps.map((s) => s / DEMO) };
 };
@@ -1750,7 +1754,7 @@ function showPaths(segment, entry) {
   for (const move of segment.moves) {
     if (data.people[move.person]?.crowd) continue;
     const tint = new THREE.Color(data.people[move.person].color), points = (nodes) => nodes.flatMap((node, k) => {
-      const p = at(segment.place, node), out = [], arc = k && move.how !== "direct" ? flight(at(segment.place, nodes[k - 1]), p) : null;
+      const p = at(segment.place, node), out = [], arc = k && move.how !== "direct" && !(nodes === move.path && airOf(move, k)) ? flight(at(segment.place, nodes[k - 1]), p) : null;
       if (arc) for (let n = 1; n < 12; n++) { const q = along(at(segment.place, nodes[k - 1]), p, arc, n / 12); out.push(q.x - entry.cx, q.y + 0.35, q.z - entry.cz); }
       return [...out, p.x - entry.cx, p.y + 0.35, p.z - entry.cz];
     });
@@ -1807,7 +1811,8 @@ function position(place, move, elapsed) {
   if (elapsed >= steps.at(-1)) return { ...at(place, move.path.at(-1)), k: move.path.length };
   if (move.how === "direct") { const a = at(place, move.path[0]), b = at(place, move.path[1]), f = elapsed / steps[1], lift = Math.sin(Math.PI * f) * 3; return { x: a.x + (b.x - a.x) * f, z: a.z + (b.z - a.z) * f, y: a.y + (b.y - a.y) * f + lift, k: 2 }; }
   let k = 1; while (k < steps.length - 1 && steps[k] < elapsed) k++;
-  const a = at(place, move.path[k - 1]), b = at(place, move.path[k]), f = Math.min(1, Math.max(0, (elapsed - steps[k - 1]) / Math.max(1e-6, steps[k] - steps[k - 1]))), arc = flight(a, b);
+  const a = at(place, move.path[k - 1]), b = at(place, move.path[k]), f = Math.min(1, Math.max(0, (elapsed - steps[k - 1]) / Math.max(1e-6, steps[k] - steps[k - 1]))), air = airOf(move, k), arc = air ? null : flight(a, b);
+  if (air) return { x: a.x + (b.x - a.x) * f, z: a.z + (b.z - a.z) * f, y: a.y + (b.y - a.y) * f, k, flying: true };
   if (arc) return { ...along(a, b, arc, f), k, flying: true };
   return { x: a.x + (b.x - a.x) * f, z: a.z + (b.z - a.z) * f, y: a.y + (b.y - a.y) * f, k };
 }

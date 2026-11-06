@@ -336,6 +336,46 @@ crests and at the shore, the ripples' normals on top. Fog and the weather as on 
 
 ## 6. The air (stage 5)
 
+### 6.0 An aircraft: a vehicle near the city, a place up in the atmosphere (the user, 2026-11-06)
+
+> "I prefer near city airfields still keep no ability as vehicles but atmosphere level planes or floating base as building
+> or street or district level depend on what terrain thinks. An aircraft scene can happen up there if it has no
+> interaction with ground level."
+
+- **Near the city: a vehicle.**
+  - Anything flying that the scene ties to the ground stays a vehicle of the surface's air (§6.1–6.2), as today: a carrier its riders are tied to (`mounts.mjs` CARRIERS: a helicopter, an aircraft, a drone), or a thing that flies over the roofs (an airship).
+  - Tied to the ground means it takes off or lands, is boarded from a roof or a street, acts on the ground (attacks, carries, lights), or is seen and spoken of from the ground.
+  - Its riders gain no ability of their own: they ride the vehicle's way while tied to it.
+- **Up in the atmosphere: a place.**
+  - A plane in flight or a floating base is a place of the air layer (§3.5), at the building, street or district level the terrain cast decides.
+  - It stands on its own deck, with its ways down to the ground under it.
+- **The test is the scene's.** A scene can happen up there only when it has no interaction with the ground level.
+- **One aircraft can be both** across a story: a vehicle in the scenes where it takes off, lands or fights the street, and a place in the scenes spent aboard in flight with nothing below them.
+- **§6.3's moving places** in the air are this place: a scene aboard is held on its own floor, not on a frame flown over the city.
+
+**Volume 1 by this rule (checked 2026-11-06):** nothing goes to the air layer. Every flying thing in it is tied to the
+ground, so all of it is the surface's air:
+
+| Scenes | What flies | By the rule |
+| --- | --- | --- |
+| 2, 46, 126, 134 | airships over the city, seen from the street (one used as a mirror) | things over the roofs |
+| 19 | drones hunting someone on the street | vehicles (drones) |
+| 157–158 | an observation helicopter with troopers in powered suits attacks the street and is brought down | a vehicle |
+| 162, 168 | a person leaping between towers (a 38th floor to a 52nd) carrying another | an ability's leap, no aircraft |
+| 135, 170, 181–182 | people and things thrown or held in the air by abilities | abilities and falls (§3.2) |
+| 218–235 | a tower's roof used as a helideck: VTOL jets and a rescue helicopter, parked; the helicopter disabled | vehicles standing on a roof |
+| 278 | a tilt-rotor lands with the security forces | a vehicle |
+
+The reading's "airplane runway" (scene 225, a street-scale place) is that tower's roof, which Touma likens to a runway;
+by this rule it is the roof (a building's), not a runway on the ground.
+
+**What is built and what is not:**
+
+- **Built:** the vehicles (carriers with a flying height, things over the roofs) and a place's air layer (§3.5: by its name, or a hand's answer).
+- **Not built:**
+  - the test applied by a cast: a note that a scene is spent aboard in flight with nothing below it, giving that aircraft's place the air layer, as the underground note does under the street;
+  - flight through the air: today a flight or a leap is played as a straight line, through whatever stands between (§6.2 is still to build).
+
 ### 6.1 Bands
 
 Low air: the rooftops to the clouds (the cloud layer at 420 m, sky.md, is its ceiling where the weather has clouds). High
@@ -345,6 +385,35 @@ air: above them to cruising height. Each band has the weather's wind, stronger w
 
 Flyers (the ability sheets) move on straight lines at a height that clears the towers, rise and descend at the ends;
 helicopters likewise, slower. A fall is the physics of §3.2. A beam through the clouds is as built.
+
+**Built (2026-11-06; the user: "Yes", to flight through the air for volume 1).** `world/air.mjs` `airPath`. Each kind
+leaves its own building through a window first (where the line toward the other end leaves the plan, at its own height),
+not up through the floors above:
+
+- **a flight:** up to 10 m over every roof under its line and over both ends, level across, down outside the far building and in, or straight down onto its roof;
+- **a leap:** one arc in steps of at most 8 m, its middle clearing every roof under it by 10 m, raised where a step would still clip a roof;
+- **a climb up a wall:** across to the far wall's foot, up it, in.
+
+How the engine uses it:
+
+- **The director** routes through the air every flight, and every leap, flight or climb its journeys find no walk for. Before, each went in one straight line through whatever stood between. A flight to or from below the street goes by the walk and its lifts (W12's 92 m flight down to a lab went through the ground).
+- **The path** is cells of the world. The move keeps its air steps as ranges `[first, last, kind]`.
+- **The page** plays those steps straight, at the kind's pace: a flight 15 m/s, a leap 8, a climb 1.5. It never plays them as a hop of their own (any step over 3 m was one).
+- **L12** no longer calls such a move "played as a walk" (`throughAir` on its card move).
+- **The key animator's flights and leaps:** a stated flight or leap its spot has no walk to also goes through the air. From below the street they run up to the open ground first; never into the ground.
+- **Both ends in one building:** no air path; its stairs and lifts are the walk's.
+
+Checked on copies of library 16 (unpaid rehearsals, stand-in answers):
+
+- **No law newly broken.** Scenes 155–171, 160–163, 176–180, 222–226 and 248–251 break no law that the code before did not. Scenes 160–163 and 248–251 were run with the code before too: the same counts, the same moves.
+- **Volume 1's air moves now fly over the roofs:**
+  - scene 163's flight to the roof of the 83-floor office: up to 129 m, across, down onto the roof;
+  - scene 250's flight between two roofs, from 120 m to 69 m, 66 m apart: up, across, and down outside the far building.
+  - Neither passes through a building. Before, each was one hop or one straight line.
+- **W12's held flight in scene 162** (from a basement W12 had misplaced her in, to an office's 44th floor; held as "no way there on foot") replayed on the same world:
+  - 6 steps up to the street on foot, then up to 130 m, across, down outside the office, and in at its 40th floor, the highest a walk reaches;
+  - through no other building, judged by the cells each building holds.
+- **Not reproduced unpaid:** that scene's stated leaps between towers come from Jev's own picks in a paid run; the stand-in answers do not raise them.
 
 ### 6.3 Moving places
 

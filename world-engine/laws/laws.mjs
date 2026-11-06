@@ -169,7 +169,7 @@ export function bodies({ played }) {
 export function waysOf(abilities, who) {
   return new Set([...HUMAN, ...Object.keys(abilities?.people?.[who]?.ways ?? {})]);
 }
-/** L12 · Abilities: a move made a way the person has; a leap or flight played (today the engine walks them, W4 fixes). */
+/** L12 · Abilities: a move made a way the person has; a leap or flight played (through the air where the walk has no way: `throughAir`). */
 export function abilitiesHeld({ played, abilities }) {
   const out = [];
   let checked = 0;
@@ -177,7 +177,8 @@ export function abilitiesHeld({ played, abilities }) {
     if (!move.how || move.direction === 'stays') continue;
     checked++;
     if (!waysOf(abilities, move.person).has(move.how)) out.push(violation('L12', `${card.scene} · ${card.card} · ${move.person}`, `a ${move.how} by someone with no such way${move.moved ? ' (played as a walk)' : ''}`, { who: move.person, how: move.how, moved: !!move.moved }));
-    else if (!HUMAN.has(move.how) && move.moved) out.push(violation('L12', `${card.scene} · ${card.card} · ${move.person}`, `a ${move.how} played as a walk: the engine has no ${move.how} yet`, { who: move.person, how: move.how, engine: true }));
+    // Played through the air (world/air.mjs: a flight, a leap, a climb up a wall) is played as itself, not as a walk.
+    else if (!HUMAN.has(move.how) && move.moved && !move.throughAir) out.push(violation('L12', `${card.scene} · ${card.card} · ${move.person}`, `a ${move.how} played as a walk: the engine has no ${move.how} yet`, { who: move.person, how: move.how, engine: true }));
   }
   return { law: 'L12', checked, violations: out };
 }
