@@ -41,6 +41,12 @@ export const EDGE = { walk: 0, climb: 1, descend: 2, jump: 3, fall: 4, arc: 5, w
  */
 export const WALL_KINDS: readonly number[] = [EDGE.wallLow, EDGE.wallMid, EDGE.wallHigh];
 const factorOf = (factors: number[] | undefined, kind: number) => factors?.[kind] ?? (WALL_KINDS.includes(kind) ? Infinity : 1);
+/**
+ * An edge's cost for a way of moving: a kind the way never takes (factor Infinity) is closed whatever its cost. Its cost
+ * times the factor was 0 × Infinity = NaN on edges of no cost (W12's rehearsal: 63 of 91 failed walks in units 1–84 had a
+ * field of NaN, so even a step of 2 m found "no way there on foot").
+ */
+const edgeCost = (cost: number, factor: number) => (factor === Infinity || !(cost >= 0) ? Infinity : cost * factor);
 
 /** A directed movement graph in compressed rows: node positions (metres), and per edge its target, direction, cost (metres of walking) and kind. */
 export interface MoveGraph { nodes: number; x: Float64Array; z: Float64Array; y: Float64Array; offsets: Int32Array; to: Int32Array; dir: Uint8Array; cost: Float64Array; kind: Uint8Array }
@@ -96,10 +102,10 @@ export function solveWalk(graph: MoveGraph, targets: Iterable<number>, options: 
   // weight infinite, and infinity times zero turned the whole field to NaN (every route through it "no way on foot").
   // Scaled down until it holds on every edge of this graph (most graphs keep it whole).
   let scale = 1;
-  for (let n = 0; n < graph.nodes; n++) for (let e = graph.offsets[n]; e < graph.offsets[n + 1]; e++) { const fall = phi[n] - phi[graph.to[e]], cost = graph.cost[e] * factorOf(options.factors, graph.kind[e]); if (fall > cost) scale = Math.min(scale, Math.max(0, cost) / fall); }
+  for (let n = 0; n < graph.nodes; n++) for (let e = graph.offsets[n]; e < graph.offsets[n + 1]; e++) { const fall = phi[n] - phi[graph.to[e]], cost = edgeCost(graph.cost[e], factorOf(options.factors, graph.kind[e])); if (fall > cost) scale = Math.min(scale, Math.max(0, cost) / fall); }
   if (scale < 1) for (let n = 0; n < graph.nodes; n++) phi[n] *= scale;
   const weight = new Float64Array(graph.to.length);
-  for (let n = 0; n < graph.nodes; n++) for (let e = graph.offsets[n]; e < graph.offsets[n + 1]; e++) weight[e] = Math.exp(-(graph.cost[e] * factorOf(options.factors, graph.kind[e]) + phi[graph.to[e]] - phi[n]) / options.T);
+  for (let n = 0; n < graph.nodes; n++) for (let e = graph.offsets[n]; e < graph.offsets[n + 1]; e++) weight[e] = Math.exp(-(edgeCost(graph.cost[e], factorOf(options.factors, graph.kind[e])) + phi[graph.to[e]] - phi[n]) / options.T);
   const turn = turnWeights(options.kappa, options.T), h = new Float64Array(graph.nodes * D), a = new Float64Array(64);
   const tolerance = options.tolerance ?? 1e-9, maxSweeps = options.maxSweeps ?? 5000;
   let sweeps = 0, converged = false;

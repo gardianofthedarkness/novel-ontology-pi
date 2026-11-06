@@ -199,17 +199,37 @@ export async function strandDemo(novelDir, options) {
   };
   const T = 0.6 * temperatureBound({ step: 2, kappa: 1, lambda: 8, floorHeight: 3, arcCost: 7 }), kappa = 1, lambda = 8;
   /**
-   * A walk's field, solved on the world round where it goes (its targets and, given `from`, where it starts, with 40 m of
-   * room): small however much of the city is explored. `sampleWalk` on it is wrapped to take and give world ids.
+   * A walk's field, solved on the world round where it goes (its targets and, given `from`, where it starts, with `pad`
+   * metres of room, 40 unless asked): small however much of the city is explored. `sampleWalk` on it is wrapped to take and give world ids.
    */
-  const fields = new Map(), spotCache = new Map(), solve = (placeId, key, targets, how, from = null) => {
-    const points = [...targets, ...(from === null ? [] : [from])].map(id => W.nodePos(world, id)), pad = 40;
+  const DEEP = -20, fields = new Map(), spotCache = new Map(), solve = (placeId, key, targets, how, from = null, pad = 40) => {
+    const points = [...targets, ...(from === null ? [] : [from])].map(id => W.nodePos(world, id));
     const box = { x0: Math.min(...points.map(p => p.x)) - pad, x1: Math.max(...points.map(p => p.x)) + pad, z0: Math.min(...points.map(p => p.z)) - pad, z1: Math.max(...points.map(p => p.z)) + pad };
     const built = graphOf({ x: (box.x0 + box.x1) / 2, z: (box.z0 + box.z1) / 2 }, Math.max(box.x1 - box.x0, box.z1 - box.z0) / 2);
     const spec = specOf(how, ({ step, arcCost }) => 0.6 * temperatureBound({ step, kappa: 1, lambda: 8, floorHeight: 3, arcCost }));
-    const cacheKey = `${built.version}|${key}|${spec.key}|${[box.x0, box.x1, box.z0, box.z1].map(Math.round).join(',')}`;
-    if (!fields.has(cacheKey)) { const part = W.windowOf(built.graph, box), field = solveWalk(part.graph, targets.map(id => part.local[id]).filter(n => n >= 0), { T: spec.T, kappa, lambda, factors: spec.factors }); fields.set(cacheKey, { ...field, part }); }
+    // The layers (docs/v2/terrain-levels.md §8.1–8.2): the street with what lies just under it, and the deep layer below
+    // DEEP metres. A walk sees the deep layer only when one of its ends is there: a deep facility's lift (90 m at a flat
+    // cost) inside a street walk's window made the solver scale its guide away, and long legs found no walk (W12).
+    // The targets are part of the key: a retake reuses its walk's key with a new target in the same box, and was handed the
+    // old target's field, which need not reach where the person now stands (W12's scenes 122–123: "no way there" on 4 m).
+    const deep = points.some(p => p.y <= DEEP), aimed = [...targets].sort((a, b) => a - b).join(','), cacheKey = `${built.version}|${key}|${spec.key}|${deep ? 'deep' : 'near'}|${aimed}|${[box.x0, box.x1, box.z0, box.z1].map(Math.round).join(',')}`;
+    if (!fields.has(cacheKey)) { const part = W.windowOf(built.graph, box, deep ? undefined : n => built.graph.y[n] > DEEP), field = solveWalk(part.graph, targets.map(id => part.local[id]).filter(n => n >= 0), { T: spec.T, kappa, lambda, factors: spec.factors }); fields.set(cacheKey, { ...field, part }); }
     return fields.get(cacheKey);
+  };
+  /**
+   * Where a walk from a node can get to within `radius` metres: the same layers as `solve` sees and only the edges its way
+   * of going allows. A spot for a fact is picked only among these (docs/v2/terrain-levels.md §8.2; W12's units 118–123: a
+   * basement or a hall 6 m off, whose way down lay outside every walk's window, was "no way there" card after card).
+   */
+  const reachable = new Map(), onFoot = (from, radius = 60, how = 'walk') => {
+    const p = W.nodePos(world, from), box = { x0: p.x - radius, x1: p.x + radius, z0: p.z - radius, z1: p.z + radius };
+    const built = graphOf({ x: p.x, z: p.z }, radius), spec = specOf(how, ({ step, arcCost }) => 0.6 * temperatureBound({ step, kappa: 1, lambda: 8, floorHeight: 3, arcCost })), key = `${built.version}|${from}|${radius}|${spec.key}`;
+    if (reachable.has(key)) return reachable.get(key);
+    const deep = p.y <= DEEP, part = W.windowOf(built.graph, box, deep ? undefined : n => built.graph.y[n] > DEEP), seen = W.reachableIn(part.graph, part.local[from], spec.factors), out = new Set();
+    for (let n = 0; n < seen.length; n++) if (seen[n]) out.add(part.ids[n]);
+    if (reachable.size > 400) reachable.clear();
+    reachable.set(key, out);
+    return out;
   };
   const sampleWalk = (graph, field, start, heading, rng) => { if (!field.part) return walkSample(graph, field, start, heading, rng); const at = field.part.local[start]; if (at < 0) return null; const path = walkSample(field.part.graph, field, at, heading, rng); return path && path.map(n => field.part.ids[n]); };
   const pick = (list, rng) => list[Math.floor(rng() * list.length)];
@@ -1463,7 +1483,7 @@ export async function strandDemo(novelDir, options) {
   // line's starts, handed on so the loop plays forward card by card on the same world (no export again, no replay): it adds
   // its cards to the chosen scenes, its moves to `moves` and its positions to `runs`, streams the world in with `reach`, and
   // calls `assemble` for the page as far as it has played.
-  if (options.engine) await options.engine({ world, W, graphOf, cost, reach, solve, sampleWalk, T, kappa, lambda, runs, moves, chosen, assemble, snapshot, names: inputs.names, hits, hitSphere });
+  if (options.engine) await options.engine({ world, W, graphOf, cost, reach, solve, onFoot, sampleWalk, T, kappa, lambda, runs, moves, chosen, assemble, snapshot, names: inputs.names, hits, hitSphere });
   return data;
 }
 

@@ -40,6 +40,8 @@ const MOVE_SURE = 0.5;
 const BODY = 1.7;
 /** How far the layout artist and the checks look for a spot that agrees with the notes (metres; was 6 bodies, W10). */
 const FACT_SEARCH = 25;
+// How far round a unit's start a spot under the street is looked for, when the unit is underground (metres).
+const UNDER_SEARCH = 120;
 const seeded = text => { let h = 2166136261; for (const c of text) { h ^= c.charCodeAt(0); h = Math.imul(h, 16777619); } let s = h >>> 0; return () => { s = (s + 0x6d2b79f5) | 0; let t = Math.imul(s ^ (s >>> 15), 1 | s); t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t; return ((t ^ (t >>> 14)) >>> 0) / 4294967296; }; };
 const round = value => Math.round(value * 10) / 10;
 
@@ -328,6 +330,16 @@ export async function direct(novelDir, { reading, readingPath = null, prefilm = 
         for (let id = 0; id < type.length; id++) if (type[id] && graph.offsets[id + 1] > graph.offsets[id] && Math.abs(graph.x[id] - x) <= radius && Math.abs(graph.z[id] - z) <= radius) nodes.push({ id, x: graph.x[id], y: graph.y[id], z: graph.z[id], type: type[id], lot: lot[id], ground: built.ground?.[id] ?? 0 });
         return { built, nodes };
       };
+      // What a walk from a node reaches within `radius` metres (the engine's onFoot, the layers and edges a walk uses): a
+      // fact's spot is looked for among these only, never under a stair that lies outside every walk's window.
+      const onFoot = (from, radius) => E.onFoot(from, Math.max(40, radius + 16));
+      // The spots under the street a walk from a node reaches within UNDER_SEARCH, nearest first, the near-ground layer
+      // (to 25 m down, docs/v2/terrain-levels.md §8.1) ahead of the deep one.
+      const downFrom = node => {
+        const p = at(node), reach = onFoot(node, UNDER_SEARCH), under = around(p[0], p[2], UNDER_SEARCH).nodes.filter(entry => entry.type === FA.TYPE.underground && reach.has(entry.id));
+        const d = entry => Math.hypot(entry.x - p[0], entry.y - p[1], entry.z - p[2]);
+        return under.sort((a, b) => (a.y < -25) - (b.y < -25) || d(a) - d(b));
+      };
       // A move's walk: one draw of the path integral, and six more from the same field (the traces the player draws round it,
       // the spread of where the walk might have gone).
       // A walk that fails says so with a code (W0: NO_TARGET, OFF_WALK, NO_PATH) and the least that replays it: the seed's
@@ -336,7 +348,7 @@ export async function direct(novelDir, { reading, readingPath = null, prefilm = 
         // The engine numbers nodes as first asked for, so the ids hold only within this run: the replay also keeps where
         // they stood and the first target in metres (why-walk.mjs and the L18 blast smoother read those after the run).
         const metres = id => { const p = W.nodePos(world, id); return { x: p.x, y: p.y, z: p.z }; };
-        walk.failed = null; walk.code = null; walk.replay = { key, from: from[0], targets: targets.slice(0, 8), how, at: { from: metres(from[0]), ...(targets.length ? { to: metres(targets[0]) } : {}) } };
+        walk.failed = null; walk.code = null; walk.widened = null; walk.replay = { key, from: from[0], targets: targets.slice(0, 8), how, at: { from: metres(from[0]), ...(targets.length ? { to: metres(targets[0]) } : {}) } };
         if (!targets.length) { walk.failed = 'no place to stand there'; walk.code = 'NO_TARGET'; return null; }
         // Appearing (within its reach) and flying go straight to the nearest target, through no walk; a target beyond an
         // appearing's reach is run to.
@@ -346,8 +358,15 @@ export async function direct(novelDir, { reading, readingPath = null, prefilm = 
           if (target && target.d <= reach) { const path = [from[0], target.id]; path.ensemble = []; path.how = how === 'flight' ? 'flight' : 'teleport'; return path; }
           how = 'run';
         }
-        const field = E.solve(scene.placeId, key, targets, how, from[0]), built = E.graphOf(W.nodePos(world, from[0]));
-        const path = E.sampleWalk(built.graph, field, from[0], from[1], seeded(key));
+        let field = E.solve(scene.placeId, key, targets, how, from[0]);
+        const built = E.graphOf(W.nodePos(world, from[0]));
+        let path = E.sampleWalk(built.graph, field, from[0], from[1], seeded(key));
+        // The way may leave the 40 m round the walk (a basement's stair at the far end of its building, a mall's entrance):
+        // where a walk from here reaches the target within a wider square, the walk is solved again with that much room.
+        if (!path && field.part && field.part.local[from[0]] >= 0) {
+          const f0 = W.nodePos(world, from[0]), wide = Math.round(Math.min(...targets.slice(0, 8).map(id => { const t = W.nodePos(world, id); return Math.hypot(t.x - f0.x, t.z - f0.z); })) + UNDER_SEARCH + 16), reach = E.onFoot(from[0], wide, how);
+          if (targets.some(id => reach.has(id))) { field = E.solve(scene.placeId, key, targets, how, from[0], wide); path = E.sampleWalk(built.graph, field, from[0], from[1], seeded(key)); if (path) { walk.widened = wide; if (asking) asking.widened = (asking.widened ?? 0) + 1; } }
+        }
         if (path) path.ensemble = Array.from({ length: 6 }, (_, n) => E.sampleWalk(built.graph, field, from[0], from[1], seeded(`${key}|${n}`))).filter(Boolean);
         // Why no walk was found (the user's Why panel: people chose a place and never went): where they stand is not on the
         // walk round them and their target, or the walk has no way from there to it.
@@ -559,6 +578,17 @@ export async function direct(novelDir, { reading, readingPath = null, prefilm = 
           // middle of its spawn box, on the open ground there.
           if ((anchor === null || anchor === undefined) && present.length && spawned?.target?.box) { const [x, z] = spawned.target.box; E.reach(x, z, 24); anchor = W.nodeNear(world, E.graphOf({ x, z }), x, z, 0) ?? null; }
         }
+        // A unit underground (docs/v2/terrain-levels.md §8.5: until each place carries the set dresser's note, the unit's own
+        // setting): its people start under the street. The anchor goes to the nearest spot below the street that a walk from
+        // it reaches, in the near-ground layer first (§8.1); those standing above the street walk down to it (W12's units
+        // 118–123: everyone started on the street, and every "underground" fact of theirs failed).
+        const dressed = prepared?.setDresser, below = dressed?.setting === 'underground' && (dressed.sure ?? 0) >= 0.5;
+        let wentDown = false;
+        if (below && anchor !== null && anchor !== undefined && at(anchor)[1] > -1) {
+          const p = at(anchor), down = downFrom(anchor)[0] ?? null;
+          sceneRecord.underground = { setting: dressed.sure, from: said(p), to: down ? said([down.x, down.y, down.z]) : null, metres: down ? Math.round(Math.hypot(down.x - p[0], down.z - p[2])) : null };
+          if (down) { anchor = down.id; wentDown = true; }
+        }
         // A spot an arm's length to a body or two from the anchor on its level, the same for the same person each time.
         const beside = (who, spread = [BODY, 2.5 * BODY]) => {
           if (anchor === null || anchor === undefined) return null;
@@ -582,7 +612,7 @@ export async function direct(novelDir, { reading, readingPath = null, prefilm = 
             positions[who] = from; travels.push({ who, from, dest: revised, ...(frameMetres && metres_ <= frameMetres ? {} : { route: true }), smoothed: true });
             continue;
           }
-          if (from && here.includes(who)) { positions[who] = from; sceneRecord.carried.push(who); continue; }
+          if (from && here.includes(who) && !(wentDown && at(from[0])[1] > -1)) { positions[who] = from; sceneRecord.carried.push(who); continue; }
           const dest = beside(who);
           if (dest === null || dest === undefined) { if (from) positions[who] = from; continue; }
           if (!from) { positions[who] = [dest, 0]; sceneRecord.spawned.push(who); continue; }
@@ -665,6 +695,9 @@ export async function direct(novelDir, { reading, readingPath = null, prefilm = 
               const t = k / legs, aim = [a[0] + (b[0] - a[0]) * t, a[2] + (b[2] - a[2]) * t];
               const targets = k === legs && last?.length ? last : groundNear(aim[0], aim[1]);
               if (!targets.length) { skipped.push(k); continue; }
+              // The leg's whole corridor streamed in first: its ends alone load about 60 m round each, so a leg of 100 m
+              // or more could have a gap in its middle.
+              { const h = at(here[0]); E.reach((h[0] + aim[0]) / 2, (h[2] + aim[1]) / 2, Math.hypot(aim[0] - h[0], aim[1] - h[2]) / 2 + 24); }
               const leg = walk(scene, `${scene.id}|${who}|${tag}|${k}`, here, targets, 'run');
               // Where a route stops, in metres (the engine's node ids hold only within the run): the leg, where it began, its
               // aim on the straight line, its targets, and why the walk found no way (why-walk.mjs draws it).
@@ -767,7 +800,7 @@ export async function direct(novelDir, { reading, readingPath = null, prefilm = 
           for (const who of [...new Set(facts.map(fact => fact.who))].filter(who => positions[who])) {
             const here = nodeAt(positions[who][0]), binding = facts.filter(fact => fact.who === who && FA.binding(fact)), failing = binding.filter(fact => FA.holds(fact, here, positionOf) === false);
             if (!failing.length) continue;
-            const nearby = around(here.x, here.z, radius).nodes.filter(node => inside(node.id)).map(describe), best = FA.bestFor(binding, here, nearby, positionOf);
+            const reach = onFoot(here.id, radius), nearby = around(here.x, here.z, radius).nodes.filter(node => inside(node.id) && reach.has(node.id)).map(describe), best = FA.bestFor(binding, here, nearby, positionOf);
             faults.push({ law: 'L14', who, why: failing.map(fact => FA.factWords(fact, id => names.get(id) ?? id)).join('; '), fix: best ? 'layout' : null, spot: best?.id ?? null, lines: failing.map(fact => fact.sentence) });
           }
           return { faults, notes: routed.map(item => item.id) };
@@ -784,7 +817,7 @@ export async function direct(novelDir, { reading, readingPath = null, prefilm = 
             if (startsInside && !own.some(fact => SITE_KINDS.has(fact.kind))) own.push({ who, kind: 'indoors', value: null, basis: 'implied', sure: 0.7, sentence: null, by: 'the place' });
             const here = nodeAt(positions[who][0]);
             if (!own.some(fact => FA.holds(fact, here, positionOf) === false)) continue;
-            const best = FA.bestFor(own, here, around(here.x, here.z, FACT_SEARCH).nodes.filter(node => inside(node.id)).map(describe), positionOf);
+            const reach = onFoot(here.id, FACT_SEARCH), best = FA.bestFor(own, here, around(here.x, here.z, FACT_SEARCH).nodes.filter(node => inside(node.id) && reach.has(node.id)).map(describe), positionOf);
             if (!best) continue;
             moveTo(who, walk(scene, `${scene.id}|${cutId}|${who}|layout-notes`, positions[who], [best.id], 'walk'), 'walk', `layout: by the notes (${own.map(fact => FA.factWords(fact, id => names.get(id) ?? id)).join('; ')})`, { quiet: true });
             moved = true;
@@ -992,9 +1025,11 @@ export async function direct(novelDir, { reading, readingPath = null, prefilm = 
               // only for a stated fact.
               const wide = failing.some(fact => ['indoors', 'outdoors', 'roof', 'underground', 'floor', 'vehicle'].includes(fact.kind)), nearby = [...around(here.x, here.z, Math.max(5 * BODY, (frameHere ?? frameMetres ?? 24 * BODY) / (wide ? 2 : 4))).nodes];
               for (const fact of failing) { const p = fact.kind === 'near' ? positionOf(fact.value) : null; if (p) nearby.push(...around(p[0], p[2], 3 * BODY).nodes); }
-              const words = failing.map(fact => FA.factWords(fact, id => names.get(id) ?? id)).join('; ');
-              let best = FA.bestFor(binding, here, nearby.filter(node => inside(node.id)).map(describe), positionOf);
-              if (!best && failing.some(fact => fact.basis === 'stated')) { best = FA.bestFor(binding, here, nearby.map(describe), positionOf); if (best) (cardRecord.laws ??= []).push({ law: 'L14', who, verdict: 'amend', why: `outside the set: ${words}` }); }
+              const words = failing.map(fact => FA.factWords(fact, id => names.get(id) ?? id)).join('; '), far = Math.max(...nearby.map(node => Math.hypot(node.x - here.x, node.z - here.z)), 0), reach = onFoot(here.id, Math.min(far, 160)), walkable = nearby.filter(node => reach.has(node.id));
+              let best = FA.bestFor(binding, here, walkable.filter(node => inside(node.id)).map(describe), positionOf);
+              if (!best && failing.some(fact => fact.basis === 'stated')) { best = FA.bestFor(binding, here, walkable.map(describe), positionOf); if (best) (cardRecord.laws ??= []).push({ law: 'L14', who, verdict: 'amend', why: `outside the set: ${words}` }); }
+              // Said to be underground, with no way down near: the nearest way down a walk reaches (§8.5, until the place's note).
+              if (!best && failing.some(fact => fact.kind === 'underground' && fact.basis === 'stated')) { best = FA.bestFor(binding, here, downFrom(here.id).slice(0, 400).map(describe), positionOf); if (best) (cardRecord.laws ??= []).push({ law: 'L14', who, verdict: 'amend', why: `went down: ${words}` }); }
               if (!best) { (cardRecord.laws ??= []).push({ law: 'L14', who, verdict: failing.some(fact => fact.basis === 'stated') ? 'held' : 'weighed', why: `no spot near agrees: ${words}` }); continue; }
               moveTo(who, walk(scene, `${scene.id}|${card.id}|${who}|implied`, positions[who], [best.id], 'walk'), 'walk', `implied: ${words}`, { quiet: true });
               const last = cardRecord.moves.at(-1);

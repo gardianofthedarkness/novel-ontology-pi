@@ -290,6 +290,14 @@ The skin is one sheet per region over the near-ground layer, derived from the ci
 
 **Places inside an underground area** (its streets, buildings and rooms) inherit its layer, so a scene in one is underground without being asked again. That is what scenes 120–131 lacked.
 
+**Built first, before the note (2026-11-05):**
+- **A unit the set dresser calls underground** (W12: units 118, 121, 123) starts under the street. Its anchor goes to the nearest spot below the street that a walk reaches within 120 m, the near-ground layer first. Whoever stands above walks down to it. The record keeps where it was moved from and to (`underground`).
+- **A fact's spot is picked only where a walk reaches** (`reachableIn` in world.ts, the engine's `onFoot`). Before, a basement or hall a few metres off, whose way down lay outside the walk's window, was chosen card after card and never reached.
+- **Said to be underground, with no way down near:** a stated fact looks for the nearest way down a walk reaches within 120 m (L14 `went down`).
+- **A walk whose way leaves its 40 m margin** is solved once more with a wider one, but only where a walk is known to reach the target. The unit's record counts these (`widened`).
+- **Rehearsed on W12's units 115–131 (unpaid):** failing facts 23 → 14, "no way there" 6 → 0, layout retakes 26 → 4, key-check retakes 14 → 5.
+- **Still to come:** the per-place note itself, the gate lifted for noted areas, and the portals and virtual elevator.
+
 ### 8.6 The deep layer's ceiling, and the virtual elevator
 
 **The hard ceiling.** An underground world has a ceiling, but it is so high and so wide that from inside it reads as open, the way space does.

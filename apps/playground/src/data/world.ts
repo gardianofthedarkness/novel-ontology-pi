@@ -1,5 +1,5 @@
 import { MASS, STAIR, SKELETON_CELL, FLOOR_HEIGHT, cellAt, cellIndex, furnish, generateSkeleton, skeletonStream, type Skeleton, type SkeletonKind } from "./skeleton.js";
-import { EDGE, UP, DOWN, buildGraph, buildGraphAt, directionOf, launchOf, type MoveGraph } from "./pathIntegral.js";
+import { EDGE, UP, DOWN, WALL_KINDS, buildGraph, buildGraphAt, directionOf, launchOf, type MoveGraph } from "./pathIntegral.js";
 import { ARC_EFFORT, ARC_SPEEDS, GROUND, type BuildingRole, type PlaceLot, type PlacedThing } from "./skeletonPlace.js";
 import { boundsOf, inHall, intervalsOf, pillarAt, type Hall } from "./underground.js";
 
@@ -385,6 +385,10 @@ export function worldGraph(world: World, standing: Uint8Array[], things: PlacedT
   } }
   world.lots.forEach((lot) => { if (box && ((lot.i0 + lot.nx) * SKELETON_CELL < box.x0 || lot.i0 * SKELETON_CELL > box.x1 || (lot.j0 + lot.nz) * SKELETON_CELL < box.z0 || lot.j0 * SKELETON_CELL > box.z1)) return; for (let k = 0; k <= lot.floors; k++) for (let j = lot.j0; j < lot.j0 + lot.nz; j++) for (let i = lot.i0; i < lot.i0 + lot.nx; i++) if (inside(i, j)) cells.push([i, j, k]); for (let k = -1; k >= -basementsOf(lot); k--) for (let j = lot.j0; j < lot.j0 + lot.nz; j++) for (let i = lot.i0; i < lot.i0 + lot.nx; i++) if (inside(i, j)) cells.push([i, j, k]); });
   for (const thing of things) for (let j = thing.j0; j <= thing.j1; j++) for (let i = thing.i0; i <= thing.i1; i++) if (inside(i, j)) cells.push([i, j, thing.top]);
+  // Each cell walked once: a cell listed twice (a hall laid twice, as library 16's mall was; ground and a thing at the same
+  // level) added its steps twice, the walk sum then counted every way round a loop twice over and grew without bound,
+  // and the solver's field became NaN: W12's rehearsal had 13,600 doubled steps in one window and 63 walks "no way there".
+  { const seen = new Set<string>(); let kept = 0; for (const cell of cells) { const key = `${cell[0]}|${cell[1]}|${cell[2]}`; if (seen.has(key)) continue; seen.add(key); cells[kept++] = cell; } cells.length = kept; }
   const add = (from: number, to: number, dx: number, dz: number, cost: number, kind: number, dir = directionOf(dx, dz)) => edges.push({ from, to, dir, cost, kind });
   const surface = (i: number, j: number) => { const key = cellKey(i, j), index = world.lotAt.get(key) ?? NOT, thing = thingAt.get(key) ?? NOT; return Math.max(index < 0 ? 0 : world.lots[index].floors * FLOOR_HEIGHT, thing < 0 ? 0 : things[thing].top * FLOOR_HEIGHT); };
   const ELEVATION = Math.atan(1 / Math.SQRT2), G = 9.8;
@@ -566,7 +570,10 @@ export function worldGraph(world: World, standing: Uint8Array[], things: PlacedT
     const here = what(i, j, k);
     type[id] = here.type; lot[id] = here.lot; ground[id] = here.type === 1 ? world.ground.get(cellKey(i, j)) ?? GROUND.street : 0;
   }
-  return { graph: buildGraphAt(at, edges), type, lot, ground };
+  // Each step once (the same cells, way and kind): one added by two of the rules above counted twice in the walk sum.
+  const once = new Map<string, (typeof edges)[number]>();
+  for (const edge of edges) { const key = `${edge.from}|${edge.to}|${edge.dir}|${edge.kind}`, known = once.get(key); if (!known || edge.cost < known.cost) once.set(key, edge); }
+  return { graph: buildGraphAt(at, [...once.values()]), type, lot, ground };
 }
 
 /**
@@ -654,9 +661,11 @@ export const chunkGround = (world: World, key: number) => { const { ci, cj } = c
  * The part of a graph inside a box (metres): its own small graph, with each node's id there (`local`, -1 outside) and back
  * (`ids`). A walk is solved on the ground round where it goes, not on the whole explored city.
  */
-export function windowOf(graph: MoveGraph, box: { x0: number; z0: number; x1: number; z1: number }): { graph: MoveGraph; local: Int32Array; ids: Int32Array } {
+export function windowOf(graph: MoveGraph, box: { x0: number; z0: number; x1: number; z1: number }, keep?: (node: number) => boolean): { graph: MoveGraph; local: Int32Array; ids: Int32Array } {
   const local = new Int32Array(graph.nodes).fill(NOT), ids: number[] = [];
-  for (let n = 0; n < graph.nodes; n++) if (graph.x[n] >= box.x0 && graph.x[n] <= box.x1 && graph.z[n] >= box.z0 && graph.z[n] <= box.z1) { local[n] = ids.length; ids.push(n); }
+  // `keep`: which nodes the walk may use besides being in the box (docs/v2/terrain-levels.md §8.2: a walk sees only the
+  // layers its ends are in, so a street walk never holds a deep facility's lift).
+  for (let n = 0; n < graph.nodes; n++) if (graph.x[n] >= box.x0 && graph.x[n] <= box.x1 && graph.z[n] >= box.z0 && graph.z[n] <= box.z1 && (!keep || keep(n))) { local[n] = ids.length; ids.push(n); }
   const count = ids.length, offsets = new Int32Array(count + 1), to: number[] = [], dir: number[] = [], cost: number[] = [], kind: number[] = [];
   for (let m = 0; m < count; m++) {
     const n = ids[m];
@@ -667,6 +676,28 @@ export function windowOf(graph: MoveGraph, box: { x0: number; z0: number; x1: nu
   return { graph: { nodes: count, x: pick(graph.x), z: pick(graph.z), y: pick(graph.y), offsets, to: Int32Array.from(to), dir: Uint8Array.from(dir), cost: Float64Array.from(cost), kind: Uint8Array.from(kind) }, local, ids: Int32Array.from(ids) };
 }
 
+
+/**
+ * The nodes a walk from `start` can get to on a graph (a window's own ids): every edge whose factor is finite, as the path
+ * integral weighs them (walls closed unless `factors` opens them). A spot is chosen only among these, so a walk is never
+ * sent where its window has no way (docs/v2/terrain-levels.md §8.2: a basement whose stair lies outside the window).
+ */
+export function reachableIn(graph: MoveGraph, start: number, factors?: number[]): Uint8Array {
+  const seen = new Uint8Array(graph.nodes);
+  if (start < 0 || start >= graph.nodes) return seen;
+  const queue = [start];
+  seen[start] = 1;
+  while (queue.length) {
+    const n = queue.pop()!;
+    for (let e = graph.offsets[n]; e < graph.offsets[n + 1]; e++) {
+      const m = graph.to[e], kind = graph.kind[e], factor = factors?.[kind] ?? (WALL_KINDS.includes(kind) ? Infinity : 1);
+      if (seen[m] || !(factor < Infinity) || !(graph.cost[e] >= 0)) continue;
+      seen[m] = 1;
+      queue.push(m);
+    }
+  }
+  return seen;
+}
 
 /** What can be wrong with the world a graph covers (the user's research handoff, 2026-11-02: each failure with a code). */
 export interface WorldIssue { code: "NO_ENTRANCE" | "SHUT_ROOM"; lot: number; source: string; room?: number; nodes: number }

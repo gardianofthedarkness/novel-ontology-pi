@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { createWorld, ensure, inscribed, localCell, nodeId, nodeNear, nodePos, spotsNear, worldGraph, worldSpot, CHUNK, type WorldSource } from "../apps/playground/src/data/world.js";
+import { createWorld, ensure, inscribed, localCell, nodeId, nodeNear, nodePos, reachableIn, spotsNear, windowOf, worldGraph, worldSpot, CHUNK, type WorldSource } from "../apps/playground/src/data/world.js";
 import { addPatch, fillLandscape, firstLandscape } from "../src/v2/world/landscape.js";
 import { collapse, hallsOf, intervalPrecision, subwayOf, type Hall } from "../src/v2/world/underground.js";
 import { solveWalk, sampleWalk, temperatureBound } from "../apps/playground/src/data/pathIntegral.js";
@@ -109,6 +109,34 @@ test("under the street: halls in the ground, each kind reached on foot from the 
     const path = sampleWalk(built.graph, solveWalk(built.graph, spots[spot], { T, kappa: 1, lambda: 8 }), street, 0, skeletonStream(spot));
     assert.ok(path && spots[spot].includes(path.at(-1)!), `${spot} reached from the street`);
   }
+});
+
+test("a street walk's window leaves the deep layer out (terrain-levels §8.2): no deep facility's lift in it, and the walk still goes along the street", () => {
+  const lab: Hall = { id: "lab", kind: "lab", depth: 90, height: 10, boxes: [{ x: -70, z: -70, w: 30, d: 24, angle: 0 }], bores: [], pillars: 0, lined: false, up: [[-70, -70]] };
+  const world = createWorld({ ...source(), underground: { halls: [lab] } });
+  ensure(world, 0, 0, 200, 0);
+  const built = worldGraph(world, standingOf(world)), box = { x0: -150, x1: 150, z0: -150, z1: 150 };
+  const whole = windowOf(built.graph, box), near = windowOf(built.graph, box, (n) => built.graph.y[n] > -20);
+  assert.ok(Array.from(whole.graph.y).some((y) => y <= -20), "the whole window holds the lab");
+  assert.ok(Array.from(near.graph.y).every((y) => y > -20), "the street's window holds nothing of the deep layer");
+  const from = nodeNear(world, built, -60, 0, 0)!, to = nodeNear(world, built, 60, 0, 0)!, T = 0.6 * temperatureBound({ step: 2, kappa: 1, lambda: 8, floorHeight: 3, arcCost: 7 });
+  const path = sampleWalk(near.graph, solveWalk(near.graph, [near.local[to]], { T, kappa: 1, lambda: 8 }), near.local[from], 0, skeletonStream("street"));
+  assert.ok(path && path.at(-1) === near.local[to], "a 120 m street walk is found");
+});
+
+test("what a walk reaches (terrain-levels §8.2): the deep lab by its lift and the basements by their stairs on the whole window, nothing deep on the street's, and only what its own window holds", () => {
+  const lab: Hall = { id: "lab", kind: "lab", depth: 90, height: 10, boxes: [{ x: -70, z: -70, w: 30, d: 24, angle: 0 }], bores: [], pillars: 0, lined: false, up: [[-70, -70]] };
+  const world = createWorld({ ...source(), underground: { halls: [lab] } });
+  ensure(world, 0, 0, 200, 0);
+  const built = worldGraph(world, standingOf(world)), box = { x0: -150, x1: 150, z0: -150, z1: 150 }, from = nodeNear(world, built, -60, 0, 0)!;
+  const whole = windowOf(built.graph, box), near = windowOf(built.graph, box, (n) => built.graph.y[n] > -20);
+  const reached = (part: ReturnType<typeof windowOf>) => { const seen = reachableIn(part.graph, part.local[from]); return Array.from(part.ids).filter((_, n) => seen[n]); };
+  const all = reached(whole), street = reached(near);
+  assert.ok(all.some((n) => built.graph.y[n] <= -80), "the lab's floor, by its lift");
+  assert.ok(all.some((n) => built.type[n] === 5 && built.lot[n] >= 0 && built.lot[n] < 1_000_000), "a basement, by its building's stairs");
+  assert.ok(street.length > 1000 && street.every((n) => built.graph.y[n] > -20), "the street's window reaches the street and nothing deep");
+  const tight = windowOf(built.graph, { x0: -64, x1: -56, z0: -4, z1: 4 }), small = reached(tight);
+  assert.ok(small.length > 0 && small.every((n) => Math.abs(built.graph.x[n] + 60) <= 4 && Math.abs(built.graph.z[n]) <= 4), "a tight window reaches only inside itself");
 });
 
 test("a city's halls and basements: a box finds its hall at least 90% of the time just under the street, in the subway, and deep, over six generated cities", () => {
