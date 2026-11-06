@@ -72,3 +72,65 @@ test('known scene locations remain available to Places when actual story time is
   assert.equal(projection.places[0].id, 'station');
   assert.deepEqual(projection.times, []);
 });
+
+test('the building log keeps one entry per name at a place: the scene place with a building, every scene that names it in reading order', async () => {
+  const { buildingLog } = await import('./time-place.mjs');
+  const rows = [{ id: 's1', index: 0, placeIds: ['loc_city', 'loc_tower'] }, { id: 's2', index: 1, placeIds: ['loc_tower'] }, { id: 's3', index: 2, placeIds: [] }];
+  const log = buildingLog([{ sceneId: 's2', name: '钟塔', model: null, size: 30 }, { sceneId: 's1', name: '钟塔', model: 'skyscraper', size: 30 }, { sceneId: 's3', name: '无处', model: null, size: null }], rows, { loc_city: 'none', loc_tower: 'skyscraper' });
+  assert.deepEqual(log, [{ id: 'loc_tower|钟塔', name: '钟塔', placeId: 'loc_tower', model: 'skyscraper', size: 30, sceneIds: ['s1', 's2'] }], 'a scene with no place names no building on the map');
+  // Reviewed into the ontology: the mention is that record; a reviewed one the report never mentioned stands from its first scene.
+  const canon = buildingLog([{ sceneId: 's2', name: '钟塔', model: null, size: 30 }], rows, { loc_tower: 'skyscraper' }, [{ id: 'loc_obj_1', names: ['钟塔'], placeId: 'loc_tower', model: 'skyscraper', size: 30, sceneId: 's2' }, { id: 'loc_obj_2', names: ['车站'], placeId: 'loc_city', model: 'station', size: 20, sceneId: 's1' }]);
+  assert.deepEqual(canon.map((entry) => [entry.name, entry.entityId, entry.reviewed, entry.sceneIds]), [['钟塔', 'loc_obj_1', true, ['s2']], ['车站', 'loc_obj_2', true, ['s1']]]);
+});
+
+test('Places takes the named buildings reviewed into the ontology from the book: applied stage-objects places with an applied parent', async () => {
+  const { timePlaceProjection } = await import('./time-place.mjs');
+  const location = (id, name, properties = {}) => ({ id, kind: 'Location', names: [{ text: name, lang: 'zh', kind: 'canonical' }], properties });
+  const entities = [location('p7', '第七学区'), location('loc_obj_1', '无人车站', { source: 'stage-objects', building: 'station', size: 30, firstSceneId: 'sc1' }), location('loc_obj_2', '没挂上的', { source: 'stage-objects' })];
+  const projection = timePlaceProjection({ entities, scenes: [{ id: 'sc1', chapterIndex: 0, sentenceIds: ['b0000_s0001'], charactersPresent: [], locationId: 'p7' }], relations: [{ fromId: 'loc_obj_1', toId: 'p7', type: 'PART_OF', properties: {} }] });
+  assert.deepEqual(projection.buildings.map((entry) => [entry.name, entry.placeId, entry.reviewed]), [['无人车站', 'p7', true]], 'one without its place in the tree is not drawn');
+  assert.deepEqual(projection.places.map((place) => place.id), ['p7'], 'a building is not a place disc of its own');
+});
+
+test('the simulation records reach the map trimmed: lots with their skeletons and when they are named, things placed, hits with the cells and units each lot lost', async (context) => {
+  const { mkdtemp, mkdir, writeFile, rm } = await import('node:fs/promises');
+  const { tmpdir } = await import('node:os');
+  const { join } = await import('node:path');
+  const { readSimulation } = await import('./stage-reports.mjs');
+  const workspace = await mkdtemp(join(tmpdir(), 'simulation-'));
+  context.after(() => rm(workspace, { recursive: true, force: true }));
+  assert.equal(await readSimulation(workspace), null);
+  await mkdir(join(workspace, 'stage', 'simulation'), { recursive: true });
+  await writeFile(join(workspace, 'stage', 'simulation', 'index.json'), JSON.stringify({ strands: { k: { file: 'k.json', title: 'K' }, bad: { file: '../escape.json' } } }));
+  await writeFile(join(workspace, 'stage', 'simulation', 'k.json'), JSON.stringify({ strand: { id: 'k', title: '白井', from: 's1', to: 's2' },
+    buildings: { loc_1: { label: '钟塔', kind: 'site', grid: { NX: 32, NZ: 24 }, lots: [{ label: null, detected: { name: '仓库', scene: 's2' }, role: 'shop', model: 'market', footprint: { i0: 1, j0: 2, nx: 3, nz: 4 }, floors: 2, skeleton: '0120'.repeat(6), rooms: [[0, 0, 0, 1, 1], [1, 'x']] }] } },
+    things: [{ id: 'thing_1', name: '直升机', model: null, shape: 'oval', placements: [{ scene: 's1', event: 0, place: 'loc_1', x: 1, y: 2, z: 3, fit: { w: 12, h: 4, d: 8, turn: 0 } }] }],
+    scenes: [{ id: 's1', place: 'loc_1', events: [{ index: 2, hit: { sphere: { x: 4, y: 5, z: 6, r: 4 }, strength: 0.9, parts: [{ lot: 0, energy: 96, blasted: [[3, 0, 0, 1]], fallen: [[4, 1, 1, 2, 0], [4, 'x']], destroyedCells: [1, 2], fellCells: [3], cutOffCells: [5], cutOffRooms: [0] }] }, hitThings: [{ id: 'thing_1' }] }] }],
+    migrations: [{ scene: 's2', person: 'char_1', from: 'loc_1', to: 'loc_2' }] }));
+  const simulation = await readSimulation(workspace);
+  assert.deepEqual(simulation.strands, [{ id: 'k', title: '白井', from: 's1', to: 's2', run: null, runs: 1 }], 'a file outside the folder is never read; a record from before runs has none');
+  assert.deepEqual(simulation.places.loc_1.lots, [{ name: '仓库', since: 's2', label: null, role: 'shop', model: 'market', i0: 1, j0: 2, nx: 3, nz: 4, floors: 2, skeleton: '0120'.repeat(6), rooms: [[0, 0, 0, 1, 1]] }], 'a malformed room is left out');
+  assert.deepEqual(simulation.hits, [{ scene: 's1', place: 'loc_1', event: 2, x: 4, y: 5, z: 6, r: 4, strength: 0.9, lots: [{ lot: 0, destroyed: [1, 2], fell: [3], cutOff: [5], cutRooms: [0], blasted: [[3, 0, 0, 1]], fallen: [[4, 1, 1, 2, 0]] }], things: ['k:thing_1'] }], 'a malformed unit is left out');
+  assert.deepEqual(simulation.things[0].placements[0], { scene: 's1', place: 'loc_1', x: 1, y: 2, z: 3, w: 12, h: 4, d: 8, turn: 0 });
+  assert.equal(simulation.migrations.length, 1);
+});
+
+test('a world run is read for its line and things only: its places name world lots by index, which the per-place map cannot draw', async (context) => {
+  const { mkdtemp, mkdir, writeFile, rm } = await import('node:fs/promises');
+  const { tmpdir } = await import('node:os');
+  const { join } = await import('node:path');
+  const { readSimulation } = await import('./stage-reports.mjs');
+  const workspace = await mkdtemp(join(tmpdir(), 'simulation-world-'));
+  context.after(() => rm(workspace, { recursive: true, force: true }));
+  await mkdir(join(workspace, 'stage', 'simulation'), { recursive: true });
+  await writeFile(join(workspace, 'stage', 'simulation', 'index.json'), JSON.stringify({ version: 2, strands: { w: { file: 'w.json', title: 'W' } } }));
+  await writeFile(join(workspace, 'stage', 'simulation', 'w.json'), JSON.stringify({ version: 2, strand: { id: 'w', title: 'Street', from: 's1', to: 's1' },
+    world: { lots: [{ footprint: { i0: 15, j0: 268, nx: 6, nz: 8 }, floors: 6 }] }, buildings: { loc_1: { label: 'Street', kind: 'street', anchor: { x: 1, z: 2 }, lots: [0] } },
+    things: [{ id: 'thing_1', name: 'Bus', placements: [{ scene: 's1', place: 'loc_1', x: 1, z: 2 }] }],
+    scenes: [{ id: 's1', place: 'loc_1', events: [{ index: 0, hit: { sphere: { x: 1, y: 1, z: 1, r: 2 }, parts: [{ lot: 0 }] } }] }] }));
+  const simulation = await readSimulation(workspace);
+  assert.deepEqual(simulation.strands.map(strand => strand.id), ['w']);
+  assert.deepEqual(simulation.places, {});
+  assert.deepEqual(simulation.hits, []);
+  assert.equal(simulation.things[0].name, 'Bus');
+});

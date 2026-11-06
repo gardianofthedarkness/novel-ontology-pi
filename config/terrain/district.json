@@ -1,0 +1,51 @@
+{
+  "about": "What a district of each kind spawns: how many streets of each kind (docs/v2/borrow-and-spawn.md §2.1, §5). A count is a number or a range [least, most], picked once for each district by a seed. Kinds are TERRAIN_KINDS.street. A mountain spawns no street. only: the district kinds a street kind may stand in (borrowed or spawned), for kinds that cannot be anywhere (the user, 2026-11-01: no boulevard where people dwell or few live); a kind not listed may stand in any.",
+  "level": "street",
+  "parent": "district",
+  "only": {
+    "avenue": [
+      "cbd"
+    ],
+    "centre": [
+      "cbd"
+    ]
+  },
+  "types": {
+    "cbd": {
+      "avenue": 2,
+      "centre": 1,
+      "station": 1,
+      "square": 1,
+      "shopping": 1,
+      "crossing": 1
+    },
+    "dwelling": {
+      "residential": 3,
+      "shopping": 1,
+      "alley": 1,
+      "park": 1,
+      "station": 1,
+      "crossing": 1
+    },
+    "industrial": {
+      "alley": 2
+    },
+    "harbour": {
+      "waterfront": 2,
+      "avenue": 1
+    },
+    "mountain": {},
+    "oldtown": {
+      "alley": 3,
+      "square": 1,
+      "shopping": 1
+    },
+    "village": {
+      "alley": 2,
+      "square": 1
+    },
+    "farmland": {
+      "alley": 1
+    }
+  }
+}

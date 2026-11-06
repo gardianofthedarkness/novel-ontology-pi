@@ -121,6 +121,8 @@ test("a sweep reports the whole pool left and stops once the top-ranked pairs ke
   assert.equal(first.complete, false);
   assert.equal(first.missesInARow, 1);
   assert.ok(first.remaining >= 1, "the true count left, not a capped page");
+  assert.deepEqual([first.stopsAfterMisses, first.missesToSettle], [2, 1], "how far the sweep is from settling, so a bounded caller keeps going");
+  assert.match(first.note!, /settles after 2 pairs in a row/);
   const second = await runCausalitySweep(dir, { env: {}, limit: 1, decisions: reject, stopAfterMisses: 2 });
   assert.equal(second.remaining, first.remaining - 1);
   assert.equal(second.complete, second.remaining === 0 || second.missesInARow >= 2);

@@ -100,6 +100,12 @@
 /* Long scene summaries in the record bar: two lines at most. */
 .transport .record-transport strong { overflow: hidden; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; }
 .atlas-levels { display: flex; gap: 4px; margin: 8px 0 0; }
+.atlas-buildings { display: grid; gap: 4px; margin: 10px 0 6px; padding-top: 8px; border-top: 1px solid var(--tp-edge); }
+.atlas-buildings > label:first-child { display: flex; justify-content: space-between; gap: 8px; font-size: 10px; }
+.atlas-buildings > label:first-child b { color: #ffe7b0; font-weight: 600; }
+.atlas-buildings input[type="range"] { width: 100%; accent-color: #ffd98a; }
+.atlas-buildings small { font-size: 9.5px; line-height: 1.35; opacity: .75; }
+.atlas-later { display: flex; align-items: center; gap: 6px; font-size: 10px; }
 .atlas-levels button { flex: 1; padding: 3px 6px; border-radius: 6px; border: 1px solid var(--tp-edge); background: transparent; color: var(--tp-text); font: inherit; font-size: 10px; cursor: pointer; }
 .atlas-levels button[aria-pressed="true"] { background: #9fd8ff; border-color: #9fd8ff; color: #06141f; }
 .atlas-focus { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 8px; margin: 8px 0 0; padding: 6px 8px; border-radius: 8px; background: #ffc46b1a; color: var(--tp-flashback); font-size: 10px; }

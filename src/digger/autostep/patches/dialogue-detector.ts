@@ -26,8 +26,8 @@ import { selectExchangeSpans } from "../segmentation.js";
  * Runs as a block-level prepass, CONCURRENTLY with scene tiling
  * (pipelined model): selection needs no scene input; the miniloop
  * joins exchanges to scenes once both pipelines land. Selection
- * endpoints are pinnable for recall: `dlg_start:<firstId>` /
- * `dlg_end:<startId>`.
+ * answers are pinnable for recall: `dlg_kind:<sentence>` (what the
+ * sentence is) / `dlg_turn:<sentence>` (whether the people talking change).
  */
 export const dialogueDetector: DecisionPatch = {
   id: "dialogue-detector",

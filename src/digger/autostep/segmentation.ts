@@ -1,6 +1,7 @@
 import type {
   DecisionAnswer,
   DecisionQuestion,
+  DecisionState,
 } from "../../ground/connectors/jev.js";
 import type { Sentence } from "../intake/sectioning.js";
 
@@ -22,15 +23,20 @@ import type { Sentence } from "../intake/sectioning.js";
  * batch's last sentence at 0.95 confidence and the block collapses
  * into one scene; asked to choose starts, it finds the real joints.)
  *
- * Dialogue exchanges use start+end selection (they do not tile: most
- * of a novel is not dialogue). Spans from overlapping batches that
- * overlap by >= 3 sentences are the same exchange and merge; smaller
- * overlaps trim. Each exchange links to the ONE scene it sits in, or
- * the TWO scenes it straddles when a conversation crosses a scene cut.
+ * Dialogue exchanges (since 2026-10-30) come from what each sentence is
+ * (classifySentences: spoken, thought, fact, action or narration, and
+ * whether the people talking change), asked as one structured document
+ * a window. Per-sentence answers work here because of the stitch: an
+ * exchange stays open through narration and replies and ends only when
+ * the people change or after a long silence, so it finds conversations,
+ * not lines (start and end selection, which it replaced, measured 16x
+ * slower on vol 1 for mostly the same exchanges). Each exchange links
+ * to the ONE scene it sits in, or the TWO scenes it straddles when a
+ * conversation crosses a scene cut.
  */
 
 export type DecideFn = (
-  state: string,
+  state: DecisionState,
   questions: DecisionQuestion[],
 ) => Promise<DecisionAnswer[]>;
 
@@ -49,8 +55,41 @@ const LOOKBACK = 20;
 const STEP = 60;
 const SEAM_TAIL = 12;
 
-const render = (sentences: Sentence[]): string =>
+const render = (sentences: Pick<Sentence, "id" | "text">[]): string =>
   sentences.map((s) => `${s.id}: ${s.text}`).join("\n");
+
+/** A tiling request: a window of sentences (where a scene ends, where the next begins), or a seam between two batches. */
+type Lines = Pick<Sentence, "id" | "text">[];
+export type TilingRequest =
+  | { kind: "window"; summary: string; context: Lines; questions: DecisionQuestion[] }
+  | { kind: "seam"; summary: string; open: string; tail: Lines; head: Lines; questions: DecisionQuestion[]; unit?: string };
+/**
+ * The tiler's wording (the user, 2026-11-04: "a similar structure which is double level tiling triggering with slightly
+ * different prompt, although we still treat the final result as one process and the middle layer isn't preserved"): the
+ * scene pass cuts where the place, the time or the viewpoint changes (the tiler's wording from before); the kind pass cuts
+ * inside each of those where the kind of action changes. A reading keeps only the kind pass's spans.
+ */
+export const TILING_WORDS = {
+  scene: {
+    unit: "SCENE",
+    end: (startId: string, last: string) => `A scene begins at sentence ${startId}: one continuous place, time and viewpoint. Which sentence id is the LAST sentence of this scene? If the scene continues past the last numbered sentence (${last}), pick that last sentence.`,
+    seam: "The previous scene's most recent sentences are shown first, then the passage that follows them. Does the previous scene CONTINUE into the following passage (same place, time and viewpoint flowing on), or did it END before the passage begins?",
+    start: (anchorId: string) => `A new scene begins where the place changes, time skips, or the viewpoint shifts. Which sentence id BEGINS the next scene at or after ${anchorId}? Pick the first sentence of the next scene, or NONE if no new scene begins in the rest of this passage.`,
+  },
+  kind: {
+    unit: "SEGMENT",
+    end: (startId: string, last: string) => `Inside one scene, a segment begins at sentence ${startId}: one kind of action (talk, a fight, a chase or a journey, someone's inner thought, a call or a message, scene-setting, a memory, the world itself changing). Which sentence id is the LAST sentence of this segment, before the kind of action changes? If it continues past the last numbered sentence (${last}), pick that last sentence.`,
+    seam: "The previous segment's most recent sentences are shown first, then the passage that follows them, inside one scene. Does the previous segment CONTINUE into the following passage (the same kind of action flowing on), or did it END before the passage begins?",
+    start: (anchorId: string) => `Inside one scene, a new segment begins where the kind of action changes: talk turns into a fight, a fight into a chase, action into someone's inner thought, scene-setting into events, or back; not where a speaker, a sentence, a blow or a moment changes within the same kind. Which sentence id BEGINS the next segment at or after ${anchorId}? Pick its first sentence, or NONE if the same kind of action runs to the end of this passage.`,
+  },
+} as const;
+export type TilingWords = keyof typeof TILING_WORDS;
+/** A tiling request's prompt, as tileScenes sends it. */
+export function tilingDocument(request: TilingRequest): string {
+  return request.kind === "window"
+    ? `${request.summary}\n---\n${render(request.context)}`
+    : `${request.summary}\nPREVIOUS ${request.unit ?? "SCENE"} (began at ${request.open}, still open) — its most recent sentences:\n${render(request.tail)}\n---\nFOLLOWING PASSAGE:\n${render(request.head)}`;
+}
 
 function choiceValue(
   answers: DecisionAnswer[],
@@ -88,7 +127,11 @@ export async function tileScenes(
   opts: {
     stateSummary: string;
     gates: SegmentationGates;
+    /** The wording: the scene pass (the default) or the kind pass inside a scene. */
+    words?: TilingWords;
     onSpan?: (spans: string[][]) => Promise<void>;
+    /** Where a caller composes the request's document itself (the v2 reading's context engine), else tilingDocument. */
+    ask?: (request: TilingRequest) => Promise<DecisionAnswer[]>;
   },
 ): Promise<{
   spans: string[][];
@@ -97,6 +140,7 @@ export async function tileScenes(
 }> {
   const escalations: SpanEscalation[] = [];
   const unitConfidences: Record<string, number> = {};
+  const words = TILING_WORDS[opts.words ?? "scene"];
   const n = sentences.length;
   const closed: [number, number][] = [];
   if (n === 0) return { spans: [], escalations, unitConfidences };
@@ -104,6 +148,7 @@ export async function tileScenes(
   const spansNow = (): string[][] =>
     closed.map(([a, b]) => sentences.slice(a, b + 1).map((s) => s.id));
   const idxOf = new Map(sentences.map((s, i) => [s.id, i]));
+  const ask = opts.ask ?? ((request: TilingRequest) => decide(tilingDocument(request), request.questions));
 
   // The one open scene: its tiling start, and the provisional end Jev
   // picked for it (advisory until a seam ratifies it).
@@ -116,17 +161,14 @@ export async function tileScenes(
     const options = sentences.slice(from, regionEnd).map((s) => s.id);
     if (options.length === 0) return;
     const context = sentences.slice(Math.max(0, from - LOOKBACK), regionEnd);
-    const answers = await decide(
-      `${opts.stateSummary}\n---\n${render(context)}`,
-      [
+    const answers = await ask({ kind: "window", summary: opts.stateSummary, context, questions: [
         {
           key,
           primitive: "choice",
-          instructions: `A scene begins at sentence ${startId}: one continuous place, time and viewpoint. Which sentence id is the LAST sentence of this scene? If the scene continues past the last numbered sentence (${options[options.length - 1]}), pick that last sentence.`,
+          instructions: words.end(startId, options[options.length - 1]),
           options,
         },
-      ],
-    );
+      ] });
     const a = choiceValue(answers, key);
     const conf = a?.confidence ?? 0;
     unitConfidences[startId] = conf;
@@ -150,18 +192,14 @@ export async function tileScenes(
       const tail = sentences.slice(tailFrom, batchStart);
       const head = sentences.slice(batchStart, batchStart + SEAM_TAIL);
       const key = `scene_seam:${sentences[batchStart].id}`;
-      const answers = await decide(
-        `${opts.stateSummary}\nPREVIOUS SCENE (began at ${sentences[cur.start].id}, still open) — its most recent sentences:\n${render(tail)}\n---\nFOLLOWING PASSAGE:\n${render(head)}`,
-        [
+      const answers = await ask({ kind: "seam", summary: opts.stateSummary, open: sentences[cur.start].id, tail, head, ...(opts.words === "kind" ? { unit: words.unit } : {}), questions: [
           {
             key,
             primitive: "choice",
-            instructions:
-              "The previous scene's most recent sentences are shown first, then the passage that follows them. Does the previous scene CONTINUE into the following passage (same place, time and viewpoint flowing on), or did it END before the passage begins?",
+            instructions: words.seam,
             options: ["continues", "ended"],
           },
-        ],
-      );
+        ] });
       const a = choiceValue(answers, key);
       const conf = a?.confidence ?? 0;
       unitConfidences[key] = conf;
@@ -190,7 +228,6 @@ export async function tileScenes(
       Math.max(0, batchStart - LOOKBACK),
       regionEnd,
     );
-    const state = `${opts.stateSummary}\n---\n${render(context)}`;
     let local = batchStart;
     for (let iter = 0; iter < 12 && local < regionEnd; iter++) {
       const anchorId = sentences[local].id;
@@ -199,14 +236,14 @@ export async function tileScenes(
         ...sentences.slice(local, regionEnd).map((s) => s.id),
         "NONE",
       ];
-      const answers = await decide(state, [
+      const answers = await ask({ kind: "window", summary: opts.stateSummary, context, questions: [
         {
           key,
           primitive: "choice",
-          instructions: `A new scene begins where the place changes, time skips, or the viewpoint shifts. Which sentence id BEGINS the next scene at or after ${anchorId}? Pick the first sentence of the next scene, or NONE if no new scene begins in the rest of this passage.`,
+          instructions: words.start(anchorId),
           options,
         },
-      ]);
+      ] });
       const a = choiceValue(answers, key);
       const conf = a?.confidence ?? 0;
       if (conf < opts.gates.reask) {
@@ -242,10 +279,215 @@ export async function tileScenes(
 }
 
 /**
- * Select dialogue exchanges over the block and link each to the scene
- * (or two scenes, when it straddles a cut) it belongs to. Units are
- * sentence-id arrays; unitScenes[i] holds the scene-span indices for
- * units[i], one or two entries.
+ * What each sentence of a block is, asked a window at a time as one structured document (Jev's structured input,
+ * docs.typesafe.ai/concepts/state and /primitives/advanced): the state is a JSON object holding the kinds' definitions once
+ * and the window's sentences keyed by id (with the sentences before it as context only), and each question names its
+ * sentence by path (`passage.<id>`), so a question costs a few tokens instead of repeating the definitions. Every question
+ * of a window goes in one request (parallel questions: one call, not a chain of start and end questions), and the windows
+ * run at the same time. For each sentence: is it spoken aloud, thought (a person's inner voice, feelings in their head,
+ * talking to themself), a fact (background knowledge of the world: how things are, what a place or a power is, history —
+ * not this scene's happening), an action or movement by someone or something that matters (a person, a crowd, a vehicle, a
+ * weapon, a thing with a name of its own, a building or a place; never an everyday thing), or a jump back in time (the
+ * user's rules, 2026-10-30), a description of the surroundings (the environment: a place, the
+ * weather, the light, what stands around), or narration; and does the sentence's carrier change there (the user's v2 flow,
+ * 2026-10-30: who carries it — the speaker, the one acting, or what it is about — and so the people taking part).
+ *
+ * From that (the user's rules, 2026-10-30): a dialogue exchange runs as long as the same people are talking, narration and
+ * actions between the lines inside it (actions are extracted apart, as events); it ends where the people talking change, or
+ * after a long stretch with no one speaking. A monologue is a run of thought, a few narration or action sentences inside
+ * it. Facts are kept as the world's background knowledge. Units are sentence indices of the block. The questions' keys
+ * (`dlg_kind:<sentence>`, `dlg_turn:<sentence>`) are the dialogue faculty's, so reviewer and recall pins apply to them.
+ */
+export const SENTENCE_KINDS = {
+  spoken: "spoken aloud: a line of speech someone says to someone (or shouts, announces)",
+  thought: "a person's inner voice: their thoughts, feelings in their head, or talking to themself (a monologue)",
+  fact: "background knowledge of the world: how things are, what a place, a group, a power or a thing is, its history or rules — not something happening in this scene",
+  action: "an action or a movement by someone or something that matters: a person or a crowd, a vehicle or a weapon, a thing with a name of its own, a building or a place acts, moves or changes; or the story goes back in time (a flashback). An everyday thing (a phone, a door, a machine at its routine work) or something happening in the background with no one who matters in it is narration",
+  environment: "a description of the surroundings: a place, a building or a room, the street, the weather, the light, what stands around",
+  narration: "narration: how someone looks or feels, the scene's mood, commentary, a passage of time, and what happens in the background or to everyday things with no one who matters in it (a phone ringing, a passing machine's noise)",
+} as const;
+export type SentenceKind = keyof typeof SENTENCE_KINDS;
+/** Each kind in a few words, as its choice's criterion (the full definition is in the document's `kinds`). */
+const KIND_LABELS: Record<SentenceKind, string> = {
+  spoken: "said aloud to someone",
+  thought: "a person's inner voice, or talking to themself",
+  fact: "background knowledge of the world",
+  action: "who or what matters acts or moves; a flashback",
+  environment: "the surroundings: a place, weather, things",
+  narration: "looks, feelings, mood, commentary, background",
+};
+/**
+ * Block types (docs/v2/next-steps.md A4–A6, M2; the user, 2026-11-03): what a stretch of about twelve sentences is about,
+ * no longer a dialogue or an action but what the director's faculties listen for. Asked in the kinds pass, one question a
+ * block (12 sentences, moving 6 at a time), its whole distribution kept with its top three and its confidence. The same
+ * nine as world-engine/director/specialists.mjs BLOCK_TYPES.
+ */
+export const BLOCK_TYPES = {
+  routine: "people together: talk and small acts in one place",
+  confrontation: "a fight or standoff: blows, dodges, powers used on someone",
+  traversal: "going somewhere at scale: a chase, an escape, crossing streets, buildings or the city",
+  mediated: "talk through a channel: a phone, a door or wall, a broadcast, a message",
+  interior: "thought, reflection, memory of feelings: someone's inner voice",
+  exposition: "world-building or background with no one acting now",
+  establishing: "where and when: the place, the weather, the crowd, the mood",
+  memory: "a flashback: what happened before this scene's now",
+  catastrophe: "the world itself changing: the ground splits, a flood, a building collapses",
+} as const;
+export type BlockType = keyof typeof BLOCK_TYPES;
+export const BLOCK = 12, BLOCK_STEP = 6;
+/** A block's answer: its sentences, its top type, confidence, top three and whole distribution. */
+export interface BlockAnswer { first: string; last: string; sentences: string[]; type: BlockType | null; confidence: number; top: [string, number][]; distribution: Record<string, number> }
+
+/** The carrier of a sentence: who speaks it, who acts in it, or what it is about. It changes where the people taking part do. */
+const TURN = {
+  true: "the people taking part change here: someone new speaks, acts or is spoken to, someone who was taking part has gone, or it turns to another subject or place",
+  false: "the same people go on (talking, even taking turns, or acting), or it stays on the same subject",
+};
+/**
+ * Sentences classified a request (each with two questions: about 120 tokens, so a window is well inside Jev's 64k-token
+ * request), the sentences before them shown as context only, and the windows asked at once.
+ */
+const CLASSIFY = 100, CONTEXT = 8, WINDOWS_AT_ONCE = 4;
+/** A conversation that goes this many sentences with no one speaking has ended. */
+const QUIET = 8;
+/** A monologue keeps at most this many narration or action sentences inside it. */
+const ASIDE = 2;
+
+/** The structured document a window's questions are about (the request's state). */
+/** What a change of carrier is, as the document says it. */
+export const SENTENCE_CHANGE = `A sentence's carrier is who speaks it, who acts in it, or what it is about. It changes when ${TURN.true}.`;
+export function sentenceDocument(task: string, before: Sentence[], asked: Sentence[]) {
+  return {
+    task: `${task} Classify every sentence of the passage (sentences keyed by id, in reading order).`.trim(),
+    kinds: { ...SENTENCE_KINDS },
+    blocks: { ...BLOCK_TYPES },
+    change: SENTENCE_CHANGE,
+    ...(before.length ? { before: Object.fromEntries(before.map((sentence) => [sentence.id, sentence.text])) } : {}),
+    passage: Object.fromEntries(asked.map((sentence) => [sentence.id, sentence.text])),
+  };
+}
+
+/** A window's questions: each sentence's kind, and whether the carrier changes at it. */
+export const sentenceQuestions = (asked: Sentence[]): DecisionQuestion[] => asked.flatMap((sentence) => [
+  { key: `dlg_kind:${sentence.id}`, primitive: "choice" as const, instructions: `What kind of sentence is passage.${sentence.id}? (The kinds are defined in kinds.)`, options: Object.keys(SENTENCE_KINDS), optionHints: { ...KIND_LABELS } },
+  { key: `dlg_turn:${sentence.id}`, primitive: "noul" as const, instructions: `At passage.${sentence.id}, does the carrier change?`, noulCriteria: TURN },
+]);
+
+/** A window's blocks: twelve sentences moving six at a time; a shorter tail joins the last full one. */
+export function blocksOf<T extends { id: string }>(asked: T[]): T[][] {
+  if (asked.length <= BLOCK) return asked.length ? [asked] : [];
+  const out: T[][] = [];
+  for (let start = 0; start + BLOCK <= asked.length; start += BLOCK_STEP) out.push(asked.slice(start, start + BLOCK));
+  if ((asked.length - BLOCK) % BLOCK_STEP) out.push(asked.slice(asked.length - BLOCK));
+  return out;
+}
+/** A window's block questions: what each block is about. */
+export const blockQuestions = (asked: Sentence[]): DecisionQuestion[] => blocksOf(asked).map((block) => ({
+  key: `blk_type:${block[0].id}|${block[block.length - 1].id}`, primitive: "choice" as const,
+  instructions: `What is the stretch from passage.${block[0].id} to passage.${block[block.length - 1].id} mostly about? (The block types are defined in blocks.)`,
+  options: Object.keys(BLOCK_TYPES), optionHints: { ...BLOCK_TYPES },
+}));
+/** The blocks Jev answered in a window. */
+export function blockAnswers(asked: Sentence[], answers: DecisionAnswer[]): BlockAnswer[] {
+  const round = (p: number) => Number(p.toFixed(3));
+  return blocksOf(asked).map((block) => {
+    const first = block[0].id, last = block[block.length - 1].id, answer = answers.find((entry) => entry.key === `blk_type:${first}|${last}`);
+    const distribution = Object.fromEntries(Object.entries(answer?.distribution ?? (answer?.value ? { [String(answer.value)]: 1 } : {})).map(([type, p]) => [type, round(Number(p))]));
+    const type = answer?.value && String(answer.value) in BLOCK_TYPES ? (String(answer.value) as BlockType) : null;
+    return { first, last, sentences: block.map((sentence) => sentence.id), type, confidence: round(answer?.confidence ?? 0), top: Object.entries(distribution).sort((a, b) => b[1] - a[1]).slice(0, 3), distribution };
+  });
+}
+
+/** `ask`, where a caller composes the window's document itself (the v2 reading's context engine), else sentenceDocument. */
+export async function classifySentences(
+  sentences: Sentence[],
+  decide: DecideFn,
+  opts: { stateSummary: string; blocks?: boolean; onBatch?: (through: number, kinds: SentenceKind[], turns: number[]) => Promise<void>; ask?: (window: { summary: string; before: Sentence[]; asked: Sentence[]; questions: DecisionQuestion[] }) => Promise<DecisionAnswer[]> },
+): Promise<{ kinds: SentenceKind[]; confidence: number[]; turns: number[]; distributions: Record<string, number>[]; blocks: BlockAnswer[] }> {
+  // Each sentence's whole distribution over the kinds is kept beside its top kind (the user, 2026-11-03: the faculties fire on
+  // a mixed index of every distribution and score, not only the top answer).
+  const kinds: SentenceKind[] = [], confidence: number[] = [], turns: number[] = [], distributions: Record<string, number>[] = [], blocks: BlockAnswer[] = [];
+  const windows = Array.from({ length: Math.ceil(sentences.length / CLASSIFY) }, (_, w) => w * CLASSIFY);
+  const done = new Map<number, DecisionAnswer[]>();
+  let next = 0, published = 0, publishing = Promise.resolve();
+  // Windows finish in any order; their answers join the kinds in reading order, and each finished prefix is published.
+  const publish = async () => {
+    while (done.has(windows[published])) {
+      const b = windows[published], answers = done.get(b)!;
+      for (const sentence of sentences.slice(b, b + CLASSIFY)) {
+        const kind = choiceValue(answers, `dlg_kind:${sentence.id}`), turn = answers.find((answer) => answer.key === `dlg_turn:${sentence.id}`);
+        kinds.push((kind?.value && kind.value in SENTENCE_KINDS ? kind.value : "narration") as SentenceKind);
+        confidence.push(kind?.confidence ?? 0);
+        turns.push(Number(turn?.value ?? 0));
+        distributions.push(kind?.distribution ?? (kind?.value ? { [String(kind.value)]: 1 } : {}));
+      }
+      if (opts.blocks === true) blocks.push(...blockAnswers(sentences.slice(b, b + CLASSIFY), answers));
+      published++;
+      await opts.onBatch?.(Math.min(sentences.length, b + CLASSIFY) - 1, kinds, turns);
+    }
+  };
+  await Promise.all(Array.from({ length: Math.min(WINDOWS_AT_ONCE, windows.length) }, async () => {
+    while (next < windows.length) {
+      const b = windows[next++], asked = sentences.slice(b, b + CLASSIFY), before = sentences.slice(Math.max(0, b - CONTEXT), b);
+      const questions = [...sentenceQuestions(asked), ...(opts.blocks === true ? blockQuestions(asked) : [])];
+      done.set(b, await (opts.ask ? opts.ask({ summary: opts.stateSummary, before, asked, questions }) : decide(sentenceDocument(opts.stateSummary, before, asked), questions)));
+      publishing = publishing.then(publish);
+      await publishing;
+    }
+  }));
+  return { kinds, confidence, turns, distributions, blocks };
+}
+
+/** Dialogue exchanges, monologues and fact runs from the sentences' kinds (indices, first and last). */
+export function spansOfKinds(kinds: SentenceKind[], turns: number[]): { dialogues: [number, number][]; monologues: [number, number][]; facts: [number, number][] } {
+  const dialogues: [number, number][] = [], monologues: [number, number][] = [], facts: [number, number][] = [];
+  let talk: [number, number] | null = null, quiet = 0, inner: [number, number] | null = null, aside = 0;
+  for (let i = 0; i < kinds.length; i++) {
+    const kind = kinds[i];
+    if (kind === "spoken") {
+      if (talk && turns[i] >= 0.5) { dialogues.push(talk); talk = null; }
+      if (talk) talk[1] = i; else talk = [i, i];
+      quiet = 0;
+    } else if (talk && ++quiet > QUIET) { dialogues.push(talk); talk = null; }
+    if (kind === "thought") { if (inner) inner[1] = i; else inner = [i, i]; aside = 0; }
+    else if (inner && (kind === "spoken" || ++aside > ASIDE)) { monologues.push(inner); inner = null; }
+    if (kind === "fact") { const last = facts[facts.length - 1]; if (last && last[1] === i - 1) last[1] = i; else facts.push([i, i]); }
+  }
+  if (talk) dialogues.push(talk);
+  if (inner) monologues.push(inner);
+  return { dialogues, monologues, facts };
+}
+
+/** A card's kind: a sentence kind (a run of it), or an exchange or a monologue over such runs. */
+export type CardKind = SentenceKind | "dialogue" | "monologue";
+/** Where a card goes (the user's v2 flow): the world engine plays dialogue, action and environment; thought, fact and narration go to the ontology. */
+export const CARD_HOME: Record<CardKind, "world" | "ontology"> = { dialogue: "world", spoken: "world", action: "world", environment: "world", thought: "ontology", monologue: "ontology", fact: "ontology", narration: "ontology" };
+export interface KindCard { id: string; kind: CardKind; home: "world" | "ontology"; first: string; last: string; inside?: string[] }
+
+/**
+ * A block's cards from its sentences' kinds (the user's v2 flow, 2026-10-30): adjacent sentences of one kind are one card, a
+ * new card where the carrier changes. Exchanges and monologues (spansOfKinds) are cards over those runs, nested: a dialogue
+ * card holds the runs inside it (its spoken lines, and the actions and narration between them), so an action inside a
+ * conversation is still an action card for the world engine. `ids` are the sentences' ids, in the order of `kinds`.
+ */
+export function kindCards(ids: string[], kinds: SentenceKind[], turns: number[]): KindCard[] {
+  const card = (kind: CardKind, first: number, last: number): KindCard => ({ id: `${kind}:${ids[first]}`, kind, home: CARD_HOME[kind], first: ids[first], last: ids[last] });
+  const runs: [SentenceKind, number, number][] = [];
+  for (let i = 0; i < kinds.length; i++) {
+    const run = runs[runs.length - 1];
+    if (run && run[0] === kinds[i] && run[2] === i - 1 && !(turns[i] >= 0.5)) run[2] = i;
+    else runs.push([kinds[i], i, i]);
+  }
+  const { dialogues, monologues } = spansOfKinds(kinds, turns);
+  const over = (kind: CardKind, spans: [number, number][]): KindCard[] => spans.map(([first, last]) => ({ ...card(kind, first, last), inside: runs.filter(([, from, to]) => from >= first && to <= last).map(([inner, from, to]) => card(inner, from, to).id) }));
+  const order = new Map(ids.map((id, index) => [id, index]));
+  return [...runs.map(([kind, first, last]) => card(kind, first, last)), ...over("dialogue", stitchDialogueSpans(dialogues)), ...over("monologue", monologues)]
+    .sort((a, b) => order.get(a.first)! - order.get(b.first)! || order.get(b.last)! - order.get(a.last)!);
+}
+
+/**
+ * The block's dialogue exchanges (and its monologues and facts), from the sentences' kinds (`classifySentences`): the same
+ * interface the chained start-and-end questions had, `onBatch` with the spans finished through each window.
  */
 export async function selectExchangeSpans(
   sentences: Sentence[],
@@ -253,82 +495,24 @@ export async function selectExchangeSpans(
   opts: { stateSummary: string; gates: SegmentationGates; onBatch?: (spans: [number, number][], completeThrough: number) => Promise<void> },
 ): Promise<{
   spans: [number, number][];
+  monologues: [number, number][];
+  facts: [number, number][];
   escalations: SpanEscalation[];
   unitConfidences: Record<string, number>;
 }> {
-  const escalations: SpanEscalation[] = [];
-  const unitConfidences: Record<string, number> = {};
-  const n = sentences.length;
-  const raw: [number, number][] = [];
-
-  for (let b = 0; b < n; b += STEP) {
-    const region = sentences.slice(b, Math.min(n, b + BATCH));
-    if (region.length === 0) break;
-    const state = `${opts.stateSummary}\n---\n${render(region)}`;
-    let local = 0;
-    for (let iter = 0; iter < 12 && local < region.length; iter++) {
-      const firstId = region[local].id;
-      const startKey = `dlg_start:${firstId}`;
-      const startOpts = [...region.slice(local).map((s) => s.id), "NONE"];
-      const sa = choiceValue(
-        await decide(state, [
-          {
-            key: startKey,
-            primitive: "choice",
-            instructions: `Select dialogue at sentence level: one continuous exchange of actual speech involving one or more people. Alternating voices do not require a new exchange. One or two brief narration or action sentences BETWEEN spoken sentences may remain inside the run. Three or more consecutive non-verbal sentences break the run: speech resuming after that gap starts another dialogue card, even with the same speakers in the same scene. Do not include a long descriptive passage merely to connect two spoken lines. Thoughts, quoted labels and descriptions are not spoken dialogue. Which sentence id BEGINS the next dialogue exchange at or after ${firstId}? Pick its first spoken sentence, including speech resuming after a long narration gap, or NONE if no speech begins in the rest of this passage.`,
-            options: startOpts,
-          },
-        ]),
-        startKey,
-      );
-      if (!sa || sa.value === "NONE" || sa.value === "") {
-        if ((sa?.confidence ?? 0) < opts.gates.reask) escalations.push({ unitId: firstId, reason: "dialogue absence decision too uncertain" });
-        break;
-      }
-      const sLocal = region.findIndex((s) => s.id === sa.value);
-      if (sLocal < local) break;
-      const confS = sa.confidence ?? 0;
-      unitConfidences[region[sLocal].id] = confS;
-      if (confS < opts.gates.reask) {
-        escalations.push({
-          unitId: region[sLocal].id,
-          reason: `dialogue exchange start too uncertain (${confS.toFixed(2)})`,
-        });
-      }
-      const endKey = `dlg_end:${region[sLocal].id}`;
-      const endOpts = region.slice(sLocal).map((s) => s.id);
-      const ea = choiceValue(
-        await decide(state, [
-          {
-            key: endKey,
-            primitive: "choice",
-            instructions: `The multi-person dialogue exchange beginning at ${region[sLocal].id} may include one or two brief non-verbal sentences only when speech resumes immediately afterward. End the run BEFORE any gap of three or more consecutive narration, action or description sentences, even if the same speakers resume in the same scene; that resumed speech starts another dialogue card. Also end when the conversation stops or the participants change entirely. Choose the LAST spoken sentence before the break, not the scene's end or the narration after speech. Which sentence id is the LAST sentence belonging to this exchange? Pick only an id from ${region[sLocal].id} to ${endOpts[endOpts.length - 1]}.`,
-            options: endOpts,
-          },
-        ]),
-        endKey,
-      );
-      let eLocal = region.findIndex((s) => s.id === ea?.value);
-      if (eLocal < sLocal) eLocal = sLocal;
-      const confE = ea?.confidence ?? 0;
-      if (confE < opts.gates.reask) {
-        escalations.push({
-          unitId: region[sLocal].id,
-          reason: `dialogue exchange end too uncertain (${confE.toFixed(2)})`,
-        });
-      }
-      raw.push([b + sLocal, b + eLocal]);
-      local = eLocal + 1;
-    }
-    const merged = stitchDialogueSpans(raw);
-    const nextStart = b + BATCH >= n ? n : b + STEP;
-    const crossing = merged.find(([start, end]) => start < nextStart && end >= nextStart);
-    const through = crossing ? crossing[0] - 1 : nextStart - 1;
-    await opts.onBatch?.(merged.filter(([, end]) => end <= through), through);
-    if (b + BATCH >= n) break;
+  const { kinds, confidence, turns } = await classifySentences(sentences, decide, { stateSummary: opts.stateSummary, onBatch: async (through, soFar, turnsSoFar) => {
+    if (!opts.onBatch) return;
+    // The exchanges settled so far: one still open near the window's end may run on into the next.
+    const settled = through === sentences.length - 1 ? through + 1 : through - QUIET, { dialogues } = spansOfKinds(soFar, turnsSoFar);
+    await opts.onBatch(stitchDialogueSpans(dialogues.filter(([, end]) => end < settled)), Math.max(-1, Math.min(through, settled)));
+  } });
+  const { dialogues, monologues, facts } = spansOfKinds(kinds, turns);
+  const escalations: SpanEscalation[] = [], unitConfidences: Record<string, number> = {};
+  for (const [start] of [...dialogues, ...monologues]) {
+    unitConfidences[sentences[start].id] = confidence[start];
+    if (confidence[start] < opts.gates.reask) escalations.push({ unitId: sentences[start].id, reason: `the kind of sentence ${sentences[start].id} is too uncertain (${confidence[start].toFixed(2)})` });
   }
-
-  return { spans: stitchDialogueSpans(raw), escalations, unitConfidences };
+  return { spans: stitchDialogueSpans(dialogues), monologues, facts, escalations, unitConfidences };
 }
 
 function stitchDialogueSpans(raw: [number, number][]): [number, number][] {

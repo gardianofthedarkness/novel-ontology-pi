@@ -79,7 +79,7 @@ const strings = (value: unknown): value is string[] => Array.isArray(value) && v
 const kinds = new Set(["Character", "Location", "Organization", "Item", "Concept", "TimePoint"]);
 const relationKinds: Record<string, [string[], string[]]> = {
   CAUSES: [["Event", "DialogueCard"], ["Event", "DialogueCard"]], CAUSED_BY: [["Event", "DialogueCard"], ["Event", "DialogueCard"]], PRECEDES: [["Event"], ["Event"]],
-  PARTICIPATES_IN: [["Character"], ["Event"]], PRESENT_IN: [["Character"], ["Scene"]], MENTIONED_IN: [["Character"], ["Scene"]], LOCATED_AT: [["Scene"], ["Location"]],
+  PARTICIPATES_IN: [["Character"], ["Event"]], PRESENT_IN: [["Character"], ["Scene"]], MENTIONED_IN: [["Character", "Item"], ["Scene"]], LOCATED_AT: [["Scene"], ["Location"]],
   KNOWS: [["Character"], ["Character"]], SPEAKS_TO: [["Character"], ["Character"]], ADDRESSES: [["Character"], ["Character"]], OWNS: [["Character"], ["Item"]], MEMBER_OF: [["Character"], ["Organization"]],
   STATE_BEFORE: [["Character"], ["Event"]], STATE_AFTER: [["Character"], ["Event"]], FORKS_FROM: [["Branch"], ["Event"]],
   OCCURS_DURING: [["Scene"], ["TimePoint"]], PART_OF: [["Location"], ["Location"]],
@@ -249,7 +249,7 @@ export function materializeSemantic(changeset: ChangeSet, knownEntities: Entity[
     } else if (fact.field === "state") {
       const state = next as Omit<StateChange, "id">;
       const scores = (scores: unknown) => record(scores) && Object.values(scores).every(score => typeof score === "number" && Number.isFinite(score) && Math.abs(score) <= 1);
-      if (!record(state) || !scores(state.emotions) || !scores(state.relationships) || ![state.knowledgeAdd, state.goalsAdd, state.possessionsAdd, state.possessionsRemove].every(strings) || state.location !== null && typeof state.location !== "string") throw new Error("Invalid character state");
+      if (!record(state) || !scores(state.emotions) || !scores(state.relationships) || ![state.knowledgeAdd, state.goalsAdd, state.possessionsAdd, state.possessionsRemove].every(strings) || ![state.conditionsAdd ?? [], state.conditionsRemove ?? []].every(strings) || state.location !== null && typeof state.location !== "string") throw new Error("Invalid character state");
       resolved = typed(state.characterId, ["Character"]) && typed(state.afterEventId, ["Event"]) && resolveIds(Object.keys(state.relationships), ["Character"]);
       if (resolved) projected.push({ ...proposal, payload: structuredClone(state) });
     } else if (fact.field === "relation") {

@@ -32,6 +32,7 @@ test('interactive mode fails closed without credentials and does not create a re
     assert.equal(manifest.portraits.visualInput, false);
     assert.match(manifest.portraits.skill, /skills\/novel-portraits\/SKILL.md$/);
     assert.equal(manifest.portraits.command, 'novel album assign <workspace>');
+    assert.match(manifest.animation.skill, /skills\/novel-stage\/SKILL.md$/);
   } finally { await rm(directory, { recursive: true, force: true }); }
 });
 

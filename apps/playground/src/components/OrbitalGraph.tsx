@@ -11,6 +11,7 @@ import { breathOffset, buildInertiaRig, glintLevel, heartbeatRoute, now, pointAl
 import { framePositions, type LabelBus } from "./graphCamera";
 import { ScaleNavigation } from "./ScaleNavigation";
 import { FacultyEffects } from "./FacultyEffects";
+import { ArchitectureHolograms } from "./ArchitectureHolograms";
 import type { FacultyAnchor } from "../data/facultyEffects";
 import type { FloorMark } from "../data/orbitalTimePlace";
 import { useAlbumTexture } from "./useAlbumTexture";
@@ -949,7 +950,7 @@ export const OrbitalGraph = forwardRef<GraphCanvasRef, Props>(function OrbitalGr
     onCanvasClick={(event) => onBlank?.(event)}>
     <ambientLight intensity={0.85} /><directionalLight position={[800, 1200, 1800]} intensity={1.5} color="#c4eaff" />
     <gridHelper args={[18000, 90, "#294760", "#122237"]} position={[0, -950, 0]} />
-    {floor.length ? <FloorMap marks={floor} /> : <axesHelper args={[900]} position={[-1400, -945, -1200]} />}
+    {floor.length ? <><FloorMap marks={floor} /><ArchitectureHolograms marks={floor} reducedMotion={reducedMotion} /></> : <axesHelper args={[900]} position={[-1400, -945, -1200]} />}
     {backdrop && <ParentBackdrop ghosts={backdrop.ghosts} path={backdrop.path} morph={morph} reducedMotion={reducedMotion} />}
     {paths.map((path) => <AnimatedTimePath key={path.id} path={path} morph={morph} reducedMotion={reducedMotion} motion={motion} anchors={pathAnchors.get(path.id) ?? []} radii={radii} />)}
     <VisibleConnections edges={edges} bus={bus} />

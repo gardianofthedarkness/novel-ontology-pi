@@ -27,6 +27,7 @@ import {
 import { llmPing, llmProbe } from "./commands/shared/llmCommands.js";
 import { ingestNovel } from "./commands/extract/ingestCommands.js";
 import { libraryCommand } from "./commands/extract/libraryCommands.js";
+import { universeCommand } from "./commands/extract/universeCommands.js";
 import { emShow, emSweep } from "./commands/extract/emCommands.js";
 import { calendarCommand } from "./commands/extract/calendarCommands.js";
 import {
@@ -63,6 +64,12 @@ import { reviewCommand } from "./commands/extract/reviewCommands.js";
 import { approveBook } from "../solidifier/merge/approve.js";
 import { atlasCommand } from "./commands/extract/atlasCommands.js";
 import { checklistCommand } from "./commands/extract/checklistCommands.js";
+import { SIM_USAGE, simPick, simRun, simShow, simStrands, simTerrain } from "./commands/extract/simCommands.js";
+import { sourceGrep, sourceSimilar } from "./commands/extract/sourceCommands.js";
+import { worldAnswer, worldBatch, worldPool } from "./commands/extract/worldCommands.js";
+import { castAsk, castMerge, castReview, castSheet, castShow, sky } from "./commands/extract/castCommands.js";
+import { readingShow, sourceEpub, worldApply, worldCanon, worldHeld, worldLogShow, worldUndo } from "./commands/extract/worldReviewCommands.js";
+import { STAGE_USAGE, stageArchitecture, stageLandscape, stageLines, stageMovement, stageObjects, stagePrep, stageScale, stageShow } from "./commands/extract/stageCommands.js";
 import { TIMEPLACE_USAGE, timeplaceAfterApprove, timeplaceRun, timeplaceShow, timeplaceStrands, timeplaceTree } from "./commands/extract/timeplaceCommands.js";
 import {
   listChangeSets,
@@ -74,6 +81,10 @@ const COMMANDS: Record<string, string> = {
   "novel review show|evidence|decide|apply <root> <packet> --scope book|universe|library [--universe <id>]": "One semantic gate for every faculty: paged assertions/evidence, revision-bound accept|hold|reject, staged decisions, explicit apply. Evidence uses --fact; mutations use --revision; decide uses --decisions '<JSON>'. Unreviewed assertions remain held.",
   "novel init <path>": "Create a novel workspace + bundle manifest",
   "novel library init <library-dir>": "Create a private, versioned multi-file library; no model calls",
+  "novel universe snapshots|snapshot|status|restore <library> ...": "A universe's snapshots: one before each book's first run (where a rerun starts) and one after each run; restore puts a snapshot back (what it replaces is snapshotted first)",
+  "novel universe export <library> <snapshot> <out.tgz>": "Pack a run's result (with the snapshot before it) for another user; the books' text is not included",
+  "novel universe import <bundle> <library> [--source vol-<n>=<file>]": "Start a universe from another user's bundle; your copy of each book is checked by sha256",
+  "novel universe paths|adopt <library>": "The library's fixed paths; adopt gives a library made before snapshots its first ones",
   "novel library add <library-dir> <file.epub|file.txt> [--title <title>]": "Register an immutable source by content hash; identical files deduplicate",
   "novel library show <library-dir> [--series <id> | --universe <id> | --continuity <id>]": "Inspect source identities, reviewed organization and reading order; scoped results exclude unresolved assignments",
   "novel library evidence <library-dir> <source-id> [--offset N --limit N]": "Read up to 2000 original-language characters for organization evidence; no model calls",
@@ -85,7 +96,8 @@ const COMMANDS: Record<string, string> = {
   "novel watch <novel-dir> [--port N]": "Read-only loopback SSE over the processing event log",
   "novel section <file>": "Deterministic sentence sectioning only (free, testable)",
   "novel blocks <file> [--size N]": "Chapter detection + block cutting map (no models)",
-  "novel ingest <novel-dir> <file> [--auto-approve] [--max-blocks N] [--block-size N] [--no-extract] [--no-causality] [--time-place]":
+  "novel init <path> --world-first": "A world-first workspace: its base layer is applied without fact review, and the world loop decides presence, place, time and dialogue (docs/world-first-design.md)",
+  "novel ingest <novel-dir> <file> [--auto-approve | --base-layer] [--max-blocks N] [--block-size N] [--no-extract] [--no-causality] [--time-place]":
     "Full loop: blocks -> miniloop (live Jev) -> extraction (work LLM, when configured) -> ChangeSets -> merge gate -> graph. Default stops at the first gate; --auto-approve applies every ChangeSet. Causality waits for story time and strands: ingest only marks the causality sweep pending (novel checklist runs it after them); --no-causality skips even that",
   "novel causality candidates <novel-dir> [--unit ID] [--chapter N] [--limit N]":
     "List hybrid-nominated CAUSES candidates (graph patterns + embedding top-K) for agent adjudication. No proposals are created.",
@@ -107,6 +119,10 @@ const COMMANDS: Record<string, string> = {
     "The universe's places: one per cluster of book places, with its path through the universe place tree.",
   "novel timeplace strands <novel-dir> [--ask] [--max-questions N] [--min-impact N] [--cache dir] [--out file]":
     "Story strands from stored story time: parallel scenes, splits and meetings checked against places; plans \"who is present?\" questions only where a borrowed cast creates a strand link (free), and asks them with --ask (work model, 4 scenes per call), at most --max-questions (default 30), only in chapters of at least --min-impact scenes (default 8); report only, no canon writes",
+  "novel sim strands|pick|run|show <novel-dir> [--auto N] [--strand id] [--max-calls N] [--accept]":
+    "The stage simulation (view data, never canon): `strands` ranks the book's story lines by the scenes the engine would simulate; `pick` simulates those lines live, event by event (headless Chrome): on a picture of each event as it begins, Jev decides where the people go, where the things it mentions stand and where its fight hits and how big, the next event beginning from what those answers made, within --max-calls, keeping every decision for the runs; `run` (no model calls) runs the engine (buildings as skeletons from the place tree, the per-fork walk with the path-integral sampler, placed things, damage) on the first N lines (--auto N) or one (--strand id) and keeps each as a versioned run with the player's data (a line's first run is its accepted one; --accept takes this run instead); `show` lists each line's accepted run and whether it was made from the book as it is now. The viewer plays accepted runs at play/, and what a running pick or run is doing at play/live.",
+  "novel stage show|lines|objects|scale|architecture|movement|prep <novel-dir> [--no-jev] [--no-work] [--max-calls N] [--cache dir] [--force] [--line scene-id]":
+    "Read mode's stage (view inputs, never canon, no review; run on request, apart from the book's analysis, from reviewed canon only: each paid step waits for the analysis steps it builds on unless --force): `scale` sizes each place of the tree, region to room (one Jev choice per place; the stage builds places by it); `objects` lists the buildings and large visible things each staged scene puts in its place, matched to what the stage can draw (work model, a few scenes per call, within --max-calls); `lines` shows the timeline as the simulation walks it, story line by story line (each scene's own cast and where each person comes from; --line lists one line's scenes; no model calls; not `novel fork`, which branches the story); `architecture` picks each place's building, a sub-kind of place (name shortlist, then Jev picks among pictures); `movement` asks Jev who moves where inside each scene's building and how (needs the whole file extracted and the buildings picked; --max-calls bounds a run, never exceeded: `novel stage show` gives maxRequests, enough to finish in one run; answers are kept and later runs continue); `prep` is the animation prep, last of all once every analysis step is done and both reports are current: each chain checked physically, one movement plan per place (no model calls). Answers are reused while their inputs stay the same.",
   "novel timeplace show <novel-dir>":
     "Applied time periods in story order, places as paths through the place tree, and the tree's links.",
   "novel causality sweep <novel-dir> [--limit N]":
@@ -135,6 +151,18 @@ const COMMANDS: Record<string, string> = {
   "novel graph query <db-path> <cypher>": "Raw Cypher against the Ladybug store",
   "novel graph stats <db-path>": "Node/relation counts per table",
   "novel query <novel-dir> <cypher>": "OntologyStore query (graph traversal)",
+  "novel source grep <novel-dir> <regex> [--limit N]": "Original sentences matching a regular expression, with sentence and scene ids (read-only)",
+  "novel source similar <novel-dir> <text> [--limit N]": "The original passages most like a text (lexical retrieval), with sentence and scene ids (read-only)",
+  "novel world pool|batch|answer <novel-dir> …": "World-first review pool: what the world flagged, a batch for the main agent, and its answers (novel world answer <dir> <batch> <item> <option> --reason <text>)",
+  "novel world log <novel-dir> --scene|--person|--card <id> [--run <id>]": "The world log of the last director run: who was where, moves, meetings, blasts, and the laws' verdicts (read-only)",
+  "novel world held <novel-dir> [--run <id>] [--budget N]": "A director run's held items (what the laws could not settle, and the user's notes) into the review pool, one batch per scene by reach",
+  "novel world apply <novel-dir>": "The main agent's answers into the pins the director plays by, under the laws (what they turn back returns to the pool)",
+  "novel cast show|merge|sheet|ask|review <novel-dir> …": "The cast's review: the cast and their ability sheets (show [<char>]); two entries made one person in the reading, its views, the ontology and the universe's sheets (merge <keep> <merged> --reason t [--reading <data.json>]... [--dry]); one person's ability sheet (sheet <char> --sheet '<JSON>' | --none --reason t [--evidence <ids>]); two people raised as one for the agent (ask <a> <b> --why t); the cast's questions in batches in the world's review pool (review [--size N] [--least-cards N] [--send <console-dir>]), answered with novel world answer, done by novel world apply",
+  "novel sky build|show <novel-dir> [--dry] [--cache <dir>]": "The story sky: each unit's time of day and weather into sky.json beside the reading the director plays (build: Jev, cents, cached; --dry counts only); show: what it holds",
+  "novel world canon <novel-dir> [--run <id>]": "What a director run settled into canon by its gates: presence, place, speakers, where each person is, strands (undoable)",
+  "novel world undo <novel-dir> --run <id>": "A director run's writes to canon taken back, each record to what it replaced",
+  "novel reading <novel-dir> card|scene|line <id>": "The v2 reading of a card, a scene or a line: kinds, speakers and how sure, people, place and time, with the text (read-only)",
+  "novel source epub <novel-dir> [--doc N] [--grep <regex>] [--offset N] [--limit N]": "The original EPUB as published: its documents, one document's paragraphs, or the paragraphs matching (read-only)",
   "novel search <novel-dir> <text> [--limit N]":
     "Graph-first text search (Cypher CONTAINS scan)",
   "novel state <novel-dir> <character-id> [--at <event-id>]":
@@ -208,10 +236,11 @@ async function main(): Promise<void> {
   }
 
   if (cmd === "init") {
-    if (!sub?.trim() || sub.startsWith("--") || positional.length !== 2) {
-      throw new Error("Usage: novel init <path> [--pretty]");
+    const worldFirst = positional.includes("--world-first");
+    if (!sub?.trim() || sub.startsWith("--") || positional.length !== (worldFirst ? 3 : 2)) {
+      throw new Error("Usage: novel init <path> [--world-first] [--pretty]");
     }
-    out(await initWorkspace(sub), pretty);
+    out(await initWorkspace(sub, { worldFirst }), pretty);
     return;
   }
 
@@ -229,6 +258,11 @@ async function main(): Promise<void> {
 
   if (cmd === "library") {
     out(await libraryCommand(positional.slice(1)), pretty);
+    return;
+  }
+
+  if (cmd === "universe") {
+    out(await universeCommand(positional.slice(1)), pretty);
     return;
   }
 
@@ -485,7 +519,7 @@ async function main(): Promise<void> {
     const file = positional[2];
     if (!novelDir || !file || file.startsWith("--")) {
       throw new Error(
-        "Usage: novel ingest <novel-dir> <file> [--auto-approve] [--max-blocks N] [--block-size N] [--no-extract] [--no-causality] [--time-place]",
+        "Usage: novel ingest <novel-dir> <file> [--auto-approve | --base-layer] [--max-blocks N] [--block-size N] [--no-extract] [--no-causality] [--time-place]",
       );
     }
     const maxBlocksRaw = flag(positional, "--max-blocks");
@@ -501,6 +535,7 @@ async function main(): Promise<void> {
     out(
       await ingestNovel(novelDir, file, {
         autoApprove: positional.includes("--auto-approve"),
+        baseLayer: positional.includes("--base-layer"),
         maxBlocks,
         blockSize,
         noExtract: positional.includes("--no-extract"),
@@ -533,6 +568,53 @@ async function main(): Promise<void> {
       maxCalls: number("--max-calls"), maxQuestions: number("--max-questions"), out: flag(positional, "--out"), cache: flag(positional, "--cache"),
       propose: positional.includes("--propose"), force: positional.includes("--force"),
     }), pretty);
+    return;
+  }
+
+  if (cmd === "sim") {
+    const novelDir = positional[2];
+    if (!["strands", "terrain", "pick", "run", "show"].includes(sub ?? "") || !novelDir || novelDir.startsWith("--")) throw new Error(`Usage: ${SIM_USAGE}`);
+    const valued = sub === "run" ? ["--auto", "--strand", "--pace", "--from"] : sub === "pick" ? ["--auto", "--strand", "--max-calls"] : sub === "terrain" ? ["--turns", "--parts", "--from", "--until"] : [], switches = sub === "run" ? ["--accept", "--force"] : sub === "terrain" ? ["--sites", "--run", "--spawn", "--resettle"] : [];
+    const seen = new Set<string>();
+    for (let index = 3; index < positional.length; index++) {
+      const name = positional[index];
+      if (seen.has(name) || ![...valued, ...switches].includes(name)) throw new Error(`Usage: ${SIM_USAGE}`);
+      seen.add(name);
+      if (valued.includes(name)) { const value = positional[++index]; if (!value || value.startsWith("--")) throw new Error(`${name} needs a value.`); }
+    }
+    const auto = flag(positional, "--auto");
+    if (auto !== undefined && (!/^\d+$/.test(auto) || Number(auto) < 1 || Number(auto) > 20)) throw new Error("--auto must be a whole number from 1 to 20.");
+    const maxCalls = flag(positional, "--max-calls");
+    if (maxCalls !== undefined && (!/^\d+$/.test(maxCalls) || Number(maxCalls) < 1 || Number(maxCalls) > 500)) throw new Error("--max-calls must be a whole number from 1 to 500.");
+    const pace = flag(positional, "--pace");
+    if (pace !== undefined && (!/^\d+(\.\d+)?$/.test(pace) || Number(pace) > 30)) throw new Error("--pace must be seconds per moment, from 0 to 30.");
+    const lines = { auto: auto === undefined ? undefined : Number(auto), strand: flag(positional, "--strand") };
+    const turns = flag(positional, "--turns");
+    if (turns !== undefined && (!/^\d+$/.test(turns) || Number(turns) < 1 || Number(turns) > 3)) throw new Error("--turns must be 1, 2 or 3.");
+    const parts = flag(positional, "--parts");
+    if (parts !== undefined && (!/^\d+$/.test(parts) || Number(parts) < 1)) throw new Error("--parts must be a whole number, 1 or more.");
+    const level = flag(positional, "--from"), until = flag(positional, "--until");
+    if (sub === "terrain" && [level, until].some((value) => value !== undefined && !["city", "district", "street", "building"].includes(value))) throw new Error("--from and --until must be city, district, street or building.");
+    if (sub === "terrain") { out(await simTerrain(novelDir, { turns: turns === undefined ? undefined : Number(turns), sites: positional.includes("--sites"), run: positional.includes("--run"), parts: parts === undefined ? undefined : Number(parts), spawn: positional.includes("--spawn"), from: level, until, resettle: positional.includes("--resettle") }), pretty); return; }
+    out(await (sub === "strands" ? simStrands(novelDir) : sub === "show" ? simShow(novelDir) : sub === "pick" ? simPick(novelDir, { ...lines, maxCalls: maxCalls === undefined ? undefined : Number(maxCalls) }) : simRun(novelDir, { ...lines, from: flag(positional, "--from"), accept: positional.includes("--accept"), force: positional.includes("--force"), pace: pace === undefined ? undefined : Number(pace) })), pretty);
+    return;
+  }
+
+  if (cmd === "stage") {
+    const novelDir = positional[2];
+    if (!["show", "lines", "objects", "scale", "landscape", "architecture", "movement", "prep"].includes(sub ?? "") || !novelDir || novelDir.startsWith("--")) throw new Error(`Usage: ${STAGE_USAGE}`);
+    const valued = sub === "movement" || sub === "objects" ? ["--max-calls", "--cache"] : sub === "architecture" || sub === "scale" || sub === "landscape" ? ["--cache"] : sub === "lines" ? ["--line"] : [], switches = sub === "prep" ? ["--force"] : sub === "scale" || sub === "landscape" ? ["--no-jev"] : sub === "show" || sub === "lines" ? [] : sub === "objects" ? ["--no-work", "--no-jev", "--force"] : ["--no-jev", "--force"];
+    const seen = new Set<string>();
+    for (let index = 3; index < positional.length; index++) {
+      const name = positional[index];
+      if (seen.has(name) || ![...valued, ...switches].includes(name)) throw new Error(`Usage: ${STAGE_USAGE}`);
+      seen.add(name);
+      if (valued.includes(name)) { const value = positional[++index]; if (!value || value.startsWith("--")) throw new Error(`${name} needs a value.`); }
+    }
+    const maxCalls = flag(positional, "--max-calls");
+    if (maxCalls !== undefined && (!/^\d+$/.test(maxCalls) || Number(maxCalls) < 1)) throw new Error("--max-calls must be a positive integer.");
+    const options = { jev: !positional.includes("--no-jev"), cache: flag(positional, "--cache"), maxCalls: maxCalls === undefined ? undefined : Number(maxCalls), force: positional.includes("--force") };
+    out(await (sub === "show" ? stageShow(novelDir) : sub === "objects" ? stageObjects(novelDir, { ...options, work: !positional.includes("--no-work") }) : sub === "lines" ? stageLines(novelDir, { line: flag(positional, "--line") }) : sub === "scale" ? stageScale(novelDir, options) : sub === "landscape" ? stageLandscape(novelDir, options) : sub === "architecture" ? stageArchitecture(novelDir, options) : sub === "movement" ? stageMovement(novelDir, options) : stagePrep(novelDir, options)), pretty);
     return;
   }
 
@@ -669,6 +751,66 @@ async function main(): Promise<void> {
       throw new Error("Usage: novel query <novel-dir> <cypher>");
     }
     out(await novelQuery(novelDir, cypher), pretty);
+    return;
+  }
+
+  if (cmd === "reading") {
+    const novelDir = positional[1];
+    if (!novelDir || !positional[2] || !positional[3]) throw new Error("Usage: novel reading <novel-dir> card|scene|line <id>");
+    out(await readingShow(novelDir, positional[2], positional[3]), pretty);
+    return;
+  }
+
+  if (cmd === "source" && sub === "epub") {
+    const novelDir = positional[2], number = (name: string) => { const value = flag(positional, name); if (value === undefined) return undefined; if (!/^\d+$/.test(value)) throw new Error(`${name} must be a whole number.`); return Number(value); };
+    if (!novelDir) throw new Error("Usage: novel source epub <novel-dir> [--doc N] [--grep <regex>] [--offset N] [--limit N]");
+    out(await sourceEpub(novelDir, { doc: number("--doc"), grep: flag(positional, "--grep"), offset: number("--offset"), limit: number("--limit") }), pretty);
+    return;
+  }
+
+  if (cmd === "source") {
+    const novelDir = positional[2];
+    if (!["grep", "similar"].includes(sub ?? "") || !novelDir) throw new Error("Usage: novel source grep|similar <novel-dir> <regex|text> [--limit N]");
+    const text = restText(positional.slice(3), ["--limit"]), rawLimit = flag(positional, "--limit"), limit = rawLimit === undefined ? (sub === "grep" ? 20 : 10) : Number(rawLimit);
+    if (!text) throw new Error(`Usage: novel source ${sub} <novel-dir> <${sub === "grep" ? "regex" : "text"}> [--limit N]`);
+    if (!Number.isInteger(limit) || limit < 1 || limit > 50) throw new Error("--limit must be a whole number from 1 to 50.");
+    out(await (sub === "grep" ? sourceGrep(novelDir, text, limit) : sourceSimilar(novelDir, text, limit)), pretty);
+    return;
+  }
+
+  if (cmd === "cast") {
+    const novelDir = positional[2];
+    if (!["show", "merge", "sheet", "ask", "review"].includes(sub ?? "") || !novelDir) throw new Error("Usage: novel cast show <novel-dir> [<char>] | merge <novel-dir> <keep> <merged> --reason <text> [--reading <data.json>]... [--dry] | sheet <novel-dir> <char> --sheet '<JSON>' | --none --reason <text> [--evidence <ids>] | ask <novel-dir> <a> <b> --why <text> | review <novel-dir> [--size N] [--least-cards N] [--send <console-dir>]");
+    const all = (name: string) => positional.flatMap((value, n) => (value === name && positional[n + 1] ? [positional[n + 1]] : []));
+    const number = (name: string) => { const value = flag(positional, name); return value === undefined ? undefined : Number(value); };
+    if (sub === "show") { out(await castShow(novelDir, positional[3]?.startsWith("--") ? undefined : positional[3]), pretty); return; }
+    if (sub === "merge") { if (!positional[3] || !positional[4]) throw new Error("Usage: novel cast merge <novel-dir> <keep> <merged> --reason <text> [--reading <data.json>]... [--dry]"); out(await castMerge(novelDir, positional[3], positional[4], { reason: flag(positional, "--reason"), readings: all("--reading"), dry: positional.includes("--dry") }), pretty); return; }
+    if (sub === "sheet") { if (!positional[3]) throw new Error("Usage: novel cast sheet <novel-dir> <char> --sheet '<JSON>' | --none --reason <text> [--evidence <ids>]"); out(await castSheet(novelDir, positional[3], { sheet: flag(positional, "--sheet"), none: positional.includes("--none"), reason: flag(positional, "--reason"), evidence: flag(positional, "--evidence") }), pretty); return; }
+    if (sub === "ask") { if (!positional[3] || !positional[4]) throw new Error("Usage: novel cast ask <novel-dir> <a> <b> --why <text>"); out(await castAsk(novelDir, positional[3], positional[4], flag(positional, "--why")), pretty); return; }
+    out(await castReview(novelDir, { size: number("--size"), least: number("--least-cards"), send: flag(positional, "--send") }), pretty);
+    return;
+  }
+
+  if (cmd === "sky") {
+    const novelDir = positional[2];
+    if (!["build", "show"].includes(sub ?? "") || !novelDir) throw new Error("Usage: novel sky build|show <novel-dir> [--dry] [--cache <dir>]");
+    out(await sky(novelDir, sub!, { dry: positional.includes("--dry"), cache: flag(positional, "--cache") }), pretty);
+    return;
+  }
+
+  if (cmd === "world") {
+    const novelDir = positional[2];
+    if (!["pool", "batch", "answer", "log", "held", "apply", "canon", "undo"].includes(sub ?? "") || !novelDir) throw new Error("Usage: novel world pool <novel-dir> | batch <novel-dir> <batch-id> | answer <novel-dir> <batch-id> <item> <option> --reason <text> | log <novel-dir> --scene|--person|--card <id> | held <novel-dir> [--run <id>] [--budget N] | apply <novel-dir> | canon <novel-dir> [--run <id>] | undo <novel-dir> --run <id>");
+    if (sub === "pool") { out(await worldPool(novelDir), pretty); return; }
+    if (sub === "log") { out(await worldLogShow(novelDir, { scene: flag(positional, "--scene"), person: flag(positional, "--person"), card: flag(positional, "--card"), run: flag(positional, "--run") }), pretty); return; }
+    if (sub === "held") { const budget = flag(positional, "--budget"); out(await worldHeld(novelDir, { run: flag(positional, "--run"), budget: budget === undefined ? undefined : Number(budget) }), pretty); return; }
+    if (sub === "apply") { out(await worldApply(novelDir), pretty); return; }
+    if (sub === "canon") { out(await worldCanon(novelDir, { run: flag(positional, "--run") }), pretty); return; }
+    if (sub === "undo") { out(await worldUndo(novelDir, { run: flag(positional, "--run") }), pretty); return; }
+    if (sub === "batch") { if (!positional[3]) throw new Error("Usage: novel world batch <novel-dir> <batch-id>"); out(await worldBatch(novelDir, positional[3]), pretty); return; }
+    const reason = flag(positional, "--reason");
+    if (!positional[3] || !positional[4] || !positional[5] || positional[5].startsWith("--") || !reason) throw new Error("Usage: novel world answer <novel-dir> <batch-id> <item> <option> --reason <text>");
+    out(await worldAnswer(novelDir, positional[3], positional[4], positional[5], reason), pretty);
     return;
   }
 

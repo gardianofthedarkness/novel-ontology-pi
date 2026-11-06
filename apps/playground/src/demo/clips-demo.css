@@ -1,0 +1,9 @@
+/* The standalone clips page: one dark screen, the player filling it. */
+:root { color-scheme: dark; --demo-bg: #060c12; --demo-ink: #d9e3ea; }
+* { box-sizing: border-box; }
+html, body, #root { height: 100%; margin: 0; }
+body { background: var(--demo-bg); color: var(--demo-ink); font: 14px/1.5 -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif; }
+button { font: inherit; color: inherit; background: transparent; border: 0; padding: 8px 10px; cursor: pointer; }
+button:disabled { cursor: default; opacity: .45; }
+button:focus-visible, a:focus-visible { outline: 2px solid #7ce6ff; outline-offset: 2px; }
+h2, p { margin-top: 0; }

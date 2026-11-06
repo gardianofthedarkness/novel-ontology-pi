@@ -1,6 +1,6 @@
 import { createServer } from 'node:http';
 import { randomBytes, timingSafeEqual } from 'node:crypto';
-import { readFile, realpath, stat } from 'node:fs/promises';
+import { readFile, readdir, realpath, stat } from 'node:fs/promises';
 import { extname, resolve, sep } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { parseArgs } from 'node:util';
@@ -11,6 +11,8 @@ import { bookCatalog } from './book-catalog.mjs';
 import { resolveAlbumAsset } from './album.mjs';
 import { configuredLibraryBindings, readLibraryLive, withLibraryLive } from './library-live.mjs';
 import { readUniverseTimePlace } from './universe-time-place.mjs';
+import { runReport, reportPage } from './run-report.mjs';
+import { addDirectorNote, directorAlbum, directorDev, directorSky, directorFile, directorReading, directorNotes, directorReview, pagePolicy, liveFrames, livePicture, liveState, liveWorld, simulationLivePage, simulationNowPage, simulationPage, simulationVendor, simulationWorldPage, terrainStep } from './sim-play.mjs';
 
 const requestLimit = 15000;
 const maximumLifetime = 240 * 60 * 1000;
@@ -104,7 +106,41 @@ async function configuredWorkspace(volume) {
   return resolve(root, selected.workspace);
 }
 
-export async function createViewer({ port = 4324, origin, expiresAt, readLive = configuredLive, resolveWorkspace = readLive === configuredLive ? configuredWorkspace : undefined, watchPaths, console: consoleOptions, dist = `${repo}/apps/playground/dist`, libraryDirectory = process.env.NOVEL_LIBRARY_DIR, libraryBindings, libraryReader = readLibraryLive } = {}) {
+async function configuredSource(volume) {
+  const { volumes, active } = await liveConfiguration();
+  const selected = volumes.find(entry => entry.id === (volume === 'active' ? active.volume : Number(volume)));
+  if (!selected) throw new Error('Unknown volume');
+  return { workspace: resolve(root, selected.workspace), metadataDirectory: resolve(root, selected.metadataDirectory) };
+}
+
+/**
+ * Read mode's text: one block of the book's source, cut into the sentences
+ * every record cites (b0003_s0012), each marked when a paragraph starts.
+ * Read-only, on the private link like the rest of the viewer.
+ */
+export async function bookText(metadataDirectory, block) {
+  // Blocks by their file name (b0001.txt is block 0), so a missing one is a 404, never another block's text under this block's ids.
+  const files = (await readdir(metadataDirectory)).filter(name => /^b\d{4}\.txt$/.test(name)).sort();
+  const name = `b${String(block + 1).padStart(4, '0')}.txt`;
+  if (!files.includes(name)) return null;
+  const { sectionBlock } = await import('../../dist/src/digger/intake/sectioning.js');
+  const text = await readFile(resolve(metadataDirectory, name), 'utf8');
+  let cursor = 0;
+  const sentences = sectionBlock(text, block).sentences.map((sentence) => {
+    const start = text.indexOf(sentence.text, cursor);
+    const paragraph = start < 0 || cursor === 0 || text.slice(cursor, start).includes('\n');
+    if (start >= 0) cursor = start + sentence.text.length;
+    return { id: sentence.id, text: sentence.text, ...(paragraph ? { paragraph: true } : {}) };
+  });
+  return { block, blocks: Number(files.at(-1).slice(1, 5)), sentences };
+}
+
+/** Read mode's prepared animation (novel stage prep): one movement plan per place, or null until the book's analysis is complete. */
+export async function stagePlan(workspace) {
+  return readFile(resolve(workspace, 'stage', 'plan.json'), 'utf8').then(JSON.parse, error => { if (error.code === 'ENOENT') return null; throw error; });
+}
+
+export async function createViewer({ port = 4324, origin, expiresAt, readLive = configuredLive, resolveWorkspace = readLive === configuredLive ? configuredWorkspace : undefined, resolveSource = readLive === configuredLive ? configuredSource : undefined, watchPaths, console: consoleOptions, dist = `${repo}/apps/playground/dist`, libraryDirectory = process.env.NOVEL_LIBRARY_DIR, libraryBindings, libraryReader = readLibraryLive } = {}) {
   if (!Number.isInteger(port) || port < 0 || port > 65535) throw new TypeError('Invalid loopback port');
   const expiry = deadline(expiresAt);
   if (origin !== undefined) validateOrigin(origin, port);
@@ -142,7 +178,7 @@ export async function createViewer({ port = 4324, origin, expiresAt, readLive = 
       const route = url.pathname.match(/^\/view\/([a-zA-Z0-9_-]+)(\/.*)$/);
       if (!route || Buffer.byteLength(route[1]) !== Buffer.byteLength(access) || !timingSafeEqual(Buffer.from(route[1]), Buffer.from(access))) { send(401); return; }
       const scopedPath = route[2];
-      const allowed = scopedPath === '/api/pi/messages' ? 'POST' : scopedPath === '/api/live/stream' ? 'GET' : 'GET, HEAD';
+      const allowed = scopedPath === '/api/pi/messages' || scopedPath === '/play/terrain/step' || scopedPath === '/play/notes' ? 'POST' : scopedPath === '/api/live/stream' ? 'GET' : 'GET, HEAD';
       if (!allowed.split(', ').includes(request.method)) { send(405, undefined, { Allow: allowed }); request.resume(); return; }
       if (scopedPath === '/api/pi/messages') {
         if (!piConsole) { send(404); request.resume(); return; }
@@ -162,6 +198,124 @@ export async function createViewer({ port = 4324, origin, expiresAt, readLive = 
         const asset = await bounded(async () => resolveAlbumAsset(await resolveWorkspace(volume), url.searchParams.get('id')));
         if (!asset) { send(404); return; }
         send(200, await readFile(asset.filename), { 'Content-Type': asset.type });
+        return;
+      }
+      if (scopedPath === '/play/terrain/step') {
+        // Terrain spawning's step (world-engine/terrain/terrain-spawn.mjs), from World · Live's Next step and Run on: for a run waiting
+        // after a proposal, watched in the engine's own live view.
+        const volume = url.searchParams.get('volume') ?? 'active';
+        if (!resolveWorkspace || volume !== 'active' && (!/^[1-9]\d*$/.test(volume) || !Number.isSafeInteger(Number(volume)))) { send(404); request.resume(); return; }
+        let body = '';
+        for await (const chunk of request) { body += chunk; if (body.length > 512) { send(413); return; } }
+        let mode = null; try { mode = JSON.parse(body).mode; } catch { /* a bad body */ }
+        const step = await bounded(async () => terrainStep(await resolveWorkspace(volume), mode));
+        if (!step) { send(400); return; }
+        send(200, JSON.stringify(step), { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store' });
+        return;
+      }
+      if (scopedPath === '/play/dev.json' || scopedPath === '/play/dev/file') {
+        // Developer mode (sim-play.mjs directorDev, directorFile): one card's records, or one of the run's files, read only.
+        const volume = url.searchParams.get('volume') ?? 'active';
+        if (!resolveWorkspace || volume !== 'active' && (!/^[1-9]\d*$/.test(volume) || !Number.isSafeInteger(Number(volume)))) { send(404); return; }
+        if (scopedPath === '/play/dev.json') {
+          const scene = url.searchParams.get('scene') ?? '', card = url.searchParams.get('card') ?? '';
+          if (!/^[\w-]{1,60}$/.test(scene) || card.length > 120) { send(400); return; }
+          const view = await bounded(async () => directorDev(await resolveWorkspace(volume), { scene, card }));
+          if (!view) { send(404); return; }
+          send(200, JSON.stringify(view), { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store' });
+          return;
+        }
+        const file = await bounded(async () => directorFile(await resolveWorkspace(volume), url.searchParams.get('name') ?? ''));
+        if (!file) { send(404); return; }
+        send(200, file.body, { 'Content-Type': file.type, 'Cache-Control': 'no-store', 'Content-Disposition': `inline; filename="${file.name}"` });
+        return;
+      }
+      if (scopedPath === '/play/report') {
+        // The run report (run-report.mjs): the last director run's changes in words, read only.
+        const volume = url.searchParams.get('volume') ?? 'active';
+        if (!resolveWorkspace || volume !== 'active' && (!/^[1-9]\d*$/.test(volume) || !Number.isSafeInteger(Number(volume)))) { send(404); return; }
+        const data = await bounded(async () => runReport(await resolveWorkspace(volume)));
+        if (!data) { send(404); return; }
+        const html = reportPage(data);
+        send(200, html, { 'Content-Type': types['.html'], 'Content-Security-Policy': pagePolicy(html), 'Cache-Control': 'no-store' });
+        return;
+      }
+      if (scopedPath === '/play/notes' || scopedPath === '/play/notes.json' || scopedPath === '/play/reading.json' || scopedPath === '/play/review.json' || scopedPath === '/play/album.json' || scopedPath === '/play/sky.json') {
+        // Notes on the director's cards (sim-play.mjs directorNotes): added from World · Live's reader, read by both; and
+        // the reading as the reader shows it (kinds, detected names).
+        const volume = url.searchParams.get('volume') ?? 'active';
+        if (!resolveWorkspace || volume !== 'active' && (!/^[1-9]\d*$/.test(volume) || !Number.isSafeInteger(Number(volume)))) { send(404); request.resume(); return; }
+        if (scopedPath === '/play/sky.json') { const view = await bounded(async () => directorSky(await resolveWorkspace(volume))); if (!view) { send(404); return; } send(200, JSON.stringify(view), { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store' }); return; }
+        if (scopedPath === '/play/album.json') { send(200, JSON.stringify(await bounded(async () => directorAlbum(await resolveWorkspace(volume)))), { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store' }); return; }
+        if (scopedPath === '/play/reading.json') { const view = await bounded(async () => directorReading(await resolveWorkspace(volume))); if (!view) { send(404); return; } send(200, JSON.stringify(view), { 'Content-Type': 'application/json; charset=utf-8' }); return; }
+        if (scopedPath === '/play/review.json') { const view = await bounded(async () => directorReview(await resolveWorkspace(volume))); if (!view) { send(404); return; } send(200, JSON.stringify(view), { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store' }); return; }
+        if (scopedPath === '/play/notes.json') { send(200, JSON.stringify(await bounded(async () => directorNotes(await resolveWorkspace(volume)))), { 'Content-Type': 'application/json; charset=utf-8' }); return; }
+        let body = '';
+        for await (const chunk of request) { body += chunk; if (body.length > 4096) { send(413); return; } }
+        let parsed = null; try { parsed = JSON.parse(body); } catch { /* a bad body */ }
+        const note = await bounded(async () => addDirectorNote(await resolveWorkspace(volume), parsed));
+        if (!note) { send(400); return; }
+        send(200, JSON.stringify(note), { 'Content-Type': 'application/json; charset=utf-8' });
+        return;
+      }
+      if (scopedPath === '/play/' || scopedPath === '/play/live' || scopedPath === '/play/world' || scopedPath === '/play/now' || scopedPath === '/play/live.json' || scopedPath.startsWith('/play/live/')) {
+        // The stage simulation: the player (the selected book's accepted runs, or with newest=1 its latest; novel sim run) in the
+        // engine's own page, and the live page with what a running novel sim pick|run is doing and the replay of Jev's questions.
+        const volume = url.searchParams.get('volume') ?? 'active';
+        if (!resolveWorkspace || volume !== 'active' && (!/^[1-9]\d*$/.test(volume) || !Number.isSafeInteger(Number(volume)))) { send(404); return; }
+        const page = scopedPath === '/play/' ? await bounded(async () => simulationPage(await resolveWorkspace(volume), { newest: url.searchParams.get('newest') === '1', live: `live?volume=${volume}` })) : null;
+        if (scopedPath === '/play/live' || scopedPath === '/play/' && !page) {
+          // Before a book has runs, its player is the live page (what novel sim pick is doing).
+          const page = await simulationLivePage();
+          // Framed by World · Live's Jev debugger panel: this origin only.
+          send(200, page.html, { 'Content-Type': types['.html'], 'Content-Security-Policy': page.policy, 'X-Frame-Options': 'SAMEORIGIN' });
+          return;
+        }
+        // The live view of the world: the engine's world as it stands at the moment being played (live/world.json).
+        if (scopedPath === '/play/now') { const page = await bounded(async () => simulationNowPage(await resolveWorkspace(volume))); if (!page) { send(404); return; } send(200, page.html, { 'Content-Type': types['.html'], 'Content-Security-Policy': page.policy, 'Cache-Control': 'no-store', 'X-Frame-Options': 'SAMEORIGIN' }); return; }
+        if (scopedPath === '/play/world') { const page = await simulationWorldPage(); send(200, page.html, { 'Content-Type': types['.html'], 'Content-Security-Policy': page.policy }); return; }
+        if (scopedPath === '/play/live/world.json') { send(200, await bounded(async () => liveWorld(await resolveWorkspace(volume))), { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store' }); return; }
+        if (scopedPath === '/play/live.json') { send(200, JSON.stringify(await bounded(async () => liveState(await resolveWorkspace(volume)))), { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store' }); return; }
+        if (scopedPath === '/play/live/frames.jsonl') { send(200, await bounded(async () => liveFrames(await resolveWorkspace(volume))), { 'Content-Type': 'text/plain; charset=utf-8', 'Cache-Control': 'no-store' }); return; }
+        if (scopedPath.startsWith('/play/live/')) {
+          const picture = await bounded(async () => livePicture(await resolveWorkspace(volume), scopedPath.slice('/play/live/'.length)));
+          if (!picture) { send(404); return; }
+          send(200, picture.body, { 'Content-Type': picture.type, 'Cache-Control': 'private, max-age=86400' });
+          return;
+        }
+        send(200, page.html, { 'Content-Type': types['.html'], 'Content-Security-Policy': page.policy });
+        return;
+      }
+      if (scopedPath.startsWith('/play/vendor/')) {
+        const body = await simulationVendor(scopedPath.slice('/play/vendor/'.length));
+        if (!body) { send(404); return; }
+        send(200, body, { 'Content-Type': types['.js'] });
+        return;
+      }
+      if (scopedPath === '/api/book-epub' || scopedPath === '/api/book-epub-file') {
+        // Read mode's original book: a spine document of the volume's EPUB, made safe, or one of its pictures (book-epub.mjs).
+        const volume = url.searchParams.get('volume') ?? 'active', item = url.searchParams.get('item') ?? '0', inside = url.searchParams.get('path') ?? '';
+        if (!resolveSource || volume !== 'active' && (!/^[1-9]\d*$/.test(volume) || !Number.isSafeInteger(Number(volume)))) { send(404); return; }
+        if (scopedPath === '/api/book-epub' ? !/^\d{1,4}$/.test(item) : !inside || inside.length > 300 || inside.includes('..')) { send(400); return; }
+        const { bookEpub, bookEpubFile } = await import('./book-epub.mjs');
+        const data = await bounded(async () => { const source = await resolveSource(volume); return scopedPath === '/api/book-epub' ? bookEpub(source, Number(item)) : bookEpubFile(source, inside); }).catch(() => null);
+        if (!data) { send(404); return; }
+        if (scopedPath === '/api/book-epub-file') send(200, data.bytes, { 'Content-Type': data.type });
+        else send(200, JSON.stringify(data), { 'Content-Type': 'application/json; charset=utf-8' });
+        return;
+      }
+      if (scopedPath === '/api/book-text' || scopedPath === '/api/stage') {
+        // Read mode: the selected book's text, one block at a time, and its prepared animation.
+        const volume = url.searchParams.get('volume') ?? 'active';
+        if (!resolveSource || volume !== 'active' && (!/^[1-9]\d*$/.test(volume) || !Number.isSafeInteger(Number(volume)))) { send(404); return; }
+        const block = url.searchParams.get('block') ?? '0';
+        if (scopedPath === '/api/book-text' && (!/^\d{1,4}$/.test(block))) { send(400); return; }
+        const data = await bounded(async () => {
+          const source = await resolveSource(volume);
+          return scopedPath === '/api/stage' ? stagePlan(source.workspace) : bookText(source.metadataDirectory, Number(block));
+        });
+        if (!data) { send(404); return; }
+        send(200, JSON.stringify(data), { 'Content-Type': 'application/json; charset=utf-8' });
         return;
       }
       if (['/api/live', '/db/novel/view.json', '/api/live/stream'].includes(scopedPath)) {

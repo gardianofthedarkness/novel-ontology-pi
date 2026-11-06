@@ -77,7 +77,8 @@ function factRow(fact: ReviewFact, state: ReviewState) {
 
 export async function review(operation: string, target: ReviewTarget, options: ReviewOptions = {}, env: NodeJS.ProcessEnv = process.env): Promise<unknown> {
   if (!["show", "evidence", "decide", "apply"].includes(operation)) throw new Error("Use review show|evidence|decide|apply.");
-  if (target.scope === "book" && !/^cs_[a-zA-Z0-9_-]{1,512}$/.test(target.packetId)) throw new Error("Invalid book review packet ID.");
+  // A book's packets, and a standalone book's identity packets (universal EM, its own shared list).
+  if (target.scope === "book" && !/^(?:cs_[a-zA-Z0-9_-]{1,512}|um_[a-f0-9]{24})$/.test(target.packetId)) throw new Error("Invalid book review packet ID.");
   target = { ...target, directory: resolve(target.directory) };
   const directory = join(target.directory, "review");
   await mkdir(directory, { recursive: true, mode: 0o700 });

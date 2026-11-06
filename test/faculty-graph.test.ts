@@ -67,7 +67,8 @@ test("closed scenes start identity and understanding before dialogue or segmenta
     modelId: "mock-jev",
     async decide(_state, questions) {
       return Promise.all(questions.map(async question => {
-        if (question.key.startsWith("dlg_start:")) { await waitDialogue; dialogueFinished = true; return { key: question.key, value: "NONE", confidence: 0.99 }; }
+        if (question.key.startsWith("dlg_turn:")) return { key: question.key, value: 0, confidence: 0.99 };
+        if (question.key.startsWith("dlg_kind:")) { await waitDialogue; dialogueFinished = true; return { key: question.key, value: "narration", confidence: 0.99 }; }
         if (question.key.startsWith("scene_end:")) return { key: question.key, value: question.key.endsWith(ids[0]) ? ids[1] : ids[3], confidence: 0.99 };
         if (question.key.startsWith("scene_start:")) { if (question.key.endsWith(ids[0])) return { key: question.key, value: ids[2], confidence: 0.99 }; segmentationFinished = true; return { key: question.key, value: "NONE", confidence: 0.99 }; }
         return { key: question.key, value: "unknown", confidence: 0.2 };
@@ -145,15 +146,15 @@ test("valid dialogue rows survive context-only records and unknown speaker names
 
 test("dialogue recall pins take priority over automatic restructuring and remain auditable", async () => {
   const sentences = sectionBlock("小樱说：“你好。”", 0).sentences;
-  const key = `dlg_start:${sentences[0].id}`;
-  const decisions: DecisionModel = { modelId: "jev", async decide(_state, questions) { return questions.map(question => ({ key: question.key, value: sentences[0].id, confidence: 0.99 })); } };
+  const key = `dlg_kind:${sentences[0].id}`;
+  const decisions: DecisionModel = { modelId: "jev", async decide(_state, questions) { return questions.map(question => ({ key: question.key, value: question.key.startsWith("dlg_kind:") ? "spoken" : question.key.startsWith("dlg_turn:") ? 0 : sentences[0].id, confidence: 0.99 })); } };
   const work: WorkModel = { modelId: "work", async generate(request) {
     assert.ok(!request.system.startsWith("FACULTY: dialogue-adjudication"));
     if (request.system.startsWith("FACULTY: entities-participants")) return JSON.stringify({ newEntities: [], charactersPresent: ["小樱"], charactersMentioned: [], locationName: null });
     return JSON.stringify({ events: [] });
   } };
   const graph = new FacultyGraph(decisions, work, { dialogueScope: "scene" });
-  const result = await graph.run({ blockId: "b0001", chapterIndex: 0, sentences, knownEntities: [character], pins: new Map([[key, "NONE"]]) });
+  const result = await graph.run({ blockId: "b0001", chapterIndex: 0, sentences, knownEntities: [character], pins: new Map([[key, "narration"]]) });
   assert.ok(result.miniloop.appliedPins?.includes(key));
   assert.ok(result.miniloop.changeset.reviewNotes["faculty:dialogue-pins"]);
   assert.deepEqual((await result.sceneResults.get(sentences[0].id)!).turns, []);
@@ -175,7 +176,7 @@ test("invalid faculty output keeps complete source scenes and explicit unresolve
 test("scene boundaries retry System 1 with wider context before any System 2 escalation", async () => {
   const sentences = sectionBlock(Array.from({ length: 100 }, (_, index) => `第${index}句叙述。`).join("\n"), 0).sentences;
   const decisions: DecisionModel = { modelId: "jev", async decide(state, questions) {
-    return questions.map(question => ({ key: question.key, value: question.key.startsWith("scene_end:") ? question.options!.at(-1)! : question.key.startsWith("scene_seam:") ? "continues" : "NONE", confidence: question.key.startsWith("scene_end:") && !state.includes("READ-ONLY NEIGHBOR CONTEXT") ? 0.4 : 0.99 }));
+    return questions.map(question => ({ key: question.key, value: question.key.startsWith("scene_end:") ? question.options!.at(-1)! : question.key.startsWith("scene_seam:") ? "continues" : "NONE", confidence: question.key.startsWith("scene_end:") && !String(state).includes("READ-ONLY NEIGHBOR CONTEXT") ? 0.4 : 0.99 }));
   } };
   const work: WorkModel = { modelId: "work", async generate(request) {
     assert.ok(!request.system.startsWith("Resolve one uncertain"));
@@ -193,14 +194,14 @@ test("dialogue retries keep the same questions and units while using neighboring
   const neighbors = sectionBlock("此前小樱与小林一起走来。", 0).sentences;
   let originalQuestions: unknown;
   const decisions: DecisionModel = { modelId: "jev", async decide(state, questions, options) {
-    if (state.includes("READ-ONLY NEIGHBOR CONTEXT") && questions[0].key.startsWith("speaker:")) {
-      assert.ok(state.includes(neighbors[0].id));
+    if (String(state).includes("READ-ONLY NEIGHBOR CONTEXT") && questions[0].key.startsWith("speaker:")) {
+      assert.ok(String(state).includes(neighbors[0].id));
       assert.ok(options?.signal);
       assert.deepEqual(questions, originalQuestions);
       return questions.map(question => ({ key: question.key, confidence: 0.99, value: question.key.endsWith(sentences[0].id) ? "小樱" : "小林" }));
     }
     if (questions[0].key.startsWith("speaker:")) originalQuestions = structuredClone(questions);
-    return questions.map(question => ({ key: question.key, value: question.key.startsWith("scene_end:") ? sentences[2].id : question.key === `dlg_start:${sentences[0].id}` || question.key === `dlg_end:${sentences[0].id}` ? sentences[0].id : question.key === `dlg_start:${sentences[1].id}` || question.key === `dlg_end:${sentences[1].id}` ? sentences[1].id : question.key.startsWith("speaker:") ? "unknown" : "NONE", confidence: question.key.startsWith("speaker:") ? 0.2 : 0.99 }));
+    return questions.map(question => ({ key: question.key, value: question.key.startsWith("scene_end:") ? sentences[2].id : question.key === `dlg_kind:${sentences[0].id}` || question.key === `dlg_kind:${sentences[1].id}` ? "spoken" : question.key.startsWith("dlg_turn:") ? (question.key.endsWith(sentences[1].id) ? 1 : 0) : question.key.startsWith("speaker:") ? "unknown" : "NONE", confidence: question.key.startsWith("speaker:") ? 0.2 : 0.99 }));
   } };
   const work: WorkModel = { modelId: "work", async generate(request) {
     assert.ok(!request.system.startsWith("FACULTY: dialogue-adjudication"));
@@ -214,5 +215,5 @@ test("dialogue retries keep the same questions and units while using neighboring
   assert.equal(graph.router.metrics["dialogue-attribution"].retryRecovered, 1);
   assert.equal(graph.router.metrics["dialogue-attribution"].escalated, 0);
   assert.equal(graph.router.metrics["scene-boundaries"].retries, 0);
-  assert.equal(graph.router.metrics["dialogue-boundaries"].retries, 0);
+  assert.equal(graph.router.metrics["dialogue-boundaries"], undefined, "sentence kinds are never re-asked one by one");
 });

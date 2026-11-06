@@ -132,6 +132,7 @@ test("work model: generate returns content and reports usage + latency", async (
     promptTokens: 3,
     completionTokens: 1,
     totalTokens: 4,
+    cacheHitTokens: null,
   });
   assert.equal(typeof r.latencyMs, "number");
   assert.equal(r.attempts, 1);
@@ -174,6 +175,7 @@ test("work model: jsonSchema asks for JSON mode; missing usage maps to nulls", a
     promptTokens: null,
     completionTokens: null,
     totalTokens: null,
+    cacheHitTokens: null,
   });
 });
 

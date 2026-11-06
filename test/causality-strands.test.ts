@@ -58,7 +58,7 @@ test("with embedding vectors, pairs of the same person in nearby scenes are kept
 
 test("Jev is told when a pair runs in parallel strands", async () => {
   let state = "";
-  const decisions: DecisionModel = { modelId: "fake", decide: async (snapshot, questions) => { state = snapshot; return questions.map((question) => ({ key: question.key, value: 0.1 })); } };
+  const decisions: DecisionModel = { modelId: "fake", decide: async (snapshot: string, questions) => { state = snapshot; return questions.map((question) => ({ key: question.key, value: 0.1 })); } };
   await checkCausalLinks(decisions, [{ fromId: "e1", toId: "e2", legs: ["shared-actor"], codeScore: 0.5, orderAmbiguous: true, parallel: true }], universe);
   assert.match(state, /parallel strands/);
   assert.match(state, /a message, a call, news, a person arriving/);

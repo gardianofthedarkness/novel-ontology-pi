@@ -1,0 +1,99 @@
+{
+  "about": "Which 3D model draws each building (docs/v2/model-kit.md). One table for the whole world: the fill's buildings, the engine's lots and shells, and named buildings. uses: for each building use, its models with the floors each can stand for ([least, most]); fill: any building of that use; named: preferred for a building the story names (detailed, heavier models). A building takes, of its use's models, those whose floors hold its own (else the nearest), then the ones whose proportions are nearest its own, one of them by a seed. A use with no model is drawn as a plain block. kinds: the use of a fill building with none of its own (a landscape's building kind). roles: the use of an engine lot or shell that has no building model (its role), and of a named building (what it was matched as). ancient: the models of an older world, by kind, '*' for any other; only buildings on ancient ground take them, and no modern use may name one. The library is apps/playground/src/data/architectureModels.json.",
+  "uses": {
+    "house": {
+      "fill": { "suburban-01": [1, 2], "suburban-02": [1, 3], "suburban-03": [1, 3], "suburban-04": [1, 2], "suburban-05": [1, 2], "suburban-06": [1, 3], "suburban-07": [1, 2], "suburban-08": [1, 3], "suburban-09": [1, 2], "suburban-10": [1, 3], "suburban-11": [1, 3], "suburban-12": [1, 3], "suburban-13": [1, 3], "suburban-14": [1, 3], "suburban-15": [2, 3], "suburban-16": [2, 3], "suburban-17": [1, 3], "suburban-18": [1, 3], "suburban-19": [1, 2], "suburban-20": [1, 2], "suburban-21": [2, 3] }
+    },
+    "apartment": {
+      "fill": { "kk-block-a": [2, 4], "kk-block-b": [2, 4], "kk-block-c": [3, 7], "kk-block-d": [3, 7], "kk-apartment": [3, 7], "kk-dormitory": [5, 10], "tower-c": [10, 45], "tower-f": [10, 45], "tower-l": [10, 45] },
+      "named": { "brick-small": [3, 6], "brick-medium": [5, 8], "brick-large": [6, 10] }
+    },
+    "dormitory": {
+      "fill": { "kk-dormitory": [3, 10], "kk-block-d": [3, 7] }
+    },
+    "shop": {
+      "fill": { "block-wide-a": [1, 4], "block-wide-b": [1, 4], "office-c": [2, 6], "kk-block-e": [3, 6], "kk-block-f": [3, 6] },
+      "named": { "brick-small": [3, 6], "brick-medium": [5, 8] }
+    },
+    "convenience": {
+      "fill": { "block-wide-a": [1, 4], "block-wide-b": [1, 4], "kk-block-e": [3, 6] }
+    },
+    "cafe": {
+      "fill": { "block-wide-a": [1, 4], "office-c": [2, 6], "kk-block-f": [3, 6] },
+      "named": { "brick-small": [3, 6] }
+    },
+    "restaurant": {
+      "fill": { "block-wide-b": [1, 4], "office-c": [2, 6], "kk-block-e": [3, 6] },
+      "named": { "brick-small": [3, 6], "brick-medium": [5, 8] }
+    },
+    "bar": {
+      "fill": { "block-wide-a": [1, 4], "office-c": [2, 6], "kk-block-f": [3, 6] },
+      "named": { "brick-small": [3, 6] }
+    },
+    "arcade": { "fill": { "kk-mall": [1, 6] } },
+    "mall": { "fill": { "kk-mall": [1, 8] } },
+    "department": { "fill": { "kk-mall": [1, 8], "office-k": [3, 10] } },
+    "cinema": { "fill": { "kk-mall": [1, 6] } },
+    "bank": { "fill": { "office-k": [2, 10], "office-c": [2, 6] } },
+    "government": { "fill": { "office-k": [2, 10], "office-h": [4, 12] } },
+    "office": {
+      "fill": { "office-c": [3, 8], "office-h": [4, 12], "office-k": [3, 10], "kk-block-e": [3, 6], "tower-a": [10, 45], "tower-b": [10, 45], "tower-d": [10, 45], "tower-e": [10, 45], "tower-g": [10, 45], "tower-h": [10, 45], "tower-i": [10, 45], "tower-j": [10, 45], "tower-k": [10, 40], "tower-m": [10, 45], "skyscraper-a": [25, 80], "skyscraper-b": [35, 150], "skyscraper-e": [35, 150] },
+      "named": { "brick-medium": [5, 8], "brick-large": [6, 10] }
+    },
+    "hotel": {
+      "fill": { "office-h": [4, 12], "kk-block-f": [3, 7], "tower-c": [10, 45], "tower-f": [10, 45] },
+      "named": { "brick-large": [6, 10] }
+    },
+    "school": { "fill": { "kk-school": [1, 6] } },
+    "hospital": { "fill": { "office-k": [2, 12] } },
+    "clinic": { "fill": { "kk-block-b": [2, 4], "office-c": [1, 6] } },
+    "station": { "fill": { "block-wide-b": [1, 4], "office-k": [2, 8] } },
+    "lab": { "fill": { "kk-lab": [1, 4], "kk-quantum": [1, 6] } },
+    "factory": {
+      "fill": { "industrial-a": [1, 4], "industrial-b": [1, 4], "industrial-c": [1, 4], "industrial-d": [1, 5], "industrial-e": [1, 4], "industrial-f": [1, 5], "industrial-g": [1, 4], "industrial-l": [1, 5], "industrial-m": [1, 5], "industrial-n": [1, 5] }
+    },
+    "warehouse": {
+      "fill": { "industrial-h": [1, 3], "industrial-q": [1, 3], "industrial-r": [1, 4], "industrial-s": [1, 3], "industrial-t": [1, 3] }
+    },
+    "workshop": {
+      "fill": { "industrial-i": [1, 2], "industrial-j": [1, 2], "industrial-k": [1, 2], "industrial-o": [1, 3], "industrial-p": [1, 2] }
+    },
+    "church": { "fill": {} },
+    "parking": { "fill": {} },
+    "hall": { "fill": {} },
+    "pavilion": { "fill": {} }
+  },
+  "kinds": {
+    "skyscraper": "office",
+    "tower": "office",
+    "office": "office",
+    "shop": "shop",
+    "mall": "mall",
+    "house": "house",
+    "townhouse": "house",
+    "cottage": "house",
+    "farmhouse": "house",
+    "apartment": "apartment",
+    "warehouse": "warehouse",
+    "station": "station",
+    "factory": "factory",
+    "hall": "hall",
+    "pavilion": "pavilion"
+  },
+  "roles": {
+    "office": "office",
+    "shop": "shop",
+    "station": "station",
+    "hospital": "hospital",
+    "school": "school",
+    "home": "apartment",
+    "mall": "mall",
+    "skyscraper": "office",
+    "market": "shop"
+  },
+  "ancient": {
+    "keep": ["keep"],
+    "fountain": ["fountain"],
+    "*": ["market", "keep", "windmill", "market"]
+  }
+}

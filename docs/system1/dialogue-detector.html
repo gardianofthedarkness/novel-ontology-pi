@@ -29,6 +29,15 @@ TWO when the conversation straddles a scene cut (links recorded alongside the un
 attribution works per window over the exchanges clipped to that window and produces the turns —
 per-sentence decisions survive only there, where they belong. The demo below still illustrates the
 retired classify-then-stitch design.</div>
+<div class="panel" style="border-color:var(--teal)"><b>Back to sentence kinds, 2026-10-30 — with a different stitch.</b>
+The retired design joined a dialogue sentence to the one before only when it "continues the same speaker's turn, no
+narration break", so a narration line or the other person's reply ended the unit: it found turns. Now every sentence is
+spoken, thought, fact, action or narration, with whether the <b>people</b> in the conversation change there
+(<code>dlg_kind</code>, <code>dlg_turn</code>); an exchange stays open through narration and replies, and ends only when the
+people change or after 8 sentences with no one speaking. Thought runs become monologue cards and fact runs the book's facts,
+which start and end questions cannot give. Asked as one structured document per 100 sentences, windows at once. Measured on
+vol 1's first 300 sentences (Jev 1.14): 14 exchanges, median 11 sentences, in 0.25 s and 3 requests; start and end selection
+found 14 exchanges, median 6, in 4.1 s and 37 requests, mostly the same ones.</div>
 
 <table class="io">
   <tr><th>Inputs</th><td>The block's sentences (IDs + text) in overlapping batches; the finished scene partition (for scene links)</td></tr>

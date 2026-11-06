@@ -1,0 +1,1011 @@
+{
+  "about": "The building level's inventory (docs/v2/borrow-and-spawn.md §6; the user, 2026-11-01): there are too many kinds of building in a universe to offer them all, so a building's name and the sentences round it in its scenes are searched against these types, and Jev chooses among the ten nearest, given the scenes. Each type: describe, what it is (what the search and Jev read), saying nothing of its height; words, what the text may call it (Chinese, Japanese, English); use, the coarse use its lot and its model go by (TERRAIN_KINDS.building, config/models.json); or shape, the basic shape it is (a tunnel a cut, a raised deck a platform), placed as a shape at the building level. Its height is the scenes' (the user, 2026-11-01): every building is offered the same slices, from under the street to a hundred floors, from its type's least floors up (heights.json), with any measure its sentences give. A type whose use has no lot where it stands is placed where the characters' travel is least and pushes the buildings round it outward.",
+  "types": {
+    "detached-house": {
+      "use": "house",
+      "describe": "a detached house: one family's home with a yard",
+      "words": [
+        "独栋",
+        "一户建",
+        "一戸建て",
+        "住宅",
+        "民宅",
+        "家",
+        "house",
+        "home"
+      ]
+    },
+    "townhouse": {
+      "use": "house",
+      "describe": "a townhouse or a row house wedged between its neighbours",
+      "words": [
+        "联排",
+        "长屋",
+        "町屋",
+        "townhouse",
+        "row house"
+      ]
+    },
+    "villa": {
+      "use": "house",
+      "describe": "a villa or mansion of the rich, behind a wall and a garden",
+      "words": [
+        "别墅",
+        "豪宅",
+        "宅邸",
+        "公馆",
+        "屋敷",
+        "邸",
+        "villa",
+        "mansion"
+      ]
+    },
+    "apartment-block": {
+      "use": "apartment",
+      "describe": "a block of flats: homes over a lobby",
+      "words": [
+        "公寓",
+        "住宅楼",
+        "アパート",
+        "マンション",
+        "apartment",
+        "flats"
+      ]
+    },
+    "residential-tower": {
+      "use": "apartment",
+      "describe": "a residential tower: a skyscraper of flats over a lobby",
+      "words": [
+        "塔楼公寓",
+        "高层公寓",
+        "高层住宅",
+        "塔楼",
+        "住宅塔楼",
+        "タワーマンション",
+        "tower apartment",
+        "residential tower",
+        "high-rise flats"
+      ]
+    },
+    "public-housing": {
+      "use": "apartment",
+      "describe": "a public housing estate: rows of identical slab blocks",
+      "words": [
+        "团地",
+        "公营住宅",
+        "国宅",
+        "団地",
+        "estate",
+        "public housing"
+      ]
+    },
+    "student-dormitory": {
+      "use": "dormitory",
+      "describe": "a student dormitory or hall of residence of a school",
+      "words": [
+        "学生宿舍",
+        "宿舍",
+        "学生寮",
+        "寮",
+        "dormitory",
+        "dorm"
+      ]
+    },
+    "company-dormitory": {
+      "use": "dormitory",
+      "describe": "a company or workers' dormitory",
+      "words": [
+        "员工宿舍",
+        "社员寮",
+        "宿舍楼",
+        "workers' dormitory"
+      ]
+    },
+    "share-house": {
+      "use": "dormitory",
+      "describe": "a share house or a boarding house of rented rooms",
+      "words": [
+        "合租",
+        "寄宿",
+        "下宿",
+        "シェアハウス",
+        "boarding house"
+      ]
+    },
+    "ramen-shop": {
+      "use": "restaurant",
+      "describe": "a ramen or noodle shop: a counter of bowls, a curtain at the door",
+      "words": [
+        "拉面店",
+        "拉面",
+        "面馆",
+        "ラーメン",
+        "ramen",
+        "noodle"
+      ]
+    },
+    "sushi-restaurant": {
+      "use": "restaurant",
+      "describe": "a sushi restaurant, a conveyor-belt sushi shop",
+      "words": [
+        "寿司",
+        "回转寿司",
+        "回転寿司",
+        "sushi"
+      ]
+    },
+    "family-restaurant": {
+      "use": "restaurant",
+      "describe": "a family restaurant or a diner with booths and a drinks bar",
+      "words": [
+        "家庭餐厅",
+        "餐厅",
+        "餐馆",
+        "ファミレス",
+        "restaurant",
+        "diner"
+      ]
+    },
+    "fast-food": {
+      "use": "restaurant",
+      "describe": "a fast-food shop: burgers, fried chicken, a counter and a few tables",
+      "words": [
+        "快餐",
+        "汉堡",
+        "炸鸡",
+        "ファストフード",
+        "burger",
+        "fast food"
+      ]
+    },
+    "izakaya": {
+      "use": "bar",
+      "describe": "an izakaya: a pub of small dishes and drink, lanterns at its door",
+      "words": [
+        "居酒屋",
+        "酒馆",
+        "izakaya",
+        "pub"
+      ]
+    },
+    "bar": {
+      "use": "bar",
+      "describe": "a bar, a dart bar or a lounge, its sign lit at night",
+      "words": [
+        "酒吧",
+        "飞镖",
+        "バー",
+        "bar",
+        "lounge"
+      ]
+    },
+    "karaoke": {
+      "use": "bar",
+      "describe": "a karaoke box: private singing rooms",
+      "words": [
+        "卡拉OK",
+        "KTV",
+        "カラオケ",
+        "karaoke"
+      ]
+    },
+    "cafe": {
+      "use": "cafe",
+      "describe": "a café or a coffee shop",
+      "words": [
+        "咖啡",
+        "咖啡店",
+        "咖啡厅",
+        "喫茶",
+        "カフェ",
+        "cafe",
+        "coffee"
+      ]
+    },
+    "patisserie": {
+      "use": "shop",
+      "describe": "a cake shop, a patisserie or a Western sweets shop",
+      "words": [
+        "蛋糕店",
+        "西点",
+        "西洋点心",
+        "甜点",
+        "ケーキ",
+        "patisserie",
+        "cake"
+      ]
+    },
+    "bakery": {
+      "use": "shop",
+      "describe": "a bakery",
+      "words": [
+        "面包店",
+        "面包",
+        "パン屋",
+        "bakery"
+      ]
+    },
+    "donut-shop": {
+      "use": "shop",
+      "describe": "a donut shop or a crepe stand",
+      "words": [
+        "甜甜圈",
+        "可丽饼",
+        "ドーナツ",
+        "クレープ",
+        "donut",
+        "crepe"
+      ]
+    },
+    "convenience-store": {
+      "use": "convenience",
+      "describe": "a convenience store, open all night",
+      "words": [
+        "便利店",
+        "便利商店",
+        "超商",
+        "コンビニ",
+        "convenience"
+      ]
+    },
+    "supermarket": {
+      "use": "convenience",
+      "describe": "a supermarket or a grocer",
+      "words": [
+        "超市",
+        "超级市场",
+        "菜市场",
+        "スーパー",
+        "supermarket",
+        "grocery"
+      ]
+    },
+    "drugstore": {
+      "use": "shop",
+      "describe": "a drugstore or a pharmacy",
+      "words": [
+        "药店",
+        "药妆",
+        "药局",
+        "薬局",
+        "ドラッグストア",
+        "pharmacy",
+        "drugstore"
+      ]
+    },
+    "bookstore": {
+      "use": "shop",
+      "describe": "a bookstore",
+      "words": [
+        "书店",
+        "书局",
+        "本屋",
+        "書店",
+        "bookstore"
+      ]
+    },
+    "clothing-store": {
+      "use": "shop",
+      "describe": "a clothing boutique or a fashion store",
+      "words": [
+        "服装店",
+        "服饰",
+        "时装",
+        "ブティック",
+        "boutique",
+        "clothing"
+      ]
+    },
+    "electronics-store": {
+      "use": "department",
+      "describe": "an electronics store: appliances, phones and games",
+      "words": [
+        "电器",
+        "家电",
+        "电子",
+        "家電量販店",
+        "electronics"
+      ]
+    },
+    "game-shop": {
+      "use": "shop",
+      "describe": "a game or a toy shop, a hobby or a comic store",
+      "words": [
+        "游戏店",
+        "玩具店",
+        "模型店",
+        "漫画",
+        "ホビー",
+        "toy",
+        "game shop"
+      ]
+    },
+    "florist": {
+      "use": "shop",
+      "describe": "a florist",
+      "words": [
+        "花店",
+        "花屋",
+        "florist"
+      ]
+    },
+    "general-shop": {
+      "use": "shop",
+      "describe": "a shop of some trade on the street front",
+      "words": [
+        "商店",
+        "店铺",
+        "小店",
+        "店",
+        "shop",
+        "store"
+      ]
+    },
+    "car-dealer": {
+      "use": "workshop",
+      "describe": "a car dealer or a used-car lot, a showroom and a yard of cars",
+      "words": [
+        "汽车经销商",
+        "二手车",
+        "车行",
+        "经销商",
+        "中古車",
+        "car dealer"
+      ]
+    },
+    "garage": {
+      "use": "workshop",
+      "describe": "a repair garage or a workshop",
+      "words": [
+        "修理厂",
+        "汽修",
+        "车库",
+        "工作室",
+        "整備工場",
+        "garage",
+        "workshop"
+      ]
+    },
+    "gas-station": {
+      "use": "workshop",
+      "describe": "a petrol station under its canopy",
+      "words": [
+        "加油站",
+        "ガソリンスタンド",
+        "gas station",
+        "petrol"
+      ]
+    },
+    "shopping-mall": {
+      "use": "mall",
+      "describe": "a shopping centre: many shops under one roof, an atrium",
+      "words": [
+        "购物中心",
+        "商场",
+        "商城",
+        "ショッピングモール",
+        "mall",
+        "shopping centre"
+      ]
+    },
+    "department-store": {
+      "use": "department",
+      "describe": "a department store",
+      "words": [
+        "百货",
+        "百货公司",
+        "百货商店",
+        "デパート",
+        "百貨店",
+        "department store"
+      ]
+    },
+    "shopping-arcade": {
+      "use": "arcade",
+      "describe": "a covered shopping arcade of shops",
+      "words": [
+        "商店街",
+        "拱廊",
+        "アーケード",
+        "arcade street"
+      ]
+    },
+    "game-center": {
+      "use": "arcade",
+      "describe": "a game centre or an amusement arcade of machines",
+      "words": [
+        "游戏中心",
+        "电玩",
+        "游乐场",
+        "ゲームセンター",
+        "ゲーセン",
+        "game center",
+        "arcade"
+      ]
+    },
+    "pachinko": {
+      "use": "arcade",
+      "describe": "a pachinko parlour, loud and bright",
+      "words": [
+        "柏青哥",
+        "弹珠",
+        "パチンコ",
+        "pachinko"
+      ]
+    },
+    "cinema": {
+      "use": "cinema",
+      "describe": "a cinema or a multiplex",
+      "words": [
+        "电影院",
+        "影院",
+        "映画館",
+        "cinema",
+        "movie"
+      ]
+    },
+    "theatre": {
+      "use": "cinema",
+      "describe": "a theatre or a concert hall",
+      "words": [
+        "剧场",
+        "剧院",
+        "音乐厅",
+        "劇場",
+        "theatre",
+        "concert hall"
+      ]
+    },
+    "bowling": {
+      "use": "arcade",
+      "describe": "a bowling alley or a sports amusement centre",
+      "words": [
+        "保龄球",
+        "ボウリング",
+        "bowling"
+      ]
+    },
+    "museum": {
+      "use": "government",
+      "describe": "a museum or an art gallery",
+      "words": [
+        "博物馆",
+        "美术馆",
+        "展览馆",
+        "博物館",
+        "美術館",
+        "museum",
+        "gallery"
+      ]
+    },
+    "library": {
+      "use": "government",
+      "describe": "a library, public or of a school",
+      "words": [
+        "图书馆",
+        "書館",
+        "图书",
+        "library"
+      ]
+    },
+    "office-building": {
+      "use": "office",
+      "describe": "an office building: offices over a lobby",
+      "words": [
+        "办公楼",
+        "写字楼",
+        "大楼",
+        "办公室",
+        "オフィス",
+        "office",
+        "大厦"
+      ]
+    },
+    "office-tower": {
+      "use": "office",
+      "describe": "an office tower: a skyscraper of offices over a lobby",
+      "words": [
+        "高层大楼",
+        "高层大厦",
+        "高层建筑",
+        "高楼",
+        "摩天楼",
+        "摩天大楼",
+        "摩天",
+        "超高层",
+        "高層ビル",
+        "超高層ビル",
+        "skyscraper",
+        "tower",
+        "high-rise"
+      ]
+    },
+    "mixed-use-building": {
+      "use": "office",
+      "describe": "a mixed-use building: shops below, offices or flats above",
+      "words": [
+        "复合大楼",
+        "复合式",
+        "混合大厦",
+        "综合大楼",
+        "雑居ビル",
+        "mixed-use"
+      ]
+    },
+    "company-headquarters": {
+      "use": "office",
+      "describe": "a company's headquarters",
+      "words": [
+        "总部",
+        "总公司",
+        "本社",
+        "headquarters"
+      ]
+    },
+    "real-estate-office": {
+      "use": "office",
+      "describe": "a real-estate firm's office building",
+      "words": [
+        "不动产",
+        "地产",
+        "房产",
+        "不動産",
+        "real estate"
+      ]
+    },
+    "bank": {
+      "use": "bank",
+      "describe": "a bank",
+      "words": [
+        "银行",
+        "銀行",
+        "bank"
+      ]
+    },
+    "hotel": {
+      "use": "hotel",
+      "describe": "a hotel",
+      "words": [
+        "酒店",
+        "宾馆",
+        "饭店",
+        "旅馆",
+        "ホテル",
+        "hotel"
+      ]
+    },
+    "capsule-hotel": {
+      "use": "hotel",
+      "describe": "a capsule or a business hotel",
+      "words": [
+        "胶囊旅馆",
+        "商务酒店",
+        "カプセルホテル",
+        "capsule hotel"
+      ]
+    },
+    "ryokan": {
+      "use": "hotel",
+      "describe": "a ryokan, a traditional inn",
+      "words": [
+        "旅馆",
+        "旅館",
+        "ryokan",
+        "inn"
+      ]
+    },
+    "city-hall": {
+      "use": "government",
+      "describe": "a city hall or an administration building",
+      "words": [
+        "市政厅",
+        "政府",
+        "行政大楼",
+        "区役所",
+        "市役所",
+        "city hall",
+        "administration"
+      ]
+    },
+    "police-station": {
+      "use": "government",
+      "describe": "a police station, or a police box at a corner",
+      "words": [
+        "警察局",
+        "警署",
+        "派出所",
+        "交番",
+        "警察",
+        "警备员",
+        "警備員",
+        "police"
+      ]
+    },
+    "prosecutors-office": {
+      "use": "government",
+      "describe": "a prosecutors' office or a court",
+      "words": [
+        "检察厅",
+        "检察院",
+        "法院",
+        "法庭",
+        "裁判所",
+        "court",
+        "prosecutor"
+      ]
+    },
+    "detention-centre": {
+      "use": "government",
+      "describe": "a detention centre or a prison, walls round it",
+      "words": [
+        "看守所",
+        "拘留所",
+        "监狱",
+        "刑务所",
+        "審問",
+        "审讯",
+        "prison",
+        "detention"
+      ]
+    },
+    "fire-station": {
+      "use": "government",
+      "describe": "a fire station with its engine bays",
+      "words": [
+        "消防局",
+        "消防署",
+        "消防",
+        "fire station"
+      ]
+    },
+    "post-office": {
+      "use": "government",
+      "describe": "a post office",
+      "words": [
+        "邮局",
+        "郵便局",
+        "post office"
+      ]
+    },
+    "embassy": {
+      "use": "government",
+      "describe": "an embassy or a consulate",
+      "words": [
+        "大使馆",
+        "领事馆",
+        "大使館",
+        "embassy"
+      ]
+    },
+    "research-institute": {
+      "use": "lab",
+      "describe": "a research institute or a science facility",
+      "words": [
+        "研究所",
+        "研究机构",
+        "研究设施",
+        "实验",
+        "研究",
+        "institute",
+        "research"
+      ]
+    },
+    "laboratory": {
+      "use": "lab",
+      "describe": "a laboratory: clean rooms, sealed doors, equipment",
+      "words": [
+        "实验室",
+        "研究室",
+        "ラボ",
+        "laboratory",
+        "lab"
+      ]
+    },
+    "windowless-building": {
+      "use": "lab",
+      "describe": "a sealed building with no windows or doors, its purpose hidden",
+      "words": [
+        "没有窗户",
+        "无窗",
+        "窓のないビル",
+        "windowless"
+      ]
+    },
+    "data-centre": {
+      "use": "lab",
+      "describe": "a data centre or a computing facility",
+      "words": [
+        "数据中心",
+        "计算机",
+        "服务器",
+        "データセンター",
+        "data center",
+        "supercomputer"
+      ]
+    },
+    "hospital": {
+      "use": "hospital",
+      "describe": "a hospital",
+      "words": [
+        "医院",
+        "医疗机构",
+        "病院",
+        "hospital"
+      ]
+    },
+    "clinic": {
+      "use": "clinic",
+      "describe": "a clinic or an infirmary",
+      "words": [
+        "诊所",
+        "医务室",
+        "医疗",
+        "クリニック",
+        "保健室",
+        "clinic",
+        "infirmary"
+      ]
+    },
+    "school": {
+      "use": "school",
+      "describe": "a school: classrooms round a yard, a gym",
+      "words": [
+        "学校",
+        "中学",
+        "高中",
+        "小学",
+        "学园",
+        "学院",
+        "高校",
+        "school"
+      ]
+    },
+    "girls-academy": {
+      "use": "school",
+      "describe": "an elite academy, a girls' school of fine buildings",
+      "words": [
+        "女子学院",
+        "名门",
+        "女校",
+        "お嬢様",
+        "academy"
+      ]
+    },
+    "university": {
+      "use": "school",
+      "describe": "a university building or a campus",
+      "words": [
+        "大学",
+        "校园",
+        "キャンパス",
+        "university",
+        "campus"
+      ]
+    },
+    "cram-school": {
+      "use": "school",
+      "describe": "a cram school in an office building",
+      "words": [
+        "补习班",
+        "补习",
+        "塾",
+        "予備校",
+        "cram school"
+      ]
+    },
+    "kindergarten": {
+      "use": "school",
+      "describe": "a kindergarten or a nursery",
+      "words": [
+        "幼儿园",
+        "幼稚园",
+        "保育园",
+        "幼稚園",
+        "kindergarten"
+      ]
+    },
+    "gym": {
+      "use": "mall",
+      "describe": "a gymnasium or a sports centre, one great hall",
+      "words": [
+        "体育馆",
+        "体育中心",
+        "健身房",
+        "体育館",
+        "gymnasium",
+        "sports centre"
+      ]
+    },
+    "church": {
+      "use": "church",
+      "describe": "a church or a chapel",
+      "words": [
+        "教会",
+        "教堂",
+        "礼拜堂",
+        "教会堂",
+        "church",
+        "chapel"
+      ]
+    },
+    "shrine": {
+      "use": "church",
+      "describe": "a Shinto shrine behind its gate",
+      "words": [
+        "神社",
+        "鸟居",
+        "鳥居",
+        "shrine"
+      ]
+    },
+    "temple": {
+      "use": "church",
+      "describe": "a Buddhist temple",
+      "words": [
+        "寺",
+        "寺庙",
+        "寺院",
+        "お寺",
+        "temple"
+      ]
+    },
+    "train-station": {
+      "use": "station",
+      "describe": "a train station: its hall, gates and platforms",
+      "words": [
+        "车站",
+        "火车站",
+        "电车",
+        "駅",
+        "station"
+      ]
+    },
+    "subway-station": {
+      "use": "station",
+      "describe": "a subway station's entrance building",
+      "words": [
+        "地铁站",
+        "地铁",
+        "地下鉄",
+        "subway",
+        "metro"
+      ]
+    },
+    "bus-terminal": {
+      "use": "station",
+      "describe": "a bus terminal or a monorail station",
+      "words": [
+        "巴士",
+        "公交",
+        "单轨",
+        "バスターミナル",
+        "モノレール",
+        "bus terminal",
+        "monorail"
+      ]
+    },
+    "parking-garage": {
+      "use": "parking",
+      "describe": "a car park building",
+      "words": [
+        "停车场",
+        "停车楼",
+        "立体停车",
+        "駐車場",
+        "parking"
+      ]
+    },
+    "factory": {
+      "use": "factory",
+      "describe": "a factory or a plant, its chimneys and tanks",
+      "words": [
+        "工厂",
+        "工場",
+        "制造",
+        "plant",
+        "factory"
+      ]
+    },
+    "power-plant": {
+      "use": "factory",
+      "describe": "a power plant or a substation",
+      "words": [
+        "发电厂",
+        "发电站",
+        "变电所",
+        "発電所",
+        "power plant"
+      ]
+    },
+    "warehouse": {
+      "use": "warehouse",
+      "describe": "a warehouse or a depot",
+      "words": [
+        "仓库",
+        "倉庫",
+        "物流",
+        "warehouse",
+        "depot"
+      ]
+    },
+    "construction-site": {
+      "use": "warehouse",
+      "describe": "a construction site: a frame of scaffolding, cranes",
+      "words": [
+        "工地",
+        "施工",
+        "建设中",
+        "工事現場",
+        "construction"
+      ]
+    },
+    "ruins": {
+      "use": "warehouse",
+      "describe": "a ruin or an abandoned building",
+      "words": [
+        "废墟",
+        "遗迹",
+        "废弃",
+        "廃墟",
+        "ruins",
+        "abandoned"
+      ]
+    },
+    "bridge-building": {
+      "use": "office",
+      "describe": "a building spanning a road or a river, a skywalk",
+      "words": [
+        "天桥",
+        "连廊",
+        "空中走廊",
+        "skywalk",
+        "bridge building"
+      ]
+    },
+    "tunnel": {
+      "shape": "cut",
+      "describe": "a tunnel or an underground passage, a way under the street",
+      "words": [
+        "隧道",
+        "地下通道",
+        "地道",
+        "通道",
+        "トンネル",
+        "地下道",
+        "tunnel",
+        "underpass"
+      ]
+    },
+    "underground-structure": {
+      "shape": "cut",
+      "describe": "a cavern or an underground structure, a space dug under the ground",
+      "words": [
+        "地下构造",
+        "地下设施",
+        "地下空间",
+        "地下室",
+        "洞窟",
+        "洞穴",
+        "地下",
+        "cavern",
+        "underground"
+      ]
+    },
+    "raised-deck": {
+      "shape": "platform",
+      "describe": "a deck or a platform held up above the ground: a helipad, a sky garden, a runway",
+      "words": [
+        "平台",
+        "停机坪",
+        "空中庭院",
+        "跑道",
+        "天台",
+        "露台",
+        "甲板",
+        "helipad",
+        "platform",
+        "deck"
+      ]
+    }
+  }
+}

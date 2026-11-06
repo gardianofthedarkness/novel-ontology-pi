@@ -41,6 +41,12 @@ flowchart TD
   After -->|clearly two people| Distinct[Remembered, not asked again]
 ```
 
+## Named buildings and things
+
+The same two systems cover the buildings and large things a book names (`novel stage objects`). At birth, each new name is checked against this book's records of its kind (any Item; any Location for a building, since a named building may already be a place) and the universe's list of things, plus the run's other new names: a full proper name owned by one candidate binds by code; any other name gets one Jev choice (`NEW_THING` for a new one), with the same thresholds. Bare kind words ("大楼", "卡车") never bind by themselves. A likely match below the bind threshold is kept new and shown to the reviewer (`possiblySame`).
+
+The universe's list of things lives beside the character list (`<library>/cast/<universe>.things.json`; `<book>/cast/book.things.json` standalone, `src/solidifier/identity/things.ts`). When a stage-objects packet applies, each reviewed record joins it: one bound at birth to a universe thing (`universalId`) as its member, any other as a new thing. The after-apply pair check (um_ packets) is for characters only so far.
+
 ## The shared character list
 
 `src/solidifier/identity/cast.ts`. One list per universe, in the library

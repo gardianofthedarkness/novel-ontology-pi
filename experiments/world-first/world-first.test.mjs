@@ -1,0 +1,188 @@
+import { test } from 'node:test';
+import assert from 'node:assert/strict';
+import { allowedTimes, createWorld, enter } from './world.mjs';
+import { compose } from './compose.mjs';
+
+test('nobody vanishes: someone of the scene before who is not mentioned in a scene that carries straight on in the same place is still there', () => {
+  const world = createWorld();
+  enter(world, { id: 's1', place: 'P', relation: 'after', present: ['x', 'y'] });
+  const next = enter(world, { id: 's2', place: 'P', relation: 'after', present: ['x'] });
+  assert.deepEqual(next.stayed, ['y']);
+  assert.equal(world.people.y.place, 'P');
+  assert.ok(world.people.y.log.at(-1).unseen);
+  // And a fragment (no one detected at all) keeps everyone.
+  assert.deepEqual(enter(world, { id: 's3', place: 'P', relation: 'after', present: [], fragment: true }).stayed.sort(), ['x', 'y']);
+});
+
+test('nobody is in two places at once: a scene sharing someone with the scene before, elsewhere, cannot be at the same time; one without can', () => {
+  const world = createWorld();
+  enter(world, { id: 's1', place: 'P', relation: 'after', present: ['x'] });
+  assert.ok(!allowedTimes(world, ['x', 'z'], 'Q').includes('same'));
+  assert.deepEqual(allowedTimes(world, ['z'], 'Q'), ['after', 'later', 'same', 'flashback']);
+  enter(world, { id: 's2', place: 'Q', relation: 'same', present: ['z'] });
+  // A third scene at that same time again cannot have x (at P then) nor z (at Q then) somewhere else.
+  enter(world, { id: 's2b', place: 'Q', relation: 'after', present: ['z'] });
+  assert.equal(world.scenes[1].clock.join(), world.scenes[0].clock.join());
+});
+
+test('people who come from elsewhere travelled between the two scenes; a flashback logs the past and moves nobody', () => {
+  const world = createWorld();
+  enter(world, { id: 's1', place: 'P', relation: 'after', present: ['x'] });
+  const later = enter(world, { id: 's2', place: 'Q', relation: 'later', present: ['x'] });
+  assert.deepEqual(later.travelled, [{ person: 'x', from: 'P', to: 'Q', after: 's1' }]);
+  enter(world, { id: 's3', place: 'R', relation: 'flashback', present: ['x'] });
+  assert.equal(world.people.x.place, 'Q');
+  assert.ok(world.people.x.log.at(-1).past);
+});
+
+test('context composition keeps the shape and the budget: the oldest story goes first, then a long scene loses its middle, never its start or the question', () => {
+  const story = Array.from({ length: 8 }, (_, n) => `scene ${n + 1}: ${'事'.repeat(200)}`), text = `开头${'中'.repeat(6000)}结尾`;
+  const context = compose({ world: ['上条当麻 — at 学园都市'], story, text, focus: 'Who is in this scene?', budget: 3000 });
+  assert.ok(context.length <= 3000 + 40, `${context.length}`);
+  assert.ok(context.includes('上条当麻 — at 学园都市') && context.includes('Who is in this scene?'));
+  assert.ok(context.includes('开头') && context.includes('结尾') && context.includes('[…]'));
+  assert.ok(!context.includes('scene 1:') && context.includes('scene 8:'), 'the newest story stays');
+  assert.ok(compose({ text: 'short', focus: 'q' }).includes('this is the first scene'));
+});
+
+test('the book facts go into the context, oldest cut first, after the oldest story', () => {
+  const facts = Array.from({ length: 6 }, (_, n) => `fact ${n + 1}: ${'知'.repeat(150)}`), story = Array.from({ length: 4 }, (_, n) => `scene ${n + 1}: ${'事'.repeat(150)}`);
+  const roomy = compose({ facts, story, text: '场景', focus: 'q' });
+  assert.ok(roomy.includes('What the book has told of the world:\n- fact 1:') && roomy.indexOf('fact 6') < roomy.indexOf('The story so far'));
+  const tight = compose({ facts, story, text: '场景', focus: 'q', budget: 1200 });
+  assert.ok(!tight.includes('scene 1:') && tight.includes('scene 4:'), 'the story goes first, down to two scenes');
+  assert.ok(!tight.includes('fact 1:') && tight.includes('fact 6:'), 'then the oldest facts');
+  assert.ok(!compose({ text: 'x', focus: 'q' }).includes('told of the world'), 'no facts, no section');
+});
+
+test('after a flashback the story stays in the past until a scene goes back to the main time, which picks up after the last scene before it', () => {
+  const world = createWorld();
+  enter(world, { id: 's1', place: 'P', relation: 'after', present: ['x'] });
+  enter(world, { id: 's2', place: 'Q', relation: 'flashback', present: ['x'] });
+  assert.deepEqual(allowedTimes(world, ['x'], 'Q'), ['after', 'later', 'back']);
+  assert.equal(enter(world, { id: 's3', place: 'Q', relation: 'after', present: ['x'] }).clock, null, 'still the past');
+  assert.equal(world.people.x.place, 'P');
+  const back = enter(world, { id: 's4', place: 'P', relation: 'back', present: ['x'] });
+  assert.deepEqual(back.clock, [1, 2]);
+});
+
+test('a dialogue node: live parties join the scene unless they are elsewhere then; a remote party in the scene is a conflict; public listeners are everyone there', async () => {
+  const { settle } = await import('./dialogue.mjs');
+  const away = id => id === 'far';
+  const live = settle({ kind: 'live', parties: ['x', 'y'], inScene: ['x'], elsewhere: away });
+  assert.deepEqual([live.joins, live.conflicts, live.geometry], [['y'], [], 'meeting']);
+  assert.deepEqual(settle({ kind: 'live', parties: ['x', 'far'], inScene: ['x'], elsewhere: away }).conflicts, ['far is elsewhere at this time']);
+  const phone = settle({ kind: 'remote', parties: ['x', 'y'], local: 'x', inScene: ['x', 'y'], elsewhere: away });
+  assert.equal(phone.remote, 'y');
+  assert.equal(phone.conflicts.length, 1);
+  const shout = settle({ kind: 'public', parties: ['x', null], inScene: ['x', 'y', 'z'], elsewhere: away });
+  assert.deepEqual([shout.public, shout.listeners], [true, ['y', 'z']]);
+  assert.equal(settle({ kind: 'group', parties: ['x', 'y'], inScene: ['x', 'y', 'z'], elsewhere: away }).geometry, 'box');
+});
+
+test('the laws on actors, things and knowledge', async () => {
+  const { actors, things, knowledge } = await import('./laws.mjs');
+  const found = actors({ events: [{ id: 'e1', actors: ['a', 'b', 'c'] }], inScene: ['a'], chance: id => ({ b: 0.4, c: 0.1 })[id], elsewhere: () => false });
+  assert.deepEqual([found.add, found.flags.map(flag => flag.person)], [['b'], ['c']]);
+  const held = things([{ person: 'a', after: 'e1', holds: ['key'], drops: [] }, { person: 'b', after: 'e2', holds: ['key'], drops: [] }], new Map([['e1', 1], ['e2', 2]]));
+  assert.equal(held.flags.length, 1);
+  const learned = knowledge([{ person: 'a', after: 'e1', learns: ['the plan'] }, { person: 'z', after: 'e1', learns: ['the plan'] }], new Map([['e1', 's1']]), () => new Set(['a']));
+  assert.deepEqual(learned.map(flag => flag.person), ['z']);
+});
+
+test('someone a dialogue shows was there joins the scene, and a person elsewhere at that time does not', async () => {
+  const { join } = await import('./world.mjs');
+  const world = createWorld();
+  enter(world, { id: 's1', place: 'P', relation: 'after', present: ['x'] });
+  const same = enter(world, { id: 's2', place: 'Q', relation: 'same', present: ['y'] });
+  assert.equal(join(world, same, 'x', 'dialogue'), false, 'x is at P at this time');
+  assert.equal(join(world, same, 'z', 'dialogue'), true);
+  assert.equal(world.people.z.place, 'Q');
+});
+
+test('lineage: what led up to an event, from the world alone; EM from world evidence merges only when one person would not be in two places at once', async () => {
+  const { lineage, sameness } = await import('./solidify.mjs');
+  const script = { names: { a: '御坂美琴', b: '美琴', c: '上条当麻', d: '御坂妹' }, scenes: [
+    { id: 's1', place: 'P', clock: [0, 1], present: ['a', 'c'], stayed: [], timeline: [{ type: 'event', id: 'e1', actors: ['a'] }, { type: 'dialogue', id: 'd1', kind: 'live', parties: ['a', 'c'], listeners: [] }] },
+    { id: 's2', place: 'Q', clock: [1, 2], present: ['b', 'c'], stayed: [], timeline: [{ type: 'event', id: 'e2', actors: ['c'] }] },
+    { id: 's3', place: 'R', clock: [1, 2], present: ['d'], stayed: [], timeline: [] },
+  ] };
+  const led = lineage(script, 'e2');
+  assert.deepEqual(led.map(item => item.id), ['d1'], 'the dialogue c took part in leads to e2; e1 shares nobody and was elsewhere');
+  const pairs = sameness(script, script.names);
+  const ab = pairs.find(pair => pair.names.includes('美琴') && pair.names.includes('御坂美琴'));
+  assert.ok(ab && !ab.conflict, 'never together, names overlap, a companion shared, no clash');
+  assert.ok(!pairs.some(pair => pair.names.includes('御坂妹')), 'no shared companion');
+});
+
+test('a flashback opens only where the text looks back, and a chapter opens in the main time', async () => {
+  const { BACKWARD } = await import('./world.mjs');
+  const world = createWorld();
+  enter(world, { id: 's1', chapter: 0, place: 'P', relation: 'after', present: ['x'] });
+  assert.ok(!allowedTimes(world, ['y'], 'Q', { opening: '第二章变化的学园都市，前夜' }).includes('flashback'));
+  assert.ok(allowedTimes(world, ['y'], 'Q', { opening: '事情要追溯到之前上条出门的时候' }).includes('flashback'));
+  enter(world, { id: 's2', chapter: 0, place: 'Q', relation: 'flashback', present: ['y'] });
+  assert.deepEqual(allowedTimes(world, ['y'], 'Q', { opening: '' }), ['after', 'later', 'back']);
+  assert.ok(allowedTimes(world, ['z'], 'R', { opening: '', chapterStart: true }).includes('same'), 'a new chapter is in the main time');
+  assert.ok(enter(world, { id: 's3', chapter: 1, place: 'R', relation: 'after', present: ['z'], chapterStart: true }).clock, 'not the past');
+  assert.ok(BACKWARD.test('三年前的那天'));
+});
+
+test('identity: matches chain into one person kept under a proper name; a pair the world has apart at once stays two', async () => {
+  const { planMerges, DESCRIPTIVE } = await import('./identity.mjs');
+  const names = { a: '上条当麻', b: '刺猬头少年', c: '猪头少年', d: '茵蒂克丝', e: '白衣修女' };
+  const { merges } = planMerges([{ a: 'b', b: 'a', why: 'x' }, { a: 'c', b: 'b', why: 'y' }], names);
+  assert.deepEqual(merges.map(merge => [merge.drop, merge.keep]).sort(), [['b', 'a'], ['c', 'a']]);
+  const script = { scenes: [{ place: 'P', clock: [0, 1], present: ['d'], stayed: [] }, { place: 'Q', clock: [0, 1], present: ['e'], stayed: [] }] };
+  const apart = planMerges([{ a: 'e', b: 'd', why: 'z' }], names, script);
+  assert.deepEqual([apart.merges.length, apart.apart.length], [0, 1]);
+  assert.ok(DESCRIPTIVE.test('学园都市第一名') && DESCRIPTIVE.test('白色的怪物') && !DESCRIPTIVE.test('一方通行'));
+});
+
+test('identity: an epithet tied to several named people is never merged, and two named people never become one through epithets', async () => {
+  const { planMerges } = await import('./identity.mjs');
+  const names = { m: '那个男人', a: '一方通行', b: '上条当麻', g: '门卫', t: '统括理事长', x: '最后之作', y: '司令塔' };
+  const scenes = [{ a: 'm', b: 'g' }, { a: 'm', b: 'b' }, { a: 'm', b: 'a' }, { a: 't', b: 'a' }].map(pair => ({ ...pair, why: 'scene' }));
+  const plan = planMerges([...scenes, { a: 'y', b: 'x', why: 'birth', direct: true }], names);
+  assert.deepEqual(plan.merges.map(merge => [merge.drop, merge.keep].sort().join('')).sort(), ['at', 'xy'], 'only the unambiguous epithet, and the direct match of two names');
+  assert.ok(plan.merges.some(merge => merge.drop === 't' && merge.keep === 'a'), 'kept under the name');
+  assert.ok(plan.apart.some(pair => pair.apart === 'an epithet for more than one person'));
+  const chain = planMerges([{ a: 't', b: 'a', why: 's' }, { a: 't', b: 'g', why: 's' }], names);
+  assert.equal(chain.merges.length, 0, 'an epithet tied to two people is ambiguous: neither merges');
+});
+
+test('the review pool: a scene\'s unsure presence, dialogue conflicts and missing actors become items (the same question one item); answers become pins', async () => {
+  const { flagsOf, pinsFrom, identityFlag } = await import('./pool.mjs');
+  const name = id => ({ a: '上条当麻', b: '茵蒂克丝', c: '御坂美琴' })[id] ?? id;
+  const items = flagsOf({ scene: 's1', number: 1, placeLabel: 'P', summary: '...', name, unsure: [{ id: 'a', p: 0.4 }], dialogues: [{ id: 'd1', kind: 'remote', parties: ['a', 'b'], conflicts: ['b, on the other end, is in the scene'] }], actorFlags: [{ event: 'e1', person: 'c', law: 'actor not in the scene' }] });
+  assert.deepEqual(items.map(item => item.kind), ['presence', 'dialogue', 'actor']);
+  assert.ok(items.every(item => /^wi_[a-f0-9]{16}$/.test(item.id)));
+  assert.equal(flagsOf({ scene: 's1', number: 1, placeLabel: 'P', summary: '...', name, unsure: [{ id: 'a', p: 0.45 }], dialogues: [], actorFlags: [] })[0].id, items[0].id, 'one question, one item');
+  const identity = identityFlag({ a: 'b', b: 'a', name, why: 'x' });
+  assert.equal(identity.id, identityFlag({ a: 'a', b: 'b', name, why: 'y' }).id);
+  const pins = pinsFrom({ present: {}, same: [], different: [], kind: {} }, [
+    { answer: { verdict: 'not present' }, item: items[0] }, { answer: { verdict: 'live' }, item: items[1] }, { answer: { verdict: 'different' }, item: identity },
+  ]);
+  assert.deepEqual(pins, { present: { 's1|a': false }, same: [], different: [['a', 'b']], kind: { d1: 'live' } });
+  // A landscape answer is the ground of its place, pinned for the stage.
+  assert.deepEqual(pinsFrom({ present: {}, same: [], different: [], kind: {} }, [{ answer: { verdict: 'park' }, item: { kind: 'landscape', subjects: ['loc_000003'] } }]).landscape, { loc_000003: 'park' });
+});
+
+test('building EM: answers join scene spots, named places and names into one building each; a name of its own is one building for the book', async () => {
+  const { identitiesOf } = await import('./buildings.mjs');
+  const labels = { loc_bar: '飞镖酒吧', 'spot:s24': 'a building (scene 24)', 'spot:s30': 'a building in 学园都市 (scene 30)' };
+  const identities = identitiesOf([
+    { scene: 's24', place: 'spot:s24', name: '飞镖酒吧', to: 'here' },
+    { scene: 's25', place: 'spot:s25', name: '飞镖酒吧', to: 'loc_bar' },
+    { scene: 's27', place: 'spot:s27', name: '现代建筑', to: 'loc_bar' },
+    { scene: 's31', place: 'spot:s30', name: '隧道', to: 'subway' },
+    { scene: 's33', place: 'spot:s33', name: '电影院', to: 'own' },
+    { scene: 's35', place: 'spot:s35', name: '电影院', to: 'name:电影院' },
+  ], labels);
+  const bar = identities.find(identity => identity.places.includes('loc_bar'));
+  assert.deepEqual(bar.places.sort(), ['loc_bar', 'spot:s24']);
+  assert.deepEqual(bar.names.sort(), ['现代建筑', '飞镖酒吧']);
+  assert.equal(bar.label, '飞镖酒吧');
+  assert.deepEqual(identities.find(identity => identity.names.includes('电影院')).places, []);
+  assert.ok(!identities.some(identity => identity.names.includes('隧道')), 'the subway is not a building');
+});

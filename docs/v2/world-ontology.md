@@ -1,0 +1,706 @@
+# Stage 3: the world and the ontology, one loop (2026-11-02)
+
+**Status:** plan (Track B of [next-steps.md](next-steps.md)), not built. Written after the first full director run of volume 1 (run `d20261102081221`).
+
+The user, on what v2 missed:
+
+> We need to completely redesign how the world engine's runtime interacts with the ontology. We missed the ontology
+> structure maintenance by a lot in v2. The reason we ran the world engine with the ontology is that the world engine
+> keeps continuity and gives evidence for mappings and extraction the text can't settle (spatial and detailed movement
+> Jev can't simply determine from text). We missed that entirely. We also miss the other way round: the world engine
+> rejecting Jev's proposals to the ontology because physics says no.
+
+This is **Track B** of [next-steps.md](next-steps.md). Track A, the summarization layer (a work model's digest of each
+card and scene, and its memory across scenes), is decoupled from it and built in parallel (the user, 2026-11-02): A
+makes each question better informed, B checks every answer, whatever asked it, and keeps the ontology.
+
+## 1. What v1 had, and v2 lost
+
+v1's world-first design ([../world-first-design.md](../world-first-design.md), approved 2026-10-29) ran the world *with*
+extraction:
+- **Laws on every answer** (§4 there): nobody vanishes; nobody is in two places at once; a flashback moves nobody; no text,
+  no change; travel takes time; conversation needs nearness; a thing is held by one person or lies at one place;
+  knowledge flows only by witnessing, hearing or being told; a physical event's actors are there.
+- **The world as evidence** (§11): EM merges and splits from who is never together, presence the two-places law keeps
+  rejecting, people acting on knowledge they couldn't have; place containment from trips with no time for travel.
+- **A pool and a gate** (§11): what the laws can't settle goes to the main agent in batches; its answers become pins;
+  the world replays from the cache with them; a pin the laws reject goes back with the reason.
+- **Records** (§12): presence, stayed, place, relation, clock, time node per scene; dialogue nodes with kind and
+  parties; tracks with anchors; holdings; knowledge with sources.
+
+v2 today runs one way only:
+
+```mermaid
+flowchart LR
+  R[Reading · v2 extraction] --> C[canon.ts: ontology written once]
+  R --> S[script.json: place, present, clock per scene]
+  S --> T[Terrain] --> P[Spawning] --> D[Director]
+  D --> L[run.json, pages: positions, moves, blasts]
+  L -. nothing back .-> C
+```
+
+What that leaves, measured on volume 1:
+
+| | v2 now |
+|---|---|
+| Ontology files written after the reading | none: `state-changes`, `timelines`, `branches` are empty; `events.summaryEn` is the source sentence |
+| Spoken lines with no speaker / under 0.6 sure (EM²) | 646 / 806 of 1,666 |
+| Scenes where the script places nobody | 4 of 46 |
+| Moves Jev chose that never walked, with no reason recorded | 21 |
+| Jev answers the world checks against physics | none: a target, a floor, a leap, a meeting are taken as given |
+| Director outcomes (who stood where, met whom, what broke) back in the ontology | none |
+
+## 2. The principle: both directions, through one ledger
+
+1. **World to ontology: evidence and continuity.** The engine is the only part that knows where everyone physically is,
+   what is reachable, how long a trip takes, who is within earshot, what stands and what broke. What it finds is
+   recorded as evidence and offered to the ontology as proposals: who was present, where a scene is, who could have
+   said a line, which building a mention is, which floor a room is on, how places nest, what order scenes can happen
+   in.
+2. **Ontology to world, checked: physics can say no.** Every proposal that would change the world or the ontology (from
+   the reading, from Jev, from the work model, from a note of the user's) passes the world's laws first. A proposal the
+   laws reject is not applied: it goes, with the reason and what the world would allow, to a main agent who reviews it
+   with the evidence the text holds (§5, §7). Nothing is silently dropped or silently applied.
+3. **One ledger.** Every proposal and every verdict is a record with its source, its evidence and its state, so the user
+   and the developer can see why the ontology says what it says (the Why panel's next tabs).
+
+## 3. The layers of the ontology
+
+| Layer | Written by | Changes how | Holds |
+|---|---|---|---|
+| **Text** | the reading (extraction) | only through the ledger | sentences, kinds, cards, mentions, EM and EM² with how sure, facts, the place tree, time words |
+| **World log** | the engine at play time, per run | append-only | presence per scene (present, stayed, arrived, left), tracks (anchors and walked segments), meetings, dialogue nodes (kind, parties, nearness), holdings, damage, knowledge entries, bindings (a place to a building's lot, a named room to a skeleton room, a floor), proven time relations |
+| **Memory** | the work model (Track A) | per card and per scene | card and scene digests; short- and long-term memory ([next-steps.md](next-steps.md)) |
+| **Ledger** | everyone who proposes; the laws; the gate | append-only | proposals, verdicts (accepted, amended, rejected, held, pinned), their evidence and source |
+| **Canon** | applied from the ledger | by accepted proposals only | the ontology as the rest of the system reads it: entities, events with real summaries, relations, scenes, state changes, timelines, branches |
+
+Text is never edited in place; canon is what the ledger has accepted on top of it. A run that is played again replays
+the ledger's pins, so an answer the user or the agent gave is never lost.
+
+## 4. The laws, for v2's 3D world
+
+The deeper discussion, with what the engine enforces today and each law's rule: [physics-laws.md](physics-laws.md). Continuity is
+scoped to a strand (the user, 2026-11-02): it holds to the end of a strand and never carries into another.
+
+v1's nine, made physical now that the world is a real city with floors, plus the checks the 3D world allows:
+
+| Law | Evidence the world gives the ontology | Proposals it rejects | v2 now |
+|---|---|---|---|
+| 1. Nobody vanishes | presence carried scene to scene; "stayed" lists | a scene's cast that drops someone still there | partial (carry on, no record) |
+| 2. Nobody is in two places at once | who is where at each clock tick | presence or a speaker in a scene at the same time elsewhere | missing |
+| 3. A flashback moves nobody | the past's own tracks | moves played in a flashback against now | missing |
+| 4. No text, no change | fragments carry the scene before | changes with no line behind them | missing |
+| 5. Travel takes time | path lengths and pace on the walk graph | "right after" across a city; a move too far for the card | missing |
+| 6. Conversation needs nearness | who is within 4 m or the same room (live), 25 m or the same floor (public) | a speaker or listener out of earshot; a live talk with the parties apart | dialogue gathers by rule; no check |
+| 7. One holder, one place for a thing | custody records | a thing in two hands or places | missing |
+| 8. Knowledge flows | who witnessed or heard what | someone acting on what they couldn't know | missing |
+| 9. Actors are there | actors' positions at the event | an action by someone not present | partial (actors filtered) |
+| 10. Reachability (new) | the walk graph: doors, stairs, roofs, the underground | a target no walk reaches; a floor the building lacks; a room with no door | a failed walk now records why; nothing more |
+| 11. Bodies and buildings (new) | footprints, floors, what stands and what broke | standing inside a wall; a building inside another; a floor above the roof | buildings no longer overlap |
+| 12. Abilities (new) | a person's stated powers (the concepts' owners) | a leap onto a five-floor roof by someone who can't; a flight with no means | missing |
+| 13. Destruction is physical (new) | what each hit broke, by strength and material | a blast with nothing said to break; breaking what is already gone | asked on clear evidence; no check |
+
+Each law is code, not a model call: a check on a proposal against the world log, giving `ok`, `amend` (with the lawful
+alternatives) or `reject` (with the reason).
+
+## 5. The runtime loop, per card: system 2 and the law engine
+
+System 2, as the user defined it (2026-11-02): **the same context falls to an LLM request when confidence is low.** When
+Jev's answer to a question is below 0.5, the work model is asked the very same question with the very same composed
+context. Whichever answer is used (Jev's when it is sure enough, else the work model's), it goes into the physics law
+engine to see whether it makes sense. If it doesn't, a main agent reviews it with the review CLI (§7), gathering as
+much evidence as it needs from the ontology, the reading and the original book.
+
+```mermaid
+flowchart TB
+  Q[A question about a card, its composed context] --> J[Jev answers]
+  J --> C1{Jev sure? at least 0.5}
+  C1 -- yes --> L{Physics law engine}
+  C1 -- no --> W[System 2: the work model, same question, same context]
+  W --> L
+  L -- makes sense --> P[Play it; world log; evidence to the ledger]
+  L -- does not --> H[Held: play the lawful default, mark the card]
+  H --> R[Main agent reviews with the review CLI]
+  R --> A[Answer pinned in the ledger]
+  A --> L2{Physics law engine}
+  L2 -- makes sense --> RP[Replay from the cache with the pin]
+  L2 -- does not --> R
+```
+
+- **Both answers are kept** when system 2 ran: Jev's, the work model's, and which was used; the law engine's verdict on
+  the one used.
+- **A held card plays its lawful default** (nobody moves, the line has no speaker) and is marked in Why; the run never
+  waits for the review.
+- **The agent's answer is a proposal too:** the laws check it before it is pinned, as v1's world-first design has it; a
+  pin the laws reject goes back to the agent with the reason.
+- **Evidence proposals** after each played card: a speaker the nearness law makes certain or impossible, a present person
+  the script missed, a meeting, a custody change.
+
+## 5a. Ground truth and back-propagation (the user, 2026-11-02)
+
+> While Jev's live play makes a correction that the main agent confirms, what it proposed is now ground truth: the engine
+> back-propagates the existing ontology logs, until the last ground truth, for all characters in the strand.
+
+v1 had the principle ([../world-first-design.md](../world-first-design.md) §8.3: a person's track is anchors joined by free
+segments; a live meeting re-samples each mover's segment from their last anchor as a bridge ending at the meeting), and
+its own status table says the re-timing was never built ("a meeting is walked at the dialogue, from where the mover is,
+not re-timed back to their last anchor"). v1's code that is there: the meetings (`export-strand-demo.mjs` meetingOf:
+who came to whom, a group's box), the pool, its pins and replays (`experiments/world-first/pool.mjs`,
+`src/cli/commands/extract/worldCommands.ts`). v2's director uses none of it: its talk gathers by rule.
+
+### What counts as ground truth
+
+Every position in the world log carries how it came to be, ranked:
+
+| Rank | Source | Example |
+|---|---|---|
+| 1 | **Pinned**: the main agent's answer, or Jev's confirmed by it (W5), checked by the laws | "she was on the roof all along" |
+| 2 | **Stated**: the text puts someone at a spot, read surely (a spatial word, a named room bound) | "in the office on the third floor" |
+| 3 | **Met**: a live meeting or a group's box (L6) | two people talking face to face |
+| 4 | **Answered**: Jev's or the work model's answer that the laws passed | a move to a spot in a wedge |
+| 5 | **Ruled**: the engine's default | spawning's start, carry on, a gathering walk, off-page |
+
+An **anchor** is a position of rank 1–3. Ranks 4–5 are hypotheses between anchors.
+
+### Back-propagation
+
+When a new anchor lands for someone at moment t in strand S (a pin above all):
+
+1. **Their span.** Find their last anchor before t in S (or the strand's start). Everything the world log has for them
+   between the two is hypothesis and is re-derived.
+2. **Their track.** Re-solve the span as a bridge on the path integral (below: it runs backward in time): from the last anchor to the new one, through
+   any stated destination in between (rank 2–3 stay fixed), under the laws (L5 time, L10 reach, L12 ways). Their scene
+   starts in the span are re-placed on it, so a **spawn** made by rule moves to where the bridge has them (spawning is
+   back-propagated too).
+3. **Everyone tied to them.** A position derived from theirs is re-derived the same way back to that person's own last
+   anchor: someone who went "with" them, someone gathered to them to talk, a group whose box was drawn round them. The
+   ties are recorded with each move, so the set is exact; it stays inside S.
+4. **The laws again.** Every law is re-run over the revised span. What still breaks goes to the review; a revision may
+   not move any anchor (rank 1–3): a conflict with one is a conflict for the agent, never silently resolved.
+5. **The logs.** The world log keeps both: the old span marked superseded by this revision, the new one current, with
+   the anchor that caused it. Canon's records derived from the span (presence, places, meetings, speakers) are
+   re-proposed through the ledger.
+6. **What comes after t.** Continuity carries the new positions forward. A later answer whose question showed the old
+   positions is checked by the laws on replay; only answers that now break a law are asked again (the cache keeps the
+   rest).
+
+### The path integral runs backward in time too (the user, 2026-11-02)
+
+The engine's motion is a path integral (`pathIntegral.ts`): every walk weighs e^(−S/T), and a walk is drawn with an
+h-transform, where h[s] is the summed weight of every walk from s into the target set. That h is the propagator run
+**backward from the future**: from where someone must end up, back to every place they could be now. Back-propagation
+is this, not a separate method:
+
+- **A span with an anchor at each end** is a bridge: walks are drawn forward with the new anchor's h (they end there by
+  construction), starting from the last anchor; a stated destination in between splits the span into bridges.
+- **Where they were at a moment in between** (a scene's start, a card's end) is the forward weight from the last anchor
+  times the backward weight to the new one: α(s) · h(s). With a time budget (L5, where the story states the time), the
+  two are the finite-horizon propagators, α_m forward m steps and h_(N−m) backward N − m, so the moment's spread is
+  α_m · h_(N−m); without one, the moment is placed along a drawn bridge by its share of the span's play.
+- **A spawn** made by rule, with an anchor later in the strand and none before, is drawn from spawning's own choices
+  weighted by h: P(start = s) ∝ prior(s) · h(s), so where someone first appears agrees with where they must be later.
+- **Too far to be lawful** shows as weight: when h at the last anchor (or α_N at the new one) is zero, no walk joins
+  them in the time there is, and the anchor pair is a conflict for the review (L5, L10), found by the propagator itself.
+- **The ensemble** (several draws, already drawn for every move) shows how sure the revised track is: tight between
+  close anchors, spread where the story leaves room.
+
+The forward field needs the walk graph reversed (climbing and descending cost differently), solved once per span like
+the backward one.
+
+### The objective: change the history least (the user, 2026-11-02)
+
+> The history should change the least, in space and in destruction energy, when back-propagating multiple
+> possibilities.
+
+A new anchor can usually be met many ways: which tied people move and which stay, who came to whom, which of a bridge's
+draws is kept. Of all the revisions that keep every anchor and break no law, the engine takes the one that changes the
+history least:
+
+J(revision) = Σ over people and moments of the span ‖x′ − x‖ + μ · Σ over blasts |ΔE|
+
+- **Space:** each person, at each moment the world log records (a scene's start, a card's end), the distance between
+  where the revision has them and where the history had them; a floor counts as its height (3 m), so moving someone
+  up a building is a change too.
+- **Destruction energy:** a blast's energy is what it broke (the volume of each building part it took, by how hard the
+  part is); ΔE is a blast added, removed, moved or made stronger or weaker. A revision that leaves every blast as it
+  was costs nothing here; μ weighs a joule of change against a metre.
+- **Constraints, not costs:** anchors (rank 1–3) never move, and every law holds. J ranks only the lawful revisions.
+
+How the engine applies it:
+
+1. **Inside the path integral:** the bridge's action gains a pull toward the old track, a potential V(s) = α · (the
+   distance from s to where the history had the person at that point of the span), so the walks it draws stay near the
+   old history unless the new anchor forces them away (the Feynman–Kac form: weight e^(−(S + ΣV)/T)).
+2. **Between discrete choices:** each alternative (who came to whom; whether a tied person is re-derived or keeps their
+   track because the new one still holds them lawfully) is played out, and the one with the least J is kept; a tied
+   person whose old track stays lawful is not moved at all.
+3. **Among the drawn walks:** of the ensemble's draws, the one with the least J is played; the others stay as the
+   ensemble's spread.
+4. **In the ledger:** each revision records its J (metres and joules changed, and for whom). A revision above a size
+   the user sets goes to the review rather than being applied, so a small pin can't quietly rewrite a chapter.
+
+### Where it sits
+
+Back-propagation needs the world log with each position's rank and ties (W1), the laws (W2), and pins (W5); it is
+built with W5 and runs on every pin from then on. The meetings (who came to whom, a group's box) come back with L6 once
+Jev gives each dialogue card its kind.
+
+### Back-propagation is Bayesian smoothing (the user, 2026-11-02, with the research handoff "Trap reconstruction")
+
+> Every character or object is a particle: its states are a distribution, not a fixed set. Every character has a
+> complex, unmeasurable motivation, an energy level of action. Back-propagation in the particle path integral is
+> Bayesian smoothing: it turns discrete, uncertain observations at intervals into continuous clouds. Buildings are like
+> magnetic fields. And least change does not conflict with it: it is Schwinger's action principle, where we define our
+> own action.
+
+Our path integral weighs a walk by e^(−S/T), a positive weight, so it is a Markov process, and its h (the summed weight of
+every way on to the targets) is the backward message of a smoother: a moment's cloud is the forward weight times the
+backward one, α·β, the handoff's forward-backward (its §5 and the Gaussian smoother of its §12). **We define the
+action**, and the posterior of a history is e^(−S/T) of it:
+
+S = S_walk + S_seen + S_talk + S_frame + S_events
+
+- **S_walk**, the walk: the effort of moving between moments (metres, a floor as three), at each person's own
+  temperature, their *drive* (the unmeasurable motivation: how far and how fast they go), estimated from how they move.
+- **S_seen**, the observations (the handoff's blinking readouts): where the text puts someone at a moment, as tight as
+  its rank (pinned and stated tight, met close, Jev's answer wider, a rule's default wide). **Least change is this
+  term**: the history as played is itself a weak observation of every moment, so a revision moves people only as far as
+  the stronger observations ask.
+- **S_talk**, the couplings: a face-to-face line puts its speaker within reach of whom they speak to; a public one,
+  within earshot (iterated between the two clouds).
+- **S_frame**, the scene's frame (L16; the user, 2026-11-03): at a scene's start, the extent the scale reader gave its
+  first beat, measured round the cast; someone outside it is pulled toward it as far as the reader's answer is trusted
+  (σ 8 m, an answer's rank), one-sided (inside costs nothing). Someone the strands carry straight on is played where they
+  stood (L1); their distance outside the frame is the disagreement this term back-propagates along their chain.
+- **S_events**, events at their rates (a blast, an entrance, an exit), the handoff's marked point process; not a penalty
+  on a path.
+
+The most probable history is the one of least action (Viterbi over the clouds), and each moment keeps its cloud: the
+spread of where the person may have been, tight between close observations, wide where the story leaves room. The laws
+are the action's walls: what they forbid has no weight at all.
+
+**Occupation** (the handoff's injection and annihilation, its detector efficiency): who is on the stage is a hidden
+state per scene too. The script's presence is a detection that can miss; acting or speaking on a card is a strong
+detection; a mention a weak one; staying on from one scene to the next in a strand the transition. A missed detection is
+not absence: someone who acts but is not in the script is likely there, and the smoother says how likely.
+
+**Buildings are a topology** (the user: "more of a topology idea"): like a magnetic field, which does no work
+((qv×B)·v = 0) and only bends the paths, a building decides which way one can go (rooms joined at their doors, floors at
+their stairs: W0's portals) without changing what going costs. No drift term.
+
+**W5b · The smoother** replaces the first cut's bridge: per person and strand, the moments they are on the stage (scene
+starts and card ends), a cloud of candidate spots at each (where they were played, the walk's other draws, the scene's
+spots, where those with them stood), forward-backward over the clouds in log space, the least-action path, the clouds
+kept; occupation per scene alongside. The director starts each scene where the smoothed history has them (a revision
+above the limit still goes to the review), and Why shows each person's cloud and how far the smoothing moved them.
+
+### One observation, several updates: state facts (the user, 2026-11-03)
+
+> Everytime we observe, we actually get multiple state updates, some are subtle and sure, some are confirmed. There are
+> many times where characters carried actions but they have implication that they have moved into a building as they
+> have roofs on top of them.
+
+A sentence is an instrument with several outcomes, each measuring a different part of the state. The summarizer
+(Track A, `world-engine/digest/digest.mjs`) reads every window of about 30 sentences and gives, per sentence:
+
+- **moves**, graded: a step (to 2 m), nearby (to 10 m), elsewhere; toward, away from or with someone; stated or implied,
+  how sure;
+- **facts** about where someone is: indoors, outdoors, a floor, a roof, underground, near or apart from someone, by a
+  window, a door, the street, stairs, a wall, a roof's edge, in a vehicle; stated or implied, how sure;
+- **items** held, picked up, used, given, put down, thrown, broken; **talk** kinds; **breaks**; the **background**'s
+  doing (standing, strolling, walking, fighting...).
+
+Each fact is a region on the walk graph (`world-engine/digest/facts.mjs`: node types, a building's outer wall, an
+entrance, stairs, the street, others' positions). After each card the director checks everyone's binding facts (stated
+and at least 50% sure, or implied and at least 65%): a spot that disagrees moves them to the nearest spot that agrees
+(an implied move, logged with source `implied`); where none agrees within reach, **L14** records it (held if stated,
+weighed if implied). Backward smoothing then places the move before the line that reveals it. Not yet: the facts as
+region terms in the smoother itself (today the implied move is the observation).
+
+### Routine motion
+
+Next ([next-steps.md](next-steps.md) A4, proposed 2026-11-03): the summarizer as faculties fired by block types, each
+an instrument for its own observable at its own scale, measuring only where Jev's block-type distribution says that
+observable is active.
+
+
+- Graded moves are played by rule (no question); going elsewhere is asked of Jev on the pictures with the digest beside
+  the text; a pair going together: the one carried follows, else the first named leads.
+- The scene digest gives each person's routine and the crowd: those strolling or walking go on along the scene's way
+  (a group keeps together; strollers turn back beyond 40 m), those fighting shift a step or two each card; a crowd of
+  three or six walkers (`extra:` ids) is scenery, never in the laws, the log, the smoothing or canon.
+- System 2 may not take motion away: where Jev saw a move or an act and the work model none, Jev's stands.
+
+## 6. The world back into the ontology
+
+What each specialist director keeps (positions, feelings, exchanges, holdings, buildings) and the path each takes into
+`ontology/*.jsonl` (world log, laws, smoother, ledger, gate, canon) is one registry, `world-engine/director/specialists.mjs`
+(`STATE`, `FLOW`, `GATES`), tested against `src/ground/ontology/types.ts` and against what canon writes today; the tables
+are in [next-steps.md](next-steps.md) A5.
+
+| Proposal from the world | When | Example |
+|---|---|---|
+| Speaker of a line | a dialogue card is played | only one person within earshot of the listener could have said it; EM² said "no one" |
+| Presence in a scene | a scene starts and ends | someone carried on in the room the scene stays in, the script left them out |
+| A scene's place | people's positions at the scene's start | everyone stands in a building the script calls a street |
+| A place's container | a trip with no time for travel | two places that are one building's floors |
+| Time relation | travel law | "right after" impossible across the city: "later" |
+| Building identity | a named building's mention lands on a lot | the same café in two scenes is one lot |
+| A room's floor | a named room bound at its first scene | the office is on the third floor from then on |
+| EM merge or split | chapter end | two identities never present together, same companions; one person rejected by the two-places law again and again |
+| State change | a blast, a fall, a capture | a building damaged; someone hurt |
+
+Each goes through the ledger and its gates (§7b): applied when the laws pass it and it is the world's own or agrees
+with the reading; otherwise decided by a main agent (G1), never by default.
+
+## 7. The review: a main agent with a high-privilege CLI
+
+What the law engine rejects is reviewed by a main agent: Pi (v1's main agent, through its console's queue), or another
+agent such as Codex, all through the same CLI. The CLI is high privilege: it reads everything the workspace holds,
+the full text included, and writes only answers into the ledger.
+
+| Command | Gives | Status |
+|---|---|---|
+| `novel query <dir> <cypher>` | Cypher on the ontology's graph | exists |
+| `novel source grep <dir> <regex>` | the source text's lines matching a pattern | exists |
+| `novel source similar <dir> <text>` | the passages most like a text (RAG) | exists |
+| `novel source epub <dir> [--doc N] [--grep <regex>]` | the original EPUB read in full, one document or all, or grepped, as published | new |
+| `novel reading <dir> card\|scene\|line <id>` | the v2 reading of a card, a scene or a line: kinds, EM and EM² with how sure, facts, the place and time | new |
+| `novel world log <dir> --scene\|--person\|--card <id>` | the world log: who was where, tracks, meetings, holdings, damage | new |
+| `novel world held <dir>` | the held items: the question, the answers (Jev's, the work model's), the law that failed and why, the lawful alternatives | new |
+| `novel world answer <dir> <item> <option> --reason <text> --evidence <refs>` | an answer, checked by the laws, pinned in the ledger with its evidence | new |
+
+- **Batches:** held items go to the agent in batches (8, as v1); the world never waits for them.
+- **The user's notes** (World · Live's Why) become held items too: a note on a card is shown to the agent with the
+  card's records, and an answer pins the card.
+- **Replay:** pins are replayed from the cache (only what changed is asked again).
+- **A main agent decides everything the laws don't** (§7b): identity, a fact against a sure reading, abilities,
+  cross-book records; what its answers can't make lawful stays held, playing its lawful default, and is reported.
+
+### 7.1 The cast's review (the user, 2026-11-06: "Add the missing commands, and have the agent review in batches")
+
+Before, two people of a v2 reading could not be made one by any command (`novel fix merge` reaches the ontology only),
+and no command set one person's ability sheet (the settei step sheets the whole cast at once). So W12's split people
+and two missing sheets waited on a hand edit. Now (`world-engine/review/cast.mjs`, `src/cli/commands/extract/castCommands.ts`):
+
+| Command | Does |
+|---|---|
+| `novel cast show <dir> [<char>]` | the cast with their cards and ability sheets (what Jev held unsure too), or one person with what the cast log did to them |
+| `novel cast merge <dir> <keep> <merged> --reason t [--reading <data.json>]… [--dry]` | two entries made one person everywhere: each reading the book plays from (the director's, the manifest's) with its views and pre-film notes, the universe's sheets, the ontology (`novel fix merge`, graph rebuilt); every file copied aside first (stage/world/cast-backup), logged (stage/world/cast-log.jsonl); `--dry` lists what would change |
+| `novel cast sheet <dir> <char> --sheet '<JSON>' \| --none --reason t [--evidence <ids>]` | one person's sheet in the universe's abilities.json, checked against the settei's kinds and limits; the kinds held unsure for those parts taken off |
+| `novel cast ask <dir> <a> <b> --why t` | two people raised as one, a question for the next cast batch |
+| `novel cast review <dir> [--size N] [--least-cards N] [--send <console-dir>]` | the cast's questions into the review pool in batches (8): two entries whose names meet; each sheet kind Jev held unsure; each main character (20 cards or more) with no sheet; `--send` puts them in Pi's console queue |
+| `novel sky build\|show <dir> [--dry] [--cache <dir>]` | the story sky (each unit's time of day and weather) into sky.json beside the reading the director plays |
+
+- **The agent answers** with `novel world answer` like any held item. `same person` merges into the first subject. A held sheet is kept or taken off. For `set by hand`, the agent first runs `novel cast sheet`; the apply step checks that a sheet set that way exists, else the item comes back in a later batch.
+- **`novel world apply`** (or the director at its next run) does what was decided.
+- **Checked on a copy of library 16** (stand-in answers, test only):
+  - it raised 8 pairs and 17 sheet questions in 3 batches;
+  - the merges (Maidono and the Santa girl, the two Negaoka entries, Oyafune and Oyafune Monaka) left no trace of the merged ids in either reading or the universe, and the ontology merged too;
+  - a sheet set by hand passed the check, and one answered before it was set came back to the pool;
+  - the director then played scenes 165–171 with no law broken.
+- **Library 16 (2026-11-06):** its 3 cast batches are in its pool. Pi's console turned them away because no Pi worker was running; `novel cast review <dir> --send <host>/runtime/pi-console` sends them once one is.
+- **The book's reading output is shared.** Library 16's manifest points at `~/claude-world-first/v2-vol1-w12`, so a merge applied there reaches every copy made from it later.
+
+## 7a. v1's review boundary (for decision 1)
+
+How v1 formats the ontology and what its review gate covers (`src/ground/connectors/bundle.ts`,
+`src/solidifier/merge/{changeset,semantic,apply}.ts`, [../unified-review.md](../unified-review.md),
+[../world-first-design.md](../world-first-design.md) §11):
+
+- **Format.** A per-book bundle of JSONL files, the source of truth (`entities`, `relations`, `events`, `scenes`,
+  `timelines`, `branches`, `state-changes`; the graph is rebuilt from them). Writes come only as **ChangeSets** of
+  proposals (`upsert_entity`, `create_event`, `create_scene`, `add_relation`, `add_alias`, `set_state_change`), applied
+  by one path (`applyChangeSet`) and only when the set is **approved**.
+- **Reviewed (semantic facts).** Each proposal is split into facts, each needing original evidence and a decision
+  (accept, hold, reject with a reason): an entity's **identity**; an **alias**; a **state change**; an event's
+  **actors**; a scene's **presence**, **mentions**, **location**, each dialogue **turn** (speaker, addressee) and each
+  **dialogue member**; every **relation** (except an event's own actor's `PARTICIPATES_IN`). Unreviewed facts default
+  to held; nothing accepted without the source shown.
+- **Not reviewed: the source's organisation.** The ids, sentences, chapter and order of scenes and events (what the
+  facts hang on) publish with the set.
+- **Bypassing review, by design:**
+  - `novel ingest --base-layer`, only in a world-first workspace: the base layer (scenes, events, dialogue exchanges, the
+    roster) applied without fact review (`manifest.worldFirst`); `--auto-approve` is a separate, explicit mode.
+  - **The world loop's own records** (world-first): presence, place, time, dialogue kind and parties, starts and moves
+    are the world's, kept by its laws, never reviewed; the stage's outputs live in `stage/`, not in canon.
+  - **EM from world evidence:** a merge with no conflict against the laws applied automatically, flagged
+    (`emFromWorld`), undoable; anything else to packets.
+  - **What the laws can't settle** goes to the main agent's pool (pins, replay), not to the user.
+- **The user's gate** saw only low-confidence identity merges, conflicts the laws can't settle, and cross-book packets
+  (the universe's causality, atlas and calendar), each through the same review lifecycle (show, evidence, decide, apply).
+
+## 7b. Review gates for v2: review by exception (decided 2026-11-02)
+
+The user's concern with v1's boundary: the world log now records many kinds of things, and reviewing them as v1
+reviewed facts would bury the user. On volume 1 alone one run wrote 339 world records and 359 ledger entries, and the
+reading has 2,196 roles (643 under 0.5). Decided: **nothing is reviewed as a record; only exceptions are, in two
+gates, the second seeing bundles, not lines.** No gate is the user (the user: an agent understands better than a
+person, because of how long its context is), and there is no tier above the main agent: **every main agent (Pi, Codex
+or another) has all the rights.** The user reads what was decided and can reverse any of it.
+
+### The two gates
+
+| Gate | Who | Sees | Volume on volume 1 (estimate) |
+|---|---|---|---|
+| **G0 · The laws** | code | every proposal, every run | all of it, in milliseconds |
+| **G1 · A main agent** | any: Pi, Codex or another, with the review CLI and the whole book, its ontology, world log and universe to read; each with all the rights | what G0 holds, bundled by scene; identity, abilities, big revisions, cross-book records; a sample of what G0 passed | today 112 held items in 23 scenes, so ~23 bundles, plus a handful of identity and ability items per book; fewer once system 2 and Jev's dialogue kinds run |
+
+### Classes: what goes where
+
+| Class | Examples | Route |
+|---|---|---|
+| **W · World mechanics** | positions, walks, tracks, meetings by rule, bindings, blast geometry | never reviewed; the world log only; canon gets their summary (where each person is at a scene's end) applied automatically when lawful |
+| **S · Story state the world derives** | presence, a scene's place, time relations, a line's speaker, hurt, a building damaged | applied automatically when G0 passes and it agrees with the reading or the reading was unsure (below 0.5); otherwise G1 |
+| **R · Revisions** (back-propagation) | a pin's re-derived span | applied when its size J is below the threshold; above it G1 |
+| **I · Identity** | a merge or a split, a new person, a description that means someone | a clean merge (no law against it, strong evidence) applied with a flag, undoable, as v1; anything else G1 |
+| **A · Abilities** | the per-character config (it lets someone past the physics) | written by G1 with evidence; every change in the run's report, since one wrong entry changes everything a person does |
+| **X · Cross-book** | a strand continued into the next book, the atlas, the calendar | G1, one bundle per book |
+
+### What keeps the volume down
+
+1. **Bundles, not records.** G1 gets one item per scene: the scene's held breaks together, with its text, the world log's
+   records for it and the alternatives the laws allow. One answer can settle several breaks (one misplaced person
+   explains three L6 breaks). Identity questions are one item each, ability changes one list, cross-book one bundle per
+   book. The user gets a report per run: what G0 applied and G1 decided, by class, with what each changed, readable in
+   World · Live.
+2. **Reach decides priority.** Each item is scored by how much it would change (its J, §5a) times how far it reaches
+   (the later scenes and people that depend on it, from the log's ties). Items are answered highest first, within a
+   budget per run (G1 a fixed number of bundles); what's left over stays held and plays its lawful
+   default. Nothing waits on review.
+3. **Audits instead of approvals.** Of what G0 passes and is applied automatically, a small random share (say 2%) goes
+   to G1 as an audit. Each class keeps its audit error rate; a class whose rate rises above a limit is routed to G1
+   automatically until it falls again. The gates tighten where the engine is wrong and loosen where it's right.
+4. **Everything applied is undoable.** Canon changes only through the ledger, and every applied entry can be reverted
+   with what depended on it. A note on a card in World · Live (Why) is the user's way to reverse or pin, at the moment
+   they notice, without reviewing anything ahead of time.
+5. **The reading's own answers stay out of review.** v2's extraction is not reviewed per fact (as v1's was): its answers
+   are the text layer, trusted by their confidence; a weak one is checked by the world (G0) and system 2 rather than by
+   a person.
+
+### Who decides
+
+The laws decide what applies on its own (classes W and S when lawful, small revisions, clean merges flagged), and each
+class's audit rate is on record. Everything else is decided by a main agent with the evidence in front of it, never
+by default; any main agent has all the rights (the user, 2026-11-02), there is no senior tier, and the user is not a
+gate: every decision is reported and can be reversed or pinned from World · Live.
+
+## 8. What the user sees
+
+- **Why, per card:** Jev's questions (with system 2's answer beside Jev's where it ran), **Laws** (each check, passed or
+  failed, why), **Proposals** (what the card proposed to the ontology and the verdict), and the **review** (the agent's
+  evidence and answer) for a held card. Track A adds Digest and Memory.
+- **The run report:** laws broken and how each was settled; proposals by verdict; the held items and the agent's answers; the
+  ontology's changes since the reading (a diff by layer).
+- **Reading:** a line whose speaker the world changed is marked in the book, with the old and new speaker.
+
+## 9. Milestones (Track B)
+
+| | Builds | Model calls | Done when |
+|---|---|---|---|
+| W0 · A valid world | each building's inside walked on its own plan, joined to the street only at its doors; holdings independent of the order chunks are reached in; the world's own check (no building shut, no room shut) at generation and at every scene; every failed walk with a code and what replays it | none | the check finds nothing on a generated city or round 第十五学区; two load orders give the same world; held walks coded |
+| W1 · World log and ledger | the director writes world-log records (presence, tracks, meetings, holdings, damage, bindings), each position with its rank (§5a) and what it was derived from, and evidence proposals; canon's empty files filled from accepted ones | none | volume 1's run replayed from cache writes them; `state-changes`, `timelines` non-empty |
+| W2 · The law engine | laws 1–13 as code on every answer; verdicts logged only | none | counts of each law's violations on volume 1 |
+| W3 · System 2 | below 0.5, the same question with the same context to the work model; both answers kept | work model | how often it runs, how often the two differ, on volume 1 |
+| W4 · Laws decide | the law engine's verdict acts: what makes sense plays, what doesn't is held and plays the lawful default | none | no move played against a law; failed walks held with a reason |
+| W5 · The review | the CLI's new commands (§7), on v1's pool, pins and replays; held items to the main agent in batches; answers checked and pinned; **back-propagation from every pin** (§5a); the user's notes as items | agent | every held item of volume 1 answered or sent to the gate |
+| W6 · Back into the ontology | speaker, presence, place, time, binding, EM proposals through the ledger into canon | none | unsure speakers settled or held; scenes with nobody 0 |
+| W7 · UI | Why's Laws, Proposals and review; the run report; changed lines marked in the book | none | the user reads a run's changes without the developer |
+| W8 · Volume 1 again | all of it, with Track A where it is ready | all | against `d20261102081221`: moves, failed walks, speakers settled, laws broken, held and answered, cost |
+
+**Built (2026-11-02): W1 and W2**, without L12 (abilities wait for the main agent's config). `world-engine/log/`
+writes each director run's world log (`stage/world/log/<run>.jsonl`: presence, positions, meetings, blasts, bindings,
+each position ranked and with what it carries on from and whom it is tied to) and its ledger
+(`stage/world/ledger/<run>.jsonl`: location changes by canon event, a timeline per strand, damage, and every law's
+break held for review); `world-engine/laws/` checks the laws (`stage/director/laws.json`). The director writes all three
+after every run. Nothing goes into canon yet: the ledger's proposals wait for decision 1. On run `d20261102081221`:
+172 presences, 69 positions, 56 meetings, 3 blasts, 39 bindings; ranks 160 ruled, 77 answered, 4 stated; 241 location
+changes, 3 timelines, 3 damage records proposed, 112 breaks held.
+
+**Built (2026-11-02): W3**, system 2 (`world-engine/director/system2.mjs`): every director question Jev answers below 0.5
+goes to the work model with the same composed state (the pictures named, not sent; every option in words), and its
+answer is used when it is one of the options; a box stays Jev's. Both answers are kept with the card (or the scene, for
+its director's pass) in `run.json` (`system2`), and the run's log says how often it ran, was used and differed. Checked
+end to end on scene 1 with a fake Jev unsure of everything: 148 answers went to the work model in 17 requests. The
+director turns it on when `WORK_LLM_*` is configured (the reading's DeepSeek), and says so when it is not.
+
+**Built (2026-11-02): W4**, the laws deciding as the director plays: continuity per strand at every scene's start (L1:
+someone comes in from the scene the strands name, never from another strand's state); each dialogue card where someone
+spoken to stands apart is given its kind by Jev (L6: face to face gathers, remote moves nobody, public is heard within
+25 m and held beyond); an actor with no place is held (L9); a move no walk reaches is held with why (L10; someone already
+at their spot is not a break). Every verdict is kept with its card (`laws`) and goes into the ledger as applied or held.
+Checked with stand-ins on scenes 1–6 of a scratch copy: 233 moves, 158 walked, 41 already there, 12 talks given a kind,
+3 actors and 34 moves held. Found on the way: a room in a turned building could be shut (its door's plan cell falls
+between world cells); first patched, then fixed at its root by W0's interior topology.
+
+**Built (2026-11-02): W5b, the smoother** (`world-engine/smoother/`), replacing W5's first-cut bridge (`backprop.mjs`,
+removed). `smoother.mjs` takes a run's page, world log and record: each person's moments (a scene's start, every card
+they move or talk on), a cloud of up to 48 spots at each (where they were played, the walk's other draws, every node the
+run stood or walked on in that scene, where whom they speak to stands), S_seen by rank (σ: pinned 1.5 m, stated and met
+3, answered 8, ruled 20), S_walk over the person's drive (their median metres a moment against everyone's, ½ to 3
+times), S_talk by the card's kind (a kind Jev gave or the review pinned holds the pair within reach; a kind no one gave
+is a mixture, near at 0.8 or else afar, so a pair a kilometre apart is a voice from afar, not a teleport), forward and
+backward in log space, the least-action history by Viterbi, people one at a time against the others' latest (both of a
+pair at once only swap). **Continuity is by strand** (L1; the user, 2026-11-02: not by scene or card, which are only
+when the text is seen): a person's moments are chained along the strands' entries, each scene joined to the one the
+strands say they come from (a `samePlace` entry costs no more than a step), someone first in a strand starting a chain
+of their own; no chain crosses strands unless the strands say so (a fork begins from its parent), and their drive is
+measured along their chains. On the last run: 69 chains for 65 people; 200 moments moved, 56 scene starts (at most
+21 m), against 222 and 65 when the first build chained everyone through the whole run in play order. `occupation.mjs` smooths who is on the stage per scene of a strand (the script a detection with
+η 0.9; acting or speaking ×20, spoken to ×5, named ×1.2; the review's answers near certain). On the last real run
+(volume 1, 0.2 s): 527 moments of 65 people, mean cloud 4.1 m; talks face to face within reach went from 163 to 179 of
+258 (those left apart are a kilometre off, likely phone calls: that run asked no kinds); 222 moments moved more than
+2 m, none over 50; the director would start 65 scenes' people where the smoothing has them (at most 25 m) and add the
+one person surely there whom the script left out (the review sees the rest of the likelihoods). Each run's smoothing is
+written to `stage/world/smoothed/<run>.json`; Why shows each person's cloud and shift per card, the report the totals.
+Not yet: clouds drawn in the 3D view; card moments re-placed (only scene starts are); events (blasts) in the action.
+
+**Built (2026-11-02): W7 completed**, checked in a headless browser on a copy of the live workspace (desktop and phone).
+*Why*, per card, leads with the main agent's answers (question, answer, reason, pinned or waiting), then the laws as the
+card played, its proposals (the same break on several lines once, with how many, names not ids), each person's cloud
+(how sure, how far from where played) and system 2. *The run report* is a page of its own (`play/report`, opened from
+Why's Run report; `tools/pi-review/run-report.mjs`, rendered on the server, no script): a summary in sentences (scenes,
+moves, Jev's questions; the laws' checks and breaks; the review's questions, answers and pins; what the ontology
+gained; what the smoothing moved), then each law in words with what it checked and broke and what it decided as the run
+played, the review scene by scene with every answer and its reason and what waits, what went into the ontology layer by
+layer (each scene's people, place and speakers before and after; where people are; relations in words, such as "scene 6
+comes at least 15 min after scene 5, walking 1214 m"; aliases, a building's lot, damage; strands) with the command that
+takes it back, who says each line, the smoothing's largest moves and who is likely on the stage though the script left
+them out, the world's own check, system 2. *Clouds* (the **Clouds** button, on by default): the card's smoothed clouds
+drawn in the 3D view, each spot a disc as large and bright as it is likely, a dashed line from where someone was played
+to where the smoothed history has them. *The book*: a line whose speaker the world settled is underlined (dotted), one
+the review ruled out struck through, with who and by whom on hover.
+
+**Built (2026-11-02): developer mode and the run's records** (the user: like the handoff's blinking observations,
+what is smoothed beside what the data were, and as much record as possible; on iPad too). World · Live's **Dev** panel
+(on the left, beside Read) shows for the card being read: each person in the scene, moment by moment, the raw
+observation (where the run had them, its rank and σ), the smoothed spot, how far apart, the cloud's width, the talk
+couplings, their drive and how likely they are on the stage; then every record of the card and its scene as JSON (the
+card as played, the scene's starts and laws and world check, the world log's and the ledger's rows, the review's items
+and answers, what canon took, the notes, the full smoothing), each with Copy; and the run's own files. In the 3D view,
+**Raw (blinks)** shows only the observations, the moment shown flashing like a readout with a ring as wide as it is
+trusted and faint ghosts at the scene's other moments; **Smoothed**, the least-action history through the moments and
+the cloud; **Both**. Data from `play/dev.json` and `play/dev/file` (read only). Every run now keeps its own records in
+`stage/director/runs/<run>/` (the pins it began with, its log line by line, its record, the laws over it, Jev's
+questions and answers in it, and an index pointing at its page, world log, ledger, smoothing, canon, pool and
+answers); the smoothing keeps each moment's observation, σ, couplings and draws, and who is likely on the stage per
+scene. Checked headless on desktop and on iPad sizes with Safari's user agent and touch (landscape 1180×820, portrait
+820×1180, mini 744×1133): World · Live, Dev, the report and the player with no console errors and no sideways scroll;
+the pages use nothing newer than Safari 15.4.
+
+**Built (2026-11-02): W0**, a valid world (the user's research handoff, `Text_to_City_Research_Handoff.md`: separate
+interior topology with explicit portals, a generation-time validator, order-independent chunks, failure codes and
+minimal replays; the same as the field's practice: areas joined by portals rather than one grid over everything, and a
+chunk a pure function of its seed and place). In `apps/playground/src/data/world.ts`:
+
+- *Interior topology.* A turned building's inside is no longer joined cell by cell on the world grid, which aliased its
+  turned plan (a corridor and a room a grid step apart were joined through a wall; a door whose plan cell fell between
+  world cells shut its room). Its plan is walked instead: each plan cell is stood for by the world cell nearest it (its
+  own, else the nearest of its kind on that floor), and two plan cells are joined only by the plan's rules (corridor to
+  corridor, within a room, a room to a corridor at its door, a stair to the floor above). The street joins it only at
+  its doors. A square building's plan is the world grid, and is walked by the same rules.
+- *Order-independent holdings.* A cell two buildings could stand on goes to the first in the source's order
+  (`ownCell`), not to whichever was reached first; a test reaches the chunks in two orders and gets the same holdings
+  and the same walk.
+- *The world's own check* (`worldIssues`): `NO_ENTRANCE` (a building wholly in the graph not reached from the street)
+  and `SHUT_ROOM` (a room not reached). A test runs it on a generated city (none), and on one building with every
+  corridor gone (`NO_ENTRANCE`). It found what the tests had not: 43 rooms on upper floors shut, because a stair whose
+  plan cell no world cell held joined no floors (fixed: stairs are joined on the plan), and one building swallowed by
+  another in a city whose overlaps were not cleared (as the export does). The director runs it round every scene's
+  start and keeps what it finds with the scene (`world`); the ledger holds it for the review (`kind: world`). Its first
+  stand-in run (scenes 1–6) found 18 more on the real world. 11 were the check's own (it measured the graph over nodes
+  with no walk, judging buildings half outside it), and 3 more were buildings whose street had not streamed in yet (now
+  judged only with every chunk round them loaded). 4 were real: rooms of a small turned tower whose whole corridor on
+  a floor fell between world cells, so that floor's rooms joined nothing (fixed: with none of its kind held, a wall's
+  cell stands for a plan cell). After it, the same run: nothing found, and of 233 moves 171 walked, 62 already there,
+  none held (W4's check on the same scenes held 34). Scenes 13–17 then showed one more: a 10-floor office from the text's
+  slots standing inside a 100-floor tower from another slot, both kept because overlaps gave way only for buildings
+  the text had not placed (fixed: one the text placed moves to the nearest clear spot, `tall.ts clearOverlaps`; still
+  unchecked: overlaps between two places' buildings, which the check would show).
+- *Failure codes.* A held walk says why as a code: `NO_TARGET` (nowhere to stand there), `OFF_WALK` (where they stand
+  is off the walk round them and their target), `NO_PATH` (no way there on foot), with the least that replays it (the
+  seed's key, where they stood, the first targets, how they went), in the card's moves and its L10 verdict.
+
+**Built (2026-11-02): W5, W6 and W7**, with Pi as the main agent (the user, 2026-11-02: Codex and others later, through
+the same CLI).
+
+- *W5 · The review* (`world-engine/review/review.mjs`, `backprop.mjs`). After every run the ledger's held entries and the
+  user's notes become pool items (v1's pool, batches and answers), **one question per person or pair and scene**: the
+  same break on several cards or lines is one item, so one answer settles them all (the last real run's 112 held breaks
+  are 57 questions in 23 scenes). Scenes are ordered by reach (how often their people appear later in the strand) and
+  batched (10 at most, a budget of 12 scenes a run); `--agent <host state>` sends them to Pi's console. The review CLI:
+  `novel reading <dir> card|scene|line <id>`, `novel world log <dir> --scene|--person|--card <id>`, `novel source epub
+  <dir> [--doc N] [--grep <regex>]`, with v1's `novel world batch|answer`, `novel source grep|similar` and `novel query`;
+  Pi may run all of them (tools/pi-review/guard.mjs) and none that writes. At the next run's start the answers become
+  pins under the laws (`novel world apply`, or the director itself; an answer that would put someone in two places at
+  one stated moment, L2, goes back with why), and the director plays by them: presence, remote actors, talk kinds,
+  arrivals, stays. (The first cut of back-propagation below, a bridge, is replaced by W5b's smoother.) A talk answered **face to face** is a meeting pinned, an anchor: back-propagation draws a bridge
+  from each of the two people's last anchor to the other (who came to whom is a choice: both ways are drawn and the
+  one that changes the history least is kept), places their scene starts in the span on it, keeps the draw with the
+  least J, and applies it below 300 m (above, it is held for the review as class R). The world log ranks what the
+  review pinned `pinned` and the re-placed starts `revised` (source back-propagated). First cut: the span keeps to the
+  person's stay round the meeting (their scene starts within 60 m of where they stood at it, back to their last anchor:
+  a scene's place is often only the city, and the first try drew a 700 m bridge through scenes elsewhere), and only
+  scene starts are re-placed.
+- *W6 · Back into the ontology* (`world-engine/review/canon.mjs`). After every run: each scene's presence (who played in
+  it, people of the book only), place and speakers (the reading's, unknown where the laws held them or the review
+  rejected them), where each person is at a scene's end (a state change after its last event; held where a law held
+  them there), and a timeline per strand, appended to canon's bundle (last write wins), the graph rebuilt. Every write is
+  logged in `stage/world/canon.jsonl` with what it replaced: `novel world undo <dir> --run <id>` takes a run's writes
+  back. Not yet: time relations, damage (no canon schema for a building's state yet).
+
+  **W6 completed (2026-11-02).** *Speakers settled by the world* (`speakers.mjs`): a spoken line's speaker is the
+  review's (a pin), else the reading's when sure and there, else, the reading unsure, Jev's own guess (at least 20%)
+  when the world has them there and within earshot of whom they speak to, else the card's only speaker there; a guess
+  naming someone not there (perhaps a phone) and everything else is held as a `who-speaks` question (those there as
+  options). On the last real run's 1,600 spoken lines: 1,006 the reading's, 446 the world's, 143 held; canon's speakers
+  went from 1,011 lines to 1,362 of 1,640. The settled ones are the director's too: a line the reading was unsure of
+  gets its bubble, and World · Live underlines it (dotted) with who settled it. *Audits* (§7b): 2% of what the world
+  settles on its own goes to the review as `right`/`wrong`; a wrong one rules that speaker out of the line for good,
+  and a class with at least 5 audits over 20% wrong is routed to the review until it falls. *Identity*
+  (`identity.mjs`): from the world log, two slots of one description met in a strand one after the other and never
+  together, and a description never with a named person who is in a scene beside it, sharing at least two companions
+  (each description's two likeliest), as `identity` questions (12 a run); `same` for a named person writes the
+  description's words as their aliases in canon. *Places:* a scene at an unnamed place takes its nearest named one up
+  the script's tree. On the last real run: canon's 39 played scenes all have presence and a place (none had either),
+  98 scene-end locations (27 held), 125 presence edges in the graph (0 before), 3 strand timelines; the review has 143
+  `who-speaks`, 8 audits and 12 identities besides the laws' 57; undo returns canon exactly as it was.
+
+  **And the rest of §6 (2026-11-02):** `worldPlaces` reads from the run's page which lot each scene played in (the
+  building spawning bound it to, else the one most of its people stood in) and on which floor. *Building identity:* a
+  named building is its lot (`properties.world.lot`, floors, role), the same lot every time, else a `building` question.
+  *A room's floor:* a named room or floor gets its floor and building, the same every time, else a `floor` question.
+  *A place's container:* a named place smaller than a building playing in a named building's lot is `PART_OF` it, where
+  canon has no parent for it; against canon's parent, a `container` question (canon keeps one parent per place, so the
+  answer is pinned for the main agent rather than rewritten). *Time:* someone who walks from one scene to the next,
+  both at one unstated time, puts the second at least that walk later: `PRECEDES` from the first scene's last event to
+  the second's first, the minutes, metres and walker kept with it (stated clocks stay the laws', L5). *Damage:* a blast
+  on a named building's lot goes on its record (`properties.world.damage`: scene, card, cells taken), unless the laws
+  held the blast (L13). *Splits:* someone twice in two places at one stated moment (L2) is a `split` question.
+  Undo covers all of it. On the last real run: the named building of scenes 13–20 is its lot (a 40-floor office) with
+  scene 21's blast on it; 4 time relations (scene 6 at least 15 min after 5, scene 10 15 min after both 8 and 9, scene 13 10 min after 12), 4
+  `PRECEDES` edges in the graph; no rooms are named in volume 1 and no one breaks L2, so no floors, containers or splits
+  there. Still not in canon: someone hurt (no state for it), a split carried out (the answer is pinned for the main
+  agent's identity tools).
+- *W7 · UI* (World · Live's reader): Why shows, per card, the laws as it played (with the talk's kind, Jev's or the
+  review's), system 2's answer beside Jev's, the card's proposals, and the review's question with the agent's answer and
+  reason; **Run report** shows the run's laws by verdict, system 2, proposals by state, the review, canon's writes, the
+  revisions and the world's own check; a line whose speaker the review rejected is struck through in the book, with the
+  change on hover (`play/review.json`, sim-play.mjs directorReview).
+
+Order: W0 under all of it; W1 and W2 first (no model calls; they show the size of the problem), then W3 and W4, then W5 and W6, W7 alongside,
+then W8. Track A runs in parallel throughout.
+
+## 10. Decisions for the user
+
+1. ~~Review gates~~ **Decided (§7b):** review by exception; G0 the laws, G1 any main agent with all the rights; the user
+   reads reports and reverses through notes. Its numbers still to set: the audit share, the error-rate limit per
+   class, G1's budget per run.
+2. ~~EM merges~~ **Decided (§7b):** a clean merge applied with a flag, undoable, as v1; anything else to G1.
+3. When the laws reject a reading's sure answer (a speaker at 0.9 out of earshot): the reading wins and the world is
+   rechecked, or the world wins?
+4. Abilities (law 12): read from the concepts' owners only, or also asked of the work model per person?
+5. Replays: each run replays the whole volume with pins (cached), or only from the first changed scene?
+7. Back-propagation's weights: μ (a joule of destruction against a metre), α (the pull toward the old track), and the
+   size of a revision above which it goes to the review.
+6. System 2's threshold: 0.5 for every question, or its own per question kind (whether, direction, spot, speaker)?

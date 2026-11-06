@@ -20,6 +20,8 @@ export interface WorkModelUsage {
   promptTokens: number | null;
   completionTokens: number | null;
   totalTokens: number | null;
+  /** Of the prompt tokens, the ones served from the provider's prompt cache, when it says (DeepSeek: prompt_cache_hit_tokens). */
+  cacheHitTokens?: number | null;
 }
 
 export interface WorkModelResult {
@@ -70,6 +72,7 @@ interface ChatCompletionResponse {
     prompt_tokens?: number;
     completion_tokens?: number;
     total_tokens?: number;
+    prompt_cache_hit_tokens?: number;
   };
 }
 
@@ -148,6 +151,7 @@ export class HttpWorkModel implements WorkModel {
               promptTokens: data.usage?.prompt_tokens ?? null,
               completionTokens: data.usage?.completion_tokens ?? null,
               totalTokens: data.usage?.total_tokens ?? null,
+              cacheHitTokens: data.usage?.prompt_cache_hit_tokens ?? null,
             },
             latencyMs: Math.round(performance.now() - started),
             attempts,

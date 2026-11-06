@@ -23,6 +23,11 @@ import { PlaceMap } from "./components/PlaceMap";
 import { followTarget, timePlaceEmergence, universeIds, type TimePlaceProjection } from "./data/timePlace";
 import { atlasArrangement, atlasNodeId, atlasWorld, pinNodeId, readingOrderProjection, sceneOfSpiral, spiralNodeId, SCENE_LEVEL, spiralArrangement, spiralWorld, type AtlasLevels, type StoryShape } from "./data/orbitalTimePlace";
 import { AtlasPanel } from "./components/AtlasPanel";
+import { HoloStage, type HoloMode } from "./components/HoloStage";
+import { ReadMode } from "./components/ReadMode";
+import { StageClips } from "./components/StageClips";
+import { keyedPlan, placePlan, type StagePlan } from "./data/readMode";
+import { journeyScript, placeScript } from "./data/holoScript";
 import { RollingText } from "./components/RollingText";
 import { attachSwipe } from "./swipe";
 import type { Swipe } from "./data/gestures";
@@ -52,6 +57,7 @@ const EMPTY_TIME_PLACE: TimePlaceProjection = { available: false, times: [], sce
 type StageView = "narrative" | "story" | "places";
 const STAGE_VIEWS: [StageView, string][] = [["narrative", "Narrative"], ["story", "Story time"], ["places", "Places"]];
 const MODES: [boolean, string][] = [[true, "3D"], [false, "Flat"]];
+const HOLO_MODES: HoloMode[] = ["diorama", "cutscene", "journey"];
 const NO_NODES: WorldNode[] = [];
 const NO_EDGES: WorldEdge[] = [];
 const NO_JOINS: PendingJoin[] = [];
@@ -130,6 +136,9 @@ export default function App() {
   /** Orbital Places: only the scenes that were at the centre of the Story time spiral (null: no limit). */
   const [atlasFocus, setAtlasFocus] = useState<Set<string> | null>(null);
   const [atlasLevels, setAtlasLevels] = useState<AtlasLevels>(SCENE_LEVEL);
+  /** Orbital Places: the story moment the named buildings are shown at (a period id; null: the end of the story), and whether later ones show faintly. */
+  const [atlasBuildingsAt, setAtlasBuildingsAt] = useState<string | null>(null);
+  const [atlasLaterBuildings, setAtlasLaterBuildings] = useState(false);
   /** Orbital Story time: one spiral line, or strands on a ribbon (remembered per browser). */
   const [storyShape, setStoryShape] = useState<StoryShape>(() => { try { return localStorage.getItem("story-shape") === "strands" ? "strands" : "line"; } catch { return "line"; } });
   const chooseStoryShape = (shape: StoryShape) => { setStoryShape(shape); try { localStorage.setItem("story-shape", shape); } catch { /* per-browser convenience only */ } };
@@ -161,6 +170,17 @@ export default function App() {
   const [dockOpen, setDockOpen] = useState(() => { try { return localStorage.getItem("dock-open") === "1"; } catch { return false; } });
   const toggleDock = () => setDockOpen((open) => { try { localStorage.setItem("dock-open", open ? "0" : "1"); } catch { /* storage unavailable: remember for this visit only */ } return !open; });
   const [reducedMotion, setReducedMotion] = useState(() => window.matchMedia("(prefers-reduced-motion: reduce)").matches);
+  /** Holo stage (places phase 2): a place replayed like a game, or the journey across places.
+   * Deep link: ?holo=<place id or name | journey>&holoMode=diorama|cutscene|journey&holoBeat=<n>[&holoPause]. */
+  /** Read mode: the book's text with its places replayed beside it (?read; desktop). */
+  const [readMode] = useState(() => new URLSearchParams(location.search).has("read"));
+  /** Stage clips: the prepared animation as a reel of short pieces (?clips; phones too). */
+  const [clipsMode] = useState(() => new URLSearchParams(location.search).has("clips"));
+  const [holo, setHolo] = useState<{ target: string; mode: HoloMode; beat: number; paused?: boolean } | null>(() => {
+    const params = new URLSearchParams(location.search), target = params.get("holo");
+    const mode = params.get("holoMode"), beat = Number(params.get("holoBeat") ?? 0);
+    return target ? { target, mode: HOLO_MODES.includes(mode as HoloMode) ? mode as HoloMode : target === "journey" ? "journey" : "diorama", beat: Number.isInteger(beat) && beat >= 0 ? beat : 0, paused: params.has("holoPause") } : null;
+  });
   const [dynNodes, setDynNodes] = useState<WorldNode[]>([]);
   const [dynEdges, setDynEdges] = useState<WorldEdge[]>([]);
   const [albumPictures, setAlbumPictures] = useState<OrbitIllustration[]>([]);
@@ -820,15 +840,48 @@ export default function App() {
       return { world: spiral, arrangement: spiralArrangement(order, spiral, focusBook, storyShape) };
     }
     if (!viewTimePlace?.places.length) return null;
-    const filter = { periods: atlasPeriods, sceneIds: atlasFocus, levels: atlasLevels };
+    const filter = { periods: atlasPeriods, sceneIds: atlasFocus, levels: atlasLevels, buildingsAt: atlasBuildingsAt, laterBuildings: atlasLaterBuildings };
     const regrouped = atlasWorld(displayWorld, viewTimePlace, filter, loadedBook);
     return { world: regrouped, arrangement: atlasArrangement(viewTimePlace, filter, regrouped, focusBook) };
-  }, [orbitalMode, stageView, displayWorld, viewTimePlace, atlasPeriods, atlasFocus, atlasLevels, loadedBook, focusBook, storyShape]);
+  }, [orbitalMode, stageView, displayWorld, viewTimePlace, atlasPeriods, atlasFocus, atlasLevels, atlasBuildingsAt, atlasLaterBuildings, loadedBook, focusBook, storyShape]);
   /** Live highlights and Pi's touches, in the ids the shown projection uses. */
   const shownEmerging = useMemo(() => emerging ? { times: new Set([...emerging.times].map(universeId.time)), places: new Set([...emerging.places].map(universeId.place)) } : null, [emerging, universeId]);
   const shownTouched = useMemo(() => new Set([...touchedScenes].map(universeId.scene)), [touchedScenes, universeId]);
 
   const shownWorld: LoadedWorld = displayWorld ?? (world as LoadedWorld);
+  const selectedPlace = selected?.id.startsWith("pin:") ? viewTimePlace?.places.find((place) => place.id === selected.id.slice(4)) : undefined;
+  const holoJourney = holo?.mode === "journey";
+  const holoScript = useMemo(() => {
+    if (!holo || !viewTimePlace) return null;
+    if (holoJourney) return journeyScript(viewTimePlace);
+    const place = viewTimePlace.places.find((entry) => entry.id === holo.target) ?? viewTimePlace.places.find((entry) => entry.label === holo.target);
+    return place ? placeScript(viewTimePlace, shownWorld, place.id, loadedBook) : null;
+  }, [holo?.target, holoJourney, viewTimePlace, shownWorld, loadedBook]);
+  /** Leaving the journey for one place's stage: the busiest place this book can replay. */
+  // The book's prepared animation (novel stage prep), for the place stage's moves; undefined until asked, null when there is none.
+  const [stagePlan, setStagePlan] = useState<StagePlan | null | undefined>(undefined);
+  const holoOpen = !!holo && !holoJourney;
+  useEffect(() => {
+    if (!holoOpen) return;
+    let live = true;
+    fetch(`api/stage${bookQuery(phoneLive ? loadedBook : null)}`, { cache: "no-store" }).then((response) => response.ok ? response.json() : null).then((plan: StagePlan | null) => { if (live) setStagePlan(plan?.places ? plan : null); }).catch(() => { if (live) setStagePlan(null); });
+    return () => { live = false; };
+  }, [holoOpen, phoneLive, loadedBook]);
+  const holoPlan = useMemo(() => {
+    const placeId = holoScript && !holoJourney ? holoScript.places[0]?.id : undefined;
+    // Without a prepared plan from this host, nobody moves.
+    if (!placeId || !stagePlan) return null;
+    const plan = placePlan(stagePlan, placeId, loadedBook);
+    return plan ? keyedPlan(plan, holoScript!) : null;
+  }, [holoScript, holoJourney, stagePlan, loadedBook]);
+  // The place with the most beats: each place's script built once, not twice per comparison.
+  const busiestPlace = () => (viewTimePlace?.places ?? []).map((place) => [place.id, placeScript(viewTimePlace!, shownWorld, place.id, loadedBook).beats.length] as const).reduce<readonly [string, number] | null>((best, entry) => !best || entry[1] > best[1] ? entry : best, null)?.[0] ?? "journey";
+  const closeHolo = () => {
+    setHolo(null);
+    const url = new URL(location.href);
+    for (const key of ["holo", "holoMode", "holoBeat"]) url.searchParams.delete(key);
+    history.replaceState(history.state, "", url);
+  };
   const loadedBookEntry = books.find((book) => book.id === loadedBook) ?? null;
   const agentBookEntry = books.find((book) => book.id === agentBook) ?? null;
   const bookLoading = phoneLive && requestedBook !== null && requestedBook !== loadedBook;
@@ -841,16 +894,29 @@ export default function App() {
   const libraryAtTop = !!shownWorld?.library && ["library", "series"].includes(orbitalPage?.kind ?? "");
   const libraryCaption = shownWorld?.library?.events.at(-1)?.type.replaceAll(".", " / ") ?? "Waiting for organization";
 
+  // The same page with ?read toggled (other parameters and the fragment kept), so read mode opens as its own link.
+  /** The book's simulation player (novel sim run), served beside the app by the host; only once the book has runs. While Jev is picking (novel sim pick), its live page. */
+  const simulationLive = timePlace?.simulation?.live?.status === "running";
+  const simulationHref = phoneLive && timePlace?.simulation?.strands.length ? `${location.pathname.replace(/[^/]*$/, "")}play/${simulationLive ? "live" : ""}?volume=${loadedBook ?? "active"}` : null;
+  const simulationLabel = simulationLive ? "● Simulation live" : "Simulation";
+  const withRead = (on: boolean) => { const params = new URLSearchParams(location.search); if (on) params.set("read", "1"); else params.delete("read"); return `${location.pathname}${params.size ? `?${params}` : ""}${location.hash}`; };
+  const withClips = (book: number | null) => { const params = new URLSearchParams(location.search); params.delete("read"); if (book === null) params.delete("clips"); else { params.set("clips", "1"); params.set("book", String(book)); } return `${location.pathname}${params.size ? `?${params}` : ""}${location.hash}`; };
   if (!world) {
     return (
       <main className="loading-screen"><span className="eyebrow">NOVEL / ONTOLOGY PI</span><h1>Narrative archive.</h1><p role={loadError ? "alert" : "status"}>{loadError ? `Could not open the archive: ${loadError}` : "Opening local records…"}</p></main>
     );
   }
 
+  if (clipsMode) return <StageClips timePlace={timePlace} world={shownWorld} volume={loadedBook} requested={requestedBook} title={loadedBookEntry ? bookName(loadedBookEntry) : liveCollection} reducedMotion={reducedMotion}
+    books={books.length ? books.map((book) => ({ id: book.id, label: bookName(book) })) : loadedBook !== null ? [{ id: loadedBook, label: liveCollection }] : []} bookQuery={bookQuery(phoneLive ? loadedBook : null)} simulationHref={simulationHref} simulationLabel={simulationLabel} exitHref={withClips(null)} clipsHref={withClips} />;
+  if (readMode) return <ReadMode simulationHref={simulationHref} simulationLabel={simulationLabel} timePlace={timePlace} world={shownWorld} volume={loadedBook} title={loadedBookEntry ? bookName(loadedBookEntry) : liveCollection} reducedMotion={reducedMotion} bookQuery={bookQuery(phoneLive ? loadedBook : null)} exitHref={withRead(false)} />;
+
   return (
     <div className={`app orbital-active ${orbitalMode ? "mode-orbital" : "mode-traditional"}${stageView !== "narrative" ? " stage-alt" : ""}${reducedMotion ? " reduce-motion" : ""}${followingActivity ? " following-orbital" : ""}${dockOpen ? " dock-open" : " dock-closed"}`}>
       <header className="topbar">
         <button className="brand" onClick={overview} aria-label="Return to archive overview"><svg viewBox="0 0 40 40" aria-hidden="true"><path d="M4 32V8h7l18 24h7V8M4 32h7V18l18 14M19 8h17" fill="none" stroke="currentColor" strokeWidth="3" /></svg><span>NOVEL<span>ONTOLOGY / PI</span></span></button>
+        <a className="read-link" href={withRead(true)} title="Read the book with its places replayed beside the text (desktop)">Read mode</a>
+        <a className="read-link clips-link" href={withClips(loadedBook ?? 1)} title="Flip through short clips of the book's prepared animation">Clips</a>
         <span className="sample-badge"><i />{phoneLive || liveUrl ? "LIVE" : "LOCAL SAMPLE"}</span>
       </header>
       <div className="page-heading">
@@ -864,7 +930,11 @@ export default function App() {
             <div className="stage-group" role="group" aria-label="View">{STAGE_VIEWS.map(([value, label]) => <button key={value} aria-pressed={stageView === value} onClick={() => chooseStageView(value)}>{label}</button>)}</div>
             {orbitalMode && stageView === "story" && viewTimePlace?.available && <div className="stage-group" role="group" aria-label="Story shape">{([["line", "Line"], ["strands", "Strands"]] as const).map(([value, label]) => <button key={value} aria-pressed={storyShape === value} title={value === "strands" ? "Scenes that run in parallel side by side (estimated from who is in each scene)" : "Every scene on one line in story order"} onClick={() => chooseStoryShape(value)}>{label}</button>)}</div>}
           </div>
-          {regroupedOrbit && stageView === "places" && viewTimePlace && <AtlasPanel data={viewTimePlace} periods={atlasPeriods} onPeriods={(periods) => { setAtlasPeriods(periods); setAtlasFocus(null); }} focus={atlasFocus} onClearFocus={() => setAtlasFocus(null)} levels={atlasLevels} onLevels={setAtlasLevels} onCharacter={(id) => requestOrbitalFocus({ id, label: viewTimePlace.names[id] ?? id, kind: "character", state: "canon", parent: null, lane: "canon", chrono: 0, lanePos: [0, 0, 0], interiorPos: [0, 0, 0] })} />}
+          {regroupedOrbit && stageView === "places" && viewTimePlace && <AtlasPanel data={viewTimePlace} periods={atlasPeriods} onPeriods={(periods) => { setAtlasPeriods(periods); setAtlasFocus(null); }} focus={atlasFocus} onClearFocus={() => setAtlasFocus(null)} levels={atlasLevels} onLevels={setAtlasLevels} buildingsAt={atlasBuildingsAt} onBuildingsAt={setAtlasBuildingsAt} laterBuildings={atlasLaterBuildings} onLaterBuildings={setAtlasLaterBuildings} onCharacter={(id) => requestOrbitalFocus({ id, label: viewTimePlace.names[id] ?? id, kind: "character", state: "canon", parent: null, lane: "canon", chrono: 0, lanePos: [0, 0, 0], interiorPos: [0, 0, 0] })} />}
+          {regroupedOrbit && stageView === "places" && viewTimePlace && <div className="holo-entry" role="toolbar" aria-label="Holo stage">
+            {selectedPlace && <button className="is-primary" onClick={() => setHolo({ target: selectedPlace.id, mode: "diorama", beat: 0 })}>▶ Enter {selectedPlace.label}</button>}
+            <button onClick={() => setHolo({ target: "journey", mode: "journey", beat: 0 })}>➝ Journey</button>
+          </div>}
           {regroupedOrbit ? <OrbitalExplorer key={stageView} world={regroupedOrbit.world} arrangement={regroupedOrbit.arrangement} albumPictures={stageView === "story" ? albumPictures : []} albumPortraits={albumPortraits} showCausal activity={liveActivity} quietSelection={followingActivity} followingActivity={followingActivity} onPage={reportOrbitalPage} onCenter={stageView === "story" ? noteStoryCentre : undefined} onSourceVolume={chooseBook} book={loadedBookEntry} bookId={loadedBook} bookBar={bookBar} activityNodes={NO_NODES} activityEdges={NO_EDGES} reducedMotion={reducedMotion} showRelations={showRelations} resetToken={orbitalReset} focusRequest={orbitalFocus && !orbitalFocus.chapterId ? orbitalFocus : null} joins={NO_JOINS} onJoinSettled={settleJoin} onSelect={inspectOrbital} onChapter={ignoreChapter} onMotion={() => setReducedMotion(!reducedMotion)} onRelations={() => setShowRelations(!showRelations)} />
           : stageView === "story" ? <StoryTimeline pictures={albumPictures} album={storyAlbum} onPicture={selectStoryPicture} data={viewTimePlace ?? EMPTY_TIME_PLACE} names={new Map(Object.entries(viewTimePlace?.names ?? {}))} bookBar={bookBar} focusBook={focusBook} emerging={shownEmerging?.times} touched={emerging && Date.now() - emerging.at < 9000 ? undefined : shownTouched} following={followingActivity} onShowInOrbit={(sceneId) => {
             // Universe ids are "<volume>:<scene>": another book opens first.
@@ -898,6 +968,9 @@ export default function App() {
         </aside>
         <div className="activity-dock"><ActivityTab count={activity.count} shine={activity.shine} caughtUp={activity.caughtUp} active={followingActivity} onClick={flyToSite} /></div>
       </main>
+      {holo && holoScript && <HoloStage key={`${holo.target}:${holoJourney}`} script={holoScript} mode={holo.mode} initialBeat={holo.beat} autoplay={!holo.paused} reducedMotion={reducedMotion} onClose={closeHolo} plan={holoPlan}
+        onMode={(mode) => setHolo({ mode, beat: 0, target: mode !== "journey" && holo.target === "journey" ? busiestPlace() : holo.target })}
+        onEnterPlace={(placeId) => setHolo({ target: placeId, mode: "diorama", beat: 0 })} />}
       <button className="dock-toggle" aria-expanded={dockOpen} onClick={toggleDock} title={dockOpen ? "Fold the processing dock" : "Show the processing dock"}><i className={piBusy(liveActivity) ? "is-busy" : ""} /><span className="dock-label">{dockOpen ? "Hide processing" : phoneLive ? liveLabel : `Processing · ${processingStatus}`}</span><span aria-hidden="true">{dockOpen ? "▾" : "▴"}</span></button>
       <PipelineStrip stage={stage} status={processingStatus} reducedMotion={reducedMotion} faculties={liveActivity?.faculties} telemetryNote={liveActivity?.telemetryNote} />
       {phoneLive && (!libraryAtTop || liveActivity?.review) && <PiReviewProgress review={liveActivity?.review} />}

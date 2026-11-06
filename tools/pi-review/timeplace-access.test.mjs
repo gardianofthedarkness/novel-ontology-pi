@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { mkdtemp, mkdir, writeFile, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { timePlaceChangesetIds } from './timeplace-access.mjs';
+import { stageObjectsChangesetIds, timePlaceChangesetIds } from './timeplace-access.mjs';
 
 test('only source-bound time-place packets are reviewable by Pi', async () => {
   const workspace = await mkdtemp(join(tmpdir(), 'tp-access-'));
@@ -39,5 +39,25 @@ test('place-tree sweep packets of PART_OF links are reviewable too', async () =>
   await packet('cs_timeplace_place-tree_2', 'other-faculty', 'PART_OF');
   await packet('cs_timeplace_place-tree_3', 'place-tree', 'KNOWS');
   assert.deepEqual(await timePlaceChangesetIds(workspace), ['cs_timeplace_place-tree_1']);
+  await rm(workspace, { recursive: true, force: true });
+});
+
+test('stage-objects packets are reviewable only when they carry their sentences and hold only named buildings and things', async () => {
+  const workspace = await mkdtemp(join(tmpdir(), 'objects-access-'));
+  await mkdir(join(workspace, 'changesets'));
+  const facts = [
+    { id: 'so_ent_1', kind: 'upsert_entity', payload: { id: 'loc_obj_1', kind: 'Location', properties: { source: 'stage-objects' } } },
+    { id: 'so_rel_1', kind: 'add_relation', payload: { type: 'PART_OF', fromId: 'loc_obj_1', toId: 'p7' } },
+    { id: 'so_rel_2', kind: 'add_relation', payload: { type: 'MENTIONED_IN', fromId: 'item_obj_1', toId: 's1' } },
+    { id: 'so_alias_1', kind: 'add_alias', payload: { entityId: 'item_1', aliasText: 'K.L.D.' } },
+  ];
+  const packet = (id, extra = {}) => writeFile(join(workspace, 'changesets', `${id}.json`), JSON.stringify({ id, blockId: 'stage-objects', status: 'pending_review', reviewSource: [{ id: 'b0000_s0000', text: '车站。' }], proposals: facts, ...extra }));
+  await packet('cs_stage_objects_1');
+  await packet('cs_stage_objects_2', { reviewSource: [] });
+  await packet('cs_stage_objects_3', { proposals: [{ id: 'p', kind: 'upsert_entity', payload: { id: 'c1', kind: 'Character', properties: {} } }] });
+  await packet('cs_stage_objects_4', { blockId: 'time-place' });
+  await packet('cs_stage_objects_x');
+  assert.deepEqual(await stageObjectsChangesetIds(workspace), ['cs_stage_objects_1']);
+  assert.deepEqual(await timePlaceChangesetIds(workspace), [], 'never listed as time-place packets');
   await rm(workspace, { recursive: true, force: true });
 });

@@ -1,0 +1,178 @@
+{
+  "about": "Composite buildings (the user, 2026-11-01): a shop, a restaurant, a bar, a cinema the text passes by is part of a larger building, not a building of its own. Each tenant type: in, the uses of the buildings it may be part of (TERRAIN_KINDS.building), the likeliest first. It joins the host under its holder where the characters' travel is least, and takes no lot. Its floor and size: a type with `floor` and `size` is always there (a convenience store on floor one, about 120 m²), asked nothing; any other is asked, one question to Jev, which floor of its host (any, or under the street) and how large. floors: how many floors it is tall (a cinema 2; else 1). It stands at a random spot of that floor, drawn as its use's model, roughly: no tiling, no stairs. A tenant a scene is set in stays a building of its own, since the stage walks in it.",
+  "tenants": {
+    "convenience-store": {
+      "in": [
+        "office",
+        "apartment",
+        "station",
+        "mall",
+        "hotel"
+      ],
+      "floor": 1,
+      "size": 120
+    },
+    "supermarket": {
+      "in": [
+        "mall",
+        "apartment",
+        "department",
+        "station"
+      ]
+    },
+    "ramen-shop": {
+      "in": [
+        "station",
+        "mall",
+        "office",
+        "department"
+      ]
+    },
+    "sushi-restaurant": {
+      "in": [
+        "station",
+        "mall",
+        "office",
+        "department"
+      ]
+    },
+    "family-restaurant": {
+      "in": [
+        "mall",
+        "station",
+        "office",
+        "apartment"
+      ]
+    },
+    "fast-food": {
+      "in": [
+        "station",
+        "mall",
+        "office"
+      ]
+    },
+    "izakaya": {
+      "in": [
+        "office",
+        "station",
+        "mall"
+      ]
+    },
+    "bar": {
+      "in": [
+        "office",
+        "hotel",
+        "station",
+        "mall"
+      ]
+    },
+    "karaoke": {
+      "in": [
+        "mall",
+        "office",
+        "station"
+      ]
+    },
+    "cafe": {
+      "in": [
+        "office",
+        "station",
+        "mall",
+        "department",
+        "hotel"
+      ]
+    },
+    "patisserie": {
+      "in": [
+        "mall",
+        "station",
+        "department",
+        "office"
+      ]
+    },
+    "bakery": {
+      "in": [
+        "station",
+        "mall",
+        "department",
+        "apartment"
+      ]
+    },
+    "donut-shop": {
+      "in": [
+        "station",
+        "mall",
+        "office"
+      ]
+    },
+    "drugstore": {
+      "in": [
+        "station",
+        "mall",
+        "office",
+        "apartment"
+      ],
+      "floor": 1,
+      "size": 150
+    },
+    "bookstore": {
+      "in": [
+        "mall",
+        "department",
+        "station"
+      ]
+    },
+    "clothing-store": {
+      "in": [
+        "mall",
+        "department",
+        "station"
+      ]
+    },
+    "game-shop": {
+      "in": [
+        "mall",
+        "department",
+        "station"
+      ]
+    },
+    "florist": {
+      "in": [
+        "station",
+        "mall",
+        "office",
+        "hotel"
+      ],
+      "floor": 1,
+      "size": 40
+    },
+    "general-shop": {
+      "in": [
+        "mall",
+        "station",
+        "office",
+        "apartment"
+      ]
+    },
+    "cinema": {
+      "in": [
+        "mall",
+        "department"
+      ],
+      "floors": 2
+    },
+    "game-center": {
+      "in": [
+        "mall",
+        "station"
+      ]
+    },
+    "bank": {
+      "in": [
+        "office"
+      ],
+      "floor": 1,
+      "size": 300
+    }
+  }
+}

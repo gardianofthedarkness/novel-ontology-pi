@@ -9,7 +9,7 @@ import { proposeCausalityLink } from '../../dist/src/cli/commands/extract/causal
 import { causalSource } from '../../dist/src/solidifier/causality/evidence.js';
 import { loadChangeSet, saveChangeSet } from '../../dist/src/solidifier/merge/changesetStore.js';
 import { authorize } from './guard.mjs';
-import { sharedReviewReceipt, requireSharedReviewSkills } from './shared-review.mjs';
+import { bookPacketFile, requireSharedReviewSkills, sharedReviewReceipt } from './shared-review.mjs';
 import { validateStability } from './validate-stability.mjs';
 
 const execute = promisify(execFile);
@@ -65,4 +65,10 @@ test('shared gate requires only relevant loaded skills, with extra causal and li
   // Identity matches (universal EM) are the universe's shared character list: the ontology skill is enough.
   assert.equal(requireSharedReviewSkills(['review', 'show', '/lib', `um_${'a'.repeat(24)}`, '--scope', 'universe', '--universe', 'toaru'], { ontology: true }), 'universe');
   assert.throws(() => requireSharedReviewSkills(['review', 'show', '/lib', `um_${'a'.repeat(24)}`, '--scope', 'universe', '--universe', 'toaru'], {}), /relevant source/);
+});
+
+test('a book-scope packet is read from where it lives: a changeset, or a standalone book\'s identity packet in its shared list', () => {
+  assert.equal(bookPacketFile('/b', 'cs_b0001'), '/b/changesets/cs_b0001.json');
+  assert.equal(bookPacketFile('/b', 'cs_stage_objects_1'), '/b/changesets/cs_stage_objects_1.json');
+  assert.equal(bookPacketFile('/b', 'um_a806fbf6a5a0dc70a25e3dd5'), '/b/cast/packets/um_a806fbf6a5a0dc70a25e3dd5.json');
 });

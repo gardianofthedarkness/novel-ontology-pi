@@ -1,0 +1,153 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Landscape Mock</title>
+<style>
+  :root { color-scheme: dark; --bg: #060c12; --ink: #e8f1f6; --dim: #8fa6b4; --line: #1d3242; }
+  body { margin: 0; background: var(--bg); color: var(--ink); font: 14px/1.45 system-ui, "PingFang SC", sans-serif; }
+  .wrap { display: grid; grid-template-columns: 1fr 300px; height: 100vh; }
+  #stage { position: relative; min-width: 0; }
+  #stage canvas { display: block; width: 100%; height: 100%; }
+  aside { border-left: 1px solid var(--line); padding: 14px 16px; overflow: auto; }
+  h1 { font-size: 15px; margin: 0 0 6px; }
+  p, li { color: var(--dim); font-size: 13px; }
+  .row { display: flex; gap: 6px; flex-wrap: wrap; margin: 10px 0; }
+  button { background: #10202c; color: var(--ink); border: 1px solid var(--line); border-radius: 6px; padding: 5px 9px; font: inherit; font-size: 12px; cursor: pointer; }
+  button[aria-pressed="true"] { border-color: #7ce6ff; }
+  body.capture aside { display: none; } body.capture .wrap { grid-template-columns: 1fr; }
+  @media (max-width: 700px) { .wrap { grid-template-columns: 1fr; grid-template-rows: 60vh auto; } aside { border-left: 0; border-top: 1px solid var(--line); } }
+</style>
+<script type="importmap">{ "imports": { "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js", "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/" } }</script>
+</head>
+<body>
+<div class="wrap">
+  <div id="stage"></div>
+  <aside>
+    <h1 id="title">Landscapes</h1>
+    <p id="facts"></p>
+    <div class="row"><button data-view="top" aria-pressed="true">Top down</button><button data-view="persp">3D</button></div>
+    <ul id="legend"></ul>
+  </aside>
+</div>
+<script type="application/json" id="fill-data">null</script>
+<script type="module">
+import * as THREE from "three";
+import { OrbitControls } from "three/addons/controls/OrbitControls.js";
+const $ = (id) => document.getElementById(id), data = JSON.parse($("fill-data").textContent), capture = new URLSearchParams(location.search).has("capture");
+if (capture) document.body.classList.add("capture");
+$("title").textContent = data.title;
+const host = $("stage"), renderer = new THREE.WebGLRenderer({ antialias: true, preserveDrawingBuffer: true });
+renderer.setPixelRatio(Math.min(2, devicePixelRatio || 1)); host.append(renderer.domElement);
+const world = new THREE.Scene(); world.background = new THREE.Color(0x060c12);
+const span = data.extent, persp = new THREE.PerspectiveCamera(40, 1, 1, 12000), top = new THREE.OrthographicCamera(-span, span, span, -span, 1, 6000);
+top.up.set(0, 0, -1); top.position.set(0, 3000, 0); top.lookAt(0, 0, 0);
+let camera = top; const controls = new OrbitControls(persp, renderer.domElement); controls.enableDamping = true;
+persp.position.set(span * 0.9, span * 0.75, span * 1.1);
+const resize = () => { const w = host.clientWidth, h = host.clientHeight; renderer.setSize(w, h, false); persp.aspect = w / h; persp.updateProjectionMatrix(); };
+new ResizeObserver(resize).observe(host); resize();
+
+// The hologram look of the strand page: a faint cyan fill and brighter cyan edges; named buildings with white edges.
+const FILL = new THREE.MeshBasicMaterial({ color: 0x2b86c4, transparent: true, opacity: 0.12, depthWrite: false, side: THREE.DoubleSide });
+const EDGE = new THREE.LineBasicMaterial({ color: 0x8fd6ff, transparent: true, opacity: 0.5 }), NAMED = new THREE.LineBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.9 });
+const GROUND = new THREE.LineBasicMaterial({ color: 0x5fb4e8, transparent: true, opacity: 0.28 }), ROADS = new THREE.MeshBasicMaterial({ color: 0x1d4a60, transparent: true, opacity: 0.55, depthWrite: false });
+
+// Building forms, in a unit box (x and z −½…½, y 0…1): baked Kenney models and procedural forms per landscape.
+const bytes = (text) => Uint8Array.from(atob(text), (c) => c.charCodeAt(0)).buffer;
+const unitOf = (geometry) => { geometry.computeBoundingBox(); const b = geometry.boundingBox, s = b.getSize(new THREE.Vector3()); geometry.translate(-(b.min.x + b.max.x) / 2, -b.min.y, -(b.min.z + b.max.z) / 2); geometry.scale(1 / s.x, 1 / s.y, 1 / s.z); return geometry; };
+function model(name) {
+  const m = data.models[name], g = new THREE.BufferGeometry();
+  g.setAttribute("position", new THREE.Float32BufferAttribute(Float32Array.from(new Int16Array(bytes(m.positions)), (v) => v * m.step), 3)); g.setIndex(new THREE.BufferAttribute(new Uint16Array(bytes(m.indices)), 1));
+  return unitOf(g);
+}
+const merge = (parts) => { const flat = parts.map((p) => (p.index ? p.toNonIndexed() : p)), array = new Float32Array(flat.reduce((n, p) => n + p.attributes.position.array.length, 0)); let at = 0; for (const p of flat) { array.set(p.attributes.position.array, at); at += p.attributes.position.array.length; } const g = new THREE.BufferGeometry(); g.setAttribute("position", new THREE.BufferAttribute(array, 3)); return g; };
+const box = (x0, y0, z0, x1, y1, z1) => new THREE.BoxGeometry(x1 - x0, y1 - y0, z1 - z0).translate((x0 + x1) / 2, (y0 + y1) / 2, (z0 + z1) / 2);
+const cyl = (r, y0, y1, x = 0, z = 0, sides = 12) => new THREE.CylinderGeometry(r, r, y1 - y0, sides).translate(x, (y0 + y1) / 2, z);
+const cone = (r, y0, y1, x = 0, z = 0, sides = 8) => new THREE.CylinderGeometry(0, r, y1 - y0, sides).translate(x, (y0 + y1) / 2, z);
+function gable(x0, x1, y0, y1, z0, z1) { // a pitched roof along x
+  const zm = (z0 + z1) / 2, v = [[x0, y0, z0], [x1, y0, z0], [x1, y0, z1], [x0, y0, z1], [x0, y1, zm], [x1, y1, zm]], tri = [[0, 1, 5], [0, 5, 4], [3, 4, 5], [3, 5, 2], [0, 4, 3], [1, 2, 5], [0, 3, 2], [0, 2, 1]];
+  const g = new THREE.BufferGeometry(); g.setAttribute("position", new THREE.Float32BufferAttribute(tri.flatMap((t) => t.flatMap((i) => v[i])), 3)); return g;
+}
+const FORMS = {
+  "sky-tiers": () => merge([box(-0.5, 0, -0.5, 0.5, 0.55, 0.5), box(-0.38, 0.55, -0.38, 0.38, 0.8, 0.38), box(-0.25, 0.8, -0.25, 0.25, 1, 0.25)]),
+  "sky-spire": () => merge([box(-0.5, 0, -0.5, 0.5, 0.7, 0.5), box(-0.3, 0.7, -0.3, 0.3, 0.88, 0.3), cone(0.12, 0.88, 1)]),
+  "sky-twin": () => merge([box(-0.5, 0, -0.5, -0.05, 1, 0.5), box(0.05, 0, -0.5, 0.5, 0.85, 0.5), box(-0.05, 0.4, -0.2, 0.05, 0.46, 0.2)]),
+  "podium": () => merge([box(-0.5, 0, -0.5, 0.5, 0.3, 0.5), box(-0.3, 0.3, -0.3, 0.3, 1, 0.3)]),
+  "slab": () => box(-0.5, 0, -0.18, 0.5, 1, 0.18), "l-block": () => merge([box(-0.5, 0, -0.5, 0.5, 1, -0.1), box(-0.5, 0, -0.1, -0.1, 1, 0.5)]), "u-block": () => merge([box(-0.5, 0, -0.5, 0.5, 1, -0.2), box(-0.5, 0, -0.2, -0.2, 1, 0.5), box(0.2, 0, -0.2, 0.5, 1, 0.5)]),
+  "house": () => merge([box(-0.5, 0, -0.5, 0.5, 0.6, 0.5), gable(-0.5, 0.5, 0.6, 1, -0.5, 0.5)]), "house-flat": () => merge([box(-0.5, 0, -0.5, 0.2, 1, 0.5), box(0.2, 0, -0.5, 0.5, 0.6, 0.5)]),
+  "cottage": () => merge([box(-0.4, 0, -0.4, 0.4, 0.5, 0.4), gable(-0.45, 0.45, 0.5, 1, -0.45, 0.45), box(0.2, 0.6, 0.1, 0.32, 1, 0.22)]), "townhouse": () => merge([box(-0.5, 0, -0.5, 0.5, 0.7, 0.5), gable(-0.5, 0.5, 0.7, 1, -0.5, 0.5)]),
+  "hall-saw": () => merge([box(-0.5, 0, -0.5, 0.5, 0.7, 0.5), ...[-0.5, -0.17, 0.16].map((x) => gable(x, x + 0.33, 0.7, 1, -0.5, 0.5))]), "hall-stack": () => merge([box(-0.5, 0, -0.5, 0.5, 0.55, 0.5), cyl(0.06, 0.55, 1, 0.35, 0.3), cyl(0.18, 0, 0.75, -0.3, 0.25, 16)]),
+  "warehouse": () => merge([box(-0.5, 0, -0.5, 0.5, 0.8, 0.5), gable(-0.5, 0.5, 0.8, 1, -0.5, 0.5)]), "crane": () => merge([box(-0.5, 0, -0.5, 0.5, 0.45, 0.5), box(-0.05, 0, 0.35, 0.05, 1, 0.45), box(-0.45, 0.92, 0.35, 0.5, 1, 0.45)]),
+  "pavilion": () => merge([cyl(0.5, 0, 0.55, 0, 0, 6), cone(0.55, 0.55, 1, 0, 0, 6)]), "ferris": () => merge([new THREE.TorusGeometry(0.45, 0.04, 6, 24).translate(0, 0.52, 0), box(-0.04, 0, -0.04, 0.04, 0.52, 0.04)]),
+  "bowl": () => merge([new THREE.TorusGeometry(0.42, 0.08, 6, 48).rotateX(Math.PI / 2).translate(0, 0.08, 0), new THREE.CylinderGeometry(0.5, 0.42, 0.16, 48, 1, true).translate(0, 0.08, 0)]),
+  "farmhouse": () => merge([box(-0.5, 0, -0.5, 0.2, 0.55, 0.5), gable(-0.5, 0.2, 0.55, 0.85, -0.5, 0.5), cyl(0.18, 0, 1, 0.35, 0.2, 14)]),
+};
+const VARIANTS = { skyscraper: ["skyscraper-a", "skyscraper-b", "skyscraper-e", "sky-tiers", "sky-spire", "sky-twin"], tower: [..."abcdefghijklm"].map((l) => `tower-${l}`), office: ["office-c", "office-h", "office-k", "podium", "block-wide-a"], shop: ["block-wide-a", "block-wide-b", "office-c", "podium"],
+  apartment: ["slab", "l-block", "u-block"], house: ["house", "house-flat"], hall: ["hall-saw", "hall-stack"], warehouse: ["warehouse", "crane"], pavilion: ["pavilion", "pavilion", "ferris"], stadium: ["bowl"], fountain: ["fountain"], cottage: ["cottage"], townhouse: ["townhouse"], farmhouse: ["farmhouse"], keep: ["keep"] };
+const forms = new Map();
+const formOf = (name) => { if (!forms.has(name)) { const g = data.models[name] ? model(name) : unitOf(FORMS[name]()); forms.set(name, { fill: g, edges: new THREE.EdgesGeometry(g, 25) }); } return forms.get(name); };
+const hash = (x, z) => Math.abs(Math.floor(Math.sin(x * 12.9898 + z * 78.233) * 43758.5453));
+// One instanced fill per form, and every building's edges in one line set (edges cannot be instanced).
+function drawBuildings(list, material) {
+  const groups = new Map(), m = new THREE.Matrix4(), q = new THREE.Quaternion(), up = new THREE.Vector3(0, 1, 0), lines = [], v = new THREE.Vector3();
+  for (const b of list) { const variants = VARIANTS[b.k] ?? ["slab"], name = b.form ?? variants[hash(b.x, b.z) % variants.length]; groups.set(name, [...(groups.get(name) ?? []), b]); }
+  for (const [name, members] of groups) {
+    const form = formOf(name), mesh = new THREE.InstancedMesh(form.fill, FILL, members.length), edge = form.edges.attributes.position.array;
+    // Round forms keep their own proportions instead of stretching to the lot: a pavilion as wide as it is deep, a
+    // Ferris wheel as tall as it is wide and thin.
+    const sizeOf = (b) => name === "ferris" ? (({ h }) => [h, h, h * 0.18])({ h: Math.max(30, b.floors * 3) }) : name === "pavilion" ? [Math.min(b.w, b.d, 24), b.floors * 3, Math.min(b.w, b.d, 24)] : [b.w, b.floors * 3, b.d];
+    members.forEach((b, i) => { q.setFromAxisAngle(up, -b.angle); m.compose(new THREE.Vector3(b.x, 0, b.z), q, new THREE.Vector3(...sizeOf(b))); mesh.setMatrixAt(i, m); for (let n = 0; n < edge.length; n += 3) { v.set(edge[n], edge[n + 1], edge[n + 2]).applyMatrix4(m); lines.push(v.x, v.y, v.z); } });
+    content.add(mesh);
+  }
+  const g = new THREE.BufferGeometry(); g.setAttribute("position", new THREE.Float32BufferAttribute(lines, 3)); content.add(new THREE.LineSegments(g, material));
+}
+let content = new THREE.Group(); world.add(content);
+// The box being asked about (Jev's loop): a white rectangle with its label, and earlier turns' boxes fainter.
+function boxOutline(box, opacity) { const pts = [[box.x0, box.z0], [box.x1, box.z0], [box.x1, box.z1], [box.x0, box.z1]].map(([x, z]) => new THREE.Vector3(x, 1.5, z)); return new THREE.LineLoop(new THREE.BufferGeometry().setFromPoints(pts), new THREE.LineBasicMaterial({ color: 0xffffff, transparent: true, opacity })); }
+function build(d) {
+  world.remove(content); content = new THREE.Group(); world.add(content);
+  drawBuildings(d.buildings, EDGE); drawBuildings(d.named, NAMED);
+  // Roads as faint strips; fields and the castle walls as hologram too.
+  { const m = new THREE.Matrix4(), q = new THREE.Quaternion(), up = new THREE.Vector3(0, 1, 0), roads = new THREE.InstancedMesh(new THREE.BoxGeometry(1, 1, 1), ROADS, d.roads.length);
+    d.roads.forEach((road, i) => { const dx = road.b[0] - road.a[0], dz = road.b[1] - road.a[1]; q.setFromAxisAngle(up, -Math.atan2(dz, dx)); m.compose(new THREE.Vector3((road.a[0] + road.b[0]) / 2, 0, (road.a[1] + road.b[1]) / 2), q, new THREE.Vector3(Math.hypot(dx, dz), 0.2, road.width)); roads.setMatrixAt(i, m); }); content.add(roads); }
+  for (const field of d.fields ?? []) { const pts = field.pts.map(([x, z]) => new THREE.Vector3(x, 0.3, z)); content.add(new THREE.LineLoop(new THREE.BufferGeometry().setFromPoints(pts), GROUND)); const shape = new THREE.Shape(field.pts.map(([x, z]) => new THREE.Vector2(x, -z))), mesh = new THREE.Mesh(new THREE.ShapeGeometry(shape), new THREE.MeshBasicMaterial({ color: 0x2b86c4, transparent: true, opacity: field.o ?? 0.06, depthWrite: false })); mesh.rotation.x = -Math.PI / 2; mesh.position.y = 0.2; content.add(mesh); }
+  drawBuildings((d.walls ?? []).map((w) => ({ x: (w.a[0] + w.b[0]) / 2, z: (w.a[1] + w.b[1]) / 2, w: Math.hypot(w.b[0] - w.a[0], w.b[1] - w.a[1]) + 1, d: 2.5, floors: 4, angle: Math.atan2(w.b[1] - w.a[1], w.b[0] - w.a[0]), form: "slab" })), EDGE);
+  // Labels, place circles, patch outlines.
+  function label(text, fill = "#ffffff", size = 34) {
+    const canvas = document.createElement("canvas"), ctx = canvas.getContext("2d"), font = `600 ${size}px system-ui, "PingFang SC", sans-serif`;
+    ctx.font = font; const w = Math.ceil(ctx.measureText(text).width) + 18; canvas.width = w; canvas.height = size + 14;
+    ctx.font = font; ctx.textBaseline = "middle"; ctx.fillStyle = "rgba(6,12,18,.7)"; ctx.fillRect(0, 0, w, canvas.height); ctx.fillStyle = fill; ctx.fillText(text, 9, canvas.height / 2);
+    const t = new THREE.CanvasTexture(canvas); t.colorSpace = THREE.SRGBColorSpace;
+    const s = new THREE.Sprite(new THREE.SpriteMaterial({ map: t, depthTest: false, transparent: true })); s.scale.set(w / canvas.height * 14, 14, 1); s.renderOrder = 10; return s;
+  }
+  const ring = (x, z, r, opacity) => { const mesh = new THREE.Mesh(new THREE.RingGeometry(r - 1.5, r, 160), new THREE.MeshBasicMaterial({ color: 0x7ce6ff, transparent: true, opacity, side: THREE.DoubleSide, depthWrite: false })); mesh.rotation.x = -Math.PI / 2; mesh.position.set(x, 0.1, z); return mesh; };
+  // A temporary area (an unnamed district or street holding what is known only to lie in a larger place) is fainter.
+  for (const place of d.places) { content.add(ring(place.x, place.z, place.r, place.temporary ? 0.25 : 0.55)); const tag = label(`${place.name} · ${place.born}${place.temporary ? " · temporary" : ""}`, place.temporary ? "#9fb8a8" : "#c8ffc0", 32); tag.position.set(place.x, 40, place.z - place.r + 14); content.add(tag); }
+  for (const step of (d.growth ?? []).slice(0, -1)) content.add(ring(0, 0, step.radius, 0.22));
+  for (const outline of d.outlines ?? []) { content.add(new THREE.LineLoop(new THREE.BufferGeometry().setFromPoints(outline.pts.map(([x, z]) => new THREE.Vector3(x, 0.6, z))), GROUND)); const tag = label(outline.label, "#8fd6ff", 26); tag.position.set(outline.at[0], 24, outline.at[1]); content.add(tag); }
+  for (const b of d.named) { const tag = label(b.name, "#ffffff", 30); tag.position.set(b.x, b.floors * 3 + 12, b.z); content.add(tag); }
+  if (d.drift?.point) { const dot = new THREE.Mesh(new THREE.SphereGeometry(6, 16, 12), new THREE.MeshBasicMaterial({ color: 0xff4d5e })); dot.position.set(d.drift.point[0], 6, d.drift.point[1]); content.add(dot); }
+  $("facts").textContent = d.facts ?? ""; $("legend").innerHTML = (d.legend ?? []).map((line) => `<li>${line}</li>`).join("");
+  // Labels scale with the map, so they read on a wide one.
+  const big = Math.max(1, (d.extent ?? 300) / 160);
+  for (const box of d.boxes ?? []) { content.add(boxOutline(box, box.faint ? 0.45 : 1)); if (box.label) { const tag = label(box.label, box.faint ? "#c7d6e0" : "#ffffff", 30); tag.scale.multiplyScalar(big); tag.position.set((box.x0 + box.x1) / 2, 30, (box.z0 + box.z1) / 2); content.add(tag); } }
+  if (big > 1) for (const child of content.children) if (child.isSprite && !child.userData.scaled) { child.scale.multiplyScalar(big * 0.8); child.userData.scaled = true; }
+}
+build(data);
+for (const button of document.querySelectorAll("[data-view]")) button.addEventListener("click", () => { camera = button.dataset.view === "top" ? top : persp; for (const other of document.querySelectorAll("[data-view]")) other.setAttribute("aria-pressed", String(other === button)); });
+const frames = () => new Promise((done) => requestAnimationFrame(() => requestAnimationFrame(done)));
+window.__stage = {
+  /** New data (the Jev loop's next turn): everything drawn again; the models stay those of the first data. */
+  async load(next) { build({ ...next, models: data.models }); await frames(); return true; },
+  async view({ mode = "top", target = [0, 0], distance = null, yaw = 0.7, elevation = 0.6, half = null } = {}) {
+    if (mode === "top") { camera = top; const s = half ?? span, a = host.clientWidth / host.clientHeight; top.left = target[0] - s * a; top.right = target[0] + s * a; top.top = -target[1] + s; top.bottom = -target[1] - s; top.updateProjectionMatrix(); }
+    else { camera = persp; const d = distance ?? span * 1.6; controls.target.set(target[0], 0, target[1]); persp.position.set(target[0] + d * Math.cos(elevation) * Math.cos(yaw), d * Math.sin(elevation), target[1] + d * Math.cos(elevation) * Math.sin(yaw)); controls.update(); }
+    await frames(); return true;
+  },
+};
+function frame() { controls.update(); renderer.render(world, camera); requestAnimationFrame(frame); }
+frame();
+</script>
+</body>
+</html>

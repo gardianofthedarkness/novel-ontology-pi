@@ -45,7 +45,7 @@ export function cachedDecisions(model: DecisionModel, directory: string): Decisi
     modelId: model.modelId,
     async decide(state, questions, options) {
       await mkdir(folder, { recursive: true, mode: 0o700 });
-      const file = join(folder, `${key([model.modelId, state, questions])}.json`);
+      const file = join(folder, `${key(options?.images ? [model.modelId, state, questions, options.images] : [model.modelId, state, questions])}.json`);
       const hit = await read<DecisionAnswer[]>(file);
       if (hit) { CACHED.add(hit); return hit; }
       const answers = await model.decide(state, questions, options);

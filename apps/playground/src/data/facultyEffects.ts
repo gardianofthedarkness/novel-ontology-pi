@@ -17,7 +17,7 @@ export interface FacultyEffect { faculty: string; kind: FacultyEffectKind; famil
 export interface FacultyAnchor { id: string; effects: FacultyEffect[]; faculties: string[] }
 
 const KINDS: Record<string, FacultyEffectKind> = {
-  speaker: "voice", dlg_start: "quote-open", dlg_end: "quote-close", scene_start: "gate-front", scene_end: "gate-back",
+  speaker: "voice", dlg_kind: "quote-open", dlg_turn: "quote-close", dlg_start: "quote-open", dlg_end: "quote-close", scene_start: "gate-front", scene_end: "gate-back",
   scene_seam: "seam", birth: "birth", fragment: "fragment", "speaker-attribution": "orbit", "scene-adjudication": "scales",
   "dialogue-structure": "stack", "entities-participants": "ripple", "scene-understanding": "scan", "grounding-assembly": "assembly",
 };

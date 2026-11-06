@@ -1,0 +1,83 @@
+import type { DecisionAnswer, DecisionQuestion, DecisionState } from "../../ground/connectors/jev.js";
+import type { Sentence } from "../../digger/intake/sectioning.js";
+import { ask } from "../context/engine.js";
+import { typingMode } from "../context/readingModes.js";
+import { sentencesWith } from "./listing.js";
+import { isLocative, isPartOrFloor } from "../rules/typing.js";
+
+/**
+ * What each listed string is (the user's v2 flow, 2026-10-30; System 1): one structured request a batch. The state holds the
+ * types defined once, the batch's sentences keyed by id and the strings keyed by a short key with the sentences that hold
+ * them; each question names its string by path and chooses a type. Types fall into EM's categories: a person, a crowd (a
+ * group of people who are there: never a name, EM² places it), a thing (a named object, a weapon, a vehicle), a place
+ * by its scale (region, city, district, street, building, room: the user's call, 2026-10-31, scale is EM's, read where
+ * the name stands, so no stage step asks it again), a concept (an ability, a network, a plan: someone's, EM asks whose),
+ * and a time (EM for times is the calendar's). An everyday thing (a phone, a bag, a cleaning robot at its work) is
+ * routine: no category, never an entity (the user's rule, 2026-10-30: only important named things, vehicles and
+ * weapons; 2026-11-04, a dart thrown at a board was read as a weapon and walked as a person: "only weapons, vehicles or
+ * items that in that segment look like they probably play an important role, have a dedicated name, or have impact on
+ * the scene because of their functionality will be extracted. Routine things used will not." Each is judged in the
+ * passage it stands in: the same kind of thing may matter in one passage and be routine in another; and "only things
+ * with physical matter count": fire, lightning, a current, light, wind or a blast is no thing). A spatial word (on the ground, underground, on the roof, in the corridor) is no place at all but where
+ * someone or something is: no category, kept as evidence of who is where (src/v2/spatial.ts).
+ */
+export const ENTITY_TYPES = {
+  person: "a person, or a being who acts like one: by name, surname, nickname, title or a description used for them",
+  crowd: "a crowd or a group of people who are there and act together: officers, a crowd, the students, a gang (an organisation as such is none)",
+  object: "a physical item, with matter of its own, that matters in this passage: it has a dedicated name of its own (天空之眼), it probably plays an important role here, or what it does changes the scene (a device that opens the way, a letter that turns the plot)",
+  routine: "a routine thing: an everyday thing (a phone, a bag, food, clothes, furniture, a door, a wall or a pillar, a tree or a plant, a machine at its routine work), and any item, weapon or vehicle that in this passage is only used in routine: no name of its own, no important part in what happens, nothing it does changes the scene (darts thrown at a board in a bar, a kitchen knife at cooking, traffic passing by, a bus taken home)",
+  weapon: "a physical weapon, with matter of its own (held, fired, thrown or struck with), that matters in this passage: it has a dedicated name of its own, it probably plays an important role here, or what it does changes the scene (a gun drawn on someone, a blade in a fight, a bomb that goes off); fire, lightning, a current, light, wind or a blast has no matter of its own: an ability's is the ability (a concept), any other is no thing",
+  vehicle: "a physical vehicle or mech (a car, a train, a ship, an aircraft carrier) that matters in this passage: it has a dedicated name of its own, it probably plays an important role here (people chase, flee or fight in it), or what it does changes the scene (a crash, a carrier blocking the sky)",
+  region: "a region: a country, a state or a province, a wide natural area (a forest, a desert, an ocean), bigger than a city",
+  city: "a city or a town",
+  district: "a part of a city: a ward, a school district, a downtown, a neighbourhood",
+  street: "an open place in a district: a street, a road, an alley, a square, a park, a bridge, a river bank, a crossing (but 街上, on the street, is spatial)",
+  building: "a building or a structure: a school, a dormitory, a shop, a station, a tower",
+  room: "a room inside a building: a classroom, an office, a ward, a hall, a karaoke box",
+  spatial: "no place of its own but where someone or something is, against what is around: on the ground (the asphalt, the earth), underground, on the street or the road (街上, 马路上), on a roof, in a corridor, at an exit, on the stairs, on a wall, in the air, beside or under something",
+  concept: "a concept the story names: an ability (with what it makes that has no matter: its fire, lightning, current or blast), a power, a technique or a spell, a network or a system, a project or a plan (幻想杀手, 御坂网络); something someone has, uses or runs, not a thing in the hand",
+  time: "a time: a date, a day, an hour, a part of the day, a season",
+  none: "none of these: an organisation as such, an ordinary word",
+} as const;
+/** "place": an open place of an earlier reading, before EM said its scale. */
+export type EntityType = keyof typeof ENTITY_TYPES | "place";
+export type Category = "person" | "crowd" | "thing" | "place" | "concept" | "time";
+export const CATEGORY_OF: Record<EntityType, Category | null> = { person: "person", crowd: "crowd", object: "thing", routine: null, weapon: "thing", vehicle: "thing", region: "place", city: "place", district: "place", street: "place", place: "place", building: "place", room: "place", spatial: null, concept: "concept", time: "time", none: null };
+/** The scale of places, smallest first (a place's scale is its type); a parent is larger than what it holds. */
+export { PLACE_SCALES } from "../rules/places.js";
+const TYPE_LABELS: Record<keyof typeof ENTITY_TYPES, string> = {
+  person: "a person", crowd: "a crowd or a group of people", object: "a physical item that matters here (named, important, or changing the scene)", routine: "a routine thing, or one only used in routine here", weapon: "a physical weapon that matters here", vehicle: "a physical vehicle or mech that matters here",
+  region: "a region, bigger than a city", city: "a city or a town", district: "a part of a city", street: "a street or an open place in a district", building: "a building", room: "a room inside a building",
+  spatial: "where someone is (on the ground, underground, on a roof): no place", concept: "an ability, a network or a plan (a concept)", time: "a time", none: "none of these",
+};
+
+/**
+ * Whether a string is a proper name. Only a proper name is an alias anywhere in the book (EM's exact match, the card scan); a
+ * description or a common word (少女, 那个刺猬头, 屋顶, 车站) is who or what EM said only where it said it.
+ */
+const PROPER = {
+  true: "a name of its own for one person, thing or place (御坂美琴, 上条, 常盘台中学, 第七学区)",
+  false: "a description or a common word that could mean someone or something else elsewhere (少女, 那个刺猬头, 老师, 屋顶, 车站, 手机)",
+};
+
+export interface Detected { key: string; text: string; type: EntityType; category: Category | null; confidence: number; proper: number; sentences: string[] }
+
+/** A listed string's key in its batch's documents (n1, n2, …). */
+const nameKey = (index: number) => "n" + (index + 1);
+
+export type Decide = (state: DecisionState, questions: DecisionQuestion[]) => Promise<DecisionAnswer[]>;
+
+/** The structured document a batch's typing questions are about. */
+export async function typeNames(decide: Decide, batch: Sentence[], names: string[]): Promise<Detected[]> {
+  if (!names.length) return [];
+  const { replies: answers } = await ask(decide, typingMode, { batch, names, questions: names.flatMap((_, index) => [
+    { key: `type:n${index + 1}`, primitive: "choice" as const, instructions: `What is names.n${index + 1}?`, options: Object.keys(ENTITY_TYPES), optionHints: { ...TYPE_LABELS } },
+    { key: `proper:n${index + 1}`, primitive: "noul" as const, instructions: `Is names.n${index + 1} a proper name?`, noulCriteria: PROPER },
+  ]) }, null);
+  return names.map((text, index) => {
+    const answer = answers.find((entry) => entry.key === `type:n${index + 1}`);
+    const proper = Number(answers.find((entry) => entry.key === `proper:n${index + 1}`)?.value ?? 0);
+    const typed = (answer?.value && String(answer.value) in ENTITY_TYPES ? String(answer.value) : "none") as EntityType, type: EntityType = isLocative(text, CATEGORY_OF[typed] === "place", proper) || isPartOrFloor(text, CATEGORY_OF[typed] === "place", proper) ? "spatial" : typed;
+    return { key: nameKey(index), text, type, category: CATEGORY_OF[type], confidence: Number(answer?.distribution?.[type] ?? answer?.confidence ?? 0), proper, sentences: sentencesWith(batch, text) };
+  });
+}

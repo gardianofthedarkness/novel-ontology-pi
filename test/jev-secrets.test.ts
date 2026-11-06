@@ -199,6 +199,19 @@ test("JevClient speaks the real wire format and maps answers back", async (t) =>
   ]);
 });
 
+test("a box question asks for one box on a picture and reads its edges back, as the 1.14 wire format answers", async (t) => {
+  // The answer shape a live jev-1.14.0 call returned for a box question on a screenshot.
+  const { endpoint, requests } = await startJevMock(t, () => ({ status: 200, body: { model: "jev-1.14.0", answers: { where: { type: "box", box: { top: 0.33, bottom: 0.43, left: 0.43, right: 0.28 }, confidence: 0.45 }, seen: { type: "noul", noul: 0.96 } } } }));
+  const client = new JevClient({ apiKey: FAKE_KEY, endpoint, model: "jev-1.14.0" });
+  const answers = await client.decide("state text", [{ key: "where", primitive: "box", instructions: "The tower in picture view." }, { key: "seen", primitive: "noul", instructions: "Is the tower there?" }], { images: { view: "iVBORw0KGgo=" } });
+  const wire = requests[0].body.questions as Record<string, Record<string, unknown>>;
+  assert.deepEqual(wire.where, { type: "box", instructions: "The tower in picture view." });
+  assert.deepEqual(answers[0], { key: "where", value: 0.45, confidence: 0.45, box: { left: 0.28, top: 0.33, right: 0.43, bottom: 0.43 } }, "edges in order, whichever way they came");
+  assert.equal(answers[1].value, 0.96);
+  const broken = await startJevMock(t, () => ({ status: 200, body: { answers: { where: { type: "box", box: { top: 0.2, bottom: 1.4, left: 0.1, right: 0.3 } } } } }));
+  await assert.rejects(new JevClient({ apiKey: FAKE_KEY, endpoint: broken.endpoint, model: "jev-1.14.0" }).decide("s", [{ key: "where", primitive: "box", instructions: "x" }]), /invalid box/);
+});
+
 test("JevClient refuses missing or invalid probabilities without substituting a false veto or retrying", async (context) => {
   for (const noul of [undefined, null, "0.1", -0.1, 1.1]) {
     const mock = await startJevMock(context, () => ({ status: 200, body: { answers: { q: { type: "noul", noul } } } }));

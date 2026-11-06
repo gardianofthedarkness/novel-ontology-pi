@@ -1,0 +1,951 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>World · Live</title>
+<style>
+  :root { color-scheme: dark; --bg: #060c12; --panel: #0b1620e6; --ink: #d9e3ea; --dim: #8aa0b0; --line: #1d3442; --accent: #7ce6ff; --jev: #ffd36e;
+    /* Surfaces inside the panels (buttons, rows, code, the sentence read), so the day theme can light them too. */
+    --chip: #0f2230; --raised: #10212c; --deep: #071019; --sunk: #08131b; --field: #0b1a24; --rule: #12232e; --current: #17384d; --current-ink: #fff;
+    /* Sentence kinds, as the extraction report colours them. */
+    --spoken: #79aae6; --thought: #b597e4; --fact: #dfac55; --action: #ef7f66; --environment: #6bc493; --narration: #a8a59f; }
+  /* Daylight (strand-demo.html daylightTick; the user, 2026-11-05): the panels light by the story's day, warm at its dawn and
+     dusk, dark by its night, as the world they sit on. */
+  :root[data-daylight="day"] { color-scheme: light; --bg: #dfe9f1; --panel: #f6f9fcec; --ink: #13212b; --dim: #4f6575; --line: #b8cad8; --accent: #0b78a0; --jev: #a86f00;
+    --chip: #e4edf4; --raised: #dbe6ee; --deep: #eef3f7; --sunk: #e9f0f5; --field: #f1f6f9; --rule: #cddae4; --current: #cfe3f1; --current-ink: #0b1a24;
+    --spoken: #2d6fb8; --thought: #7a52b8; --fact: #9a6a10; --action: #c2452c; --environment: #2f8a58; --narration: #5e5b55; }
+  :root[data-daylight="twilight"] { --bg: #1a1420; --panel: #241a28e6; --line: #4a3442; --accent: #ffb38a; }
+  html, body, .hud, .bar a, .bar button, .legend, .sub, .blist, .pic, iframe { transition: background-color .8s ease, color .8s ease, border-color .8s ease; }
+  html, body { margin: 0; height: 100%; background: var(--bg); color: var(--ink); font: 13px/1.45 system-ui, -apple-system, "PingFang SC", sans-serif; overflow: hidden; }
+  iframe { position: fixed; inset: 0; width: 100%; height: 100%; border: 0; background: var(--bg); transition: opacity .35s ease; }
+  iframe.waiting { opacity: 0; pointer-events: none; }
+  .hud { position: fixed; z-index: 5; left: max(12px, env(safe-area-inset-left)); top: max(12px, env(safe-area-inset-top)); max-width: min(440px, calc(100vw - 24px)); background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 10px 12px; display: grid; gap: 6px; }
+  .hud h1 { margin: 0; font-size: 13px; letter-spacing: .06em; text-transform: uppercase; color: var(--accent); }
+  .hud .sky { color: var(--dim); font-size: 12px; } .hud .sky:empty { display: none; }
+  .row { color: var(--dim); font-size: 12px; }
+  .jev { color: var(--jev); font-size: 12px; }
+  .counts { font-variant-numeric: tabular-nums; color: var(--dim); font-size: 11px; }
+  .empty { position: fixed; inset: 0; display: grid; place-items: center; color: var(--dim); }
+  .strands { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 6px; }
+  /* The strands as a tree on story time (the user, 2026-11-04): each strand a lane, each unit a bar where it stands on the
+     story's clock (in the time tree's order), a branch where a strand comes off another, the line where the shown card is. */
+  .strands.tree { display: block; }
+  /* The story menu: every unit played, its strand, its time and its first line; a search over their text. */
+  #mlist .mbody { display: grid; grid-template-rows: auto 1fr; gap: 8px; min-height: 0; padding: 8px 10px 10px; }
+  #mlist input { font: inherit; font-size: 14px; color: var(--ink); background: var(--bg); border: 1px solid var(--line); border-radius: 8px; padding: 7px 10px; min-width: 0; }
+  #mrows { list-style: none; margin: 0; padding: 0; overflow: auto; min-height: 0; display: grid; gap: 4px; align-content: start; }
+  #mrows li { display: grid; gap: 2px; padding: 7px 9px; border: 1px solid var(--line); border-radius: 8px; cursor: pointer; }
+  #mrows li.now { border-color: var(--jev); } #mrows li:focus-visible { outline: 2px solid var(--accent); }
+  #mrows .faces { display: flex; gap: 4px; align-items: center; } #mrows .faces img { width: 22px; height: 22px; border-radius: 50%; object-fit: cover; border: 1px solid var(--line); }
+  #mrows .faces em { font-size: 11px; font-style: normal; color: var(--accent); border: 1px solid var(--line); border-radius: 6px; padding: 0 5px; }
+  #mrows .name { font-size: 12px; color: var(--accent); display: flex; gap: 6px; align-items: center; } #mrows .what { font-size: 13px; color: var(--ink); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  #mrows .chip { width: 8px; height: 8px; border-radius: 2px; display: inline-block; flex: none; }
+  .strands.tree svg { display: block; width: 100%; height: auto; touch-action: manipulation; overflow: visible; }
+  .strands.tree .lane { cursor: pointer; } .strands.tree .lane:focus { outline: none; } .strands.tree .lane:focus-visible .hit { stroke: var(--accent); stroke-width: .8; }
+  .strands.tree .axis { display: flex; justify-content: space-between; font-size: 10px; color: var(--dim); margin-top: 2px; }
+  /* Folding the panel (a phone: folded at first): only its first lines stay. */
+  .hud h1 { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+  .hud h1 .fold { font: inherit; font-size: 11px; letter-spacing: 0; text-transform: none; color: var(--dim); background: none; border: 1px solid var(--line); border-radius: 99px; padding: 2px 9px; cursor: pointer; }
+  .hud.folded .strands, .hud.folded .tline, .hud.folded .counts, .hud.folded #ground { display: none !important; }
+  .strands button { font-size: 11px; padding: 2px 8px; border-radius: 99px; display: inline-flex; gap: 5px; align-items: center; }
+  .strands .chip { width: 8px; height: 8px; border-radius: 2px; display: inline-block; }
+  .strands .now { color: #7dffa4; } .strands .near { color: #f2c66d; }
+  .tline { display: flex; gap: 6px; align-items: center; margin-top: 6px; } .tline input { flex: 1; min-width: 0; accent-color: var(--accent); }
+  #tlabel { font-size: 11px; color: var(--dim); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 58%; }
+  .way { font-size: 12px; margin-top: 6px; } .way a { color: var(--accent); }
+  .book .s.other { opacity: .3; }
+  .empty[hidden] { display: none; }
+  .bar { position: fixed; z-index: 5; right: max(12px, env(safe-area-inset-right)); bottom: max(12px, env(safe-area-inset-bottom)); display: flex; gap: 6px; flex-wrap: wrap; justify-content: flex-end; }
+  .bar a, .bar button { font: inherit; font-size: 12px; color: var(--ink); background: var(--panel); border: 1px solid var(--line); border-radius: 99px; padding: 6px 12px; text-decoration: none; cursor: pointer; }
+  .bar button[aria-pressed="true"] { border-color: var(--jev); color: var(--jev); }
+  .bar button:disabled { opacity: .45; cursor: default; }
+  .bar button[hidden] { display: none; }
+  #next:not(:disabled) { border-color: var(--jev); color: var(--bg); background: var(--jev); }
+  .legend { position: fixed; z-index: 5; left: max(12px, env(safe-area-inset-left)); bottom: max(12px, env(safe-area-inset-bottom)); background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 8px 10px; font-size: 11px; color: var(--dim); max-width: min(340px, calc(100vw - 24px)); }
+  .legend b { color: var(--ink); font-weight: 600; }
+  @media (max-width: 719px) { .legend { display: none; } }
+  /* Jev's questions, folded out over the world: the live page (every question's exact prompt, pictures and answers). */
+  .asks { position: fixed; z-index: 6; right: max(12px, env(safe-area-inset-right)); left: max(12px, env(safe-area-inset-left)); bottom: calc(max(12px, env(safe-area-inset-bottom)) + 44px); height: min(64vh, 680px); max-width: 780px; margin-left: auto; display: grid; grid-template-rows: auto 1fr; background: var(--panel); border: 1px solid var(--line); border-radius: 10px; overflow: hidden; }
+  .asks[hidden] { display: none; }
+  .asks header { display: flex; justify-content: space-between; align-items: center; gap: 8px; padding: 6px 10px; border-bottom: 1px solid var(--line); font-size: 12px; color: var(--jev); }
+  .asks header a { color: var(--dim); font-size: 11px; }
+  .asks iframe { position: static; width: 100%; height: 100%; }
+  /* The building level, folded out at the side: each building's type, who typed it, its height against its minimum, and the
+     parts of composite buildings under their hosts; a row tapped shows that building in the world. */
+  .blist { position: fixed; z-index: 6; right: max(12px, env(safe-area-inset-right)); top: max(12px, env(safe-area-inset-top)); bottom: calc(max(12px, env(safe-area-inset-bottom)) + 44px); width: min(440px, calc(100vw - 24px)); display: grid; grid-template-rows: auto 1fr; background: var(--panel); border: 1px solid var(--line); border-radius: 10px; overflow: hidden; }
+  .blist[hidden] { display: none; }
+  /* Developer mode: on the left, beside Read; raw observations against the smoothing, and every record of the card. */
+  .blist.dev { left: max(12px, env(safe-area-inset-left)); right: auto; width: min(460px, calc(100vw - 24px)); }
+  .devbody { overflow-y: auto; overscroll-behavior: contain; padding: 8px 10px 14px; font-size: 12px; line-height: 1.5; display: grid; gap: 10px; align-content: start; }
+  .devbody .modes { display: flex; gap: 6px; flex-wrap: wrap; }
+  .devbody .modes button, .devbody .files a { font: inherit; font-size: 12px; color: var(--ink); background: var(--chip); border: 1px solid var(--line); border-radius: 99px; padding: 4px 10px; cursor: pointer; text-decoration: none; }
+  .devbody .modes button[aria-pressed="true"] { border-color: var(--jev); color: var(--jev); }
+  .devbody .files { display: flex; gap: 6px; flex-wrap: wrap; }
+  .devbody table { border-collapse: collapse; width: 100%; font-variant-numeric: tabular-nums; } .devbody td, .devbody th { border-bottom: 1px solid var(--line); padding: 2px 4px; text-align: left; vertical-align: top; } .devbody th { color: var(--dim); font-weight: 600; }
+  .devbody .who { color: var(--accent); font-weight: 600; margin-top: 4px; } .devbody .raw { color: #ffb27a; } .devbody .sm { color: #7ce6ff; } .devbody .now td { background: var(--current); }
+  .devbody details { border-top: 1px solid var(--line); padding-top: 4px; } .devbody summary { cursor: pointer; color: var(--dim); }
+  .devbody pre { margin: 4px 0 0; max-height: 34vh; overflow: auto; background: var(--deep); border: 1px solid var(--line); border-radius: 6px; padding: 6px; font: 11px/1.4 ui-monospace, SFMono-Regular, Menlo, monospace; white-space: pre-wrap; word-break: break-all; -webkit-user-select: text; user-select: text; }
+  .devbody .copy { float: right; font-size: 11px; background: none; border: 1px solid var(--line); color: var(--dim); border-radius: 4px; cursor: pointer; }
+  .blist header { display: grid; gap: 2px; padding: 8px 10px; border-bottom: 1px solid var(--line); }
+  .blist header b { color: var(--accent); font-size: 12px; letter-spacing: .04em; }
+  .blist header span { color: var(--dim); font-size: 11px; font-variant-numeric: tabular-nums; }
+  .blist ol { list-style: none; margin: 0; padding: 4px 0; overflow-y: auto; overscroll-behavior: contain; }
+  .blist li { padding: 6px 10px; border-bottom: 1px solid var(--rule); cursor: pointer; display: grid; gap: 1px; }
+  .blist li:hover, .blist li:focus-visible { background: var(--raised); outline: none; }
+  .blist li.part { padding-left: 26px; background: var(--sunk); }
+  .blist .name { color: var(--ink); font-size: 13px; min-width: 0; overflow-wrap: anywhere; }
+  .blist .what { color: var(--dim); font-size: 11px; font-variant-numeric: tabular-nums; }
+  .blist .by { color: var(--accent); } .blist .by.jev { color: var(--jev); }
+  .blist .low { color: #ff9d7a; }
+  .blist .ask summary { color: var(--jev); font-size: 11px; cursor: pointer; padding-top: 4px; }
+  .blist .ask div { color: var(--ink); font-size: 12px; line-height: 1.6; padding: 4px 0 2px; white-space: pre-wrap; overflow-wrap: anywhere; }
+  .blist .ask b { color: var(--dim); font-weight: 600; font-size: 11px; display: block; padding-top: 6px; }
+  /* Reading (the user, 2026-11-02): the whole novel as written, the sentences the director played underlined and tappable;
+     one tapped plays its card in this world, Continue plays on to the next move. */
+  .reader .now { padding: 8px 10px; border-bottom: 1px solid var(--line); display: grid; gap: 6px; }
+  .reader .now .meta { color: var(--dim); font-size: 11px; line-height: 1.5; max-height: 6.2em; overflow-y: auto; }
+  .reader .ctl { display: flex; flex-wrap: wrap; gap: 6px; }
+  .reader .ctl button, .reader .ctl a.btn { font: inherit; font-size: 12px; color: var(--ink); background: var(--chip); border: 1px solid var(--line); border-radius: 99px; padding: 5px 11px; cursor: pointer; text-decoration: none; }
+  .reader .ctl button[aria-pressed="true"] { border-color: var(--jev); color: var(--jev); }
+  .reader .ctl #rgo { border-color: var(--jev); color: var(--bg); background: var(--jev); }
+  .reader .book { overflow-y: auto; overscroll-behavior: contain; padding: 6px 12px 40px; font-size: 15px; line-height: 1.85; color: #c9d6de; }
+  .reader .book p { margin: 0 0 .6em; }
+  /* Its header, kinds, controls, then the book taking the rest. */
+  .blist.reader { grid-template-rows: auto auto auto minmax(0, 1fr); }
+  /* The EPUB as published: its headings and pictures, in this panel's type. */
+  .reader .book .doc { border-bottom: 1px solid var(--line); padding-bottom: 1em; margin-bottom: 1em; }
+  .reader .book .doc h1, .reader .book .doc h2, .reader .book .doc h3 { color: var(--ink); font-size: 17px; line-height: 1.5; margin: 1em 0 .6em; text-wrap: balance; }
+  .reader .book .doc img { display: block; max-width: 100%; height: auto; margin: .8em auto; border-radius: 4px; }
+  .reader .book .doc div { margin: 0 0 .6em; }
+  .reader .book .s { border-radius: 3px; }
+  /* Each sentence tinted by its kind (narration plain); a played one underlined in its kind's colour, one where someone
+     moved marked ➜ after it. */
+  .reader .book .s { --k: var(--narration); }
+  .reader .book .s.k-spoken { --k: var(--spoken); } .reader .book .s.k-action { --k: var(--action); } .reader .book .s.k-environment { --k: var(--environment); }
+  .reader .book .s.k-thought { --k: var(--thought); } .reader .book .s.k-fact { --k: var(--fact); }
+  .reader .book .s:is(.k-spoken, .k-action, .k-environment, .k-thought, .k-fact) { background: color-mix(in srgb, var(--k) 14%, transparent); box-shadow: inset 2px 0 0 color-mix(in srgb, var(--k) 70%, transparent); }
+  .reader .book .s.played { color: var(--ink); text-decoration: underline; text-decoration-color: var(--k); text-decoration-thickness: 2px; text-underline-offset: 4px; cursor: pointer; }
+  .reader .book .s.moved::after { content: " ➜"; color: #7dffa4; font-size: .8em; }
+  .reader .keys { display: flex; flex-wrap: wrap; gap: 4px 10px; padding: 4px 10px 6px; font-size: 11px; color: var(--dim); border-bottom: 1px solid var(--line); }
+  .reader .keys span::before { content: ""; display: inline-block; width: 9px; height: 9px; border-radius: 2px; margin-right: 4px; vertical-align: -1px; background: var(--k); }
+  .reader .keys .k-spoken { --k: var(--spoken); } .reader .keys .k-action { --k: var(--action); } .reader .keys .k-environment { --k: var(--environment); }
+  .reader .keys .k-thought { --k: var(--thought); } .reader .keys .k-fact { --k: var(--fact); } .reader .keys .k-narration { --k: var(--narration); }
+  /* Detected words, as the reading's page marks them: a name in its entity's colour, a description dashed with whom it
+     means (→), a time boxed. */
+  .reader { --person: #ef79a7; --place: #4ec2c8; --thing: #d29a62; --time: #a2a2ff; --slot: #99a0aa; --concept: #9fcd6a; }
+  .reader .book .m { font-weight: 600; }
+  .reader .book .m-person { color: var(--person); } .reader .book .m-place { color: var(--place); } .reader .book .m-thing { color: var(--thing); } .reader .book .m-concept { color: var(--concept); }
+  .reader .book .m-time { color: var(--time); border: 1px dashed color-mix(in srgb, var(--time) 60%, transparent); border-radius: 4px; padding: 0 2px; font-weight: 500; }
+  .reader .book .m-desc { font-weight: 500; border-bottom: 2px dashed var(--person); }
+  .reader .book .m-desc.slot, .reader .book .m-desc.open { border-bottom-color: var(--slot); } .reader .book .m-desc.thing { border-bottom-color: var(--thing); }
+  .reader .book .m-desc sup { font-size: .6em; color: var(--person); margin-left: 1px; } .reader .book .m-desc.slot sup, .reader .book .m-desc.open sup { color: var(--slot); }
+  .reader .keys .m-person { --k: var(--person); } .reader .keys .m-place { --k: var(--place); } .reader .keys .m-thing { --k: var(--thing); } .reader .keys .m-time { --k: var(--time); }
+  .reader .now .kind { font-weight: 700; letter-spacing: .06em; text-transform: uppercase; }
+  .reader .book .s.current { background: var(--current); color: var(--current-ink); }
+  /* Why (the user, 2026-11-02: a frontend the reader and the developer share): the card's questions to Jev as asked, its
+     answers and pictures, and notes either of us leaves on the card. */
+  .reader .why { border-top: 1px solid var(--line); padding-top: 6px; max-height: 46vh; overflow-y: auto; overscroll-behavior: contain; }
+  .reader .why summary { cursor: pointer; color: var(--jev); font-size: 12px; }
+  .reader .qa .f { border-left: 2px solid var(--line); padding: 4px 0 4px 8px; margin: 6px 0; font-size: 12px; line-height: 1.55; }
+  .reader .qa .f > b { color: var(--dim); font-weight: 600; }
+  .reader .qa .q { margin-top: 3px; }
+  .reader .qa .q i { color: var(--dim); font-style: normal; }
+  .reader .qa .a { color: var(--ink); }
+  .reader .qa .low { color: #ff9a8a; }
+  .reader .qa .pics { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 4px; }
+  .reader .qa .pics img { width: 120px; height: auto; border-radius: 4px; border: 1px solid var(--line); }
+  .reader .notes ol { margin: 6px 0; padding-left: 18px; font-size: 12px; line-height: 1.5; }
+  /* The laws, system 2, the card's proposals and the review (Track B W7); the run's report; a line whose speaker the world changed. */
+  .reader .qa .v-held, .reader .qa .v-proposed.held { color: #ff9a8a; } .reader .qa .v-ok, .reader .qa .v-applied { color: #8fd18f; } .reader .qa .v-pinned, .reader .qa .v-amend { color: #e8c46a; }
+  .reader .qa .tag { display: inline-block; min-width: 3.2em; font-weight: 600; }
+  .reader .report table { border-collapse: collapse; font-size: 12px; margin: 4px 0; } .reader .report td { padding: 1px 8px 1px 0; vertical-align: top; }
+  .reader .book .s.respoken { text-decoration: line-through wavy #ff9a8a; text-decoration-thickness: 1px; }
+  .reader .book .s.worldspoken { text-decoration: underline dotted #e8c46a; text-underline-offset: 3px; }
+  .reader .notes li { margin: 3px 0; overflow-wrap: anywhere; }
+  .reader .notes li small { color: var(--dim); }
+  .reader .notes textarea { width: 100%; box-sizing: border-box; font: inherit; font-size: 13px; color: var(--ink); background: var(--field); border: 1px solid var(--line); border-radius: 8px; padding: 6px 8px; margin: 4px 0; }
+  .reader .book .more { color: var(--dim); font-size: 12px; text-align: center; padding: 10px; }
+  /* A phone's bar wraps to two rows: the panels stand above both. */
+  /* A phone: the bar is one row, scrolled sideways, Continue and Auto first under the thumb; the panels stand above it. */
+  #bgo { border-color: var(--jev); color: var(--bg); background: var(--jev); }
+  @media (max-width: 560px) {
+    .bar { left: max(12px, env(safe-area-inset-left)); flex-wrap: nowrap; justify-content: flex-start; overflow-x: auto; scrollbar-width: none; }
+    .bar::-webkit-scrollbar { display: none; }
+    .bar > * { flex: none; }
+    .bar #bgo, .bar #bauto { font-size: 14px; padding: 8px 16px; }
+    .blist, .asks { bottom: calc(max(12px, env(safe-area-inset-bottom)) + 52px); }
+  }
+  .hud #replaying { color: var(--jev); }
+  /* Reading along: the sentence being read at the foot of the screen, edged in its kind's colour; the same one lit in the text. */
+  .sub { --k: var(--narration); position: fixed; z-index: 6; left: 50%; transform: translateX(-50%); bottom: calc(max(12px, env(safe-area-inset-bottom)) + 52px); width: min(680px, calc(100vw - 24px)); box-sizing: border-box; background: var(--panel); border: 1px solid var(--line); border-left: 4px solid var(--k); border-radius: 10px; padding: 8px 12px; font-size: 16px; line-height: 1.65; color: var(--ink); backdrop-filter: blur(6px); }
+  .sub b { color: var(--k); margin-right: 6px; font-weight: 600; }
+  /* The album (src/v2/album.ts): a speaker's portrait before their line; the book's picture at its sentence, read along. */
+  .sub img.face { width: 30px; height: 30px; border-radius: 50%; object-fit: cover; vertical-align: middle; margin-right: 6px; border: 2px solid var(--k); }
+  .pic { position: fixed; z-index: 6; right: max(12px, env(safe-area-inset-right)); bottom: calc(max(12px, env(safe-area-inset-bottom)) + 140px); width: min(220px, 34vw); margin: 0; background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 6px; cursor: zoom-in; box-sizing: border-box; }
+  .pic img { display: block; width: 100%; height: auto; border-radius: 6px; }
+  .pic.big { inset: 0; margin: auto; width: min(92vw, 720px); height: fit-content; max-height: 92vh; overflow: auto; cursor: zoom-out; z-index: 20; }
+  .book figure.album { margin: 12px 0; text-align: center; }
+  .book figure.album img { max-width: 100%; max-height: 70vh; border-radius: 6px; }
+  /* A phone on its side (the user, 2026-11-02): the world on the left with the bar and the line being read under it, the
+     reader docked on the right at full height, the top panel cut to its first lines. */
+  @media (orientation: landscape) and (max-height: 520px) {
+    .legend, .hud .counts { display: none; }
+    .hud { max-width: 44vw; padding: 6px 10px; gap: 2px; font-size: 11px; }
+    .blist { top: max(8px, env(safe-area-inset-top)); bottom: max(8px, env(safe-area-inset-bottom)); width: min(46vw, 460px); }
+    .asks { left: auto; width: min(52vw, 620px); height: auto; top: max(8px, env(safe-area-inset-top)); }
+    .reader > header #csum { display: none; }
+    .reader .keys { padding: 2px 10px 4px; gap: 2px 8px; }
+    .reader .ctl button, .reader .ctl a.btn { padding: 3px 9px; font-size: 11px; }
+    .reader .now { padding: 6px 10px; gap: 4px; }
+    .reader .now .meta { max-height: 3.2em; }
+    .reader .why { max-height: 34vh; }
+    .reader .book { font-size: 14px; }
+    .bar { left: max(12px, env(safe-area-inset-left)); right: auto; max-width: calc(52vw - 24px); bottom: max(8px, env(safe-area-inset-bottom)); flex-wrap: nowrap; justify-content: flex-start; overflow-x: auto; scrollbar-width: none; }
+    .bar > * { flex: none; }
+    .sub { left: max(12px, env(safe-area-inset-left)); transform: none; width: calc(52vw - 24px); bottom: calc(max(8px, env(safe-area-inset-bottom)) + 44px); font-size: 14px; padding: 6px 10px; }
+  }
+  .reader .book .s.reading { outline: 2px solid var(--jev); outline-offset: 1px; border-radius: 3px; }
+</style>
+</head>
+<body>
+<div class="empty" id="empty">Waiting for the engine to play a moment…</div>
+<section class="hud" aria-live="polite">
+  <h1><span>World · live</span><button class="fold" id="fold" type="button" aria-expanded="true" aria-controls="strands">Fold ▴</button></h1>
+  <div class="row" id="where"></div>
+  <div class="row sky" id="skyword" aria-label="The story's time of day and weather"></div>
+  <div class="counts" id="ground"></div>
+  <div class="jev" id="jev"></div>
+  <div class="row" id="replaying" hidden></div>
+  <div class="counts" id="counts"></div>
+  <div class="strands" id="strands" hidden aria-label="Strands: now or near on the calendar"></div>
+  <div class="tline" id="tline" hidden><input id="tslider" type="range" min="0" max="0" value="0" aria-label="The cards in calendar order"><span id="tlabel"></span></div>
+  <div class="way" id="way" hidden></div>
+</section>
+<div class="legend">The engine's own player, at each moment it plays: drawn round <b>where Jev looks</b> and <b>where the people are</b> (within 112 m, gone beyond 160 m), never round the camera.</div>
+<section class="blist" id="blist" hidden aria-label="The buildings"><header><b>Buildings</b><span id="bsum">No building level yet.</span></header><ol id="brows"></ol></section>
+<section class="blist reader" id="clist" hidden aria-label="The novel, read along"><header><b>Read</b><span id="csum">The whole text; underlined sentences were played (➜: someone moved). Tap one to play it here.</span></header><div class="keys" aria-label="Sentence kinds"><span class="k-spoken">dialogue</span><span class="k-action">action</span><span class="k-environment">environment</span><span class="k-thought">thought</span><span class="k-fact">fact</span><span class="k-narration">narration</span><span class="m-person">person</span><span class="m-place">place</span><span class="m-thing">thing</span><span class="m-time">time</span></div><div class="now"><div class="meta" id="cmeta">Nothing playing.</div><div class="ctl"><button id="rgo">Continue ▶</button><button id="rauto" aria-pressed="false">Auto</button><button data-cps="5" aria-pressed="false">Read slow</button><button data-cps="8" aria-pressed="true">normal</button><button data-cps="14" aria-pressed="false">fast</button><button id="cagain">↺ Replay</button><button data-rspeed="1" aria-pressed="false">1×</button><button data-rspeed="2" aria-pressed="true">2×</button><button data-rspeed="4" aria-pressed="false">4×</button><button id="cnow">Back to now</button></div><details class="why" id="cwhy"><summary>Why · Jev's questions, the laws, the review and our notes <span id="cnotecount"></span></summary><div id="claws" class="qa"></div><div id="cqa" class="qa"></div><div class="notes"><ol id="cnotes"></ol><textarea id="cnote" rows="2" placeholder="What looks wrong in this card? (where, who, what the text says)"></textarea><div class="ctl"><button id="csend">Add note</button><button id="call">All notes</button><a id="creportgo" class="btn" target="_blank" rel="noopener" href="report">Run report</a></div><ol id="callnotes" hidden></ol></div></details></div><div class="book" id="book"><div class="more" id="bmore">Opening the book…</div></div></section>
+<section class="blist" id="mlist" hidden aria-label="Story menu"><header><b>Story</b><span id="msum">Every unit played so far: tap one to go there.</span></header><div class="mbody"><input id="mfind" type="search" placeholder="Find a word, a name, or a unit number" aria-label="Find in the story"><ol id="mrows"></ol></div></section>
+<section class="blist dev" id="dlist" hidden aria-label="Developer mode"><header><b>Dev · what the data were and what was smoothed</b><span id="dsum">Pick a played sentence in Read: its card's records show here.</span></header><div class="devbody" id="dbody"></div></section>
+<section class="blist" id="slist" hidden aria-label="Where everyone begins"><header><b>Spawn</b><span id="ssum">No spawning yet.</span></header><ol id="srows"></ol></section>
+<section class="asks" id="asks" hidden aria-label="Jev's questions"><header><span>Jev's questions · each with its exact prompt and pictures</span><a id="asksFull" href="live" target="_blank" rel="noopener">Full page</a></header><iframe id="asksFrame" title="Jev's questions, live"></iframe></section>
+<div class="sub" id="sub" hidden aria-live="polite"><img class="face" id="subface" alt="" hidden><b id="subwho"></b><span id="subtx"></span></div>
+<figure class="pic" id="pic" hidden title="The book's picture here (tap to enlarge)"><img id="picimg" alt="The book's picture at this sentence"></figure>
+<nav class="bar"><button id="bgo" hidden>Continue ▶</button><button id="bauto" hidden aria-pressed="false">Auto</button><button id="mopen" aria-pressed="false" aria-controls="mlist" title="Jump to any unit played so far">Menu</button><button id="next" hidden>Next step</button><button id="runOn" hidden aria-pressed="false">Run on</button><button id="traces" aria-pressed="true" title="Every way walked so far, faint; the card now's bright and tappable">Traces</button><button id="follow" aria-pressed="true">Follow Jev</button><button id="under" aria-pressed="false">Underground</button><button id="daylight" aria-pressed="true" title="The story's time of day: bright by its day, dark by its night (off: always night)">Daylight</button><button id="dopen" aria-pressed="false" title="Developer mode: the raw observations beside what was smoothed, and every record of the card">Dev</button><button id="clouds" aria-pressed="true" title="Where each person may have been, given everything the text says (the smoother)">Clouds</button><button id="live" aria-pressed="false" aria-controls="asks" title="Every Jev step: its exact input, pictures and answers">Jev debugger</button><button id="bopen" aria-pressed="false" aria-controls="blist">Buildings</button><button id="copen" aria-pressed="false" aria-controls="clist">Read</button><button id="sopen" aria-pressed="false" aria-controls="slist">Spawn</button><button id="cutsW" aria-pressed="false" title="Follow through the photographer's cuts (else a steady view of each card's people)">Cuts</button><a id="play" href="./">Replay</a></nav>
+<script>
+(() => {
+  const $ = (id) => document.getElementById(id), query = location.search, origin = location.origin;
+  $("play").href = `./${query}`; $("asksFull").href = `live${query}`;
+  // Jev's questions fold out over the world (the live page, loaded the first time they are opened) and fold away again.
+  const fold = (button, panel, on) => { $(button).setAttribute("aria-pressed", String(on)); $(panel).hidden = !on; };
+  $("live").addEventListener("click", () => {
+    const on = $("live").getAttribute("aria-pressed") !== "true";
+    fold("live", "asks", on); if (on) { fold("bopen", "blist", false); fold("sopen", "slist", false); fold("copen", "clist", false); }
+    if (on && !$("asksFrame").getAttribute("src")) $("asksFrame").src = `live${query}`;
+  });
+  // The building level (terrain spawning's, live.json's world notes): a building's type and who typed it (the search, or
+  // Jev and how sure), its height against its type's minimum and how sure Jev was of it; a composite building's parts
+  // under their host, at its foot, on its upper floors or under it. A row tapped shows that building in the world.
+  let buildings = "";
+  $("bopen").addEventListener("click", () => { const on = $("bopen").getAttribute("aria-pressed") !== "true"; fold("bopen", "blist", on); if (on) { fold("live", "asks", false); fold("sopen", "slist", false); fold("copen", "clist", false); } });
+  $("sopen").addEventListener("click", () => { const on = $("sopen").getAttribute("aria-pressed") !== "true"; fold("sopen", "slist", on); if (on) { fold("live", "asks", false); fold("bopen", "blist", false); fold("copen", "clist", false); } });
+  // Spawning (world-engine/spawning/spawn.mjs, live.json's world notes): each scene's start positions, how each was decided,
+  // and, where the rules left someone open, what Jev is given to say where: the scene's own text, who, the place's spots.
+  let spawnKey = "";
+  const BY = { carried: "carried on", stays: "stays where left", holder: "with its holder", spatial: "by the scene's words", group: "with those arriving together", speaking: "within speaking distance", default: "a random floor (open: Jev's question)", ground: "on the ground", part: "inside its part" };
+  const listSpawn = (list) => {
+    const key = JSON.stringify(list ?? null);
+    if (key === spawnKey) return; spawnKey = key;
+    if (!list?.length) { $("ssum").textContent = "No spawning yet."; $("srows").replaceChildren(); return; }
+    const all = list.flatMap((scene) => scene.starts), open = list.filter((scene) => scene.ask).length;
+    $("ssum").textContent = `${list.length} scenes · ${all.filter((s) => s.kind === "person").length} people and ${all.filter((s) => s.kind === "thing").length} things placed · ${all.filter((s) => s.by === "carried").length} carried on · ${open} scenes with a question for Jev (composed, not asked)`;
+    $("srows").replaceChildren(...list.map((scene) => {
+      const li = document.createElement("li"); li.tabIndex = 0;
+      const starts = scene.starts.map((s) => `${esc(s.name)}${s.kind === "thing" ? " (thing)" : ""}: ${BY[s.by] ?? s.by}${typeof s.floor === "number" && s.floor !== 0 ? `, ${s.floor < 0 ? `${-s.floor} under` : `floor ${s.floor}`}` : ""}`).join("<br>");
+      const doc = scene.ask?.document, lines = doc?.scene ? Object.values(doc.scene).map(esc).join("\n") : "";
+      const ask = doc ? `<details class="ask"><summary>What Jev is given (not asked yet)</summary><div><b>Task</b>${esc(doc.task)}<b>The scene's text</b>${lines}<b>Who</b>${Object.values(doc.who ?? {}).map(esc).join(", ")}<b>Spots</b>${Object.entries(doc.spots ?? {}).map(([k, v]) => `${k}: ${esc(v)}`).join("\n")}</div></details>` : "";
+      li.innerHTML = `<span class="name">Scene ${Number(scene.id.slice(-3))} · ${esc(scene.place ?? "no place")}</span><span class="what">${esc(scene.when ?? "")}</span><span class="what">${starts || "nobody present"}</span>${ask}`;
+      li.addEventListener("click", (event) => { if (event.target.closest("details")) return; if (scene.placeId) for (const frame of [shown, next]) frame?.contentWindow.postMessage({ type: "focus", id: scene.placeId }, origin); if (camera) camera.follow = false; showFollow(false); });
+      return li;
+    }));
+  };
+  $("copen").addEventListener("click", () => { const on = $("copen").getAttribute("aria-pressed") !== "true"; fold("copen", "clist", on); if (on) { fold("live", "asks", false); fold("bopen", "blist", false); fold("sopen", "slist", false); if (innerWidth < 960 && $("dopen").getAttribute("aria-pressed") === "true") fold("dopen", "dlist", false); } });
+  // Reading (world-engine/director/director.mjs's cards in live.json's world notes; the text from api/book-text, a block at a
+  // time as the reader scrolls): every sentence as written; those of a card played are underlined (green where someone moved)
+  // and tapped play it in this world, the camera free; Continue plays on to the next move and stops there.
+  const volume = new URLSearchParams(location.search).get("volume") ?? "active";
+  // The album (the user, 2026-11-05: "the picture detection and portrait system never wired in in v2"; play/album.json):
+  // the book's pictures on their sentences (the front matter on the first) and each character's portrait, bound by name.
+  let picturesAt = new Map(), faceOf = new Map(), pictureScenes = new Set(), picFrom = -1;
+  const albumAsset = (id) => `../api/album-asset?volume=${encodeURIComponent(volume)}&id=${encodeURIComponent(id)}`;
+  const albumLoaded = (async () => {
+    const album = await fetch(`album.json${location.search}`, { cache: "no-store" }).then((r) => (r.ok ? r.json() : null)).catch(() => null);
+    for (const picture of album?.pictures ?? []) if (picture.sentenceId) (picturesAt.get(picture.sentenceId) ?? picturesAt.set(picture.sentenceId, []).get(picture.sentenceId)).push(picture);
+    for (const picture of album?.pictures ?? []) if (picture.kind === "story" && picture.sceneId) pictureScenes.add(picture.sceneId);
+    for (const portrait of album?.portraits ?? []) if (!faceOf.has(portrait.entityId)) faceOf.set(portrait.entityId, albumAsset(portrait.id));
+  })();
+  const portraitsMessage = () => ({ type: "portraits", portraits: Object.fromEntries(faceOf) });
+  // The story sky (play/sky.json, world-engine/digest/sky.mjs): each unit's hour, weather and lying snow, for the world.
+  let sky = null;
+  const skyLoaded = fetch(`sky.json${location.search}`, { cache: "no-store" }).then((r) => (r.ok ? r.json() : null)).catch(() => null).then((value) => { sky = value; return value; });
+  const skyMessage = () => ({ type: "sky", units: sky?.units ?? null });
+  // A weather's name by its kind and strength (a blizzard: heavy snow in a gale).
+  const SKY_NAMES = { cloudy: { light: "a few clouds", moderate: "cloudy", heavy: "overcast" }, fog: { light: "mist", moderate: "fog", heavy: "dense fog" }, rain: { light: "drizzle", moderate: "rain", heavy: "heavy rain" }, sleet: { light: "light sleet", moderate: "sleet", heavy: "heavy sleet" }, snow: { light: "light snow", moderate: "snow", heavy: "heavy snow" }, storm: { light: "a storm", moderate: "a thunderstorm", heavy: "a violent storm" } };
+  const skyName = (weather, strength, wind) => (weather === "snow" && strength === "heavy" && wind === "gale" ? "a blizzard" : SKY_NAMES[weather]?.[strength ?? "moderate"] ?? weather);
+  let pieceSeq = 0, lastPiece = null;
+  let cards = [], cardKey = "", cardAt = -1, cardOfSentence = new Map(), rspeed = 2, nextBlock = 0, loading = false, bookDone = false;
+  const says = (m) => `${esc(m.name)}: ${m.moved ? `went${m.direction && m.direction !== "stays" ? ` (arrow ${esc(m.direction)}${m.how ? `, ${esc(m.how)}` : ""})` : ""} to ${esc(m.to ?? "?")}${m.spot && m.spot !== "none" ? ` · spot: ${esc(m.spot)}` : m.boxed ? ` · boxed${m.height ? `, ${esc(m.height)}` : ""}` : ""}` : m.direction === "stays" ? "stays" : `did not move${m.why ? ` (${esc(m.why)})` : ""}`}`;
+  // The reading as the reader shows it (play/reading.json, from the director's reading; the user, 2026-11-02: a transparent
+  // design): each sentence's kind, and the names, descriptions and times detected in it, marked where they stand with
+  // whom or what they mean, as the reading's page marks them.
+  let kindOf = null, marksOf = new Map(), namesOf = new Map(), review = null;
+  const textOf = new Map();
+  const loadKinds = async () => {
+    if (kindOf) return;
+    const view = await fetch(`reading.json${query}`, { cache: "no-store" }).then((r) => (r.ok ? r.json() : null)).catch(() => null);
+    kindOf = new Map(Object.entries(view?.kinds ?? {})); marksOf = new Map(Object.entries(view?.marks ?? {})); namesOf = new Map(Object.entries(view?.names ?? {}));
+    markWords(); mark();
+  };
+  const MARK = { char: "person", loc: "place", item: "thing", concept: "concept", time: "time", d: "desc" };
+  // Each detected word wrapped in its sentence (in each piece of it the EPUB holds), in the order they stand.
+  const markWords = () => {
+    for (const span of $("book").querySelectorAll(".s:not([data-marked])")) {
+      const id = span.dataset.id, text = textOf.get(id), found = marksOf.get(id);
+      if (!text || !found) continue;
+      span.dataset.marked = "1";
+      // A word not found in this piece (the EPUB may split a sentence) is passed over; the next is looked for from where the last one ended.
+      const walker = document.createTreeWalker(span, NodeFilter.SHOW_TEXT), nodes = [];
+      for (let node; (node = walker.nextNode()); ) nodes.push(node);
+      let n = 0;
+      for (const [at, length, type, ref] of [...found].sort((a, b) => a[0] - b[0])) {
+        const word = text.slice(at, at + length), kind = MARK[type] ?? null;
+        if (!kind || !word) continue;
+        let k = n, start = -1;
+        for (; k < nodes.length; k++) { start = nodes[k].data.indexOf(word); if (start >= 0) break; }
+        if (start < 0) continue;
+        const hit = nodes[k].splitText(start), rest = hit.splitText(word.length);
+        nodes[k] = rest; n = k;
+        const [name, category] = namesOf.get(ref) ?? [], wrap = document.createElement("span");
+        wrap.className = `m m-${kind}${type === "d" ? (!ref ? " open" : ref.startsWith("slot_") ? " slot" : ref.startsWith("item_") ? " thing" : "") : ""}`;
+        wrap.title = type === "time" ? String(ref ?? "").split(":").slice(1).join(" · ") : type === "d" ? (name ? `means ${name}` : "no one sure") : `${name ?? word}${category ? ` · ${category}` : ""}`;
+        hit.replaceWith(wrap); wrap.append(hit);
+        if (type === "d") { const sup = document.createElement("sup"); sup.textContent = name ? `→${name}` : "→?"; wrap.append(sup); }
+      }
+    }
+  };
+  const mark = () => { for (const span of $("book").querySelectorAll(".s")) { const n = cardOfSentence.get(span.dataset.id), kind = kindOf?.get(span.dataset.id); if (kind && !span.classList.contains(`k-${kind}`)) span.classList.add(`k-${kind}`); span.classList.toggle("played", n !== undefined); span.classList.toggle("moved", n !== undefined && cards[n].moves.some((m) => m.moved)); span.classList.toggle("current", n !== undefined && n === cardAt); const changed = review?.speakers?.[span.dataset.id]; span.classList.toggle("respoken", !!changed?.from); span.classList.toggle("worldspoken", !!changed && !changed.from); if (changed) span.title = `speaker: ${changed.from ? namesOf.get(changed.from)?.[0] ?? changed.from : "unsure"} → ${changed.to ? namesOf.get(changed.to)?.[0] ?? changed.to : "someone else"} (${changed.by})`; } };
+  // Why: the questions Jev was asked for a card, from the question log (live/frames.jsonl, the latest run's: from its last
+  // first call), matched by the card's place in its scene ("scene 1 · card 15/20 · …"); and the notes on it.
+  let frames = null, framesKey = "", notes = [];
+  const loadFrames = async () => {
+    if (frames && framesKey === cardKey) return frames;
+    const text = await fetch(`live/frames.jsonl${query}`, { cache: "no-store" }).then((r) => (r.ok ? r.text() : "")).catch(() => "");
+    const all = text.split("\n").flatMap((line) => { try { return line ? [JSON.parse(line)] : []; } catch { return []; } });
+    frames = all.slice(Math.max(0, all.findLastIndex((frame) => frame.call === 1))); framesKey = cardKey;
+    return frames;
+  };
+  const phaseOf = (card) => { const own = cards.filter((other) => other.scene === card.scene); return `scene ${Number(card.scene.slice(-3))} · card ${own.indexOf(card) + 1}/${own.length}`; };
+  // People by name where an answer names them (with:char_000003).
+  const valueOf = (value) => { const names = new Map(cards.flatMap((card) => card.moves.map((m) => [m.who, m.name]))); return (value && typeof value === "object" ? JSON.stringify(value) : String(value ?? "—")).replace(/(char|slot)_\d+(_\d+)?/g, (id) => names.get(id) ?? namesOf.get(id)?.[0] ?? id); };
+  const loadNotes = async () => { notes = await fetch(`notes.json${query}`, { cache: "no-store" }).then((r) => (r.ok ? r.json() : [])).catch(() => []); $("cnotecount").textContent = notes.length ? `· ${notes.length} note${notes.length === 1 ? "" : "s"}` : ""; };
+  const noteRow = (note, play) => { const li = document.createElement("li"); li.innerHTML = `<small>${esc(note.at.slice(5, 16).replace("T", " "))} · ${esc(note.scene ?? "")} ${esc(note.card)}</small><br>${esc(note.text)}`; if (play) { li.style.cursor = "pointer"; li.addEventListener("click", () => { const n = cards.findIndex((card) => card.card === note.card && card.scene === note.scene); if (n >= 0) { playCard(n); showCard(n); } }); } return li; };
+  // What the laws, system 2, the ledger and the review made of the run (play/review.json, sim-play.mjs directorReview).
+  const loadReview = async () => { review = await fetch(`review.json${query}`, { cache: "no-store" }).then((r) => (r.ok ? r.json() : null)).catch(() => null); mark(); return review; };
+  const verdictTag = (verdict) => `<span class="tag v-${esc(String(verdict).split(" ")[0])}">${esc(verdict)}</span>`;
+  const lawsHtml = (card) => {
+    const own = review?.cards?.[`${card.scene}|${card.card}`];
+    if (!own) return review ? `<div class="f"><b>The laws</b><div class="q"><i>nothing held or decided on this card</i></div></div>` : "";
+    const laws = own.laws.map((law) => `<div class="q">${verdictTag(law.verdict)} ${esc(law.law)} · ${esc(valueOf(law.who ?? ""))} <i>${esc(law.why ?? "")}${law.code ? ` (${esc(law.code)})` : ""}</i></div>`).join("");
+    const talk = own.talk ? `<div class="q">talk: <span class="a">${esc(own.talk.kind)}</span>${own.talk.pinned ? " <i>(the review)</i>" : typeof own.talk.confidence === "number" ? ` <i>(Jev ${Math.round(own.talk.confidence * 100)}%)</i>` : ""}</div>` : "";
+    const second = own.system2.map((entry) => `<div class="q"><i>${esc(entry.asked ?? entry.key)}</i><br>Jev <span class="${(entry.jev?.confidence ?? 1) < 0.5 ? "low" : ""}">${esc(valueOf(entry.jev?.value))} ${typeof entry.jev?.confidence === "number" ? Math.round(entry.jev.confidence * 100) + "%" : ""}</span> · work model <span class="a">${entry.work ? `${esc(valueOf(entry.work.value))} ${Math.round(entry.work.confidence * 100)}%` : "no answer"}</span> · used: <b>${esc(entry.used)}</b></div>`).join("");
+    // The same break on several lines once, with how many; names, not ids.
+    const grouped = new Map();
+    for (const entry of own.proposals) { const text = `${entry.law ? `${entry.law} ` : ""}${valueOf(entry.why ?? "").replace(/ \(kind not asked yet\)/, "")}`, key = `${entry.state}|${entry.kind}|${text}`; const known = grouped.get(key); if (known) known.n++; else grouped.set(key, { ...entry, text, n: 1 }); }
+    const proposals = [...grouped.values()].map((entry) => `<div class="q">${verdictTag(entry.state)} ${esc(entry.kind === "held" ? "law break" : entry.kind)}${entry.n > 1 ? ` <b>×${entry.n}</b>` : ""} · <i>${esc(entry.text)}</i></div>`).join("");
+    const asked = own.review.map((item) => `<div class="q"><i>${esc(valueOf(item.question))}</i><br>${item.answer ? `${verdictTag(item.status === "applied" ? "pinned" : item.status)} <span class="a">${esc(item.answer)}</span> <i>${esc(item.reason ?? "")}</i>` : `${verdictTag("held")} <i>waiting for the main agent (${esc(item.options.join(" / "))})</i>`}${item.note ? `<br><i>${esc(item.note)}</i>` : ""}</div>`).join("");
+    const clouds = (own.clouds ?? []).map((entry) => `<div class="q">${esc(valueOf(entry.who))}${entry.start ? " <i>(scene start)</i>" : ""} · ${entry.spread < 1 ? "sure" : `within <span class="a">${entry.spread} m</span>`} · ${entry.shift > 2 ? `<span class="v-pinned">${entry.shift} m from where played</span>` : "where played"} <i>(${esc(entry.rank)})</i></div>`).join("");
+    return [asked ? `<div class="f"><b>The review · the main agent's answers</b>${asked}</div>` : "", laws || talk ? `<div class="f"><b>The laws · as the card played</b>${talk}${laws}</div>` : "", proposals ? `<div class="f"><b>Proposals · to the ontology</b>${proposals}</div>` : "", clouds ? `<div class="f"><b>Smoothed · where each may have been, given everything the text says</b>${clouds}</div>` : "", second ? `<div class="f"><b>System 2 · below 50%, the same question to the work model</b>${second}</div>` : ""].join("");
+  };
+  loadReview();
+  $("creportgo").href = `report${query}`;
+  const showWhy = async () => {
+    const card = cards[cardAt];
+    if (!$("cwhy").open) return;
+    $("claws").innerHTML = card ? lawsHtml(card) : "";
+    $("cnotes").replaceChildren(...notes.filter((note) => card && note.card === card.card && note.scene === card.scene).map((note) => noteRow(note, false)));
+    $("callnotes").replaceChildren(...notes.slice().reverse().map((note) => noteRow(note, true)));
+    if (!card) { $("cqa").textContent = "Tap a played sentence to see its card."; return; }
+    // A dialogue card's lines and who says each, as the reading decided (EM²: Jev asked during extraction, per line).
+    const said = card.lines.filter((line) => line.kind === "spoken").map((line) => `<div class="q"><span class="a">${line.who ? esc(valueOf(line.who)) : "no one sure"}</span>${typeof line.sure === "number" ? ` <span class="${line.sure < 0.6 ? "low" : ""}">${Math.round(line.sure * 100)}%</span>` : ""} <i>${esc(line.text.slice(0, 60))}</i></div>`).join("");
+    const saidHtml = said ? `<div class="f"><b>Who says each line · the reading's (EM², asked of Jev during extraction)</b>${said}</div>` : "";
+    $("cqa").innerHTML = `${saidHtml}<div class="f">Reading Jev's questions…</div>`;
+    const phase = phaseOf(card), own = (await loadFrames()).filter((frame) => frame.phase === phase || frame.phase?.startsWith(`${phase} `));
+    if (cards[cardAt] !== card) return;
+    $("cqa").innerHTML = saidHtml + (own.length ? own.map((frame) => `<div class="f"><b>${esc(frame.phase.slice(phase.length + 3) || phase)} · call ${frame.call}</b>${frame.questions.map((q, k) => { const a = frame.answers.find((answer) => answer.key === q.key) ?? frame.answers[k]; return `<div class="q"><i>${esc(q.instructions)}</i><br><span class="a">${esc(valueOf(a?.value ?? a?.box))}</span>${typeof a?.confidence === "number" ? ` <span class="${a.confidence < 0.6 ? "low" : ""}">${Math.round(a.confidence * 100)}%</span>` : ""}${a?.top?.length > 1 ? ` <i>· else ${a.top.slice(1, 3).map(([v, c]) => `${esc(valueOf(v))} ${Math.round(c * 100)}%`).join(", ")}</i>` : ""}</div>`; }).join("")}${frame.pictures?.length ? `<div class="pics">${frame.pictures.map((picture) => `<a href="live/${esc(picture.file)}${esc(query)}" target="_blank" rel="noopener"><img loading="lazy" alt="${esc(picture.name)}" src="live/${esc(picture.file)}${esc(query)}"></a>`).join("")}</div>` : ""}</div>`).join("") : saidHtml ? "" : "No question was asked for this card.");
+  };
+  $("cwhy").addEventListener("toggle", () => { if ($("cwhy").open) Promise.all([loadNotes(), loadReview()]).then(showWhy); });
+  $("call").addEventListener("click", () => { $("callnotes").hidden = !$("callnotes").hidden; });
+  $("csend").addEventListener("click", async () => {
+    const card = cards[cardAt], text = $("cnote").value.trim();
+    if (!card || !text) return;
+    const reply = await fetch(`notes${query}`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ card: card.card, scene: card.scene, event: card.event, sentence: card.lines[0]?.id ?? null, text }) }).catch(() => null);
+    if (!reply?.ok) { $("csend").textContent = "Not saved, try again"; return; }
+    $("cnote").value = ""; $("csend").textContent = "Add note"; await loadNotes(); showWhy();
+  });
+  // Developer mode (the user, 2026-11-02, after the handoff's blinking observations): the card's records (play/dev.json),
+  // each person's raw observations in the scene beside their smoothed history, drawn in the world (strand-demo.html
+  // showDev: Raw, Smoothed or Both), and the run's files.
+  let devOn = false, devMode = "both", devData = null;
+  const fmt = (p) => (p ? `${Math.round(p.x)}, ${Math.round(p.z)}${p.y ? ` · f${Math.round(p.y / 3) + 1}` : ""}` : "—");
+  const sendDev = () => {
+    const card = cards[cardAt], people = devOn && devData ? Object.entries(devData.smoothing?.people ?? {}).map(([who, list]) => ({ who, moments: list.map((m) => ({ x: m.played.x, y: m.played.y, z: m.played.z, sigma: m.sigma, rank: m.rank, current: !!card && m.card === card.card })), smooth: list.map((m) => ({ x: m.map.x, y: m.map.y, z: m.map.z })) })) : [];
+    for (const frame of [shown, next]) frame?.contentWindow.postMessage({ type: "dev", mode: devMode, people }, origin);
+  };
+  const json = (title, value) => { if (value === null || value === undefined || (Array.isArray(value) && !value.length)) return ""; const text = JSON.stringify(value, null, 1); return `<details><summary>${esc(title)} <small>${Array.isArray(value) ? value.length : ""}</small><button class="copy" data-copy="${esc(title)}">Copy</button></summary><pre>${esc(text)}</pre></details>`; };
+  const renderDev = () => {
+    const card = cards[cardAt], d = devData;
+    if (!card) { $("dsum").textContent = "Pick a played sentence in Read: its card's records show here."; $("dbody").innerHTML = ""; return; }
+    $("dsum").textContent = `${card.scene} · ${card.card} · run ${d?.run ?? "…"}`;
+    if (!d) { $("dbody").innerHTML = "<div>Reading the records…</div>"; return; }
+    const people = Object.entries(d.smoothing?.people ?? {});
+    const tables = people.map(([who, list]) => `<div class="who">${esc(valueOf(who))} <small>drive ${d.smoothing.drive?.[who] ?? "—"} · on stage ${d.smoothing.on?.[who] !== undefined ? Math.round(d.smoothing.on[who] * 100) + "%" : "—"}</small></div><table><tr><th>moment</th><th class="raw">raw (σ)</th><th class="sm">smoothed</th><th>moved</th><th>cloud</th><th>talk</th></tr>${list.map((m) => `<tr class="${m.card === card.card ? "now" : ""}"><td>${esc(m.card ? m.card.replace(/^(\w+):b\d+_s/, "$1 ") : "start")}</td><td class="raw">${fmt(m.played)} <small>${esc(m.rank)} ±${m.sigma ?? "?"} m</small></td><td class="sm">${fmt(m.map)}</td><td>${m.shift} m</td><td>${m.spread < 1 ? "sure" : m.spread + " m"}</td><td>${(m.talk ?? []).map((t) => `${esc(valueOf(t.with))} ≤${t.reach} m${t.known ? "" : "?"}`).join(", ") || ""}</td></tr>`).join("")}</table>`).join("");
+    const sep = query ? "&" : "?", files = (d.files ?? []).map((name) => `<a target="_blank" rel="noopener" href="dev/file${query}${sep}name=${encodeURIComponent(name)}">${esc(name)}</a>`).join("");
+    $("dbody").innerHTML = `<div class="modes" role="group" aria-label="What the world shows">${["raw", "smoothed", "both"].map((mode) => `<button data-devmode="${mode}" aria-pressed="${devMode === mode}">${mode === "raw" ? "Raw (blinks)" : mode === "smoothed" ? "Smoothed" : "Both"}</button>`).join("")}</div>
+      <div><small>Raw: where the run had each person at each moment the text was read (a flash at its moment; its ring as wide as it is trusted). Smoothed: the history of least action given all of them, and its cloud.</small></div>
+      ${tables || "<div>No one smoothed in this scene.</div>"}
+      ${json("This card, as the run played it", d.cardRecord)}${json("Its scene (starts, who came how, laws, the world's check)", d.sceneRecord)}${json("World log · this scene", d.worldLog)}${json("Ledger · this scene", d.ledger)}${json("The review · this scene", d.review)}${json("Into canon · this scene", d.canon)}${json("Notes", d.notes)}${json("Smoothing · this scene (full)", d.smoothing)}
+      <div class="files"><b style="width:100%">The run's files</b>${files}</div>`;
+  };
+  const loadDev = async () => {
+    const card = cards[cardAt]; devData = null; renderDev();
+    if (!card) return;
+    const sep = query ? "&" : "?", want = `${card.scene}|${card.card}`;
+    const data = await fetch(`dev.json${query}${sep}scene=${encodeURIComponent(card.scene)}&card=${encodeURIComponent(card.card)}`, { cache: "no-store" }).then((r) => (r.ok ? r.json() : null)).catch(() => null);
+    const now = cards[cardAt]; if (!now || `${now.scene}|${now.card}` !== want) return;
+    devData = data ?? { run: null, files: [] }; renderDev(); sendDev();
+  };
+  $("dbody").addEventListener("click", (event) => {
+    const mode = event.target.closest("[data-devmode]"); if (mode) { devMode = mode.dataset.devmode; renderDev(); sendDev(); return; }
+    const copy = event.target.closest(".copy"); if (copy) { event.preventDefault(); const text = copy.closest("details").querySelector("pre").textContent; navigator.clipboard?.writeText(text).then(() => { copy.textContent = "Copied"; }, () => { copy.textContent = "Select the text"; }); }
+  });
+  $("dopen").addEventListener("click", () => { devOn = !devOn; fold("dopen", "dlist", devOn); if (devOn && innerWidth < 960) fold("copen", "clist", false); if (devOn) loadDev(); else sendDev(); });
+  // The smoother's clouds for the card shown, drawn in the world (strand-demo.html showClouds); off with the Clouds button.
+  let cloudsOn = true;
+  const sendClouds = () => { const card = cards[cardAt], own = card && review?.cards?.[`${card.scene}|${card.card}`]; for (const frame of [shown, next]) frame?.contentWindow.postMessage({ type: "clouds", clouds: cloudsOn ? own?.clouds ?? [] : [] }, origin); };
+  $("clouds").addEventListener("click", () => { cloudsOn = !cloudsOn; $("clouds").setAttribute("aria-pressed", String(cloudsOn)); sendClouds(); });
+  const showCard = (n, scroll = true) => {
+    cardAt = n; const card = cards[n]; if (!card) return;
+    showWhy(); if (review) sendClouds(); else loadReview().then(sendClouds);
+    if (devOn) loadDev();
+    $("cmeta").innerHTML = `Scene ${Number(card.scene.slice(-3))} · card ${n + 1} of ${cards.length} · <span class="kind" style="color: var(--${{ dialogue: "spoken", action: "action" }[card.kind] ?? "narration"})">${esc(card.kind === "pass" ? "narration played" : card.kind)}</span><br>${card.moves.length ? card.moves.map(says).join("<br>") : "nobody asked"}`;
+    mark();
+    $("replaying").hidden = false; $("replaying").textContent = `▶ playing scene ${Number(card.scene.slice(-3))} · card ${n + 1} of ${cards.length} · ${card.kind === "pass" ? "narration" : card.kind}`;
+    if (scroll) $("book").querySelector(`.s[data-id="${card.lines[0]?.id}"]`)?.scrollIntoView({ block: "center" });
+    // The debugger at this card's Jev steps; the strands as of this card's time; the timeline at it.
+    $("cmeta").insertAdjacentHTML("beforeend", ` · <a href="#" class="jevsteps">Jev steps ↗</a>`); $("cmeta").querySelector(".jevsteps").addEventListener("click", (event) => { event.preventDefault(); openDebug(card.scene, card.event); });
+    renderStrands(); const k = timeline.findIndex((entry) => entry.n === n); if (k >= 0) { $("tslider").value = String(k); tlabel(); }
+  };
+  // Strands, the calendar and the traces (the user, 2026-11-04: "the highlight of traces and strands selection are all
+  // directly on the page … a narrative replay as if reading the book can be simply locating them to the reader, but simply
+  // focusing on different part of the strands tree. The traces are visible directly on live, with timeline selectable that
+  // can go back in strand"): the director's units (live notes) give each card its strand and its time on the story's clock.
+  // A strand picked: its traces stay, the others' dim (the frame), the timeline holds its cards in calendar order (dragged
+  // back, a card plays again there), and the reader dims the other strands' sentences and goes to its latest card.
+  const STRAND = ["#7ce6ff", "#ff8fb1", "#b6f27a", "#f2c66d", "#c9a2ff", "#ff9e5e", "#5ef2c4", "#f27aa8", "#9ec1ff", "#e6e66d"];
+  let units = [], unitOf = new Map(), forkIds = [], strandPick = null, tracesOn = true, timeline = [];
+  const whenOf = (node) => (node ? String(node).split(":").slice(2).map((part) => (/^\d/.test(part) ? part : part.replace(/-/g, " "))).join(" · ") || "the story" : "");
+  const forkOfCard = (card) => unitOf.get(card.scene)?.fork ?? card.scene, clockOf = (card) => unitOf.get(card.scene)?.clock ?? [Infinity, Infinity];
+  const sendAll = (message) => { for (const frame of [shown, next]) frame?.contentWindow.postMessage(message, origin); };
+  albumLoaded.then(() => sendAll(portraitsMessage()));
+  skyLoaded.then(() => { if (sky) sendAll(skyMessage()); });
+  $("pic").addEventListener("click", () => $("pic").classList.toggle("big"));
+  const strandsUpdate = (director) => { units = director?.units ?? []; unitOf = new Map(units.map((unit) => [unit.id, unit])); forkIds = [...new Set(units.map((unit) => unit.fork))]; renderStrands(); buildTimeline(); };
+  // The strands as a tree on story time: x is the time tree's order, units on the same time in the order they are told
+  // (the narration complies with the strands, so this is never against a strand's own order); y a lane per strand in the
+  // order it first comes; a unit a bar, bright once it has landed; a strand branches off the one it comes from (the
+  // strand sharing most people with its first unit among those before it, else the one the narration came from); the
+  // time tree's steps marked along the foot; the vertical line is the shown card's place. A lane tapped picks its strand
+  // (and Follow Jev goes off).
+  const SVGNS = "http://www.w3.org/2000/svg";
+  const svgEl = (name, attrs) => { const el = document.createElementNS(SVGNS, name); for (const [k, v] of Object.entries(attrs)) el.setAttribute(k, String(v)); return el; };
+  let treeKey = "";
+  const renderStrands = () => {
+    const box = $("strands"); box.classList.add("tree"); box.hidden = !forkIds.length;
+    if (!forkIds.length) return;
+    const card = cards[cardAt] ?? cards.at(-1);
+    const latest = cards.at(-1)?.scene, landedTo = latest ? units.findIndex((unit) => unit.id === latest) : -1;
+    const key = [forkIds.length, landedTo, card?.scene, strandPick, units.length, readUnit].join("|");
+    if (key === treeKey) return; treeKey = key;
+    const order = units.map((unit, k) => ({ unit, k })).sort((a, b) => (a.unit.clock?.[0] ?? Infinity) - (b.unit.clock?.[0] ?? Infinity) || a.k - b.k), col = new Map(order.map(({ unit }, n) => [unit.id, n]));
+    const W = 400, GUT = 18, ROW = 8.5, TOP = 4, FOOT = 13, H = TOP + forkIds.length * ROW + FOOT, N = Math.max(1, order.length), step = (W - GUT - 4) / N;
+    const X = (id) => GUT + (col.get(id) + 0.5) * step, laneOf = new Map(forkIds.map((fork, n) => [fork, n])), Y = (fork) => TOP + laneOf.get(fork) * ROW + ROW / 2;
+    const peopleOf = new Map();
+    for (const c of cards) { const set = peopleOf.get(c.scene) ?? peopleOf.set(c.scene, new Set()).get(c.scene); for (const move of c.moves ?? []) if (move.who) set.add(move.who); for (const line of c.lines ?? []) if (line.who) set.add(line.who); }
+    const svg = svgEl("svg", { viewBox: `0 0 ${W} ${H}`, role: "group", "aria-label": "Strands on story time" });
+    // The time tree's steps: a faint rule where the story's time moves on, named where there is room.
+    let lastLabel = -Infinity, lastWhen = null;
+    order.forEach(({ unit }) => {
+      const when = whenOf(unit.when); if (!when || when === lastWhen) return; lastWhen = when;
+      const x = X(unit.id) - step / 2; svg.append(svgEl("line", { x1: x, x2: x, y1: TOP, y2: H - FOOT + 2, stroke: "#8a98a6", "stroke-width": 0.3, opacity: 0.45 }));
+      if (x - lastLabel > 62) { lastLabel = x; const t = svgEl("text", { x: x + 1, y: H - 3, "font-size": 6.5, fill: "#8a98a6" }); t.textContent = when.replace(/^12-24 · /, ""); svg.append(t); }
+    });
+    forkIds.forEach((fork) => {
+      const first = units.findIndex((unit) => unit.fork === fork), unit = units[first];
+      if (first <= 0 || !unit) return;
+      const mine = peopleOf.get(unit.id), score = new Map();
+      if (mine?.size) for (const other of units.slice(0, first)) { if (other.fork === fork) continue; const theirs = peopleOf.get(other.id); if (!theirs) continue; let shared = 0; for (const who of mine) if (theirs.has(who)) shared++; if (shared) score.set(other.fork, Math.max(score.get(other.fork) ?? 0, shared + col.get(other.id) / 1e6)); }
+      const parent = [...score.entries()].sort((a, b) => b[1] - a[1])[0]?.[0] ?? units.slice(0, first).reverse().find((other) => other.fork !== fork)?.fork;
+      if (!parent || !laneOf.has(parent)) return;
+      const x = X(unit.id), lit = strandPick === null || strandPick === fork || strandPick === parent;
+      svg.append(svgEl("path", { d: `M${(x - 5).toFixed(1)} ${Y(parent).toFixed(1)} Q${x.toFixed(1)} ${Y(parent).toFixed(1)} ${x.toFixed(1)} ${Y(fork).toFixed(1)}`, fill: "none", stroke: STRAND[laneOf.get(fork) % STRAND.length], "stroke-width": 0.8, opacity: lit ? 0.75 : 0.15 }));
+    });
+    const shown = card ? unitOf.get(card.scene) : null;
+    forkIds.forEach((fork, n) => {
+      const colour = STRAND[n % STRAND.length], picked = strandPick === fork, dim = strandPick !== null && !picked;
+      const mine = units.map((unit, k) => ({ unit, k })).filter(({ unit }) => unit.fork === fork), xs = mine.map(({ unit }) => X(unit.id));
+      const now = !!shown && shown.fork === fork;
+      const g = svgEl("g", { class: "lane", role: "button", tabindex: 0, "aria-pressed": String(picked), "aria-label": `Strand ${n + 1}: ${mine.length} units${now ? ", now" : ""}` });
+      g.append(svgEl("rect", { class: "hit", x: 0, y: TOP + n * ROW, width: W, height: ROW, fill: picked ? "rgba(124,230,255,.12)" : "transparent", rx: 2 }));
+      const label = svgEl("text", { x: GUT - 3, y: Y(fork) + 2.5, "text-anchor": "end", "font-size": 7, fill: now ? "#7dffa4" : picked ? colour : "#8a98a6" }); label.textContent = String(n + 1); g.append(label);
+      if (xs.length > 1) g.append(svgEl("line", { x1: Math.min(...xs), x2: Math.max(...xs), y1: Y(fork), y2: Y(fork), stroke: colour, "stroke-width": 0.6, opacity: dim ? 0.12 : 0.4 }));
+      for (const { unit, k } of mine) {
+        const landed = k <= landedTo, x = X(unit.id), w = Math.max(1.4, step * 0.85);
+        g.append(svgEl("rect", { x: (x - w / 2).toFixed(2), y: (Y(fork) - 2.6).toFixed(1), width: w.toFixed(2), height: 5.2, rx: 0.8, fill: colour, opacity: dim ? (landed ? 0.25 : 0.08) : landed ? 0.95 : 0.22 }));
+      }
+      // A tap on a unit's bar (or within a few of the lane's units of it) goes there, in the reader and the world; anywhere
+      // else on the lane picks the strand.
+      g.addEventListener("click", (event) => {
+        const point = svg.createSVGPoint(); point.x = event.clientX; point.y = event.clientY;
+        const at = point.matrixTransform(svg.getScreenCTM().inverse()), near = mine.map(({ unit }) => ({ unit, d: Math.abs(X(unit.id) - at.x) })).sort((a, b) => a.d - b.d)[0];
+        if (near && near.d <= Math.max(5, step * 3) && near.unit.id && cards.some((c) => c.scene === near.unit.id)) jumpToUnit(near.unit.id);
+        else pickStrand(strandPick === fork ? null : fork);
+      });
+      g.addEventListener("keydown", (event) => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); pickStrand(strandPick === fork ? null : fork); } });
+      svg.append(g);
+    });
+    // Where the reader is (the sentence read along, or the middle of the book as it is scrolled), when it is not the card shown.
+    const reader = readUnit ? unitOf.get(readUnit) : null;
+    if (reader && reader.id !== shown?.id && col.has(reader.id)) { const x = X(reader.id); svg.append(svgEl("line", { x1: x, x2: x, y1: 1, y2: H - FOOT + 2, stroke: "#e8f4ff", "stroke-width": 0.8, "stroke-dasharray": "2 1.5", opacity: 0.8 })); }
+    // The shown card's place on story time: a vertical line across every lane.
+    if (shown && col.has(shown.id)) { const x = X(shown.id); svg.append(svgEl("line", { x1: x, x2: x, y1: 1, y2: H - FOOT + 2, stroke: "#ffd36e", "stroke-width": 1.1 })); svg.append(svgEl("circle", { cx: x, cy: 1.6, r: 1.7, fill: "#ffd36e" })); }
+    const axis = document.createElement("div"); axis.className = "axis";
+    axis.innerHTML = `<span>${forkIds.length} strands · ${landedTo + 1} of ${units.length} units landed</span><span>tap a bar to go there · story time →</span>`;
+    box.replaceChildren(svg, axis);
+  };
+  // The panel folds (a phone: folded at first, then as the viewer left it).
+  const FOLD = "worldLive.fold";
+  const setFold = (on) => { document.querySelector(".hud").classList.toggle("folded", on); $("fold").textContent = on ? "Strands ▾" : "Fold ▴"; $("fold").setAttribute("aria-expanded", String(!on)); };
+  { let stored = null; try { stored = localStorage.getItem(FOLD); } catch {} setFold(stored === null ? matchMedia("(max-width: 560px)").matches : stored === "1"); }
+  $("fold").addEventListener("click", (event) => { event.stopPropagation(); const on = !document.querySelector(".hud").classList.contains("folded"); setFold(on); try { localStorage.setItem(FOLD, on ? "1" : "0"); } catch {} });
+  // Going to a point of the story (the menu, the strand tree, the timeline; the user, 2026-11-05): the book loaded as far as
+  // the card's first line and turned to it, reading along going on from there (it starts the card as the line comes up),
+  // else the card played in the world.
+  let readingLine = null, readUnit = null;
+  const jumpTo = async (n) => {
+    const card = cards[n]; if (!card) return;
+    const id = card.lines[0]?.id, found = () => id && $("book").querySelector(`.s[data-id="${id}"]`);
+    for (let k = 0; k < 60 && id && !found() && !bookDone; k++) { if (loading) await new Promise((done) => setTimeout(done, 80)); else await loadBlock(); }
+    const at = indexOf.get(id); if (at !== undefined) cursor = at;
+    found()?.scrollIntoView({ block: "center" }); readAt(id);
+    if (auto) { unfollow(); showCard(n, false); setAuto(true); return; }
+    playCard(n);
+  };
+  const jumpToUnit = (unit) => { let n = cards.findIndex((card) => card.scene === unit); if (n < 0) { const k = units.findIndex((entry) => entry.id === unit); n = cards.findIndex((card) => units.findIndex((entry) => entry.id === card.scene) > k); } if (n >= 0) jumpTo(n); };
+  // Where the reader is in the story (the sentence read along, or the one in the middle of the book as it is scrolled):
+  // the strand tree marks it beside the card the world shows.
+  const readAt = (id) => { const n = cardOfSentence.get(id); const unit = n === undefined ? null : cards[n].scene; if (unit && unit !== readUnit) { readUnit = unit; renderStrands(); } };
+  let bookLook = 0;
+  $("book").addEventListener("scroll", () => {
+    const now = Date.now(); if (now - bookLook < 250) return; bookLook = now;
+    const box = $("book").getBoundingClientRect(); if (!box.height) return;
+    for (const dy of [0, -40, 40, -90, 90]) { const span = document.elementFromPoint(box.left + box.width / 2, box.top + box.height / 2 + dy)?.closest?.(".s"); if (span && cardOfSentence.has(span.dataset.id)) { readAt(span.dataset.id); break; } }
+  });
+  // The story menu: every unit played so far, in reading order, with its strand, its time and its first line; a search over
+  // the units' text (or a unit's number).
+  const clipText = (text, size) => (text.length > size ? `${text.slice(0, size - 1)}…` : text);
+  const renderMenu = () => {
+    if ($("mlist").hidden) return;
+    const find = $("mfind").value.trim(), byUnit = new Map();
+    cards.forEach((card, n) => { const entry = byUnit.get(card.scene) ?? byUnit.set(card.scene, { n, cards: [] }).get(card.scene); entry.cards.push(card); });
+    const current = cards[cardAt]?.scene, rows = [];
+    for (const [unit, entry] of byUnit) {
+      const text = entry.cards.flatMap((card) => card.lines.map((line) => line.text)).join("");
+      if (find && !text.includes(find) && String(Number(unit.slice(-6))) !== find) continue;
+      const lane = forkIds.indexOf(unitOf.get(unit)?.fork), li = document.createElement("li"); li.tabIndex = 0; if (unit === current) li.className = "now";
+      const hit = find && text.includes(find) ? entry.cards.flatMap((card) => card.lines).find((line) => line.text.includes(find))?.text : null;
+      li.innerHTML = `<span class="name"><i class="chip" style="background:${lane >= 0 ? STRAND[lane % STRAND.length] : "#8a98a6"}"></i>Unit ${Number(unit.slice(-6))}${lane >= 0 ? ` · strand ${lane + 1}` : ""}${unitOf.get(unit)?.when ? ` · ${esc(whenOf(unitOf.get(unit).when))}` : ""} · ${entry.cards.length} card${entry.cards.length === 1 ? "" : "s"}</span><span class="what">${esc(clipText(hit ?? entry.cards[0].lines[0]?.text ?? "", 80))}</span>`;
+      // Who speaks in it with a portrait, and whether the book has a picture there (the album).
+      const faced = [...new Set(entry.cards.flatMap((card) => card.lines.map((line) => line.who)).filter((id) => id && faceOf.has(id)))].slice(0, 6);
+      const pictured = pictureScenes.has(unit);
+      if (faced.length || pictured) li.insertAdjacentHTML("beforeend", `<span class="faces">${faced.map((id) => `<img src="${esc(faceOf.get(id))}" alt="${esc(valueOf(id))}" title="${esc(valueOf(id))}">`).join("")}${pictured ? "<em>picture</em>" : ""}</span>`);
+      const go = () => { fold("mopen", "mlist", false); fold("copen", "clist", true); jumpTo(entry.n); };
+      li.addEventListener("click", go); li.addEventListener("keydown", (event) => { if (event.key === "Enter") go(); });
+      rows.push(li);
+    }
+    $("mrows").replaceChildren(...rows);
+    $("msum").textContent = find ? `${rows.length} of ${byUnit.size} units` : `${byUnit.size} units played · tap one to go there`;
+    $("mrows").querySelector(".now")?.scrollIntoView({ block: "center" });
+  };
+  $("mopen").addEventListener("click", () => {
+    const on = $("mopen").getAttribute("aria-pressed") !== "true";
+    fold("mopen", "mlist", on);
+    if (on) { for (const [button, panel] of [["copen", "clist"], ["bopen", "blist"], ["sopen", "slist"], ["live", "asks"]]) fold(button, panel, false); renderMenu(); $("mfind").focus({ preventScroll: true }); }
+  });
+  $("mfind").addEventListener("input", renderMenu);
+  // Touching a strand, the timeline or a card is looking somewhere else: Follow Jev goes off (the user, 2026-11-04).
+  const unfollow = () => { if ($("follow").getAttribute("aria-pressed") !== "true") return; showFollow(false); if (camera) camera.follow = false; sendAll({ type: "follow", on: false }); };
+  const pickStrand = (fork, quiet = false) => { if (!quiet) unfollow(); strandPick = fork; sendAll({ type: "strand", fork }); renderStrands(); buildTimeline(true); markStrand(); };
+  const buildTimeline = (jump = false) => {
+    const atEnd = Number($("tslider").value) >= Number($("tslider").max);
+    timeline = cards.map((card, n) => ({ card, n })).filter(({ card }) => strandPick === null || forkOfCard(card) === strandPick).sort((a, b) => clockOf(a.card)[0] - clockOf(b.card)[0] || clockOf(a.card)[1] - clockOf(b.card)[1] || a.n - b.n);
+    $("tline").hidden = !timeline.length; $("tslider").max = String(Math.max(0, timeline.length - 1));
+    if (atEnd || jump) $("tslider").value = $("tslider").max; tlabel();
+  };
+  const tlabel = () => { const entry = timeline[Number($("tslider").value)]; if (entry) $("tlabel").textContent = `${whenOf(unitOf.get(entry.card.scene)?.when)} · unit ${Number(entry.card.scene.slice(-6))} · card ${entry.n + 1}`; };
+  $("tslider").addEventListener("input", () => { tlabel(); const entry = timeline[Number($("tslider").value)]; if (entry) jumpTo(entry.n); });
+  const markStrand = () => {
+    for (const span of $("book").querySelectorAll(".s")) { const n = cardOfSentence.get(span.dataset.id); span.classList.toggle("other", strandPick !== null && n !== undefined && forkOfCard(cards[n]) !== strandPick); }
+    const latest = strandPick !== null ? timeline.at(-1) : null; if (latest) $("book").querySelector(`.s[data-id="${latest.card.lines[0]?.id}"]`)?.scrollIntoView({ block: "center" });
+  };
+  $("traces").addEventListener("click", () => { tracesOn = !tracesOn; $("traces").setAttribute("aria-pressed", String(tracesOn)); sendAll({ type: "traces", on: tracesOn }); });
+  // The Jev debugger (the questions page) opened at one card's Jev steps.
+  const debugLink = (scene, event) => `live${query}${query ? "&" : "?"}card=${encodeURIComponent(`${scene}|${event}`)}`;
+  const openDebug = (scene, event) => { fold("live", "asks", true); fold("bopen", "blist", false); fold("sopen", "slist", false); fold("copen", "clist", false); $("asksFrame").src = debugLink(scene, event); $("asksFull").href = debugLink(scene, event); };
+  // A replay or Continue keeps Follow as it is (the user, 2026-11-03: in World · Live the camera stayed put while people
+  // walked off, where the Player follows them): the frame glides to the card's view, then follows its people if Follow is on.
+  const send = (message) => { const on = $("follow").getAttribute("aria-pressed") === "true"; for (const frame of [shown, next]) frame?.contentWindow.postMessage({ ...message, follow: on }, origin); };
+  // A card the viewer picks is replayed with its people followed (the user, 2026-11-03), and Follow Jev goes off.
+  const playCard = (n) => { const card = cards[n]; if (!card) return; unfollow(); showCard(n, false); for (const frame of [shown, next]) frame?.contentWindow.postMessage({ type: "replay", scene: card.scene, event: card.event, camera: card.camera, once: true, speed: rspeed, follow: true }, origin); };
+  // Continue: on from where the world is to the end of the next card (a dialogue plays its lines in bubbles).
+  // Auto reads along (the user, 2026-11-02: no sentence of the book skipped, at the reader's own pace): the book sentence by
+  // sentence from where the reader is, each at the foot of the screen for as long as it takes to read (`cps` characters a
+  // second, the reader's choice), a played card started in the world as its first line comes up, the next card waiting
+  // for the last to end (the frame's cardEnded). Both sit in the bar too, within a thumb's reach on a phone.
+  let auto = false, cursor = 0, along = 0, cps = 8, endCard = null, cardDone = Promise.resolve();
+  const allSentences = [], indexOf = new Map();
+  const startCard = (n) => {
+    const card = cards[n]; showCard(n, false);
+    cardDone = new Promise((done) => { endCard = done; setTimeout(done, 90000); });
+    send({ type: "continue", scene: card.scene, event: card.event, camera: card.camera, speed: rspeed });
+  };
+  const goOn = () => { const n = cards.findIndex((card, k) => k > cardAt); if (n < 0) return; const at = indexOf.get(cards[n].lines[0]?.id); if (at !== undefined) cursor = at; startCard(n); };
+  const sentenceAt = async (k) => { while (k >= allSentences.length && !textDone) await nextSentences(); return allSentences[k] ?? null; };
+  const subtitle = (sentence) => {
+    const n = cardOfSentence.get(sentence?.id), line = n === undefined ? null : cards[n].lines.find((entry) => entry.id === sentence.id);
+    const kind = line?.kind ?? kindOf?.get(sentence?.id) ?? "narration", narrow = matchMedia("(max-width: 560px)").matches;
+    $("sub").hidden = !sentence || (narrow && !$("clist").hidden);
+    if (!sentence) return;
+    $("sub").style.setProperty("--k", `var(--${kind})`);
+    $("subwho").textContent = kind === "spoken" ? `${line?.who ? valueOf(line.who) : "?"}:` : "";
+    $("subtx").textContent = sentence.text;
+    const face = kind === "spoken" && line?.who ? faceOf.get(line.who) : null;
+    $("subface").hidden = !face; if (face && $("subface").getAttribute("src") !== face) $("subface").src = face;
+    // A story picture shows from its sentence for the next few read (the cover and front pages stay in the book).
+    const here = indexOf.get(sentence.id) ?? -1, picture = (picturesAt.get(sentence.id) ?? []).find((entry) => entry.kind === "story");
+    if (picture) { $("picimg").src = albumAsset(picture.id); $("pic").hidden = false; picFrom = here; }
+    else if (picFrom >= 0 && (here < picFrom || here - picFrom > 6)) { $("pic").hidden = true; $("pic").classList.remove("big"); picFrom = -1; }
+    for (const span of $("book").querySelectorAll(".s.reading")) span.classList.remove("reading");
+    const spans = $("book").querySelectorAll(`.s[data-id="${sentence.id}"]`);
+    for (const span of spans) span.classList.add("reading");
+    if (!$("clist").hidden) spans[0]?.scrollIntoView({ block: "center", behavior: "smooth" });
+  };
+  const readAlong = async () => {
+    const run = ++along;
+    while (auto && run === along) {
+      const sentence = await sentenceAt(cursor);
+      if (run !== along) return;
+      if (!sentence) { setAuto(false); return; }
+      const n = cardOfSentence.get(sentence.id);
+      if (n !== undefined && cards[n].lines[0]?.id === sentence.id) { await cardDone; if (!auto || run !== along) return; startCard(n); }
+      subtitle(sentence); readingLine = sentence.id; sendAll({ type: "reading", line: sentence.id }); readAt(sentence.id);
+      await new Promise((done) => setTimeout(done, Math.max(1200, (norm(sentence.text).length / cps) * 1000)));
+      if (run === along) cursor++;
+    }
+  };
+  const setAuto = (on) => {
+    auto = on; for (const id of ["rauto", "bauto"]) $(id).setAttribute("aria-pressed", String(on));
+    if (on) { if (!cursor && cardAt >= 0) cursor = indexOf.get(cards[cardAt].lines[0]?.id) ?? 0; cardDone = Promise.resolve(); readAlong(); } else { along++; $("sub").hidden = true; readingLine = null; sendAll({ type: "reading", line: null }); }
+  };
+  for (const button of document.querySelectorAll("[data-cps]")) button.addEventListener("click", () => { cps = Number(button.dataset.cps); for (const other of document.querySelectorAll("[data-cps]")) other.setAttribute("aria-pressed", String(other === button)); });
+  for (const id of ["rauto", "bauto"]) $(id).addEventListener("click", () => setAuto(!auto));
+  $("bgo").addEventListener("click", () => { setAuto(false); goOn(); });
+  const listCards = (director) => {
+    const key = `${director?.cards?.length ?? 0}|${director?.cards?.at(-1)?.card ?? ""}`;
+    if (key === cardKey) return; cardKey = key;
+    cards = director?.cards ?? [];
+    cardOfSentence = new Map(cards.flatMap((card, n) => card.lines.map((line) => [line.id, n])));
+    strandsUpdate(director);
+    $("csum").textContent = cards.length ? `The whole text; ${cards.length} cards played, ${cards.reduce((sum, card) => sum + card.moves.filter((m) => m.moved).length, 0)} moves (➜). Tap an underlined sentence to play it here.` : "The whole text. No director's run yet.";
+    for (const id of ["bgo", "bauto"]) $(id).hidden = !cards.length;
+    mark();
+  };
+  // The book as published (the user, 2026-11-02): the volume's EPUB a document at a time (api/book-epub), its headings,
+  // paragraphs and pictures kept, each sentence the records cite (b0003_s0012, from api/book-text) found in it in order and
+  // wrapped, so a played one is underlined and tappable there. Without an EPUB, the text a block at a time, in its paragraphs.
+  let epub = null, item = 0, pending = [], textDone = false;
+  // Letters and digits only: the extracted text and the EPUB differ in spaces and marks (">>" before a time line).
+  const kept = /[\p{L}\p{N}]/u, norm = (text) => [...String(text ?? "")].filter((c) => kept.test(c)).join("");
+  const nextSentences = async () => {
+    const reply = await fetch(`../api/book-text?volume=${encodeURIComponent(volume)}&block=${nextBlock}`, { cache: "no-store" }).then((r) => (r.ok ? r.json() : null)).catch(() => null);
+    if (!reply?.sentences?.length) { textDone = true; return null; }
+    nextBlock++;
+    // Every sentence in reading order (read along walks them), and each to be found in the EPUB.
+    for (const sentence of reply.sentences) { indexOf.set(sentence.id, allSentences.length); allSentences.push(sentence); textOf.set(sentence.id, sentence.text); }
+    if (epub !== false) pending.push(...reply.sentences);
+    return reply.sentences;
+  };
+  // Each sentence found in the document's text (its letters and digits) from where the last ended; one not found is passed
+  // over when one of the next five is found close by; when none is, the rest belong to the next document.
+  const align = async (doc) => {
+    const walker = document.createTreeWalker(doc, NodeFilter.SHOW_TEXT), nodes = [], map = [];
+    let flat = "";
+    for (let node; (node = walker.nextNode()); ) { for (let o = 0; o < node.data.length; o++) if (kept.test(node.data[o])) { flat += node.data[o]; map.push([nodes.length, o]); } nodes.push(node); }
+    const ranges = [];
+    let cursor = 0;
+    for (;;) {
+      if (pending.length < 8 && !textDone) await nextSentences();
+      while (pending.length && !norm(pending[0].text)) pending.shift();
+      if (!pending.length) break;
+      let found = -1, at = -1;
+      for (let k = 0; k < Math.min(6, pending.length); k++) { const key = norm(pending[k].text), p = key ? flat.indexOf(key, cursor) : -1; if (p >= 0 && (k === 0 || p - cursor < 400)) { found = k; at = p; break; } }
+      if (found < 0) break;
+      pending.splice(0, found);
+      const sentence = pending.shift(), length = norm(sentence.text).length;
+      textOf.set(sentence.id, sentence.text);
+      ranges.push([sentence.id, at, at + length]); cursor = at + length;
+    }
+    // Wrapped from the last back, so a text node split for a later sentence keeps the offsets of the earlier ones.
+    for (const [id, a, b] of ranges.reverse()) {
+      const parts = [];
+      for (let k = a; k < b; k++) { const [n, o] = map[k], last = parts.at(-1); if (last && last.n === n) last.end = o + 1; else parts.push({ n, start: o, end: o + 1 }); }
+      for (const { n, start, end } of parts.reverse()) {
+        const node = nodes[n], tail = node.splitText(start); tail.splitText(end - start);
+        const span = document.createElement("span"); span.className = "s"; span.dataset.id = id; tail.replaceWith(span); span.append(tail);
+      }
+    }
+  };
+  let rendered = 0;
+  const loadText = async () => {
+    if (rendered >= allSentences.length) await nextSentences();
+    if (rendered >= allSentences.length) { bookDone = true; $("bmore").textContent = nextBlock ? "The end of the book." : "The book's text is not served here."; return; }
+    // Paragraphs as the book has them (each sentence marked when one starts).
+    let para = rendered ? $("bmore").previousElementSibling : null;
+    for (const sentence of allSentences.slice(rendered)) {
+      if (!para || sentence.paragraph) { para = document.createElement("p"); $("bmore").before(para); }
+      const span = document.createElement("span"); span.className = "s"; span.dataset.id = sentence.id; span.textContent = sentence.text; para.append(span);
+      // Without the EPUB, the album's pictures after the sentence they hang on (with the EPUB, they stand where it has them).
+      for (const picture of picturesAt.get(sentence.id) ?? []) { const figure = document.createElement("figure"), img = document.createElement("img"); figure.className = "album"; img.loading = "lazy"; img.alt = `picture ${picture.id} (${picture.kind})`; img.src = albumAsset(picture.id); figure.append(img); $("bmore").before(figure); para = null; }
+    }
+    rendered = allSentences.length;
+  };
+  const loadEpub = async () => {
+    const reply = await fetch(`../api/book-epub?volume=${encodeURIComponent(volume)}&item=${item}`, { cache: "no-store" }).then((r) => (r.ok ? r.json() : null)).catch(() => null);
+    if (!reply) { if (!item) { epub = false; pending = []; return loadText(); } bookDone = true; $("bmore").textContent = "The end of the book."; return; }
+    epub = true; item++;
+    const doc = document.createElement("section"); doc.className = "doc";
+    doc.append(...new DOMParser().parseFromString(reply.html, "text/html").body.childNodes);
+    for (const img of doc.querySelectorAll("img[data-epub]")) { img.loading = "lazy"; img.src = `../api/book-epub-file?volume=${encodeURIComponent(volume)}&path=${encodeURIComponent(img.dataset.epub)}`; }
+    $("bmore").before(doc);
+    await align(doc);
+  };
+  const loadBlock = async () => {
+    if (loading || bookDone) return; loading = true;
+    try { await albumLoaded; await (epub === false ? loadText() : loadEpub()); } finally { loading = false; }
+    markWords(); mark();
+    if (!bookDone && $("book").scrollHeight <= $("book").clientHeight * 2) loadBlock();
+  };
+  $("book").addEventListener("scroll", () => { const book = $("book"); if (book.scrollTop + book.clientHeight > book.scrollHeight - 600) loadBlock(); });
+  // A tapped sentence is where reading along goes on from; a played one plays its card.
+  $("book").addEventListener("click", (event) => {
+    const span = event.target.closest(".s"); if (!span) return;
+    const n = cardOfSentence.get(span.dataset.id), at = indexOf.get(span.dataset.id);
+    if (at !== undefined) cursor = at;
+    if (auto) { setAuto(true); return; }
+    if (n !== undefined) playCard(n);
+    subtitle(allSentences[cursor]);
+  });
+  // Opened, the book is laid out from its start whatever read along has fetched already (Auto may run before Read is opened).
+  // Then it is shown at the sentence being read or the card playing, the book laid out as far as that (forty documents at most).
+  const reveal = async (id) => {
+    if (!id) return;
+    for (let n = 0; n < 40 && !bookDone && !$("book").querySelector(`.s[data-id="${id}"]`); n++) { while (loading) await new Promise((done) => setTimeout(done, 100)); if (!$("book").querySelector(`.s[data-id="${id}"]`)) await loadBlock(); }
+    if (id === allSentences[cursor]?.id) for (const span of $("book").querySelectorAll(`.s[data-id="${id}"]`)) span.classList.add("reading");
+    $("book").querySelector(`.s[data-id="${id}"]`)?.scrollIntoView({ block: "center" });
+  };
+  $("copen").addEventListener("click", async () => {
+    if ($("clist").hidden) return;
+    loadKinds();
+    if (!$("book").querySelector(".doc, p")) await loadBlock();
+    reveal(auto || cursor ? allSentences[cursor]?.id : cards[cardAt]?.lines[0]?.id);
+  });
+  $("rgo").addEventListener("click", () => { setAuto(false); goOn(); });
+  $("cnow").addEventListener("click", () => { setAuto(false); $("replaying").hidden = true; send({ type: "live" }); });
+  $("cagain").addEventListener("click", () => playCard(Math.max(0, cardAt)));
+  for (const button of document.querySelectorAll("[data-rspeed]")) button.addEventListener("click", () => { rspeed = Number(button.dataset.rspeed); for (const other of document.querySelectorAll("[data-rspeed]")) other.setAttribute("aria-pressed", String(other === button)); send({ type: "speed", speed: rspeed }); });
+  window.addEventListener("message", (event) => {
+    if (!shown || event.source !== shown.contentWindow) return;
+    // The card playing now, as the world plays on: marked in the text.
+    if (event.data?.type === "cardEnded") { endCard?.(); endCard = null; return; }
+    if (event.data?.type === "card") { const n = cards.findIndex((card) => card.scene === event.data.scene && card.event === event.data.event); if (n >= 0) showCard(n); }
+  });
+  const esc = (t) => String(t ?? "").replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c]);
+  const pct = (v) => (typeof v === "number" ? `${Math.round(v * 100)}%` : "");
+  const height = (b) => (typeof b.top !== "number" ? "no height" : b.top < 0 ? `${-b.top} m under the street` : `${Math.round(b.top / 3)} fl`);
+  const FLOOR = { foot: "at its foot", upper: "on its upper floors", under: "under it, below the street" };
+  const floorOf = (f) => (typeof f === "number" ? (f < 0 ? `${-f} floor${f === -1 ? "" : "s"} under the street` : `floor ${f}`) : FLOOR[f] ?? f);
+  const partOf = (b) => `part of ${esc(b.inLabel)}, ${floorOf(b.floor)}${typeof b.area === "number" ? `, about ${b.area} m²` : ""}, ${b.partBy === "jev" ? `<span class="by jev">Jev</span> <span class="${(b.partSure?.floor ?? 1) < 0.3 ? "low" : ""}">${pct(b.partSure?.floor)}</span>/${pct(b.partSure?.size)} sure` : b.partBy === "fixed" ? "as its type always is" : "asked nothing"}`;
+  const row = (b, part) => {
+    const li = document.createElement("li"); li.tabIndex = 0; if (part) li.className = "part";
+    const typed = b.typeBy === "jev" ? `<span class="by jev">Jev ${pct(b.sure.kind)}</span>` : b.typeBy === "search" ? `<span class="by">search</span>` : "";
+    const sure = typeof b.sure.height === "number" ? ` · Jev <span class="${b.sure.height < 0.3 ? "low" : ""}">${pct(b.sure.height)} sure</span>` : "";
+    const least = typeof b.least === "number" && typeof b.top === "number" && b.top >= 0 ? ` · min ${Math.round(b.least / 3)} fl${b.top === b.least ? " (at it)" : ""}` : "";
+    li.innerHTML = `<span class="name">${part ? "↳ " : ""}${esc(b.label)}</span><span class="what">${esc(b.type ?? "—")} ${typed}</span><span class="what">${part ? partOf(b) : `${b.by === "shape" ? "a shape · " : ""}${height(b)}${least}${sure}${b.alone ? " · no host near: a lot of its own" : ""}${b.street ? ` · ${esc(b.street)}` : ""}`}</span>`;
+    const focus = () => { for (const frame of [shown, next]) frame?.contentWindow.postMessage({ type: "focus", id: b.id }, origin); if (camera) camera.follow = false; showFollow(false); };
+    li.addEventListener("click", focus); li.addEventListener("keydown", (event) => { if (event.key === "Enter") focus(); });
+    return li;
+  };
+  const listBuildings = (list) => {
+    const key = JSON.stringify(list ?? null);
+    if (key === buildings) return; buildings = key;
+    if (!list?.length) { $("bsum").textContent = "No building level yet."; $("brows").replaceChildren(); return; }
+    const parts = list.filter((b) => b.by === "tenant"), own = list.filter((b) => b.by !== "tenant"), byJev = list.filter((b) => b.typeBy === "jev").length;
+    const atLeast = own.filter((b) => typeof b.least === "number" && b.top === b.least).length, unsure = own.filter((b) => typeof b.sure.height === "number" && b.sure.height < 0.3).length;
+    $("bsum").textContent = `${list.length} buildings · typed by the search ${list.length - byJev}, by Jev ${byJev} · ${parts.length} parts of composite buildings · ${atLeast} at their minimum · ${unsure} heights Jev was under 30% sure of`;
+    const rows = [], hosts = new Map();
+    for (const b of parts) { if (!hosts.has(b.in)) hosts.set(b.in, []); hosts.get(b.in).push(b); }
+    for (const b of own) { rows.push(row(b, false)); for (const p of hosts.get(b.id) ?? []) rows.push(row(p, true)); hosts.delete(b.id); }
+    // Parts whose host is a spare lot of the fill (no building of the text): under that lot.
+    for (const [, group] of hosts) { const lot = document.createElement("li"); lot.innerHTML = `<span class="name">${esc(group[0].inLabel)}</span><span class="what">a lot of the fill, no building of the text</span>`; rows.push(lot); for (const p of group) rows.push(row(p, true)); }
+    $("brows").replaceChildren(...rows);
+  };
+  // Two frames at most: the one shown, and the next one loading over it, unseen and untouchable, until it says it is
+  // ready; then it fades in on top and the old one goes, so a finger never lands on a frame about to go. Building a frame
+  // is heavy (the whole world so far), so one loads at most every few seconds, only for a newer moment, and it plays
+  // every moment since the one shown before it, so none is skipped; a phone keeps the time between for drawing and for
+  // the viewer's finger. While a finger is down, or just lifted, the swap waits: it would cut the gesture off.
+  const GAP = 5000, SETTLE = 1500;
+  let shown = null, next = null, page = 0, shownPage = 0, wanted = 0, epoch = null, shownMoment = null, camera = null, touching = false, ready = false, lastLoad = 0, lastTouch = 0, swapTimer = 0, loadTimer = 0;
+  /** A frame goes: told first to let its WebGL context go (a phone allows only a few), then emptied and removed. */
+  const retire = (frame) => { try { frame.contentWindow?.postMessage({ type: "dispose" }, origin); } catch {} setTimeout(() => { frame.src = "about:blank"; frame.remove(); }, 100); };
+  /** A frame that could not start its 3D view (or never got ready): dropped, the shown one stays, and the moment is loaded again. */
+  const drop = (frame) => { if (next !== frame) return; next = null; ready = false; page = shownPage; retire(frame); queue(); };
+  const showFollow = (on) => $("follow").setAttribute("aria-pressed", String(on));
+  // Cuts: Follow Jev through the photographer's shots; off (the default), a steady view of each card's people.
+  let cutsOn = false;
+  $("cutsW").addEventListener("click", () => { cutsOn = !cutsOn; $("cutsW").setAttribute("aria-pressed", String(cutsOn)); sendAll({ type: "cuts", on: cutsOn }); });
+  // Replay: the line played so far, from its start, as a player (the frame page in replay mode).
+  $("play").href = `now${query}${query ? "&" : "?"}replay=1`;
+  // Follow Jev on: every strand again, and the newest card landed on them, seen as the photographer frames it.
+  $("follow").addEventListener("click", () => {
+    const on = $("follow").getAttribute("aria-pressed") !== "true";
+    showFollow(on); if (camera) camera.follow = on;
+    if (on) { if (strandPick !== null) pickStrand(null, true); setAuto(false); $("replaying").hidden = true; }
+    for (const frame of [shown, next]) frame?.contentWindow.postMessage(on ? { type: "live", follow: true } : { type: "follow", on }, origin);
+  });
+  // Seeing underground: the street turns clear and the levels below it show (each frame clears it on its own while
+  // someone is down there).
+  // Daylight on or off (off: the night look, always), for every world frame.
+  $("daylight").addEventListener("click", () => {
+    const on = $("daylight").getAttribute("aria-pressed") !== "true";
+    $("daylight").setAttribute("aria-pressed", String(on));
+    if (!on) delete document.documentElement.dataset.daylight;
+    sendAll({ type: "daylightMode", on });
+  });
+  $("under").addEventListener("click", () => {
+    const on = $("under").getAttribute("aria-pressed") !== "true";
+    $("under").setAttribute("aria-pressed", String(on));
+    for (const frame of [shown, next]) frame?.contentWindow.postMessage({ type: "underground", on }, origin);
+  });
+  /** The loading frame takes over once it is ready and the viewer's finger has settled: it gets the camera the shown one had, fades in on top, and the old one goes. */
+  const swap = () => {
+    clearTimeout(swapTimer);
+    if (!next || !ready) return;
+    const wait = touching ? SETTLE : lastTouch + SETTLE - Date.now();
+    if (wait > 0) { swapTimer = setTimeout(swap, wait); return; }
+    ready = false;
+    if (camera) next.contentWindow.postMessage({ ...camera, type: "camera" }, origin);
+    next.contentWindow.postMessage({ type: "underground", on: $("under").getAttribute("aria-pressed") === "true" }, origin);
+    next.contentWindow.postMessage({ type: "traces", on: tracesOn }, origin); next.contentWindow.postMessage({ type: "strand", fork: strandPick }, origin); next.contentWindow.postMessage({ type: "cuts", on: cutsOn }, origin); next.contentWindow.postMessage({ type: "reading", line: readingLine }, origin);
+    const old = shown; shown = next; next = null; shownMoment = shown.moment ?? shownMoment; shownPage = page;
+    shown.classList.remove("waiting"); $("empty").hidden = true;
+    if (old) setTimeout(() => retire(old), 450);
+    if (cardAt >= 0) setTimeout(() => { sendClouds(); sendDev(); }, 300);
+    queue();
+  };
+  /** Load the newest moment wanted, when none is loading and the last load was long enough ago. */
+  const queue = () => {
+    clearTimeout(loadTimer);
+    if (next || wanted <= page) return;
+    const wait = lastLoad + GAP - Date.now();
+    if (wait > 0) { loadTimer = setTimeout(queue, wait); return; }
+    page = wanted; load(page);
+  };
+  addEventListener("message", (event) => {
+    if (event.origin !== origin) return;
+    const message = event.data;
+    if (message?.type === "camera" && shown && event.source === shown.contentWindow) { camera = message; showFollow(!!message.follow); }
+    if (message?.type === "daylight" && shown && event.source === shown.contentWindow) {
+      if ($("daylight").getAttribute("aria-pressed") === "true" && message.phase !== "night") document.documentElement.dataset.daylight = message.phase; else delete document.documentElement.dataset.daylight;
+      // The sky in words under the world's title: the time of day and the weather.
+      if ($("skyword")) $("skyword").textContent = message.daypart ? `${message.daypart}${message.weather && !["clear", "unknown"].includes(message.weather) ? ` · ${skyName(message.weather, message.strength, message.wind)}` : ""}${{ breezy: " · windy", gale: message.weather === "snow" && message.strength === "heavy" ? "" : " · a gale" }[message.wind] ?? ""}${message.lying ? " · snow on the ground" : ""}` : "";
+    }
+    if (message?.type === "touch" && shown && event.source === shown.contentWindow) { touching = message.active; lastTouch = Date.now(); if (!touching) swap(); }
+    if (message?.type === "interact" && shown && event.source === shown.contentWindow) lastTouch = Date.now();
+    // A way tapped in the world: who, which card, and that card's Jev steps.
+    if (message?.type === "way" && shown && event.source === shown.contentWindow) {
+      $("way").hidden = false; $("way").innerHTML = `${esc(message.name)} · ${esc(message.how ?? "walk")} · unit ${Number(String(message.scene).slice(-6))} · card ${message.event + 1} · <a href="#">Jev steps ↗</a>`;
+      $("way").querySelector("a").addEventListener("click", (e) => { e.preventDefault(); openDebug(message.scene, message.event); });
+    }
+    if (message?.type === "ready" && next && event.source === next.contentWindow) { next.contentWindow.postMessage(portraitsMessage(), origin); if (sky) next.contentWindow.postMessage(skyMessage(), origin); if ($("daylight").getAttribute("aria-pressed") !== "true") next.contentWindow.postMessage({ type: "daylightMode", on: false }, origin); next.moment = message.moment; if (lastPiece) next.contentWindow.postMessage({ ...lastPiece, type: "extend" }, origin); ready = true; swap(); }
+    if (message?.type === "failed" && next && event.source === next.contentWindow) drop(next);
+  });
+  const load = (run) => {
+    lastLoad = Date.now(); ready = false;
+    next = document.createElement("iframe"); next.className = "waiting"; next.title = "The world at this moment";
+    next.src = `now${query}${query ? "&" : "?"}run=${run}${shownMoment ? `&from=${encodeURIComponent(shownMoment)}` : ""}`;
+    // A frame that loaded but never says it is ready because this tab is hidden (nothing draws) takes over anyway after a few
+    // seconds; in a tab being looked at, a slow one is waited for, and one not ready in 30 s is dropped and loaded again.
+    const frame = next;
+    frame.addEventListener("load", () => setTimeout(() => { if (next === frame && document.hidden) { ready = true; swap(); } }, 4000));
+    setTimeout(() => { if (next === frame && !ready) drop(frame); }, 30000);
+    document.body.append(next);
+  };
+  // Terrain spawning (world-engine/terrain/terrain-spawn.mjs) in step mode waits for the user after each proposal: Next step lets it
+  // keep that one and go on to the next; Run on lets it run without waiting (pressed again, it waits after each again).
+  const step = async (mode) => {
+    const reply = await fetch(`terrain/step${query}`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ mode }) }).then((r) => (r.ok ? r.json() : null)).catch(() => null);
+    if (reply) $("runOn").setAttribute("aria-pressed", String(reply.mode === "run"));
+  };
+  $("next").addEventListener("click", () => { $("next").disabled = true; step("step"); });
+  $("runOn").addEventListener("click", () => step($("runOn").getAttribute("aria-pressed") === "true" ? "pause" : "run"));
+  async function poll() {
+    try {
+      const state = await fetch(`live.json${query}`, { cache: "no-store" }).then((r) => r.json()).catch(() => null);
+      if (state) {
+        $("jev").textContent = state.status === "running" ? `Jev · ${state.phase ?? state.command ?? "working"}${state.ask?.subject ? ` · ${state.ask.subject}` : ""} · ${state.calls ?? 0} calls` : `Jev · ${state.status}`;
+        const terrain = state.command === "sim terrain" && state.status === "running", waiting = terrain && String(state.phase ?? "").startsWith("waiting for you");
+        $("next").hidden = !terrain; $("runOn").hidden = !terrain; $("next").disabled = !waiting;
+        if (terrain && state.lines?.[0]?.mode) $("runOn").setAttribute("aria-pressed", String(state.lines[0].mode === "run"));
+        const world = state.world;
+        listBuildings(world?.notes?.buildings); listSpawn(world?.notes?.spawn); listCards(world?.notes?.director);
+        // The director's line, grown piece by piece (its live notes' extend): each new piece goes to the frame, which plays it on
+        // from where it is; a frame loaded later takes the latest when it is ready.
+        const piece = world?.notes?.extend;
+        if (piece?.seq && piece.seq !== pieceSeq) { pieceSeq = piece.seq; lastPiece = piece; for (const frame of [shown, next]) frame?.contentWindow.postMessage({ ...piece, type: "extend" }, origin); }
+        if (world) {
+          $("where").textContent = `${world.moment ?? ""}${world.final ? " · end" : ""}`;
+          // The manifold the moment stands on: each place's ground, and who set it (Jev, the main agent, or the terrain rules).
+          $("ground").textContent = world.notes?.ground ? `ground · ${world.notes.ground}` : "";
+          $("counts").textContent = world.notes ? `${state.engine ? `engine v${state.engine} · ` : ""}chunks ${world.notes.chunks} · buildings ${world.notes.lots} · ${world.notes.nodes} walk nodes${world.notes.applied ? ` · ${world.notes.applied} broken earlier` : ""}` : "";
+          // A new command counts its pages from 1 again: start over with it.
+          if (state.startedAt !== epoch) { epoch = state.startedAt; page = 0; shownPage = 0; wanted = 0; shownMoment = null; }
+          if (world.page > wanted) { wanted = world.page; queue(); }
+        }
+      }
+    } finally { setTimeout(poll, 1000); }
+  }
+  poll();
+})();
+</script>
+</body>
+</html>
