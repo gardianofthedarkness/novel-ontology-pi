@@ -33,7 +33,7 @@ The director as readers and specialists (docs/v2/next-steps.md A4–A5). Casts r
 | [Mega-scene director](directors/mega.md) | action | 100–2 km | [Blocking](casts/blocking.md), [Cinematographer](casts/cinematographer.md), [Background action](casts/backgroundAction.md), [Action director](casts/actionDirector.md) | partial |
 | [Combat director](directors/combat.md) | action | 5–60 m | [Action director](casts/actionDirector.md), [Cinematographer](casts/cinematographer.md), [Script supervisor](casts/scriptSupervisor.md) | partial |
 | [Character director](directors/character.md) | state | — | [Acting coach](casts/actingCoach.md), [Script supervisor](casts/scriptSupervisor.md) | proposed |
-| [Transport specialist](directors/transport.md) | state | — | [Prop master](casts/propMaster.md), [Script supervisor](casts/scriptSupervisor.md) | proposed |
+| [Transport specialist](directors/transport.md) | state | — | [Prop master](casts/propMaster.md), [Script supervisor](casts/scriptSupervisor.md) | partial |
 | [Architect](directors/architect.md) | state | — | [Set dresser](casts/setDresser.md), [Script supervisor](casts/scriptSupervisor.md) | partial |
 
 ## Block types

@@ -41,3 +41,20 @@ export function acrossLayers({ from, targets, mine, portals, walkIn, at, how = '
   }
   return { path: null, why };
 }
+
+/**
+ * Earshot across a ceiling (terrain-levels §8.3): a ceiling stops sound between levels; a talk across the ground skin is heard
+ * only where an open way joins the two within earshot: stairs, a hole a blow broke (a lift's closed car carries no sound).
+ * `openings`: { below: [x, y, z], above: [x, y, z], kind }. The sound's way is from the one below to the opening's lower
+ * mouth, up it, and from its upper mouth to the one above. Returns the nearest opening that carries it ({ ...opening, metres })
+ * or null.
+ */
+export function heardThrough(a, b, openings, earshot = 25) {
+  const [low, high] = a[1] <= b[1] ? [a, b] : [b, a], d = (u, v) => Math.hypot(u[0] - v[0], u[1] - v[1], u[2] - v[2]);
+  let best = null;
+  for (const opening of openings) {
+    const metres = d(low, opening.below) + d(opening.below, opening.above) + d(opening.above, high);
+    if (metres <= earshot && (!best || metres < best.metres)) best = { ...opening, metres: Math.round(metres * 10) / 10 };
+  }
+  return best;
+}

@@ -67,6 +67,7 @@ import { checklistCommand } from "./commands/extract/checklistCommands.js";
 import { SIM_USAGE, simPick, simRun, simShow, simStrands, simTerrain } from "./commands/extract/simCommands.js";
 import { sourceGrep, sourceSimilar } from "./commands/extract/sourceCommands.js";
 import { worldAnswer, worldBatch, worldPool } from "./commands/extract/worldCommands.js";
+import { castAsk, castMerge, castReview, castSheet, castShow, sky } from "./commands/extract/castCommands.js";
 import { readingShow, sourceEpub, worldApply, worldCanon, worldHeld, worldLogShow, worldUndo } from "./commands/extract/worldReviewCommands.js";
 import { STAGE_USAGE, stageArchitecture, stageLandscape, stageLines, stageMovement, stageObjects, stagePrep, stageScale, stageShow } from "./commands/extract/stageCommands.js";
 import { TIMEPLACE_USAGE, timeplaceAfterApprove, timeplaceRun, timeplaceShow, timeplaceStrands, timeplaceTree } from "./commands/extract/timeplaceCommands.js";
@@ -156,6 +157,8 @@ const COMMANDS: Record<string, string> = {
   "novel world log <novel-dir> --scene|--person|--card <id> [--run <id>]": "The world log of the last director run: who was where, moves, meetings, blasts, and the laws' verdicts (read-only)",
   "novel world held <novel-dir> [--run <id>] [--budget N]": "A director run's held items (what the laws could not settle, and the user's notes) into the review pool, one batch per scene by reach",
   "novel world apply <novel-dir>": "The main agent's answers into the pins the director plays by, under the laws (what they turn back returns to the pool)",
+  "novel cast show|merge|sheet|ask|review <novel-dir> …": "The cast's review: the cast and their ability sheets (show [<char>]); two entries made one person in the reading, its views, the ontology and the universe's sheets (merge <keep> <merged> --reason t [--reading <data.json>]... [--dry]); one person's ability sheet (sheet <char> --sheet '<JSON>' | --none --reason t [--evidence <ids>]); two people raised as one for the agent (ask <a> <b> --why t); the cast's questions in batches in the world's review pool (review [--size N] [--least-cards N] [--send <console-dir>]), answered with novel world answer, done by novel world apply",
+  "novel sky build|show <novel-dir> [--dry] [--cache <dir>]": "The story sky: each unit's time of day and weather into sky.json beside the reading the director plays (build: Jev, cents, cached; --dry counts only); show: what it holds",
   "novel world canon <novel-dir> [--run <id>]": "What a director run settled into canon by its gates: presence, place, speakers, where each person is, strands (undoable)",
   "novel world undo <novel-dir> --run <id>": "A director run's writes to canon taken back, each record to what it replaced",
   "novel reading <novel-dir> card|scene|line <id>": "The v2 reading of a card, a scene or a line: kinds, speakers and how sure, people, place and time, with the text (read-only)",
@@ -571,7 +574,7 @@ async function main(): Promise<void> {
   if (cmd === "sim") {
     const novelDir = positional[2];
     if (!["strands", "terrain", "pick", "run", "show"].includes(sub ?? "") || !novelDir || novelDir.startsWith("--")) throw new Error(`Usage: ${SIM_USAGE}`);
-    const valued = sub === "run" ? ["--auto", "--strand", "--pace", "--from"] : sub === "pick" ? ["--auto", "--strand", "--max-calls"] : sub === "terrain" ? ["--turns", "--parts", "--from", "--until"] : [], switches = sub === "run" ? ["--accept", "--force"] : sub === "terrain" ? ["--sites", "--run", "--spawn"] : [];
+    const valued = sub === "run" ? ["--auto", "--strand", "--pace", "--from"] : sub === "pick" ? ["--auto", "--strand", "--max-calls"] : sub === "terrain" ? ["--turns", "--parts", "--from", "--until"] : [], switches = sub === "run" ? ["--accept", "--force"] : sub === "terrain" ? ["--sites", "--run", "--spawn", "--resettle"] : [];
     const seen = new Set<string>();
     for (let index = 3; index < positional.length; index++) {
       const name = positional[index];
@@ -592,7 +595,7 @@ async function main(): Promise<void> {
     if (parts !== undefined && (!/^\d+$/.test(parts) || Number(parts) < 1)) throw new Error("--parts must be a whole number, 1 or more.");
     const level = flag(positional, "--from"), until = flag(positional, "--until");
     if (sub === "terrain" && [level, until].some((value) => value !== undefined && !["city", "district", "street", "building"].includes(value))) throw new Error("--from and --until must be city, district, street or building.");
-    if (sub === "terrain") { out(await simTerrain(novelDir, { turns: turns === undefined ? undefined : Number(turns), sites: positional.includes("--sites"), run: positional.includes("--run"), parts: parts === undefined ? undefined : Number(parts), spawn: positional.includes("--spawn"), from: level, until }), pretty); return; }
+    if (sub === "terrain") { out(await simTerrain(novelDir, { turns: turns === undefined ? undefined : Number(turns), sites: positional.includes("--sites"), run: positional.includes("--run"), parts: parts === undefined ? undefined : Number(parts), spawn: positional.includes("--spawn"), from: level, until, resettle: positional.includes("--resettle") }), pretty); return; }
     out(await (sub === "strands" ? simStrands(novelDir) : sub === "show" ? simShow(novelDir) : sub === "pick" ? simPick(novelDir, { ...lines, maxCalls: maxCalls === undefined ? undefined : Number(maxCalls) }) : simRun(novelDir, { ...lines, from: flag(positional, "--from"), accept: positional.includes("--accept"), force: positional.includes("--force"), pace: pace === undefined ? undefined : Number(pace) })), pretty);
     return;
   }
@@ -772,6 +775,26 @@ async function main(): Promise<void> {
     if (!text) throw new Error(`Usage: novel source ${sub} <novel-dir> <${sub === "grep" ? "regex" : "text"}> [--limit N]`);
     if (!Number.isInteger(limit) || limit < 1 || limit > 50) throw new Error("--limit must be a whole number from 1 to 50.");
     out(await (sub === "grep" ? sourceGrep(novelDir, text, limit) : sourceSimilar(novelDir, text, limit)), pretty);
+    return;
+  }
+
+  if (cmd === "cast") {
+    const novelDir = positional[2];
+    if (!["show", "merge", "sheet", "ask", "review"].includes(sub ?? "") || !novelDir) throw new Error("Usage: novel cast show <novel-dir> [<char>] | merge <novel-dir> <keep> <merged> --reason <text> [--reading <data.json>]... [--dry] | sheet <novel-dir> <char> --sheet '<JSON>' | --none --reason <text> [--evidence <ids>] | ask <novel-dir> <a> <b> --why <text> | review <novel-dir> [--size N] [--least-cards N] [--send <console-dir>]");
+    const all = (name: string) => positional.flatMap((value, n) => (value === name && positional[n + 1] ? [positional[n + 1]] : []));
+    const number = (name: string) => { const value = flag(positional, name); return value === undefined ? undefined : Number(value); };
+    if (sub === "show") { out(await castShow(novelDir, positional[3]?.startsWith("--") ? undefined : positional[3]), pretty); return; }
+    if (sub === "merge") { if (!positional[3] || !positional[4]) throw new Error("Usage: novel cast merge <novel-dir> <keep> <merged> --reason <text> [--reading <data.json>]... [--dry]"); out(await castMerge(novelDir, positional[3], positional[4], { reason: flag(positional, "--reason"), readings: all("--reading"), dry: positional.includes("--dry") }), pretty); return; }
+    if (sub === "sheet") { if (!positional[3]) throw new Error("Usage: novel cast sheet <novel-dir> <char> --sheet '<JSON>' | --none --reason <text> [--evidence <ids>]"); out(await castSheet(novelDir, positional[3], { sheet: flag(positional, "--sheet"), none: positional.includes("--none"), reason: flag(positional, "--reason"), evidence: flag(positional, "--evidence") }), pretty); return; }
+    if (sub === "ask") { if (!positional[3] || !positional[4]) throw new Error("Usage: novel cast ask <novel-dir> <a> <b> --why <text>"); out(await castAsk(novelDir, positional[3], positional[4], flag(positional, "--why")), pretty); return; }
+    out(await castReview(novelDir, { size: number("--size"), least: number("--least-cards"), send: flag(positional, "--send") }), pretty);
+    return;
+  }
+
+  if (cmd === "sky") {
+    const novelDir = positional[2];
+    if (!["build", "show"].includes(sub ?? "") || !novelDir) throw new Error("Usage: novel sky build|show <novel-dir> [--dry] [--cache <dir>]");
+    out(await sky(novelDir, sub!, { dry: positional.includes("--dry"), cache: flag(positional, "--cache") }), pretty);
     return;
   }
 

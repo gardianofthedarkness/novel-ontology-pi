@@ -65,7 +65,7 @@ const CLEAR = { near: 1e6, far: 2e6 };
 
 async function replace(file, body) { const temporary = `${file}.${process.pid}.tmp`; await writeFile(temporary, body, { mode: 0o644 }); await rename(temporary, file); }
 
-export async function terrainSpawn(novelDir, { jev: given = null, run = false, parts: limit = Infinity, spawn = false, from: fromLevel = null, until = null, heightProbe = false, notes: notesPath = null, add = false, log = () => {} } = {}) {
+export async function terrainSpawn(novelDir, { jev: given = null, run = false, parts: limit = Infinity, spawn = false, from: fromLevel = null, until = null, heightProbe = false, notes: notesPath = null, add = false, resettle = false, log = () => {} } = {}) {
   const { stageInputs } = await load('dist/src/cli/commands/extract/stageCommands.js');
   const { simStrandList } = await load('dist/src/cli/commands/extract/simCommands.js');
   const { loadWorkspaceSentences } = await load('dist/src/cli/commands/extract/timeplaceCommands.js');
@@ -164,6 +164,9 @@ export async function terrainSpawn(novelDir, { jev: given = null, run = false, p
     const drop = new Set(LEVELS.slice(LEVELS.indexOf(fromLevel)));
     for (const [id, site] of Object.entries(terrain.sites)) if (drop.has(site.scale)) { delete terrain.sites[id]; delete terrain.shapes[id]; }
     terrain.order = terrain.order.filter(id => terrain.sites[id]);
+    // A rebuilt level is settled afresh: its end is no longer kept (a bounded repair keeps only ends whose sites still stand).
+    if (terrain.ends) for (const level of drop) delete terrain.ends[level];
+    else terrain.ends = {};
     if (mapLog) mapLog.entries = mapLog.entries.filter(entry => !drop.has(entry.level));
     for (const [label, entry] of Object.entries(registry.places)) if (entry.book === bookId && drop.has(entry.scale)) delete registry.places[label];
     for (const [id, slot] of Object.entries(registry.slots ?? {})) {
@@ -601,14 +604,15 @@ export async function terrainSpawn(novelDir, { jev: given = null, run = false, p
     const topOf = id => terrain.sites[id]?.top, nearHeights = (slot, m) => typeof topOf(m.id) !== 'number' || [slot.owner, ...S.sharersIn(slot, bookId).map(share => share.mention)].every(id => !id || id === m.id || typeof topOf(id) !== 'number' || S.heightsShare(topOf(id), topOf(m.id), H.share));
     // `planes`: settle only these layers (an `add` run whose new places at this level all lie under the street, §3.3): their
     // places' moves, their spares, their areas' children; the surface's level stands as it was.
-    const spawnEnd = async (level, planes = null) => {
+    // `movable`: a bounded repair (the dynamic-grid research, §3): only these places may move in the level's improving moves.
+    const spawnEnd = async (level, planes = null, movable = null) => {
       if (!spawn) return;
       const ours = id => !planes || planes.has(planeOfPart(id, level));
       const mine = terrain.order.filter(id => terrain.sites[id]?.scale === level && terrain.sites[id].slot && registry.slots[terrain.sites[id].slot] && ours(id));
       let moves = 0;
       if (mine.length) {
         const mentions = mine.map(id => ({ id, label: terrain.sites[id].label, named: !id.startsWith('unnamed:'), kind: terrain.sites[id].kind, holder: terrain.sites[id].holder ?? terrain.sites[id].parent, scene: world[id]?.scene ?? null, pin: terrain.sites[id].pin ?? null }));
-        const choice = S.chooseSlots({ book: bookId, level, slots: slotsAt(level), mentions, assigned: Object.fromEntries(mine.map(id => [id, terrain.sites[id].slot])), ties: (a, b) => tiesAt(level)[a]?.[b] ?? 0, fixed: fixedFor(mine, level), within: (id, of) => id === of || within(id, of), sceneIndex: scene => sceneAt.get(scene) ?? 0, place: () => null, allow: (slot, m) => fits(m.kind, slot.parent) && planeOfSlot(slot) === planeOfPart(m.id, level) && (level !== 'building' || nearHeights(slot, m)) });
+        const choice = S.chooseSlots({ book: bookId, level, slots: slotsAt(level), mentions, assigned: Object.fromEntries(mine.map(id => [id, terrain.sites[id].slot])), ties: (a, b) => tiesAt(level)[a]?.[b] ?? 0, fixed: fixedFor(mine, level), ...(movable ? { movable: id => movable.has(id) } : {}), within: (id, of) => id === of || within(id, of), sceneIndex: scene => sceneAt.get(scene) ?? 0, place: () => null, allow: (slot, m) => fits(m.kind, slot.parent) && planeOfSlot(slot) === planeOfPart(m.id, level) && (level !== 'building' || nearHeights(slot, m)) });
         moves = choice.moves;
         for (const id of mine) {
           const slotId = choice.assignment[id], site = terrain.sites[id];
@@ -661,6 +665,8 @@ export async function terrainSpawn(novelDir, { jev: given = null, run = false, p
       for (const text of laid) await live.outcome({ subject: `${level}s`, text });
       await live.outcome({ subject: `${level}s`, text: `the ${level} level ends: ${moves} move${moves === 1 ? '' : 's'}, ${spares} spare${spares === 1 ? '' : 's'} placed, ${born} slot${born === 1 ? '' : 's'} spawned for the level below` });
       log(`${level} level ends: ${moves} moves, ${spares} spares placed, ${born} slots below`);
+      // The level's end settled (a bounded repair later keeps it unless something new comes to it): what stood at it.
+      (terrain.ends ??= {})[level] = { at: new Date().toISOString(), sites: Object.keys(terrain.sites).filter(id => terrain.sites[id]?.scale === level) };
       await live.phase(`building the world after the ${level} level`); await build(); await live.phase('terrain');
       // The streets' buildings, as their forms build them, are the building level's slots (§6).
       if (level === 'street' && !planes) { const made = formSlots(); await saveSlots(); await live.outcome({ subject: 'streets', text: `${made.spares} building slots from the streets' forms (${made.held} held by buildings already)` }); }
@@ -679,7 +685,21 @@ export async function terrainSpawn(novelDir, { jev: given = null, run = false, p
       ...['district', 'street'].flatMap(level => cities.flatMap(city => (partsOf.get(city.id) ?? []).filter(part => part.scale === level).map(part => ({ part, city }))).sort((a, b) => Number(!!world[a.part.id]?.pool) - Number(!!world[b.part.id]?.pool) || a.part.at - b.part.at)),
     ];
     const total = queue.filter(item => item.part).length;
-    const levelEnd = async (level, planes = null) => spawnEnd(level, planes);
+    const levelEnd = async (level, planes = null, movable = null) => spawnEnd(level, planes, movable);
+    // A bounded repair (the user, 2026-11-06: "small repairs in city growth"; the dynamic-grid research, §3 and §7: a small
+    // edit never rebuilds the city): run again over a built world, a level whose end was settled keeps it unless something new
+    // came to it; then only the new places and those sharing a holder with them may move. `resettle` settles every end again
+    // as the full loop did before (it moved 46 of library 16's places with nothing added). A library built before ends were
+    // recorded counts each level it holds sites of as settled, with those sites.
+    const settledAt = level => terrain.ends?.[level]?.sites ?? (terrain.ends ? null : [...keptAtStart].filter(id => terrain.sites[id]?.scale === level));
+    const repairOf = level => {
+      const before = settledAt(level);
+      if (resettle || !before?.length) return { whole: true };
+      const known = new Set(before), fresh = Object.keys(terrain.sites).filter(id => terrain.sites[id]?.scale === level && !known.has(id) && !id.startsWith('slot:'));
+      const holders = new Set(fresh.map(id => terrain.sites[id].holder ?? terrain.sites[id].parent).filter(Boolean));
+      const movable = new Set([...fresh, ...Object.keys(terrain.sites).filter(id => terrain.sites[id]?.scale === level && holders.has(terrain.sites[id].holder ?? terrain.sites[id].parent))]);
+      return { whole: false, fresh, movable };
+    };
     // An `add` run (terrain-levels §3.3: adding a place to a built world moves nothing else): what was kept before it starts.
     const keptAtStart = new Set(Object.keys(terrain.sites));
     if (add) slotsBefore = new Map(Object.entries(registry.slots).map(([id, slot]) => [id, JSON.stringify(slot)]));
@@ -709,8 +729,13 @@ export async function terrainSpawn(novelDir, { jev: given = null, run = false, p
           // re-settle what the build settled); one whose new places all lie under the street settles only their layer.
           const fresh = Object.keys(terrain.sites).filter(id => !keptAtStart.has(id) && !id.startsWith('slot:') && terrain.sites[id].scale === end), planes = new Set(fresh.map(id => planeOfPart(id, end)));
           if (!fresh.length) await live.outcome({ subject: `${end}s`, text: `nothing new at the ${end} level: it stands as it was` });
-          else await levelEnd(end, planes.has('surface') ? null : planes);
-        } else await levelEnd(end);
+          else await levelEnd(end, planes.has('surface') ? null : planes, resettle ? null : repairOf(end).movable ?? null);
+        } else {
+          const repair = repairOf(end);
+          if (repair.whole) await levelEnd(end);
+          else if (!repair.fresh.length) { adoptChildren(end); if (end === 'street') { formSlots(); } await saveSlots(); await live.outcome({ subject: `${end}s`, text: `nothing new at the ${end} level: it stands as it was (a bounded repair)` }); }
+          else { await live.outcome({ subject: `${end}s`, text: `a bounded repair: ${repair.fresh.length} new, ${repair.movable.size} that may move (those sharing a holder with them)` }); await levelEnd(end, null, repair.movable); }
+        }
         // The world built again once the tenants stand in their hosts (the level's end built it before they joined).
         if (end === 'building' && tenants.waiting()) { placed += await tenants.place(); reshape(); await build(); }
         if (end === until) break; continue;
@@ -1257,8 +1282,8 @@ export async function terrainSpawn(novelDir, { jev: given = null, run = false, p
 }
 
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
-  const { values, positionals } = parseArgs({ allowPositionals: true, options: { run: { type: 'boolean' }, parts: { type: 'string' }, spawn: { type: 'boolean' }, from: { type: 'string' }, until: { type: 'string' }, 'probe-heights': { type: 'boolean' }, add: { type: 'boolean' }, notes: { type: 'string' } } });
+  const { values, positionals } = parseArgs({ allowPositionals: true, options: { run: { type: 'boolean' }, parts: { type: 'string' }, spawn: { type: 'boolean' }, from: { type: 'string' }, until: { type: 'string' }, 'probe-heights': { type: 'boolean' }, add: { type: 'boolean' }, resettle: { type: 'boolean' }, notes: { type: 'string' } } });
   const [novelDir] = positionals, levels = ['city', 'district', 'street', 'building'];
-  if (!novelDir || (values.from && !levels.includes(values.from)) || (values.until && !levels.includes(values.until))) { console.error('usage: node world-engine/terrain/terrain-spawn.mjs <novel-dir> [--run] [--parts N] [--spawn] [--from city|district|street] [--until city|district|street] [--add] [--notes <underground-notes.json>]'); process.exit(2); }
-  console.log(JSON.stringify(await terrainSpawn(resolve(novelDir), { run: values.run, parts: values.parts ? Number(values.parts) : Infinity, spawn: values.spawn, from: values.from ?? null, until: values.until ?? null, heightProbe: !!values['probe-heights'], add: !!values.add, notes: values.notes ?? null, log: line => console.error(line) })));
+  if (!novelDir || (values.from && !levels.includes(values.from)) || (values.until && !levels.includes(values.until))) { console.error('usage: node world-engine/terrain/terrain-spawn.mjs <novel-dir> [--run] [--parts N] [--spawn] [--from city|district|street] [--until city|district|street] [--add] [--resettle] [--notes <underground-notes.json>]'); process.exit(2); }
+  console.log(JSON.stringify(await terrainSpawn(resolve(novelDir), { run: values.run, parts: values.parts ? Number(values.parts) : Infinity, spawn: values.spawn, from: values.from ?? null, until: values.until ?? null, heightProbe: !!values['probe-heights'], add: !!values.add, resettle: !!values.resettle, notes: values.notes ?? null, log: line => console.error(line) })));
 }

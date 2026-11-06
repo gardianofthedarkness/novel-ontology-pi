@@ -241,8 +241,8 @@ _Written from `world-engine/director/specialists.mjs` by `specialists-doc.mjs`; 
 | Mega-scene director | action | traversals and catastrophes seen from far: routes across blocks, leaps between towers, the ground splitting, crowds flowing | 100–2 km | wide and aerial at the recommended angle; follows a journey whole | moveDirectionMode at the journey's zoom (partial); a landmark on a top-down map (lettered towers, bridges, stations) (built); a route among the place graph's routes; the extent of a catastrophe (an area on the map); which way a crowd flows | partial |
 | Combat director | action | a fight, exchange by exchange: the kind and shape of each attack, who it hits, what it breaks | 5–60 m | close to medium at the recommended angle, following the exchange; wider for a blast | the hit spot and size (red spheres) (built); attack kind: hand to hand, grapple, weapon, ranged power, beam, blast, thrown object, the ground itself (built); attack shape: point, line or beam, cone, sphere, wave along the ground (built); outcome: hit, dodged, blocked, cancelled; how far knocked back (partial) | partial |
 | Character director | state | what rides with a person: how they feel, what they want, who they are to each other | — | — | emotional state as a score (Jev's score primitive); intent: what they want next; a bond changing (closer, colder, a first meeting) | proposed |
-| Transport specialist | state | vehicles and weapons: what they are, who drives, rides or holds them, whose they are; their motion is played by the beat's action director | — | — | which model a vehicle or weapon is (on the model packs' sheets); who rides, drives or holds it; whose it is | proposed |
-| Architect | state | a building borrowed from the world made the one the text describes: its look, floors, uses, rooms and what changes in it | — | — | terrainHeightMode and terrainPartMode (built); its look among the model packs and themes (on its elevation); floors and uses (the mall below, offices, flats, the rooftop deck); a room's make-up and furniture (on its plan) | partial |
+| Transport specialist | state | vehicles and weapons: what they are, who drives, rides or holds them, whose they are; their motion is played by the beat's action director | — | — | which model a vehicle is (its kind's CC0 models: KayKit and Kenney cars, vans and trucks) (built); who rides, drives or holds it (built); whose it is (built) | partial |
+| Architect | state | a building borrowed from the world made the one the text describes: its look, floors, uses, rooms and what changes in it | — | — | terrainHeightMode and terrainPartMode (built); its look among the model packs and themes (on its elevation); floors and uses (the mall below, offices, flats, the rooftop deck); a room's kind where a conversation plays in it, and its furniture (built) | partial |
 
 **State and the ontology.** What each director keeps as it plays, and how it flows:
 
@@ -309,9 +309,9 @@ Gates: **applied**, written by canon without review: a law checks it and nothing
 | State | World log | Laws | Smoothed | Into the ontology | Gate | Status |
 |---|---|---|---|---|---|---|
 | Vehicles and weapons | item (new) | — |  | Item.properties.class; new identities: held, as EM's are | held | proposed |
-| Who holds, drives or rides | possession (new) | L15 |  | StateChange.possessionsAdd + StateChange.possessionsRemove | applied | proposed |
+| Who holds, drives or rides | possession (new) | L15 |  | StateChange.possessionsAdd + StateChange.possessionsRemove; the card's holdings and the world log's possession records; canon fills each scene's possessions; L15 not yet | applied | partial |
 | Where things are | item (new) | L15 | yes | LOCATED_AT relation; where the beat's action director put them, at its zoom | applied | proposed |
-| Ownership | possession (new) | — |  | OWNS relation | held | proposed |
+| Ownership | possession (new) | — |  | OWNS relation; universe/transport.json (the pre-film step) and on the page; the OWNS relation not yet written | held | partial |
 
 *Architect*
 
@@ -319,7 +319,7 @@ Gates: **applied**, written by canon without review: a law checks it and nothing
 |---|---|---|---|---|---|---|
 | Which building it is | binding | — |  | Location.properties.world; W6: building identity from the lot each scene played in; unsure ones held | held | built |
 | Floors, uses, look | building (new) | L11 |  | Location.properties.floors + Location.properties.uses; a room's floor is in canon (W6); uses and look proposed | held | partial |
-| Rooms | building (new) | L11 |  | PART_OF relation; container and split held items (W6) | held | partial |
+| Rooms | building (new) | L11 |  | PART_OF relation; container and split held items (W6); a room's kind where a conversation plays (the world log's room records), a view input | held | partial |
 | Changes to it | damage | L13 |  | Location.properties.damage | applied | built |
 
 Into each ontology file:

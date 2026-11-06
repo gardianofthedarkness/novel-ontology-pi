@@ -53,3 +53,15 @@ test('up to a deck (terrain-levels §3.5): its lifts are tried before a lab lift
   assert.equal(portal.depth, -306);
   assert.deepEqual(calls, [[1, 3, 'near'], [31, 32, 'deep']]);
 });
+
+test('earshot across the ground skin (terrain-levels §8.3): heard through stairs or a hole near both, never through a lift or from too far', async () => {
+  const { heardThrough } = await import('./layers.mjs');
+  const below = [0, -6, 0], above = [6, 0, 0];
+  const stairs = { below: [2, -6, 0], above: [4, 0, 0], kind: 'stairs' };
+  assert.equal(heardThrough(below, above, [stairs])?.kind, 'stairs');
+  assert.equal(heardThrough(above, below, [stairs])?.kind, 'stairs', 'either way round');
+  assert.equal(heardThrough(below, [60, 0, 0], [stairs]), null, 'the one above too far from its mouth');
+  assert.equal(heardThrough(below, above, []), null, 'no opening: the ceiling stops it');
+  const hole = { below: [0, -6, 0], above: [6, 0, 0], kind: 'hole' };
+  assert.equal(heardThrough(below, above, [stairs, hole]).kind, 'hole', 'the nearest opening');
+});

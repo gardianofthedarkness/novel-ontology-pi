@@ -217,7 +217,11 @@ export async function applyAnswers(novelDir) {
   const settled = (await loadAnswers(novelDir)).map(answer => ({ answer, item: items.get(answer.item) })).filter(({ item, answer }) => item?.status === 'answered' && item.batch === answer.batch);
   const latest = new Map(settled.map(entry => [entry.item.id, entry]));
   const script = await readJson(join(novelDir, 'stage', 'world', 'script.json'), { scenes: [] });
-  const { pins, failed } = pinsFrom(await loadPins(novelDir), [...latest.values()], { script });
+  // The cast's questions (cast.mjs: who is one person, what they can do) are done by its commands, not pinned.
+  const cast = item => item.kind === 'person' || item.kind === 'sheet', castFailed = new Map();
+  if ([...latest.values()].some(({ item }) => cast(item))) { const { applyCast } = await import('./cast.mjs'); for (const { item, answer } of latest.values()) if (cast(item)) { const why = await applyCast(novelDir, item, answer); if (why) castFailed.set(item.id, why); } }
+  const { pins, failed } = pinsFrom(await loadPins(novelDir), [...latest.values()].filter(({ item }) => !cast(item)), { script });
+  for (const [id, why] of castFailed) failed.set(id, why);
   await savePins(novelDir, pins);
   const now = new Date().toISOString();
   await writePool(novelDir, [...latest.values()].map(({ item }) => failed.has(item.id) ? { ...item, status: 'open', attempts: item.attempts + 1, note: `The laws could not take the last answer: ${failed.get(item.id)}`, batch: null, at: now } : { ...item, status: 'applied', at: now }));
@@ -225,7 +229,7 @@ export async function applyAnswers(novelDir) {
 }
 
 /** The message that sends a batch to a main agent: what it is and the commands to answer it with. */
-export const batchMessage = (novelDir, batch) => `World review ${batch.id}: ${batch.items.length} held item${batch.items.length === 1 ? '' : 's'} from scene ${batch.scene ?? '?'} of ${novelDir}, which the physics laws could not settle. Read them with: novel world batch ${novelDir} ${batch.id}. For the evidence: novel reading ${novelDir} card|scene|line <id>, novel world log ${novelDir} --scene <id>, novel source grep ${novelDir} <regex>, novel source similar ${novelDir} <text>, novel source epub ${novelDir} --grep <regex>, novel query ${novelDir} 'MATCH …'. Answer each item: novel world answer ${novelDir} ${batch.id} <item> <option> --reason "<why, citing sentence ids>". The world goes on meanwhile and applies your answers under its laws.`;
+export const batchMessage = (novelDir, batch) => batch.cast ? `Cast review ${batch.id}: ${batch.items.length} question${batch.items.length === 1 ? '' : 's'} about who is one person and what people can do in ${novelDir}. Read them with: novel world batch ${novelDir} ${batch.id} (its "how" says what each answer does). A person and their sheet: novel cast show ${novelDir} <char_…>. For the evidence: novel reading ${novelDir} card|scene|line <id>, novel source grep ${novelDir} <regex>, novel source similar ${novelDir} <text>. Answer each item: novel world answer ${novelDir} ${batch.id} <item> <option> --reason "<why, citing sentence ids>"; then novel world apply ${novelDir}.` : `World review ${batch.id}: ${batch.items.length} held item${batch.items.length === 1 ? '' : 's'} from scene ${batch.scene ?? '?'} of ${novelDir}, which the physics laws could not settle. Read them with: novel world batch ${novelDir} ${batch.id}. For the evidence: novel reading ${novelDir} card|scene|line <id>, novel world log ${novelDir} --scene <id>, novel source grep ${novelDir} <regex>, novel source similar ${novelDir} <text>, novel source epub ${novelDir} --grep <regex>, novel query ${novelDir} 'MATCH …'. Answer each item: novel world answer ${novelDir} ${batch.id} <item> <option> --reason "<why, citing sentence ids>". The world goes on meanwhile and applies your answers under its laws.`;
 
 /** Every batch not yet in the main agent's console queue goes there (stage/world/sent.json remembers which did). */
 export async function sendToAgent(novelDir, consoleDir, { expiresAt = Date.now() + 3600_000 } = {}) {
@@ -241,7 +245,7 @@ export async function sendToAgent(novelDir, consoleDir, { expiresAt = Date.now()
     const batch = await readJson(join(folder, 'batches', file));
     if (!batch.items.some(item => pool.get(item)?.status === 'batched')) continue;
     const hex = createHash('sha256').update(id).digest('hex'), uuid = `${hex.slice(0, 8)}-${hex.slice(8, 12)}-4${hex.slice(13, 16)}-a${hex.slice(17, 20)}-${hex.slice(20, 32)}`;
-    try { sent[id] = await piConsole.submit({ id: uuid, text: batchMessage(novelDir, { ...batch, scene: pool.get(batch.items[0])?.scene }) }); } catch (error) { sent[id] = { error: error.message }; }
+    try { sent[id] = await piConsole.submit({ id: uuid, text: batchMessage(novelDir, { ...batch, scene: pool.get(batch.items[0])?.scene, cast: batch.items.every(item => ['person', 'sheet'].includes(pool.get(item)?.kind)) }) }); } catch (error) { sent[id] = { error: error.message }; }
   }
   await writeFile(sentFile, JSON.stringify(sent, null, 1), { mode: 0o600 });
   return sent;

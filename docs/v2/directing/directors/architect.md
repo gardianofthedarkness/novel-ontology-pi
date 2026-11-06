@@ -79,5 +79,5 @@ What it keeps as it plays, and where that lands (the flow and the gates: [Direct
 |---|---|---|---|---|---|
 | Which building it is | `binding` | — | Location.properties.world; W6: building identity from the lot each scene played in; unsure ones held | held | built |
 | Floors, uses, look | `building` (new) | L11 bodies | Location.properties.floors + Location.properties.uses; a room's floor is in canon (W6); uses and look proposed | held | partial |
-| Rooms | `building` (new) | L11 bodies | PART_OF relation; container and split held items (W6) | held | partial |
+| Rooms | `building` (new) | L11 bodies | PART_OF relation; container and split held items (W6); a room's kind where a conversation plays (the world log's room records), a view input | held | partial |
 | Changes to it | `damage` | L13 destruction | Location.properties.damage | applied | built |

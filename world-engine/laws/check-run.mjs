@@ -31,7 +31,7 @@ export function playedLine({ record, page, reading }) {
     scenes.push({ id: entry.scene, present, carried: entry.carried, spawned: entry.spawned, startAt });
     for (const card of entry.cards) {
       const read = readingCard.get(card.card), actors = (read?.people ?? []).filter(person => person.how.some(how => how === 'acts' || how === 'speaks')).map(person => person.id);
-      cards.push({ scene: entry.scene, card: card.card, kind: card.kind, lines: card.lines, moves: card.moves, breaks: card.breaks ?? null, hit: card.hit ?? null, talk: card.talk?.kind ?? null, actors, positions: after[card.event] ?? now });
+      cards.push({ scene: entry.scene, card: card.card, kind: card.kind, lines: card.lines, moves: card.moves, breaks: card.breaks ?? null, hit: card.hit ?? null, talk: card.talk?.kind ?? null, heard: card.talk?.heard ?? null, actors, positions: after[card.event] ?? now });
     }
     for (const [who, p] of Object.entries(now)) { lastEnd.set(who, p); lastScene.set(who, entry.scene); }
   }

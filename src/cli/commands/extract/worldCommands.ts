@@ -14,7 +14,8 @@ import type { LandscapePick } from "../../../digger/stage/landscape.js";
  */
 export interface PoolItem {
   id: string;
-  kind: "identity" | "presence" | "dialogue" | "actor" | "trace" | "landscape" | "speaker" | "talk" | "reach" | "continuity" | "two-places" | "travel" | "blast" | "note";
+  /** person, sheet: the cast's review (world-engine/review/cast.mjs; novel cast review): who is one person, what they can do. */
+  kind: "identity" | "presence" | "dialogue" | "actor" | "trace" | "landscape" | "speaker" | "talk" | "reach" | "continuity" | "two-places" | "travel" | "blast" | "note" | "person" | "sheet";
   /** v2 (world-engine/review/review.mjs): the card, the law that held it, its ledger entry, the scenes of a two-places. */
   card?: string | null;
   law?: string | null;
@@ -98,7 +99,8 @@ export async function worldBatch(novelDir: string, batchId: string): Promise<Rec
   const items = await loadPool(novelDir), answers = await loadAnswers(novelDir);
   return {
     batch: batch.id,
-    how: `Check each item against the original text (novel reading <book> card|scene|line <id>, novel world log <book> --scene <id>, novel source grep <book> <regex>, novel source similar <book> <text>, novel source epub <book> --grep <regex>, novel query <book> 'MATCH …'), then answer it: novel world answer <book> ${batch.id} <item> <one of its options> --reason "<why, citing sentence ids>". The world applies the answers under its laws; one that breaks a law comes back in a later batch.`,
+    how: `Check each item against the original text (novel reading <book> card|scene|line <id>, novel world log <book> --scene <id>, novel source grep <book> <regex>, novel source similar <book> <text>, novel source epub <book> --grep <regex>, novel query <book> 'MATCH …'), then answer it: novel world answer <book> ${batch.id} <item> <one of its options> --reason "<why, citing sentence ids>". The world applies the answers under its laws; one that breaks a law comes back in a later batch.`
+      + (items.some((item) => batch.items.includes(item.id) && (item.kind === "person" || item.kind === "sheet")) ? ` The cast's items: a person and their sheet as they stand, novel cast show <book> <char_…>; "same person" merges the two into the first everywhere (reading, ontology, sheets) when the answers are applied; for "set by hand" first set the sheet, novel cast sheet <book> <char_…> --sheet '{"move":{"flight":{"height":80}},"attack":{"line":{"range":100}}}' --reason "<why, citing sentence ids>" (or --none), then answer; two others who are one person, seen while reading: novel cast ask <book> <char_…> <char_…> --why "<sentence ids>".` : ""),
     items: batch.items.map((id) => items.find((item) => item.id === id)).filter((item) => item && item.status !== "withdrawn").map((item) => ({ item: item!.id, kind: item!.kind, scene: item!.scene, ...(item!.card ? { card: item!.card } : {}), ...(item!.law ? { law: item!.law } : {}), ...(item!.cards?.length ? { cards: item!.cards } : {}), ...(item!.lines?.length ? { lines: item!.lines } : {}), subjects: item!.subjects, names: item!.names, question: item!.question, options: item!.options, evidence: item!.evidence, ...(item!.note ? { note: item!.note } : {}), answered: answers.find((answer) => answer.batch === batch.id && answer.item === item!.id)?.verdict ?? null })),
   };
 }

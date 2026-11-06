@@ -66,6 +66,11 @@ export function worldLog({ run, record, page, spawn, strands }) {
       // reads `who` as a position's rank).
       for (const exchange of card?.exchanges ?? []) add({ kind: 'exchange', strand, scene: scene.id, card: card.card, attacker: exchange.attacker, target: exchange.target, attack: exchange.attack, shape: exchange.shape, range: exchange.range, outcome: exchange.outcome, knockback: exchange.knockback, line: exchange.sentence, rank: exchange.by === 'jev' ? 'answered' : 'ruled', source: exchange.by === 'jev' ? 'jev' : 'action director' });
       for (const entry of card?.conditions ?? []) add({ kind: 'condition', strand, scene: scene.id, card: card.card, subject: entry.who, condition: entry.condition, line: entry.line, rank: 'ruled', source: 'action director' });
+      // The transport specialist's state: who came to hold, drive or ride what in this card, and who let it go (`holder`,
+      // never `who`: the smoother reads `who` as a position's); its owner where the specialist found one.
+      for (const entry of card?.holdings ?? []) add({ kind: 'possession', strand, scene: scene.id, card: card.card, holder: entry.who, thing: entry.thing, how: entry.how, change: entry.change, owner: entry.owner ?? null, rank: 'answered', source: 'transport specialist' });
+      // The architect's room: the kind of room a conversation played in (a view input, never canon).
+      if (card?.room) add({ kind: 'room', strand, scene: scene.id, card: card.card, lot: card.room.lot, room: card.room.room, type: card.room.type, rank: card.room.asked ? 'answered' : 'ruled', source: 'architect' });
       if (event.hit) add({ kind: 'damage', strand, scene: scene.id, card: card?.card ?? event.id, lot: event.hit.lot ?? null, sphere: event.hit.sphere ?? null, strength: event.hit.strength ?? null, rank: 'answered', source: 'blast' });
     });
   }

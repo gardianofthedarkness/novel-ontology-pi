@@ -432,16 +432,32 @@ export async function strandDemo(novelDir, options) {
    * a hall, along the hall (the void channels it); from the street, only a shallow hall's roof under it, straight through the
    * ground. Each hall reached collapses (U.collapse): its piles close its cells; a shallow hall's cave may dent the street.
    */
+  // When each hole in the skin and each mark on a hard ceiling was made (the moment, as a chunk's: the page shows it from then).
+  const brokenAt = new Map();
   const underHit = (centre, r, strength) => {
     const halls = world.source.underground?.halls ?? [], energy = BLAST_ENERGY * strength * (2 * r / 8) ** 3, out = [];
     halls.forEach((hall, index) => {
       if (!awake.has(hall.area)) return;
       const b = U.boundsOf(hall), top = hall.depth - hall.height, below = centre.y < -1;
       if (centre.x < b.x0 - r || centre.x > b.x1 + r || centre.z < b.z0 - r || centre.z > b.z1 + r) return;
+      // A floor of another layer (terrain-levels §3.5) has no ground over it to fall. The deep layer's hard ceiling (§8.6) stops
+      // a blast that reaches it: it keeps the mark, and never breaks.
+      if (hall.layer) {
+        if (hall.layer !== 'deep' || !U.inHall(hall, [centre.x, centre.z]) || centre.y < -hall.depth - 1) return;
+        const ceiling = W.hallCeiling(world, index), rise = ceiling.at - centre.y;
+        if (ceiling.kind !== 'hard' || rise > r) return;
+        const mark = { x: Math.round(centre.x * 10) / 10, y: Math.round(ceiling.at * 10) / 10, z: Math.round(centre.z * 10) / 10, r: Math.round(Math.sqrt(Math.max(1, r * r - rise * rise)) * 10) / 10 };
+        world.underDamage.marks.push(mark); brokenAt.set(mark, moment);
+        out.push({ hall: hall.id, kind: hall.kind, stopped: 'the hard ceiling', mark });
+        return;
+      }
       if (below ? centre.y < -hall.depth - r || centre.y > -top + r : !(top < U.BANDS[0].to && top + centre.y <= r)) return;
       reach(centre.x, centre.z, r + 40);
-      const k = W.levelOf(hall.depth), cells = [];
-      for (let i = Math.floor(b.x0 / 2); i <= Math.floor(b.x1 / 2); i++) for (let j = Math.floor(b.z0 / 2); j <= Math.floor(b.z1 / 2); j++) { const entry = W.hallsAt(world, i, j).find(e => e.hall === index && e.k === k); if (entry) cells.push({ i, j, pillar: entry.pillar, reach: Infinity }); }
+      // A street laid underground has no pillars of its own drawn or walked round (its lanes are open): its roof is held, for
+      // the span test, by columns on an 8 m grid, as a car park's (without them every cell of it failed at once: the whole of
+      // W12's stretch caved in under a 4 m blast once its hall was awake).
+      const k = W.levelOf(hall.depth), cells = [], column = (i, j) => !!hall.street && i % 4 === 0 && j % 4 === 0;
+      for (let i = Math.floor(b.x0 / 2); i <= Math.floor(b.x1 / 2); i++) for (let j = Math.floor(b.z0 / 2); j <= Math.floor(b.z1 / 2); j++) { const entry = W.hallsAt(world, i, j).find(e => e.hall === index && e.k === k); if (entry) cells.push({ i, j, pillar: entry.pillar || column(i, j), reach: Infinity }); }
       if (!cells.length) return;
       if (below) {
         // Along the hall from the cell nearest the blast (2 m a step, 2.8 m a diagonal).
@@ -450,15 +466,43 @@ export async function strandDemo(novelDir, options) {
         for (let head = 0; head < queue.length; head++) for (const [di, dj, cost] of [[1, 0, 2], [-1, 0, 2], [0, 1, 2], [0, -1, 2], [1, 1, 2.83], [1, -1, 2.83], [-1, 1, 2.83], [-1, -1, 2.83]]) { const cell = cells[queue[head]], m = at.get(W.cellKey(cell.i + di, cell.j + dj)); if (m !== undefined && cell.reach + cost < cells[m].reach) { cells[m].reach = cell.reach + cost; queue.push(m); } }
       } else for (const cell of cells) cell.reach = Math.hypot((cell.i + 0.5) * 2 - centre.x, top + centre.y, (cell.j + 0.5) * 2 - centre.z);
       const width = hall.bores.length ? hall.bores[0].width : Math.min(...hall.boxes.map(box => Math.min(box.w, box.d)));
+      // The ground skin over it (§8.4): where the blast's sphere takes in its whole cover and breaks it, a hole into the hall
+      // (never where a building stands: its basements are its own). The ground it held is thrown out, not piled below.
+      const holes = U.breach(U.ceilingOf(hall), cells, centre, r, energy, below ? width * hall.height : Infinity).filter(n => !world.lotAt.has(W.cellKey(cells[n].i, cells[n].j)) && !world.underDamage.breaches.has(W.cellKey(cells[n].i, cells[n].j)));
+      for (const n of holes) { world.underDamage.breaches.set(W.cellKey(cells[n].i, cells[n].j), index); brokenAt.set(W.cellKey(cells[n].i, cells[n].j), moment); }
       const result = U.collapse({ depth: hall.depth, height: hall.height, lined: hall.lined, pillars: hall.pillars, width }, cells, energy, below ? width * hall.height : Infinity);
-      if (!result.failed.length && !result.pillars.length && !result.lining.length) return;
-      const piles = world.underDamage.piles.get(index) ?? world.underDamage.piles.set(index, new Map()).get(index);
-      for (const [n, height] of Object.entries(result.pile)) { const key = W.cellKey(cells[n].i, cells[n].j); piles.set(key, Math.max(piles.get(key) ?? 0, height)); }
-      for (const [n, depth] of Object.entries(result.dent)) { const key = W.cellKey(cells[n].i, cells[n].j); world.underDamage.dents.set(key, Math.max(world.underDamage.dents.get(key) ?? 0, depth)); }
-      out.push({ hall: hall.id, kind: hall.kind, stopped: result.stopped, pillars: result.pillars.length, lining: result.lining.length, failed: result.failed.length, layers: result.layers, pile: Math.max(0, ...Object.values(result.pile)), dent: Object.keys(result.dent).length });
+      if (!result.failed.length && !result.pillars.length && !result.lining.length) { if (holes.length) out.push({ hall: hall.id, kind: hall.kind, stopped: 'none', pillars: 0, lining: 0, failed: 0, layers: 0, pile: 0, dent: 0, breach: holes.length }); return; }
+      // Under a hole nothing piles and nothing dents: its ground was thrown out, with none over it left to fall (§8.4).
+      const piles = world.underDamage.piles.get(index) ?? world.underDamage.piles.set(index, new Map()).get(index), open = key => world.underDamage.breaches.get(key) === index;
+      for (const [n, height] of Object.entries(result.pile)) { const key = W.cellKey(cells[n].i, cells[n].j); if (!open(key)) piles.set(key, Math.max(piles.get(key) ?? 0, height)); }
+      for (const [n, depth] of Object.entries(result.dent)) { const key = W.cellKey(cells[n].i, cells[n].j); if (!open(key)) world.underDamage.dents.set(key, Math.max(world.underDamage.dents.get(key) ?? 0, depth)); }
+      out.push({ hall: hall.id, kind: hall.kind, stopped: result.stopped, pillars: result.pillars.length, lining: result.lining.length, failed: result.failed.length, layers: result.layers, pile: Math.max(0, ...Object.values(result.pile)), dent: Object.keys(result.dent).length, ...(holes.length ? { breach: holes.length } : {}) });
     });
     if (out.length) { notes.underground.hits += out.length; changed(); }
     return out;
+  };
+  /**
+   * A beam under a ceiling (terrain-levels §8.3): from a node, at a point (metres) or straight up (`to` null), `width` metres
+   * across. The sky over it, or a target under the ceiling: it goes on as before (`through`). The ground skin: it bores a hole
+   * where it meets it, as wide as it, no deeper than BEAM_BORE of ground (past that the rock stops it); the hole is the
+   * skin's (§8.4), and the beam goes on through it. The deep layer's hard ceiling: stopped there, the mark kept (§8.6).
+   * Inside a building (a slab) nothing changes: the building's own breaking is the destruction questions'.
+   */
+  const beamCeiling = (from, to = null, width = 4) => {
+    const p = W.nodePos(world, from), ceiling = W.ceilingAt(world, p.i, p.j, p.k), round = value => Math.round(value * 10) / 10;
+    if (ceiling.kind === 'sky' || ceiling.kind === 'slab') return { ceiling: ceiling.kind, through: true, ...(ceiling.open ? { open: true } : {}) };
+    if (to && to.y <= ceiling.at) return { ceiling: ceiling.kind, through: true, under: true };
+    const t = to && to.y !== p.y ? Math.max(0, (ceiling.at - p.y) / (to.y - p.y)) : 0, x = to ? p.x + (to.x - p.x) * t : p.x, z = to ? p.z + (to.z - p.z) * t : p.z;
+    const met = { ceiling: ceiling.kind, at: round(ceiling.at), x: round(x), z: round(z) };
+    if (ceiling.kind === 'hard' || ceiling.cover > U.BEAM_BORE) { const mark = { x: met.x, y: met.at, z: met.z, r: width / 2 }; world.underDamage.marks.push(mark); brokenAt.set(mark, moment); changed([{ x0: x - width, x1: x + width, z0: z - width, z1: z + width }]); return { ...met, through: false, stopped: true }; }
+    const hall = ceiling.hall, opened = [];
+    for (let i = Math.floor((x - width / 2) / 2); i <= Math.floor((x + width / 2) / 2); i++) for (let j = Math.floor((z - width / 2) / 2); j <= Math.floor((z + width / 2) / 2); j++) {
+      const key = W.cellKey(i, j);
+      if (Math.hypot((i + 0.5) * 2 - x, (j + 0.5) * 2 - z) > width / 2 + 1 || world.lotAt.has(key) || world.underDamage.breaches.has(key) || !W.hallsAt(world, i, j).some(entry => entry.hall === hall)) continue;
+      world.underDamage.breaches.set(key, hall); brokenAt.set(key, moment); opened.push(key);
+    }
+    if (opened.length) { changed([{ x0: x - width, x1: x + width, z0: z - width, z1: z + width }]); notes.underground.hits++; }
+    return { ...met, through: true, breach: opened.length };
   };
   /** Where someone under fallen ground gets out to: the nearest open cell of the same hall (null when they are not buried). */
   const buried = at => {
@@ -478,8 +522,18 @@ export async function strandDemo(novelDir, options) {
     // L18 (tunnelling): the blast on the walkable world too, as earlier damage is applied there (applyEarlier): each of the
     // world's lots the sphere reaches loses what it breaks, and what it broke lies as rubble the walk crosses.
     const touched = [];
+    // A building's height span is its own level's (a street laid underground's, the deep layer's, a deck's: its k0), so a
+    // blast down there never takes the building on the street over it (it had jumped 60 m up to one: stage 2's check).
+    // A blast lands on a building it reaches (its sphere touches it): never moved farther (one in a mall with nothing near it had
+    // been carried 117 m down to a tower of the deep layer).
+    // And the ground skin is between the street and what stands under it (terrain-levels §8.3): a blast on one side takes only
+    // the buildings on its own side (one picked by a building's face on the street had moved onto the roof of a building of the
+    // street laid underground beneath it, through the ground).
+    const spanOf = lot => { const base = (lot.k0 ?? 0) * 3; return [base, base + lot.floors * 3]; };
+    const side = y => (y >= -1 ? 1 : -1), sideOk = lot => side((lot.k0 ?? 0) * 3) === side(chosen.y);
     world.lots.forEach((lot, index) => {
-      const gap = Math.hypot(Math.max(0, lot.i0 * 2 - chosen.x, chosen.x - (lot.i0 + lot.nx) * 2), Math.max(0, -chosen.y, chosen.y - lot.floors * 3), Math.max(0, lot.j0 * 2 - chosen.z, chosen.z - (lot.j0 + lot.nz) * 2));
+      if (!sideOk(lot)) return;
+      const [base, roof] = spanOf(lot), gap = Math.hypot(Math.max(0, lot.i0 * 2 - chosen.x, chosen.x - (lot.i0 + lot.nx) * 2), Math.max(0, base - chosen.y, chosen.y - roof), Math.max(0, lot.j0 * 2 - chosen.z, chosen.z - (lot.j0 + lot.nz) * 2));
       if (gap > chosen.r) return;
       const structure = (shared.structures[index] ??= structureOf(lot)), units = shared.units[index] ?? intact(structure), { broken } = blast(structure, units, chosen, strength);
       if (!broken.length) return;
@@ -494,14 +548,14 @@ export async function strandDemo(novelDir, options) {
     const group = groups.get(scene.placeId);
     // A lot's structure and what of it stands now (its skeleton's cells as the walk left them, walls and roof as hits left them).
     const unitsOf = index => { const structure = (group.structures[index] ??= structureOf(group.layout.lots[index])), units = group.units[index] ?? intact(structure); for (let cell = 0; cell < structure.cells; cell++) units[cell] = group.standing[index][cell] && structure.kind[cell] ? 1 : 0; return { structure, units }; };
-    const struck = group.layout.lots.map((lot, index) => ({ lot, index, gap: Math.hypot(Math.max(0, lot.i0 * 2 - chosen.x, chosen.x - (lot.i0 + lot.nx) * 2), Math.max(0, lot.j0 * 2 - chosen.z, chosen.z - (lot.j0 + lot.nz) * 2)) })).sort((a, b) => a.gap - b.gap)[0];
+    const struck = group.layout.lots.map((lot, index) => { const [base, roof] = spanOf(lot); return { lot, index, gap: !sideOk(lot) ? Infinity : Math.hypot(Math.max(0, lot.i0 * 2 - chosen.x, chosen.x - (lot.i0 + lot.nx) * 2), Math.max(0, base - chosen.y, chosen.y - roof), Math.max(0, lot.j0 * 2 - chosen.z, chosen.z - (lot.j0 + lot.nz) * 2)) }; }).filter(entry => entry.gap <= chosen.r).sort((a, b) => a.gap - b.gap)[0];
     let sphere = chosen;
     if (struck) { const { structure, units } = unitsOf(struck.index); let best = null, far = Infinity; units.forEach((up, unit) => { if (!up) return; const at = unitAt(structure, unit), gap = Math.hypot(at.x - chosen.x, at.y - chosen.y, at.z - chosen.z); if (gap < far) { far = gap; best = at; } }); if (best && far > chosen.r / 2) sphere = { ...best, r: chosen.r }; }
-    const gapTo = (lot) => Math.hypot(Math.max(0, lot.i0 * 2 - sphere.x, sphere.x - (lot.i0 + lot.nx) * 2), Math.max(0, -sphere.y, sphere.y - lot.floors * 3), Math.max(0, lot.j0 * 2 - sphere.z, sphere.z - (lot.j0 + lot.nz) * 2));
+    const gapTo = (lot) => { const [base, roof] = spanOf(lot); return Math.hypot(Math.max(0, lot.i0 * 2 - sphere.x, sphere.x - (lot.i0 + lot.nx) * 2), Math.max(0, base - sphere.y, sphere.y - roof), Math.max(0, lot.j0 * 2 - sphere.z, sphere.z - (lot.j0 + lot.nz) * 2)); };
     const box = { x: [sphere.x - sphere.r, sphere.x + sphere.r], y: [sphere.y - sphere.r, sphere.y + sphere.r], z: [sphere.z - sphere.r, sphere.z + sphere.r], sphere };
     // Each building the sphere reaches, as structural units (structure.ts): those the blast's energy breaks go, then what
     // has lost its load path falls straight down to rest; walls and the roof break and fall like corridors and stairs.
-    const parts = group.layout.lots.map((lot, index) => [index, gapTo(lot)]).filter(([, gap]) => gap <= sphere.r).sort((a, b) => a[1] - b[1]).map(([index]) => {
+    const parts = group.layout.lots.map((lot, index) => [index, sideOk(lot) ? gapTo(lot) : Infinity]).filter(([, gap]) => gap <= sphere.r).sort((a, b) => a[1] - b[1]).map(([index]) => {
       const { structure, units } = unitsOf(index);
       const { broken, energy } = blast(structure, units, sphere, strength), hit = units.slice();
       for (const unit of broken) hit[unit] = 0;
@@ -1348,6 +1402,10 @@ export async function strandDemo(novelDir, options) {
       }),
       piles: [...world.underDamage.piles].flatMap(([index, cells]) => [...cells].map(([key, height]) => [...cellOf(key), W.levelOf(halls[index].depth), height])),
       dents: [...world.underDamage.dents].map(([key, depth]) => [...cellOf(key), depth]),
+      // Holes blows broke in the ground skin (terrain-levels §8.4): [i, j, the hall's index, its floor's level, when]; and the
+      // marks blows left on the deep layer's hard ceiling (§8.6): [x, y, z, r metres, when] (when: the moment, as a chunk's).
+      breaches: [...world.underDamage.breaches].map(([key, hall]) => [...cellOf(key), hall, W.levelOf(halls[hall].depth), brokenAt.get(key) ?? null]),
+      marks: world.underDamage.marks.map(mark => [mark.x, mark.y, mark.z, mark.r, brokenAt.get(mark) ?? null]),
       // The ways between the layers (terrain-levels §3.4): [foot x, foot y, foot z, top x, top z, 2 a launch / 1 a lift / 0 stairs].
       ways: [...allWays.values()],
       awake: [...awake.keys()],
@@ -1574,7 +1632,7 @@ export async function strandDemo(novelDir, options) {
   // line's starts, handed on so the loop plays forward card by card on the same world (no export again, no replay): it adds
   // its cards to the chosen scenes, its moves to `moves` and its positions to `runs`, streams the world in with `reach`, and
   // calls `assemble` for the page as far as it has played.
-  if (options.engine) await options.engine({ world, W, graphOf, cost, reach, solve, onFoot, portalsNear, DEEP, deepAt, sampleWalk, T, kappa, lambda, runs, moves, chosen, assemble, snapshot, names: inputs.names, hits, hitSphere });
+  if (options.engine) await options.engine({ world, W, graphOf, cost, reach, solve, onFoot, portalsNear, DEEP, deepAt, beamCeiling, sampleWalk, T, kappa, lambda, runs, moves, chosen, assemble, snapshot, names: inputs.names, hits, hitSphere, wake });
   return data;
 }
 

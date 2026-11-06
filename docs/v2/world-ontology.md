@@ -377,6 +377,31 @@ the full text included, and writes only answers into the ledger.
 - **A main agent decides everything the laws don't** (§7b): identity, a fact against a sure reading, abilities,
   cross-book records; what its answers can't make lawful stays held, playing its lawful default, and is reported.
 
+### 7.1 The cast's review (the user, 2026-11-06: "Add the missing commands, and have the agent review in batches")
+
+Before, two people of a v2 reading could not be made one by any command (`novel fix merge` reaches the ontology only),
+and no command set one person's ability sheet (the settei step sheets the whole cast at once). So W12's split people
+and two missing sheets waited on a hand edit. Now (`world-engine/review/cast.mjs`, `src/cli/commands/extract/castCommands.ts`):
+
+| Command | Does |
+|---|---|
+| `novel cast show <dir> [<char>]` | the cast with their cards and ability sheets (what Jev held unsure too), or one person with what the cast log did to them |
+| `novel cast merge <dir> <keep> <merged> --reason t [--reading <data.json>]… [--dry]` | two entries made one person everywhere: each reading the book plays from (the director's, the manifest's) with its views and pre-film notes, the universe's sheets, the ontology (`novel fix merge`, graph rebuilt); every file copied aside first (stage/world/cast-backup), logged (stage/world/cast-log.jsonl); `--dry` lists what would change |
+| `novel cast sheet <dir> <char> --sheet '<JSON>' \| --none --reason t [--evidence <ids>]` | one person's sheet in the universe's abilities.json, checked against the settei's kinds and limits; the kinds held unsure for those parts taken off |
+| `novel cast ask <dir> <a> <b> --why t` | two people raised as one, a question for the next cast batch |
+| `novel cast review <dir> [--size N] [--least-cards N] [--send <console-dir>]` | the cast's questions into the review pool in batches (8): two entries whose names meet; each sheet kind Jev held unsure; each main character (20 cards or more) with no sheet; `--send` puts them in Pi's console queue |
+| `novel sky build\|show <dir> [--dry] [--cache <dir>]` | the story sky (each unit's time of day and weather) into sky.json beside the reading the director plays |
+
+- **The agent answers** with `novel world answer` like any held item. `same person` merges into the first subject. A held sheet is kept or taken off. For `set by hand`, the agent first runs `novel cast sheet`; the apply step checks that a sheet set that way exists, else the item comes back in a later batch.
+- **`novel world apply`** (or the director at its next run) does what was decided.
+- **Checked on a copy of library 16** (stand-in answers, test only):
+  - it raised 8 pairs and 17 sheet questions in 3 batches;
+  - the merges (Maidono and the Santa girl, the two Negaoka entries, Oyafune and Oyafune Monaka) left no trace of the merged ids in either reading or the universe, and the ontology merged too;
+  - a sheet set by hand passed the check, and one answered before it was set came back to the pool;
+  - the director then played scenes 165–171 with no law broken.
+- **Library 16 (2026-11-06):** its 3 cast batches are in its pool. Pi's console turned them away because no Pi worker was running; `novel cast review <dir> --send <host>/runtime/pi-console` sends them once one is.
+- **The book's reading output is shared.** Library 16's manifest points at `~/claude-world-first/v2-vol1-w12`, so a merge applied there reaches every copy made from it later.
+
 ## 7a. v1's review boundary (for decision 1)
 
 How v1 formats the ontology and what its review gate covers (`src/ground/connectors/bundle.ts`,

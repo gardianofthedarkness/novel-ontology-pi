@@ -107,3 +107,118 @@ of the four in the snapshot never says it; vol 4's blue-white blade across the L
   `__sky({ ..., cutBeams: true })`.
 - **Lightning** strikes 3 to 12 seconds apart (the interval had been taken in seconds against a clock in milliseconds, so
   after the first strike a storm flashed on every frame).
+
+## Cloud types by the weather (the user, 2026-11-06: "first building the weather based clouds, and leave the rest in design for now")
+
+Each weather's clouds are of their kinds, at their heights: a low layer and, where the weather has one, a high one, each its
+own sheet in `strand-demo.html` (`CLOUD_TYPES`, `CLOUD_PLAN`, `cloudPlan`).
+
+| Type | Drawn base | Its look | Real base |
+| --- | --- | --- | --- |
+| cumulus | 650 m | puffs: small, billowing, sharp-edged | 0.6 to 2 km |
+| stratocumulus | 500 m | a deck of rolls drawn out along the wind | 0.5 to 2 km |
+| stratus | 330 m | a flat grey sheet, soft-edged | 0.1 to 0.5 km |
+| nimbostratus | 270 m | the rain deck: thick, dark, all but unbroken | 0.3 to 1 km |
+| cumulonimbus | 520 m | a storm's heaped cloud, dark-based | 0.5 to 2 km, up past 10 km |
+| fog | 160 m | cloud down to the ground (with the haze) | the ground |
+| altostratus | 1,300 m | a thin grey veil above | 2 to 7 km |
+| anvil | 1,600 m | a storm's spread top | 8 to 12 km |
+| cirrus | 1,900 m | high wisps drawn out along the wind | 6 to 12 km |
+
+The drawn heights are compressed to stay within the view (a layer at 7 km would lie past the camera's reach and its haze);
+the order and the gaps between the layers are kept.
+
+| Weather | light | moderate | heavy |
+| --- | --- | --- | --- |
+| clear | cumulus 0.12 + cirrus 0.2 | cumulus 0.18 + cirrus 0.22 | cumulus 0.18 + cirrus 0.25 |
+| cloudy | cumulus 0.35 + cirrus 0.3 | stratocumulus 0.6 + altostratus 0.35 | stratus 0.85 |
+| fog | fog 0.4 | fog 0.5 | fog 0.6 |
+| rain | stratocumulus 0.6 + altostratus 0.4 | nimbostratus 0.75 | nimbostratus 0.92 |
+| sleet | stratocumulus 0.6 + altostratus 0.3 | nimbostratus 0.72 | nimbostratus 0.85 |
+| snow | stratocumulus 0.45 + altostratus 0.3 | stratus 0.6 | nimbostratus 0.8 |
+| storm | cumulonimbus 0.85 + anvil 0.5 | cumulonimbus 0.95 + anvil 0.6 | cumulonimbus 1 + anvil 0.7 |
+
+- **A type's look:**
+  - the size of its features;
+  - how far it is drawn out along the wind;
+  - how soft its edges are, and its small detail;
+  - its opacity;
+  - how dark its thick parts are (a rain deck's, a storm's base);
+  - how much it billows.
+- **Changes of weather:** one type eases into the next (each parameter, and the layer's height), at once when the look is
+  snapped.
+- **Shared by both layers:**
+  - the light by the hour;
+  - the drift;
+  - the holes a beam tears: a beam to the sky goes through both.
+- **The low layer's alone:**
+  - the ripples;
+  - the shadows on the ground and the sun's patches;
+  - the height a wake is left at.
+- **Cover:** the low layer covers at least what the weather's look says (as sure as the reading); fair weather keeps a few
+  puffs.
+- **Not asked of Jev:** the weather, its strength and the wind are the sky reading's own.
+- **Checked:** every weather by every strength from the street looking up, four from far off at the side, three at dusk
+  (`~/claude-world-first/rehearsals/clouds-sheets.mjs`). Test hook: `window.__clouds()`.
+
+### Still in design
+
+- **Thickness.** Today a layer is a sheet:
+  - a camera or a flight at its height sees it vanish rather than go grey inside it;
+  - a storm's towers do not rise.
+
+  The design is a slab of cloud with depth (a ray marched through it, or stacked slices). A camera inside sees grey, a
+  flight goes into cloud and comes out above it, and cumulonimbus towers rise kilometres to their anvil.
+- **Blasts by their energy.** Today an area blow of 8 m or more sends a ring by a rule, whatever its energy and its height.
+  The design reads the blast's energy at the cloud's height:
+  - its overpressure falls with distance cubed;
+  - past a threshold it rings the layer;
+  - past a higher one it punches a hole (as a beam does);
+  - very large ones leave a condensation ring and a cap.
+
+  The blasts of this world (at most 32 m across, at street level) would then leave clouds 300 m up alone.
+- **The clouds acting on the world:**
+  - they shade the sun by their cover and thickness (today only their shadows on the ground);
+  - they hide what lies beyond them from the camera that shows Jev the world;
+  - a flight through a cloud flies blind, which the director's flight would read.
+- **Rain and snow from the clouds:** today they fall round the camera; they would fall from under the low layer's base,
+  where it covers.
+
+## Ripples in the clouds (the user, 2026-11-06: "cloud rippling")
+
+The cloud layer has a wave field of its own, as terrain stage 3 plans for water (terrain-levels §4.3), drawn in
+`strand-demo.html`:
+
+- **The field:** a height grid of 128 cells a side over 2.4 km, round what the camera looks at. The wave equation runs it,
+  each step from the last two, damped, 30 steps a second.
+  - It lies quiet (and costs nothing) until something disturbs it.
+  - A live field stays where it is; a quiet one follows the camera.
+- **Drawn:** a crest thickens the cloud under it and is lit; a trough thins it and is in shade. The ground's cloud shadows
+  follow (they read the same density).
+- **What disturbs it,** each a ring pushed into the grid:
+  - a beam tearing a hole: a ring as wide as the hole, the strongest;
+  - a blast's shock rising: an area blow of 8 m or more, a ring of 20 m plus four times its radius, as strong as its size;
+  - a lightning strike: a ring near what the camera looks at;
+  - anything at the cloud base (a flight through it): a wake, a bump every 0.3 s where it is;
+  - a storm or a gale under clouds: bumps at random, stronger in the wind.
+- **Not recorded:** the ripples are drawn, never kept. A replay plays the same because what disturbs them (the blows, the
+  holes, the flights) is the run's own. Lightning and a storm's bumps are at random.
+- **Test hook:** `window.__ripple({ x, z, r, amp })` pushes a ring; `window.__ripple()` says whether the field is live.
+
+## Wired in (the user, 2026-11-06: "wire the weather and daytime system in")
+
+Before, the sky reached a page only inside World · Live: its host reads sky.json beside the reading a run played and
+sends it to the page (`tools/pi-review/sim-play.mjs` `directorSky`). And library 16, where the next run plays, had no
+sky.json at all. Now:
+
+- **`novel sky build|show <novel-dir> [--dry] [--cache <dir>]`** reads the story sky into sky.json beside the reading
+  the director plays (`experiments/v2/sky.mjs`), and shows what it holds.
+- **Library 16's sky, read 2026-11-06** (12 requests to Jev):
+  - 286 units, all on Dec 24;
+  - by time of day: 38 late night, 64 night, 8 morning, 83 midday, 36 afternoon, 57 evening;
+  - by weather: 20 heavy snow, 78 snow, 184 clear, 4 heavy storm; snow lying in 282;
+  - 16 units where the chapter heading and the time carried on disagree, the heading taken.
+  - Read against the book's 46 sequences (it cuts between storylines), it holds: the night block (units 97–125) is Jev's and the gaps between, and the long midday (126–216) is Jev's, the headings' and the gaps between. No second reading needed.
+- **Every page the director makes carries the sky** (`data.sky.units`, `SKY.skyForPage`: the flat shape the page plays, the same as the live host sends). A kept page shows the story's time of day and weather on its own; World · Live's own sky message still takes over when it comes.
+- **`window.__replay()`** now gives the page's sky as it plays (its hour, light and weather) for checking.
+- **Checked:** a page of units 1–6 played at 2 a.m. in heavy snow, snow lying and falling, a little fog (screenshot); before the flat shape, the same page showed lying snow but no snowfall.

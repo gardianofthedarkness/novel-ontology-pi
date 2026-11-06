@@ -168,3 +168,11 @@ export function skySummary(units) {
   const tally = (pick) => Object.values(units).reduce((sum, unit) => { const k = pick(unit); sum[k] = (sum[k] ?? 0) + 1; return sum; }, {});
   return { dayparts: tally(unit => unit.daypart.value), daypartBy: tally(unit => unit.daypart.by ?? 'none'), weathers: tally(unit => unit.weather.value), strengths: tally(unit => `${unit.strength ?? 'moderate'} ${unit.weather.value}`), winds: tally(unit => unit.wind ?? 'calm'), weatherBy: tally(unit => unit.weather.by ?? 'none'), lying: Object.values(units).filter(unit => unit.lying).length, conflicts: Object.values(units).filter(unit => unit.conflict).length, cloudCuts: Object.values(units).filter(unit => unit.cloudCut).length };
 }
+
+/**
+ * The sky as a page plays it (strand-demo.html weatherTarget): each unit flat, its weather a word with how sure, its
+ * strength, wind, hour and lying snow; World · Live's host sends the same (tools/pi-review/sim-play.mjs directorSky).
+ */
+export function skyForPage(units) {
+  return Object.fromEntries(Object.entries(units ?? {}).map(([id, unit]) => [id, { daypart: unit.daypart?.value ?? null, hour: unit.hour ?? null, weather: unit.weather?.value ?? null, strength: unit.weather?.strength ?? unit.strength ?? null, wind: unit.weather?.wind ?? unit.wind ?? null, sure: unit.weather?.sure ?? 0, lying: !!unit.lying, ...(unit.cloudCut ? { cloudCut: unit.cloudCut } : {}) }]));
+}

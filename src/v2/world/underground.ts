@@ -318,6 +318,42 @@ export function collapse(hall: Pick<Hall, "depth" | "height" | "lined" | "pillar
 }
 
 /**
+ * The ceiling over a hall's floor (docs/v2/terrain-levels.md §8.3): it belongs to the level, not laid as geometry.
+ *   skin  a hall with a real depth (the shallow layer): the ground over it, the street's slab with the hall's cover under it,
+ *         its underside at the hall's top (`at`, metres, negative below the street); `cover` its thickness; `bond` what
+ *         breaks it a cell at a time (the band its top lies in, and a lining's while unbroken: §8.4, soil 3 + 4);
+ *   hard  the deep layer's (virtual: §8.6): so high it reads as none, a floor above its tallest building at least, hit and
+ *         never broken (no bond);
+ *   sky   a deck's and an orbit's: open.
+ */
+export interface Ceiling { kind: "skin" | "hard" | "sky"; at: number; cover: number; bond: number }
+export function ceilingOf(hall: Pick<Hall, "depth" | "height" | "lined"> & { layer?: Layer }, tallest = 0): Ceiling {
+  if (hall.layer === "air" || hall.layer === "space") return { kind: "sky", at: Infinity, cover: 0, bond: Infinity };
+  if (hall.layer === "deep") return { kind: "hard", at: -hall.depth + Math.max(hall.height, tallest + 3), cover: Infinity, bond: Infinity };
+  const cover = Math.max(0, hall.depth - hall.height);
+  return { kind: "skin", at: -cover, cover, bond: bandAt(cover).bond + (hall.lined ? LINING.bond : 0) };
+}
+/** A beam bores through the ground of the shallow layer's near band (§8.1's table, 25 m), no deeper: past it the rock stops it. */
+export const BEAM_BORE = 25;
+/**
+ * The skin a blast breaks (§8.4; the user, 2026-11-05: "yes it can break through"): a cell of a hall's ceiling opens where the
+ * blast's sphere takes in the whole of its cover there (its underside and the street over it, metres from the centre) and the
+ * blow it gives the near face is more than the skin's bond. The blow is the cave-in's (`collapse`): the open blast's spread
+ * over a sphere, or along a hall it is confined in (`section`, its cross-section; Infinity in the open). `cells`: the hall's
+ * cells as 2 m squares (i, j); returns the indices of those that open. A hard ceiling or the sky breaks nowhere.
+ */
+export function breach(ceiling: Ceiling, cells: { i: number; j: number }[], centre: { x: number; y: number; z: number }, r: number, energy: number, section = Infinity): number[] {
+  if (ceiling.kind !== "skin" || r <= 0) return [];
+  const CELL = 2, below = centre.y < ceiling.at;
+  const share = (reach: number) => Math.max(energy / (4 * Math.PI * Math.max(reach, 0.5) ** 2), Number.isFinite(section) ? (energy / (2 * section)) * Math.exp(-reach / 60) : 0);
+  return cells.flatMap((cell, n) => {
+    const x = (cell.i + 0.5) * CELL, z = (cell.j + 0.5) * CELL, flat = Math.hypot(x - centre.x, z - centre.z);
+    const under = Math.hypot(flat, centre.y - ceiling.at), over = Math.hypot(flat, centre.y), near = below ? under : over;
+    return Math.max(under, over) <= r && share(near) > ceiling.bond ? [n] : [];
+  });
+}
+
+/**
  * A terrain shape kept below the street (terrain spawning: a cut, a ramp down, a basin; docs/v2/world-engine-v2.md
  * §2.0.17): a hall that deep over its box, a passage along a long one (three times as long as wide) and a hall under any
  * other, stairs up at its ends, so the underground shows what Jev placed there.

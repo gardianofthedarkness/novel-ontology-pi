@@ -29,6 +29,8 @@ const { withSystem2 } = await import('./system2.mjs');
 const { writeWorldLog } = await import('../log/write-log.mjs');
 const R = await import('../review/review.mjs'), C6 = await import('../review/canon.mjs'), SM = await import('../smoother/smoother.mjs'), OC = await import('../smoother/occupation.mjs');
 const SKY = await import('../digest/sky.mjs');
+const RM = await import('../digest/rooms.mjs');
+const TR = await import('../digest/transport.mjs');
 const WF = await import('./workflow.mjs'), AT = await import('../laws/attacks.mjs'), IU = await import('../digest/in-use.mjs'), MT = await import('../digest/mounts.mjs'), CF = await import('../crowd/field.mjs'), DG = await import('../digest/digest.mjs'), FA = await import('../digest/facts.mjs'), LY = await import('../world/layers.mjs'), AIR = await import('../world/air.mjs'), UN = await import('../digest/underground-note.mjs'), G = await import('./gate.mjs'), LW = await import('../laws/laws.mjs');
 import { copyFile } from 'node:fs/promises';
 
@@ -53,7 +55,9 @@ const round = value => Math.round(value * 10) / 10;
 export function standIn() {
   let n = 0;
   return { modelId: 'stand-in-director', async decide(_state, questions) {
-    n++;
+    // Its answers turn with a count of the questions; one asked since that count was set (the architect's room) is left out
+    // of it, so a new question never reshuffles every answer after it (a rehearsal compares like with like).
+    if (!questions.every(question => question.key === 'room')) n++;
     return questions.map((question, k) => {
       if (question.primitive === 'box') return { key: question.key, value: { left: 0.42, top: 0.42, right: 0.58, bottom: 0.58 }, box: { left: 0.42, top: 0.42, right: 0.58, bottom: 0.58 }, confidence: 0.5 };
       const options = question.options ?? [], turn = n + k;
@@ -134,6 +138,10 @@ export async function direct(novelDir, { reading, readingPath = null, prefilm = 
   // the stage is smoothed too (occupation.mjs), and someone surely there whom the script left out is added. The reading
   // played from is recorded for the review CLI (novel reading).
   if (readingPath) await writeFile(join(out, 'reading-path.json'), JSON.stringify({ path: resolve(readingPath) }));
+  // The story sky (experiments/v2/sky.mjs, novel sky build: sky.json beside the reading played): each unit's time of day and
+  // weather, carried on every page the director makes, so a page shows them on its own and not only inside World · Live.
+  const playedFrom = readingPath ? resolve(readingPath) : JSON.parse(await readFile(join(out, 'reading-path.json'), 'utf8').catch(() => 'null'))?.path ?? null;
+  const skyFile = playedFrom ? JSON.parse(await readFile(join(dirname(playedFrom), 'sky.json'), 'utf8').catch(() => 'null')) : null, skyPage = skyFile?.units ? SKY.skyForPage(skyFile.units) : null;
   // The settei cast's prop sheet (universe/props.json, experiments/v2/settei.mjs): each object's kind, shape, size and
   // flying height, by its name, and the slots that are vehicles or weapons by id (drawn as what they are, not as people).
   const propSheet = JSON.parse(await readFile(join(novelDir, '..', '..', 'universe', 'props.json'), 'utf8').catch(() => 'null'));
@@ -141,7 +149,14 @@ export async function direct(novelDir, { reading, readingPath = null, prefilm = 
   // A car is drawn as one of the baked CC0 cars (apps/playground/tools/vehicle-models.mjs): a taxi or a police car by its
   // name, any other one of the three plain cars by a seed; every other vehicle the page builds from parts.
   const vehicleModels = JSON.parse(await readFile(new URL('../../apps/playground/src/data/vehicleModels.json', import.meta.url), 'utf8').catch(() => 'null'));
-  const carModel = (prop, name) => { if (prop?.kind !== 'a car' || !vehicleModels) return null; const label = String(name ?? ''); if (/taxi|cab|\u51fa\u79df|\u30bf\u30af\u30b7\u30fc/i.test(label)) return 'car-taxi'; if (/police|patrol|\u8b66|\u30d1\u30c8\u30ab\u30fc/i.test(label)) return 'car-police'; const plain = ['car-sedan', 'car-hatchback', 'car-stationwagon']; return plain[[...label].reduce((sum, c) => sum + c.charCodeAt(0), 0) % plain.length]; };
+  // The rooms' furniture (the architect: digest/rooms.mjs), baked in metres; its footprints for the layouts.
+  const furnitureModels = JSON.parse(await readFile(new URL('../../apps/playground/src/data/furnitureModels.json', import.meta.url), 'utf8').catch(() => 'null'));
+  const furnitureSizes = Object.fromEntries(Object.entries(furnitureModels?.models ?? {}).map(([name, model]) => [name.replace('kk-furniture-', ''), model.size]));
+  // The transport specialist (digest/transport.mjs; universe/transport.json, a pre-film step): which model a vehicle is
+  // (Jev's pick among its kind's models, else the rule of its name's words) and whose each vehicle, weapon or machine is.
+  const transport = JSON.parse(await readFile(join(novelDir, '..', '..', 'universe', 'transport.json'), 'utf8').catch(() => 'null'));
+  const carModel = (prop, name) => { if (!prop?.kind || !vehicleModels) return null; const model = TR.modelOf(transport, String(name ?? ''), prop.kind); return model && vehicleModels.models?.[model] ? model : null; };
+  const ownerOf = name => transport?.props?.[String(name ?? '')]?.owner ?? null;
   // The settei cast's ability sheet (universe/abilities.json): what each person can do to move. A move goes one of those
   // ways only where the pre-film notes say the line has it in use (a move's or a journey's `ability`, in-use.json).
   const abilitySheet = JSON.parse(await readFile(join(novelDir, '..', '..', 'universe', 'abilities.json'), 'utf8').catch(() => 'null'));
@@ -283,7 +298,7 @@ export async function direct(novelDir, { reading, readingPath = null, prefilm = 
     // A thing's form (the user, 2026-11-05: "objects needs to be assigned with a shape and size"): its sheet's shape and
     // size where the settei cast has it (a "not a thing" not drawn), else a box of the size the notes give.
     const formOf = thing => { const prop = propOf(thing.name); if (prop?.shape === null) return null; if (prop?.size) return { shape: prop.shape, size: prop.size[0], height: prop.size[1], depth: prop.size[2], airborne: prop.airborne ?? 0, kind: prop.kind }; const w = Math.max(0.2, Math.min(6, thing.size)); return { shape: 'box', size: w, height: Math.max(0.2, w * 0.6), depth: w, airborne: 0, kind: null }; };
-    const thingsOnPage = () => [...things.values()].filter(thing => thing.placed.length && formOf(thing)).map(thing => { const form = formOf(thing); return { id: thing.id, name: thing.name, aliases: [], model: null, theme: null, switched: false, shape: form.shape, size: form.size, height: form.height, depth: form.depth, kind: form.kind, ...(carModel({ kind: form.kind }, thing.name) ? { vehicleModel: carModel({ kind: form.kind }, thing.name) } : {}), placed: thing.placed, struct: null }; });
+    const thingsOnPage = () => [...things.values()].filter(thing => thing.placed.length && formOf(thing)).map(thing => { const form = formOf(thing); return { id: thing.id, name: thing.name, aliases: [], model: null, theme: null, switched: false, shape: form.shape, size: form.size, height: form.height, depth: form.depth, kind: form.kind, ...(carModel({ kind: form.kind }, thing.name) ? { vehicleModel: carModel({ kind: form.kind }, thing.name) } : {}), ...(ownerOf(thing.name) && ownerOf(thing.name) !== 'not said' ? { owner: ownerOf(thing.name) } : {}), placed: thing.placed, struct: null }; });
     try {
       // The page as far as the loop has played, loaded again only when the world has grown (or a scene is done).
       const reload = async () => {
@@ -308,7 +323,14 @@ export async function direct(novelDir, { reading, readingPath = null, prefilm = 
       }
       // Each unnamed place's first unit (the world script's `scene`), for the live view to show it only once that unit has landed.
       const bornOf = new Map();
-      const withLine = data => ({ ...data, people: Object.fromEntries(Object.entries(data.people ?? {}).map(([id, person]) => { const prop = slotProp(id); return [id, prop?.shape ? { ...person, prop: { kind: prop.kind, shape: prop.shape, size: prop.size, airborne: prop.airborne ?? 0, ...(prop.vehicle ? { vehicle: true } : {}), ...(carModel(prop, propSheet?.ids?.[id] ?? person.name) ? { model: carModel(prop, propSheet?.ids?.[id] ?? person.name) } : {}) } } : person]; })), models: { ...(data.models ?? {}), ...(vehicleModels?.models ?? {}) }, macro: (data.macro ?? []).map(node => (bornOf.has(node.id) ? { ...node, born: bornOf.get(node.id) } : node)), things: [...(data.things ?? []), ...thingsOnPage()], scenes: data.scenes.map(entry => { const piece = played.has(entry.id) ? pieceOf(played.get(entry.id)) : null; return piece ? { ...entry, starts: piece.starts, events: piece.events, cast: piece.cast, landed: true } : { ...entry, landed: false }; }) });
+      // The rooms the architect has typed (digest/rooms.mjs): page lot, room, kind, its furniture; their models on the page.
+      E.rooms ??= new Map();
+      // Who held, drove or rode what after the card before (the transport specialist's possession, carried through the run).
+      let heldBefore = new Map();
+      // The vehicle models the page's people (a vehicle slot) and things are drawn as; only those go on the page.
+      const vehiclesUsed = data => { const used = new Set([...Object.entries(data.people ?? {}).map(([id, person]) => carModel(slotProp(id), propSheet?.ids?.[id] ?? person.name)), ...thingsOnPage().map(thing => thing.vehicleModel), 'car-sedan'].filter(Boolean)); return Object.fromEntries([...used].filter(name => vehicleModels?.models?.[name]).map(name => [name, vehicleModels.models[name]])); };
+      const furnitureUsed = () => Object.fromEntries([...new Set([...E.rooms.values()].flatMap(room => room.furniture.map(piece => `kk-furniture-${piece[0]}`)))].filter(name => furnitureModels?.models?.[name]).map(name => [name, furnitureModels.models[name]]));
+      const withLine = data => ({ ...data, ...(skyPage ? { sky: { units: skyPage } } : {}), people: Object.fromEntries(Object.entries(data.people ?? {}).map(([id, person]) => { const prop = slotProp(id); return [id, prop?.shape ? { ...person, prop: { kind: prop.kind, shape: prop.shape, size: prop.size, airborne: prop.airborne ?? 0, ...(prop.vehicle ? { vehicle: true } : {}), ...(carModel(prop, propSheet?.ids?.[id] ?? person.name) ? { model: carModel(prop, propSheet?.ids?.[id] ?? person.name) } : {}), ...(ownerOf(propSheet?.ids?.[id]) && ownerOf(propSheet?.ids?.[id]) !== 'not said' ? { owner: ownerOf(propSheet?.ids?.[id]) } : {}) } } : person]; })), models: { ...(data.models ?? {}), ...vehiclesUsed(data), ...furnitureUsed() }, ...(E.rooms?.size ? { rooms: [...E.rooms.values()] } : {}), macro: (data.macro ?? []).map(node => (bornOf.has(node.id) ? { ...node, born: bornOf.get(node.id) } : node)), things: [...(data.things ?? []), ...thingsOnPage()], scenes: data.scenes.map(entry => { const piece = played.has(entry.id) ? pieceOf(played.get(entry.id)) : null; return piece ? { ...entry, starts: piece.starts, events: piece.events, cast: piece.cast, landed: true } : { ...entry, landed: false }; }) });
       const dense = id => { const { i, j, k } = W.cellOf(world, id), g = page.world; return ((k + g.ok) * g.NZ + (j + g.oj)) * g.NX + (i + g.oi); };
       const at = id => { const p = W.nodePos(world, id); return [p.x, p.y, p.z]; };
       const lotOf = (x, z) => world.lotAt.get(W.cellKey(Math.floor(x / CELL), Math.floor(z / CELL)));
@@ -352,14 +374,65 @@ export async function direct(novelDir, { reading, readingPath = null, prefilm = 
       // Through the air (docs/v2/terrain-levels.md §6.2; world/air.mjs): a flight, a leap or a climb up a wall from one node to
       // another as cells of the world, over the buildings round the way (their plans, their roofs at their full height);
       // the path says it goes through the air (`air`, its kind as `how`), with no ensemble.
+      // Every building round the way, at its own level (a street laid underground's, a deep area's, a deck's: its roof at its
+      // k0 plus its floors); each end in the one that holds its cell at its level. Under a ceiling (terrain-levels §8.3: the
+      // ground skin over a hall, the deep layer's hard ceiling), the path goes no higher than a body below it (`capped`).
       const airRoute = (from, to, kind) => {
         const a = at(from), b = at(to), pad = 60, x0 = Math.min(a[0], b[0]) - pad, x1 = Math.max(a[0], b[0]) + pad, z0 = Math.min(a[2], b[2]) - pad, z1 = Math.max(a[2], b[2]) + pad, lots = [], index = new Map();
-        world.lots.forEach((lot, n) => { if (lot.k0) return; const box = { x0: lot.i0 * CELL, z0: lot.j0 * CELL, x1: (lot.i0 + lot.nx) * CELL, z1: (lot.j0 + lot.nz) * CELL, top: (lot.height ?? lot.floors ?? 1) * FLOOR }; if (box.x1 < x0 || box.x0 > x1 || box.z1 < z0 || box.z0 > z1) return; index.set(n, lots.push(box) - 1); });
-        const standsIn = id => { const p = W.nodePos(world, id), n = world.lotAt.get(W.cellKey(p.i, p.j)); return n === undefined ? -1 : index.get(n) ?? -1; };
-        const path = [];
-        for (const [x, y, z] of AIR.airPath(a, b, { lots, from: standsIn(from), to: standsIn(to), kind })) { const id = W.nodeId(world, Math.floor(x / CELL), Math.floor(z / CELL), Math.round(y / FLOOR)); if (path.at(-1) !== id) path.push(id); }
+        world.lots.forEach((lot, n) => { const k0 = lot.k0 ?? 0, box = { x0: lot.i0 * CELL, z0: lot.j0 * CELL, x1: (lot.i0 + lot.nx) * CELL, z1: (lot.j0 + lot.nz) * CELL, top: (k0 + (lot.height ?? lot.floors ?? 1)) * FLOOR }; if (box.x1 < x0 || box.x0 > x1 || box.z1 < z0 || box.z0 > z1) return; index.set(n, lots.push(box) - 1); });
+        const standsIn = id => {
+          const p = W.nodePos(world, id), key = W.cellKey(p.i, p.j);
+          const below = (world.lotBelow.get(key) ?? []).find(n => p.k >= (world.lots[n].k0 ?? 0) && p.k <= (world.lots[n].k0 ?? 0) + world.lots[n].floors);
+          const n = below ?? (p.k >= 0 ? world.lotAt.get(key) : undefined);
+          return n === undefined ? -1 : index.get(n) ?? -1;
+        };
+        const roofOf = id => { const p = W.nodePos(world, id), ceiling = W.ceilingAt(world, p.i, p.j, p.k); return ceiling.kind === 'skin' || ceiling.kind === 'hard' ? ceiling : null; };
+        const over = [roofOf(from), roofOf(to)].filter(Boolean), ceiling = over.length ? Math.min(...over.map(entry => entry.at)) : Infinity;
+        const points = AIR.airPath(a, b, { lots, from: standsIn(from), to: standsIn(to), kind, ceiling }), path = [];
+        for (const [x, y, z] of points) { const id = W.nodeId(world, Math.floor(x / CELL), Math.floor(z / CELL), Math.round(y / FLOOR)); if (path.at(-1) !== id) path.push(id); }
         path[0] = from; if (path.at(-1) !== to) path.push(to);
-        return Object.assign(path, { how: kind, air: true, ensemble: [] });
+        return Object.assign(path, { how: kind, air: true, ensemble: [] }, points.capped ? { capped: over.some(entry => entry.kind === 'hard') ? 'the hard ceiling' : 'the ground over it' } : {});
+      };
+      // The hook of the underground (docs/underground-design.md §4.8): an area's halls come alive the first moment anyone
+      // stands under it, and until then no blast reaches them. The director's moves never told the exporter (no blast of a
+      // director run reached a hall: no cave-in, no hole); before each blast now, every node below the street that anyone
+      // stands on or has walked through wakes its hall or basement (the exporter's own `wake`), once each.
+      const woken = new Set();
+      const wakeBelow = (positions = {}) => {
+        if (!E.wake) return;
+        for (const node of [...Object.values(positions).map(entry => entry?.[0]), ...[...(E.moves?.values() ?? [])].flatMap(move => move.path ?? [])]) {
+          if (node == null) continue;
+          const p = W.nodePos(world, node);
+          if (p.k >= 0) continue;
+          const hall = W.hallsAt(world, p.i, p.j).find(entry => entry.k <= p.k), key = hall ? `hall:${hall.hall}` : `lot:${world.lotAt.get(W.cellKey(p.i, p.j)) ?? 'none'}`;
+          if (woken.has(key)) continue;
+          woken.add(key); E.wake(node);
+        }
+      };
+      // The room of a building a node stands in (its lot on the page, the room's index, its floor and its plan's size in metres),
+      // or null: a node on a building's floor inside one of its rooms (a street laid underground's and a deck's buildings too).
+      const roomAt = node => {
+        const p = W.nodePos(world, node), key = W.cellKey(p.i, p.j);
+        const n = (world.lotBelow.get(key) ?? []).find(index => p.k >= (world.lots[index].k0 ?? 0) && p.k < (world.lots[index].k0 ?? 0) + world.lots[index].floors) ?? (p.k >= 0 ? world.lotAt.get(key) : undefined);
+        if (n === undefined) return null;
+        const lot = world.lots[n], local = W.localCell(lot, p.i, p.j), k = p.k - (lot.k0 ?? 0);
+        if (!local || k < 0 || k >= lot.floors) return null;
+        const r = (lot.rooms ?? []).findIndex(room => k >= room.floor && k <= (room.top ?? room.floor) && local[0] >= room.i0 && local[0] <= room.i1 && local[1] >= room.j0 && local[1] <= room.j1);
+        if (r < 0) return null;
+        const room = lot.rooms[r];
+        return { lot: n, room: r, floor: room.floor, w: (room.i1 - room.i0 + 1) * CELL, d: (room.j1 - room.j0 + 1) * CELL, building: lot.label ?? null, role: lot.role ?? null, floors: lot.floors };
+      };
+      // The holes blows broke in the ground skin (terrain-levels §8.4) a flight from below can rise through: each the floor's
+      // node under it, nearest first, within `radius` metres of a point.
+      const holesNear = (p, radius) => {
+        const out = [];
+        for (const [key, hall] of world.underDamage.breaches) {
+          const { ci: i, cj: j } = W.chunkOf(key), floor = W.hallsAt(world, i, j).find(entry => entry.hall === hall);
+          if (!floor) continue;
+          const x = (i + 0.5) * CELL, z = (j + 0.5) * CELL, d = Math.hypot(x - p[0], z - p[2]);
+          if (d <= radius) out.push({ id: W.nodeId(world, i, j, floor.k), d });
+        }
+        return out.sort((m, n) => m.d - n.d).map(entry => entry.id);
       };
       // A move's path grown by a piece (several moves of one person in one card are one walk on the page), the steps that go
       // through the air kept as ranges [first, last, kind] (`at`: where in the piece they start): the page plays them
@@ -382,9 +455,15 @@ export async function direct(novelDir, { reading, readingPath = null, prefilm = 
           const here = metres(from[0]), reach = how === 'flight' ? Infinity : Number(String(how).split(':')[1]) || 30;
           const target = targets.map(id => ({ id, d: Math.hypot(metres(id).x - here.x, metres(id).z - here.z) })).sort((a, b) => a.d - b.d)[0];
           // A flight is through the air (world/air.mjs); one to or from below the street goes by the walk and its lifts
-          // (W12's flight to a lab 90 m down went straight through the ground).
+          // (W12's flight to a lab 90 m down went straight through the ground), or up through a hole a blow broke in the
+          // ground skin over them (terrain-levels §8.4: up only for those who leap or fly): run to the floor under it, fly out.
           const underneath = how === 'flight' && target && (here.y < -1 || metres(target.id).y < -1);
           if (target && target.d <= reach && !underneath) { if (how === 'flight') return airRoute(from[0], target.id, 'flight'); const path = [from[0], target.id]; path.ensemble = []; path.how = 'teleport'; return path; }
+          if (underneath && here.y < -1 && metres(target.id).y >= -1) {
+            const hole = holesNear([here.x, here.y, here.z], 60).find(id => W.nodePos(world, id).k === W.nodePos(world, from[0]).k);
+            const run = hole === undefined ? null : hole === from[0] ? [from[0]] : walkIn(scene, `${key}|to the hole`, from, [hole], 'run', E.deepAt(from[0]) ? 'deep' : 'near');
+            if (run?.length) { const air = airRoute(hole, target.id, 'flight'); return Object.assign([...run, ...air.slice(1)], { how: 'flight', air: true, airFrom: run.length - 1, ensemble: [], through: 'a hole in the ground over them' }); }
+          }
           how = 'run';
         }
         // The layers (docs/v2/terrain-levels.md §8.2): a walk with a target in its own layer is walked in that layer; one
@@ -1085,7 +1164,8 @@ export async function direct(novelDir, { reading, readingPath = null, prefilm = 
             const tie = tiesNow().find(entry => entry.who === person), offStage = tie && !positions[tie.on] ? mountOf(tie.on) : null;
             E.moves.set(key, { person, how: path.air && earlier ? earlier.how : path.how ?? (String(how).startsWith('ride') ? 'ride' : String(how).startsWith('climb') || String(how).startsWith('agile') || how === 'run' || earlier?.how === 'run' ? 'run' : 'walk'), ...grown(earlier, path, path.air ? path.how : null, path.airFrom ?? 0), ensemble: path.ensemble ?? [], ...(offStage ? { mount: offStage } : {}) });
             positions[person] = [path.at(-1), positions[person][1]];
-            cardRecord.moves.push({ person, why, moved: true, steps: path.length, to: said(at(path.at(-1))), ...(tie ? { riding: tie.on } : {}) });
+            // A leap or a flight a ceiling held down (terrain-levels §8.3), or one out through a hole in the ground skin (§8.4).
+            cardRecord.moves.push({ person, why, moved: true, steps: path.length, to: said(at(path.at(-1))), ...(tie ? { riding: tie.on } : {}), ...(path.capped ? { stoppedBy: path.capped } : {}), ...(path.through ? { through: path.through } : {}) });
             if (!carrying) carryAlong(person, path, E.moves.get(key).how);
           };
           // Riding (mounts.mjs): the ties in hold by this card; who moves with whom (a rider with what carries them on the
@@ -1218,6 +1298,17 @@ export async function direct(novelDir, { reading, readingPath = null, prefilm = 
           // its people are held to its last line against the background's drift. Face to face (live, group), everyone in it
           // comes within speaking distance (2–4 m) on the anchor's floor; remote, everyone stays where they are; public, those
           // within earshot (25 m, the same floor) hear it where they stand, and anyone beyond is held.
+          // Across the ground skin (terrain-levels §8.3): one of two under it in a real hall, the other not in that hall; heard
+          // only through an open way near both (stairs between the layers, a hole a blow broke), never through a lift.
+          const heardAcross = (p, q) => {
+            const a = at(positions[p][0]), b = at(positions[q][0]), cell = n => W.nodePos(world, n), roof = n => { const c = cell(n); return W.ceilingAt(world, c.i, c.j, c.k); };
+            const [ra, rb] = [roof(positions[p][0]), roof(positions[q][0])];
+            if (!(ra.kind === 'skin' || rb.kind === 'skin') || (ra.hall !== undefined && ra.hall === rb.hall)) return null;
+            const mid = [(a[0] + b[0]) / 2, (a[2] + b[2]) / 2], openings = [];
+            for (const way of around(mid[0], mid[1], 40).built.ways ?? []) if (way.kind === 'stairs') { const f = cell(way.foot), t = cell(way.top); openings.push({ below: [f.x, f.y, f.z], above: [t.x, t.y, t.z], kind: 'stairs' }); }
+            for (const [key] of world.underDamage.breaches) { const { ci, cj } = W.chunkOf(key), x = (ci + 0.5) * CELL, z = (cj + 0.5) * CELL; if (Math.hypot(x - mid[0], z - mid[1]) <= 40) { const floor = W.hallsAt(world, ci, cj).find(entry => entry.hall === world.underDamage.breaches.get(key)); if (floor) openings.push({ below: [x, floor.k * FLOOR, z], above: [x, 0, z], kind: 'hole' }); } }
+            return LY.heardThrough(a, b, openings);
+          };
           const talkNear = async () => {
             if (card.kind !== 'dialogue') return;
             const roles = card.sentences.map(id => reading.roles?.[id]).filter(role => role?.kind === 'spoken' && role.who?.id && positions[role.who.id]);
@@ -1246,11 +1337,17 @@ export async function direct(novelDir, { reading, readingPath = null, prefilm = 
             if (kind !== 'remote') { const last = sentenceAt.get(card.sentences.at(-1)) ?? 0; for (const who of members) talkingUntil.set(who, Math.max(talkingUntil.get(who) ?? -1, last)); }
             for (const id of apart) {
               if (kind === 'remote') { (cardRecord.laws ??= []).push({ law: 'L6', who: id, verdict: 'ok', why: 'remote: stays where they are' }); continue; }
-              if (kind === 'public') { const { metres, floors } = gap(id); (cardRecord.laws ??= []).push(metres <= 25 && !floors ? { law: 'L6', who: id, verdict: 'ok', why: 'public: within earshot' } : { law: 'L6', who: id, verdict: 'held', why: `public, but ${Math.round(metres)} m away${floors ? `, ${floors} floors apart` : ''}: out of earshot` }); continue; }
+              if (kind === 'public') {
+                const { metres, floors } = gap(id), through = floors ? heardAcross(anchor, id) : null;
+                if (through) (cardRecord.talk ??= { kind }).heard = [...(cardRecord.talk.heard ?? []), [anchor, id, through.kind]];
+                (cardRecord.laws ??= []).push(metres <= 25 && !floors ? { law: 'L6', who: id, verdict: 'ok', why: 'public: within earshot' } : through ? { law: 'L6', who: id, verdict: 'ok', why: `public: heard through ${through.kind === 'hole' ? 'a hole in the ground' : 'the stairs'} between the levels (${Math.round(through.metres)} m)` } : { law: 'L6', who: id, verdict: 'held', why: `public, but ${Math.round(metres)} m away${floors ? `, ${floors} floors apart` : ''}: out of earshot` });
+                continue;
+              }
               const a = at(positions[anchor][0]), { nodes } = around(a[0], a[2], 8), ring = nodes.filter(node => Math.abs(node.y - a[1]) < 1 && Math.hypot(node.x - a[0], node.z - a[2]) >= 2 && Math.hypot(node.x - a[0], node.z - a[2]) <= 4).map(node => node.id);
               moveTo(id, walk(scene, `${scene.id}|${card.id}|${id}|talk`, positions[id], ring, 'walk'), 'walk', `spoken to by ${names.get(anchor) ?? anchor}`);
               if (pins.meet.some(meet => meet.scene === scene.id && [meet.who, meet.to].includes(id) && [meet.who, meet.to].includes(anchor))) cardRecord.moves.at(-1).pinned = true;
             }
+            if (kind !== 'remote') await roomFor(anchor);
           };
           // Each person the card moves. Where the digest read the card, its moves: a step or a move nearby played by rule
           // (toward, away from or with someone, else on along their way), going elsewhere asked of Jev on the pictures,
@@ -1434,6 +1531,36 @@ export async function direct(novelDir, { reading, readingPath = null, prefilm = 
           // kind, shape and outcome on a picture of the two at the beat's zoom. A close attacker closes in; a hit throws
           // the target as far as told, away from the attacker; a dodge steps aside; what breaks goes to the destruction
           // questions; the target's state is recorded (conditions, for the ontology's state).
+          // The architect (the user, 2026-11-06: "Architect should pick a room type when conversation happens in a room"): a
+          // conversation that plays in a room of a building has the room's kind asked of Jev once (the lines, the building, its
+          // floor, the room's size), and the room is furnished by its kind (digest/rooms.mjs) on the page. Kept per room for the
+          // run; the card says which room and what kind.
+          const roomFor = async who => {
+            if (!positions[who]) return;
+            const room = roomAt(positions[who][0]);
+            if (!room) return;
+            const key = `${room.lot}|${room.room}`, known = E.rooms.get(key);
+            if (known) { cardRecord.room = { lot: room.lot, room: room.room, type: known.type, asked: false }; return; }
+            let type = 'not said', sure = null;
+            if (calls < budget) {
+              const kinds = RM.ROOM_TYPE_NAMES.map(name => `${name}: ${RM.ROOM_TYPES[name]}`).join('\n');
+              const [reply] = await decide(`A conversation in a novel is staged in a room of a building. The building: ${room.building ?? 'unnamed'} (${room.role ?? 'a building'}, ${room.floors} floors); the room is on floor ${room.floor + 1}, ${room.w} by ${room.d} m. The scene: ${placeName}.\nThe lines:\n${card.sentences.map(id => text.get(id)?.text ?? '').filter(Boolean).join('\n')}\n\nThe kinds of room:\n${kinds}`, [{ key: 'room', primitive: 'choice', instructions: 'What kind of room does this conversation take place in? Answer not said if the lines and the building do not tell.', options: RM.ROOM_TYPE_NAMES }]);
+              if (reply?.value && RM.ROOM_TYPES[reply.value]) { type = String(reply.value); sure = reply.confidence ?? null; }
+            }
+            const furniture = RM.furnish(type, room.w, room.d, furnitureSizes, `${key}|${type}`).map(piece => [piece.model, piece.u, piece.v, piece.angle]);
+            E.rooms.set(key, { lot: room.lot, room: room.room, type, sure, scene: scene.id, card: card.id, furniture });
+            cardRecord.room = { lot: room.lot, room: room.room, type, sure, asked: true, pieces: furniture.length };
+          };
+          // Where a beam from the attacker (to a point, or straight up) meets the ceiling over them (the exporter's beamCeiling):
+          // kept on the card, null under the open sky or inside a building.
+          const underCeiling = (exchange, to) => {
+            if (!E.beamCeiling) return null;
+            const met = E.beamCeiling(positions[exchange.attacker][0], to ? { x: to[0], y: to[1], z: to[2] } : null);
+            if (met.ceiling !== 'skin' && met.ceiling !== 'hard') return null;
+            if (met.under) return null;
+            (cardRecord.ceilings ??= []).push({ who: exchange.attacker, line: exchange.sentence, ...met });
+            return met;
+          };
           const fight = async () => {
             const exchanges = card.sentences.flatMap(id => exchangesAt.get(id) ?? []);
             // The card's blows as the page plays them (a beam, a blow up close, an explosion: strand-demo.html, blowFx);
@@ -1481,11 +1608,14 @@ export async function direct(novelDir, { reading, readingPath = null, prefilm = 
                 const limits = AT.limitsOf(kind, { own, weapons });
                 const verdict = AT.attackCheck({ kind, from: at(positions[exchange.attacker][0]), to: at(positions[exchange.target][0]), limits, lots: world.lots });
                 if (verdict) { (cardRecord.laws ??= []).push({ ...verdict, who: exchange.attacker, line: exchange.sentence }); entry.attackKind = kind; entry.limits = limits; }
-                blows.push({ attacker: exchange.attacker, target: exchange.target, kind, outcome: entry.outcome ?? null, held: verdict?.verdict === 'held', ...(kind === 'area' ? { radius: limits?.radius ?? 4 } : {}), by: limits?.by ?? null , ...(SKY.cutsClouds(exchange.breaks) ? { clouds: true } : {}) });
+                // A beam under a ceiling (terrain-levels §8.3): through the ground skin it bores a hole and goes on; the deep
+                // layer's hard ceiling (or rock past BEAM_BORE) stops it there, marked. Only one that reaches the sky tears the clouds.
+                const met = kind === 'line' ? underCeiling(exchange, at(positions[exchange.target][0])) : null;
+                blows.push({ attacker: exchange.attacker, target: exchange.target, kind, outcome: met?.stopped ? 'stopped' : entry.outcome ?? null, held: verdict?.verdict === 'held', ...(kind === 'area' ? { radius: limits?.radius ?? 4 } : {}), by: limits?.by ?? null, ...(SKY.cutsClouds(exchange.breaks) && !met?.stopped ? { clouds: true } : {}), ...(met ? { ceiling: met } : {}) });
               }
               // A beam the fight says tears through the clouds with no one to hit (fired at the sky): the page plays it from
-              // its attacker up through the layer (strand-demo.html, cloudHoles).
-              else if (exchange.attacker && positions[exchange.attacker] && SKY.cutsClouds(exchange.breaks)) blows.push({ attacker: exchange.attacker, target: null, kind: 'line', outcome: null, held: false, clouds: true, by: 'clouds' });
+              // its attacker up through the layer (strand-demo.html, cloudHoles). Under a ceiling it meets that first.
+              else if (exchange.attacker && positions[exchange.attacker] && SKY.cutsClouds(exchange.breaks)) { const met = underCeiling(exchange, null); blows.push({ attacker: exchange.attacker, target: null, kind: 'line', outcome: met?.stopped ? 'stopped' : null, held: false, ...(met?.stopped ? {} : { clouds: true }), by: 'clouds', ...(met ? { ceiling: met } : {}) }); }
             }
           };
           // The routine director's blocking (M8): a group the text gives a formation stands in it, round where its people
@@ -1658,7 +1788,7 @@ export async function direct(novelDir, { reading, readingPath = null, prefilm = 
           // L18: a blast the last pass's smoothing moved to this card (blasts.mjs), applied here at its smoothed size; at the
           // card that told it, nothing is asked again.
           for (const blast of blasts.filter(entry => entry.container === scene.id && entry.atCard === card.id && !entry.applied)) {
-            E.reach(blast.centre.x, blast.centre.z, blast.r + 16);
+            E.reach(blast.centre.x, blast.centre.z, blast.r + 16); wakeBelow(positions);
             E.hitSphere(scene, { id: event.id }, { ...blast.centre, r: blast.r }, 0.9, `${scene.id}|${event.id}|smoothed-hit`);
             blast.applied = true;
             cardRecord.hit = { smoothed: true, told: blast.told, across: blast.r * 2, centre: blast.centre, struck: !!E.hits.get(event.id) };
@@ -1687,11 +1817,21 @@ export async function direct(novelDir, { reading, readingPath = null, prefilm = 
                 // reading was that the card breaks something.
                 const sizes = Object.fromEntries(SIZES.map((across, n) => [across, Math.round((size?.distribution?.[`${n + 1}`] ?? (Number(size?.value) === n + 1 ? 1 : 0)) * 1000) / 1000]));
                 const breaksSure = Math.max(0, ...digestIn(dg?.breaks ?? [], card).map(entry => entry.sure ?? 0));
-                E.reach(chosen.x, chosen.z, r + 16);
+                E.reach(chosen.x, chosen.z, r + 16); wakeBelow(positions);
                 E.hitSphere(scene, { id: event.id }, { x: chosen.x, y: chosen.y, z: chosen.z, r }, 0.9, `${scene.id}|${event.id}|hit`);
                 cardRecord.hit = { pick: chosen.label, on: chosen.from, across: r * 2, struck: !!E.hits.get(event.id), centre: { x: Math.round(chosen.x * 10) / 10, y: Math.round(chosen.y * 10) / 10, z: Math.round(chosen.z * 10) / 10 }, sizes, sure: breaksSure };
               }
             }
+          }
+          // Who holds, drives or rides what after this card (the transport specialist's state): what changed since the card
+          // before, each with its owner where the specialist found one (universe/transport.json).
+          {
+            const now = new Map();
+            for (const thing of things.values()) if (thing.holder) now.set(`${thing.name}|${thing.holder}`, { thing: thing.name, who: thing.holder, how: 'holds' });
+            for (const tie of tiesNow()) { const label = tie.on.startsWith('item:') ? tie.on.slice(5) : propSheet?.ids?.[tie.on] ?? tie.on; now.set(`${label}|${tie.who}`, { thing: label, who: tie.who, how: names.has(tie.on) ? 'carried by' : 'rides' }); }
+            const changes = [...[...now].filter(([key]) => !heldBefore.has(key)).map(([, entry]) => ({ ...entry, change: 'takes' })), ...[...heldBefore].filter(([key]) => !now.has(key)).map(([, entry]) => ({ ...entry, change: 'leaves' }))];
+            if (changes.length) cardRecord.holdings = changes.map(entry => ({ ...entry, ...(ownerOf(entry.thing) && ownerOf(entry.thing) !== 'not said' ? { owner: ownerOf(entry.thing) } : {}) }));
+            heldBefore = now;
           }
           run.events.push({ at: Object.fromEntries(Object.entries(positions).map(([who, value]) => [who, value])) });
           // A card no one was asked about: the producer's camera on the people of the card, as they stood when it began.

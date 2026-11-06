@@ -89,11 +89,11 @@ export const DIRECTORS = {
   character: { kind: 'state', label: 'Character director', role: 'what rides with a person: how they feel, what they want, who they are to each other', reads: ['actingCoach', 'scriptSupervisor'], status: 'proposed',
     asks: [{ name: 'emotional state as a score (Jev\'s score primitive)', status: 'proposed' }, { name: 'intent: what they want next', status: 'proposed' }, { name: 'a bond changing (closer, colder, a first meeting)', status: 'proposed' }],
     tools: ['the ontology\'s state fold (additive deltas)', 'the smoother, later'] },
-  transport: { kind: 'state', label: 'Transport specialist', role: 'vehicles and weapons: what they are, who drives, rides or holds them, whose they are; their motion is played by the beat\'s action director', reads: ['propMaster', 'scriptSupervisor'], status: 'proposed',
-    asks: [{ name: 'which model a vehicle or weapon is (on the model packs\' sheets)', status: 'proposed' }, { name: 'who rides, drives or holds it', status: 'proposed' }, { name: 'whose it is', status: 'proposed' }],
+  transport: { kind: 'state', label: 'Transport specialist', role: 'vehicles and weapons: what they are, who drives, rides or holds them, whose they are; their motion is played by the beat\'s action director', reads: ['propMaster', 'scriptSupervisor'], status: 'partial',
+    asks: [{ name: 'which model a vehicle is (its kind\'s CC0 models: KayKit and Kenney cars, vans and trucks)', status: 'built', what: 'experiments/v2/transport.mjs, a pre-film step: universe/transport.json' }, { name: 'who rides, drives or holds it', status: 'built', what: 'card by card from the rides\' ties and the things\' holders: the card\'s holdings, the world log\'s possession, canon\'s possessions' }, { name: 'whose it is', status: 'built', what: 'the same pre-film step: each vehicle\'s, weapon\'s and machine\'s owner' }],
     tools: ['model packs (CC0)', 'things on the page'] },
   architect: { kind: 'state', label: 'Architect', role: 'a building borrowed from the world made the one the text describes: its look, floors, uses, rooms and what changes in it', reads: ['setDresser', 'scriptSupervisor'], status: 'partial',
-    asks: [{ name: 'terrainHeightMode and terrainPartMode', status: 'built', what: 'a building\'s height and what it belongs to' }, { name: 'its look among the model packs and themes (on its elevation)', status: 'proposed' }, { name: 'floors and uses (the mall below, offices, flats, the rooftop deck)', status: 'proposed' }, { name: 'a room\'s make-up and furniture (on its plan)', status: 'proposed' }],
+    asks: [{ name: 'terrainHeightMode and terrainPartMode', status: 'built', what: 'a building\'s height and what it belongs to' }, { name: 'its look among the model packs and themes (on its elevation)', status: 'proposed' }, { name: 'floors and uses (the mall below, offices, flats, the rooftop deck)', status: 'proposed' }, { name: 'a room\'s kind where a conversation plays in it, and its furniture', status: 'built', what: 'director.mjs roomFor: Jev picks the kind (digest/rooms.mjs ROOM_TYPES), the room furnished by it (KayKit Furniture Bits)' }],
     tools: ['building skeletons', 'architecture models', 'model packs', 'building EM'] },
 };
 
@@ -182,14 +182,14 @@ export const STATE = {
   ],
   transport: [
     { state: 'Vehicles and weapons', log: 'item', laws: [], to: 'entity.Item.class', gate: 'held', status: 'proposed', note: 'new identities: held, as EM\'s are' },
-    { state: 'Who holds, drives or rides', log: 'possession', laws: ['L15'], to: 'stateChange.possessionsAdd', also: 'stateChange.possessionsRemove', gate: 'applied', status: 'proposed' },
+    { state: 'Who holds, drives or rides', log: 'possession', laws: ['L15'], to: 'stateChange.possessionsAdd', also: 'stateChange.possessionsRemove', gate: 'applied', status: 'partial', note: 'the card\'s holdings and the world log\'s possession records; canon fills each scene\'s possessions; L15 not yet' },
     { state: 'Where things are', log: 'item', laws: ['L15'], smoothed: true, to: 'relation.LOCATED_AT', gate: 'applied', status: 'proposed', note: 'where the beat\'s action director put them, at its zoom' },
-    { state: 'Ownership', log: 'possession', laws: [], to: 'relation.OWNS', gate: 'held', status: 'proposed' },
+    { state: 'Ownership', log: 'possession', laws: [], to: 'relation.OWNS', gate: 'held', status: 'partial', note: 'universe/transport.json (the pre-film step) and on the page; the OWNS relation not yet written' },
   ],
   architect: [
     { state: 'Which building it is', log: 'binding', laws: [], to: 'entity.Location.world', gate: 'held', status: 'built', note: 'W6: building identity from the lot each scene played in; unsure ones held' },
     { state: 'Floors, uses, look', log: 'building', laws: ['L11'], to: 'entity.Location.floors', also: 'entity.Location.uses', gate: 'held', status: 'partial', note: 'a room\'s floor is in canon (W6); uses and look proposed' },
-    { state: 'Rooms', log: 'building', laws: ['L11'], to: 'relation.PART_OF', gate: 'held', status: 'partial', note: 'container and split held items (W6)' },
+    { state: 'Rooms', log: 'building', laws: ['L11'], to: 'relation.PART_OF', gate: 'held', status: 'partial', note: 'container and split held items (W6); a room\'s kind where a conversation plays (the world log\'s room records), a view input' },
     { state: 'Changes to it', log: 'damage', laws: ['L13'], to: 'entity.Location.damage', gate: 'applied', status: 'built' },
   ],
 };

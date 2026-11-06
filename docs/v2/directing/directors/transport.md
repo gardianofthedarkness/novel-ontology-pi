@@ -3,16 +3,16 @@ type: "director"
 id: "transport"
 aliases: ["Transport specialist"]
 kind: "state"
-status: "proposed"
+status: "partial"
 zoom: "none"
 reads: ["propMaster", "scriptSupervisor"]
-tags: ["directing/director", "kind/state", "status/proposed"]
+tags: ["directing/director", "kind/state", "status/partial"]
 ---
 <!-- Written by world-engine/director/directing-vault.mjs from the code; change the code, not this note. -->
 
 # Transport specialist
 
-Vehicles and weapons: what they are, who drives, rides or holds them, whose they are; their motion is played by the beat's action director. A **state** director; status **proposed**. Back to [Directing](../Directing.md).
+Vehicles and weapons: what they are, who drives, rides or holds them, whose they are; their motion is played by the beat's action director. A **state** director; status **partial**. Back to [Directing](../Directing.md).
 
 ## Zoom and camera
 
@@ -57,6 +57,6 @@ What it keeps as it plays, and where that lands (the flow and the gates: [Direct
 | State | World log | Laws | Into the ontology | Gate | Status |
 |---|---|---|---|---|---|
 | Vehicles and weapons | `item` (new) | — | Item.properties.class; new identities: held, as EM's are | held | proposed |
-| Who holds, drives or rides | `possession` (new) | L15 a thing in one place or one hand at a time (proposed) | StateChange.possessionsAdd + StateChange.possessionsRemove | applied | proposed |
+| Who holds, drives or rides | `possession` (new) | L15 a thing in one place or one hand at a time (proposed) | StateChange.possessionsAdd + StateChange.possessionsRemove; the card's holdings and the world log's possession records; canon fills each scene's possessions; L15 not yet | applied | partial |
 | Where things are | `item` (new), smoothed | L15 a thing in one place or one hand at a time (proposed) | LOCATED_AT relation; where the beat's action director put them, at its zoom | applied | proposed |
-| Ownership | `possession` (new) | — | OWNS relation | held | proposed |
+| Ownership | `possession` (new) | — | OWNS relation; universe/transport.json (the pre-film step) and on the page; the OWNS relation not yet written | held | partial |

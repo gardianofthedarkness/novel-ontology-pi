@@ -129,3 +129,18 @@ test("the slot tree: pools gone, their members in the pool's area; spare and sha
   assert.equal(byId.get("d1")?.parentId, "c1");
   assert.deepEqual(defaultTerrain("district", "cbd"), { ground: "skyscrapers", median: 120, manifold: defaultTerrain("district", "cbd")?.manifold });
 });
+
+test("a bounded repair (the dynamic-grid research §3; the user, 2026-11-06: small repairs): only the movable mentions move; the rest keep their slots whatever a move would gain", () => {
+  // Two unnamed industrial mentions far from the place they are tied to, two slots of their kind: one near it, one far.
+  const slots: Slot[] = [
+    { id: "near", parent: "c1", level: "district", kind: "industrial", at: [0, 0], owner: null, sharers: [], damaged: [], layer: "defaults", book: "b1" },
+    { id: "far", parent: "c1", level: "district", kind: "industrial", at: [900, 0], owner: null, sharers: [], damaged: [], layer: "defaults", book: "b1" },
+  ];
+  const fixed = [{ id: "home", at: [10, 0] as Point }], ties = (a: string, b: string) => ([a, b].includes("home") ? 1 : 0);
+  const mentions = [unnamed("u1", "industrial", "s1"), unnamed("u2", "industrial", "s2")], assigned = { u1: "far", u2: "far" };
+  const whole = chooseSlots(problem("b1", slots, mentions, { fixed, ties, assigned }));
+  assert.deepEqual(whole.assignment, { u1: "near", u2: "near" }, "settled whole, both move to the near slot");
+  const bounded = chooseSlots(problem("b1", slots, mentions, { fixed, ties, assigned, movable: (id) => id === "u2" }));
+  assert.deepEqual(bounded.assignment, { u1: "far", u2: "near" }, "bounded: only the movable one moves");
+  assert.equal(bounded.moves, 1);
+});

@@ -326,7 +326,8 @@ const daylight = { on: !capture, sky: new THREE.Color(0x060c12), day: 0, phase: 
 // key it (a weather state is a set of target parameters the look eases toward, blended with the time of day's keys, never
 // a branch per kind; docs/v2/sky.md): cloud (a greyer, flatter sky, a dimmer sun), rain, snow, fog (visibility), wind
 // (slant and drift), lightning (flashes), wet (darker ground), and snow lying.
-let skyUnits = null;
+// The story sky the page was made with (the director's `sky`), until World · Live sends its own.
+let skyUnits = data?.sky?.units ?? null;
 const WEATHER_LOOK = {
   clear: { light: {}, moderate: {}, heavy: {} },
   cloudy: { light: { cloud: 0.3 }, moderate: { cloud: 0.6, fog: 0.08 }, heavy: { cloud: 0.85, fog: 0.15 } },
@@ -374,9 +375,14 @@ const cloudUniforms = {
   uCover: { value: 0 }, uDrift: { value: new THREE.Vector2() }, uHoles: { value: Array.from({ length: HOLES }, () => new THREE.Vector4()) },
   uLit: { value: new THREE.Color() }, uShade: { value: new THREE.Color() }, uFog: { value: new THREE.Color() }, uFogNear: { value: 400 }, uFogFar: { value: 1600 },
   uShadow: { value: 0 }, uPatch: { value: new THREE.Color(0, 0, 0) }, uSunShift: { value: new THREE.Vector2() },
+  uRipple: { value: null }, uRippleBox: { value: new THREE.Vector4(0, 0, 1, 0) },
+  // The layer's type (CLOUD_TYPES): its height, its shape (feature size, stretch along the wind, edge softness, small
+  // detail) and tone (opacity, how dark its thick parts are, how much it billows, how much the ripples move it); how far its
+  // haze reaches (a high layer fades later); the wind's way.
+  uBase: { value: CLOUD_BASE }, uShape: { value: new THREE.Vector4(260, 1, 0.07, 0.06) }, uTone: { value: new THREE.Vector4(1, 0, 0, 1) }, uHaze: { value: 1 }, uWindDir: { value: new THREE.Vector2(1, 0.35).normalize() },
 };
 const CLOUD_GLSL = `
-uniform float uCover; uniform vec2 uDrift; uniform vec4 uHoles[${HOLES}];
+uniform float uCover; uniform vec2 uDrift; uniform vec4 uHoles[${HOLES}]; uniform vec4 uShape; uniform vec4 uTone; uniform vec2 uWindDir;
 float hash(vec2 p) { p = fract(p * vec2(123.34, 456.21)); p += dot(p, p + 45.32); return fract(p.x * p.y); }
 float noise(vec2 p) { vec2 i = floor(p), f = fract(p), u = f * f * (3. - 2. * f); return mix(mix(hash(i), hash(i + vec2(1., 0.)), u.x), mix(hash(i + vec2(0., 1.)), hash(i + vec2(1., 1.)), u.x), u.y); }
 float fbm(vec2 p) { float v = 0., a = .5; for (int k = 0; k < 5; k++) { v += a * noise(p); p = p * 2.03 + vec2(17.1, 9.2); a *= .5; } return v; }
@@ -391,28 +397,92 @@ float holeAt(vec2 xz, out float inside) {
   }
   return keep;
 }
+// The clouds' ripples (the user, 2026-11-06: "cloud rippling"): a wave field over the layer round what the camera looks at
+// (rippleTick), its height (-1 to 1) where a point lies in it, 0 outside.
+uniform sampler2D uRipple; uniform vec4 uRippleBox;
+float rippleAt(vec2 xz) {
+  if (uRippleBox.w <= 0.) return 0.;
+  vec2 u = (xz - uRippleBox.xy) / uRippleBox.z;
+  if (u.x <= 0. || u.y <= 0. || u.x >= 1. || u.y >= 1.) return 0.;
+  return (texture2D(uRipple, u).r - .5) * 2. * uRippleBox.w;
+}
 float cloudAt(vec2 xz, out float inside) {
-  // The noise sits mostly between .3 and .7: a cover of .3 leaves scattered clouds, .6 most of the sky, .9 all of it.
-  float t = .76 - .5 * uCover, n = fbm((xz + uDrift) / 260.) + .06 * (fbm((xz + uDrift * 1.7) / 60.) - .5);
-  return smoothstep(t - .07, t + .07, n) * holeAt(xz, inside);
+  // The noise sits mostly between .3 and .7: a cover of .3 leaves scattered clouds, .6 most of the sky, .9 all of it. By the
+  // layer's type: its features' size, drawn out along the wind (rolls of a deck, a high layer's streaks), billowing (a heap
+  // cloud's puffs), its edges sharp or soft. A ripple's crest thickens the cloud under it, its trough thins it.
+  vec2 p = xz + uDrift, side = vec2(-uWindDir.y, uWindDir.x), q = vec2(dot(p, uWindDir) / max(1., uShape.y), dot(p, side));
+  q += uTone.z * uShape.x * .45 * (vec2(fbm(q / (uShape.x * 1.7)), fbm(q / (uShape.x * 1.7) + 5.2)) - .5);
+  float t = .76 - .5 * uCover, n = fbm(q / uShape.x) + uShape.w * (fbm(q / (uShape.x * .23)) - .5) + .18 * uTone.w * rippleAt(xz);
+  return smoothstep(t - uShape.z, t + uShape.z, n) * holeAt(xz, inside);
 }`;
-const cloudLayer = new THREE.Mesh(new THREE.PlaneGeometry(mapReach * 8, mapReach * 8).rotateX(-Math.PI / 2), new THREE.ShaderMaterial({
-  uniforms: cloudUniforms, transparent: true, depthWrite: false, side: THREE.DoubleSide,
+const cloudSheet = (uniforms) => new THREE.Mesh(new THREE.PlaneGeometry(mapReach * 8, mapReach * 8).rotateX(-Math.PI / 2), new THREE.ShaderMaterial({
+  uniforms, transparent: true, depthWrite: false, side: THREE.DoubleSide,
   vertexShader: `varying vec3 vWorld; void main() { vec4 w = modelMatrix * vec4(position, 1.); vWorld = w.xyz; gl_Position = projectionMatrix * viewMatrix * w; }`,
   fragmentShader: `${CLOUD_GLSL}
-uniform vec3 uLit, uShade, uFog; uniform float uFogNear, uFogFar; varying vec3 vWorld;
+uniform vec3 uLit, uShade, uFog; uniform float uFogNear, uFogFar, uBase, uHaze; varying vec3 vWorld;
 void main() {
   float inside, d = cloudAt(vWorld.xz, inside); if (d < .01) discard;
-  float body = fbm((vWorld.xz + uDrift) / 90. + 3.);
-  vec3 col = mix(uShade, uLit, clamp(.25 + .75 * body - .3 * d, 0., 1.));
-  float f = smoothstep(uFogNear, uFogFar * 1.6, distance(cameraPosition, vWorld));
+  float body = fbm((vWorld.xz + uDrift) / (uShape.x * .35) + 3.), wave = rippleAt(vWorld.xz) * uTone.w;
+  // A ripple's crest lit, its trough in shade. A full overcast is saturated (its density cannot rise): there the ripple
+  // shows in the light, and thins the cloud in its troughs. A dark type's thick parts are its dark bases (rain, a storm's).
+  vec3 col = mix(uShade, uLit, clamp(.25 + .75 * body - .3 * d + .7 * wave, 0., 1.)); d *= 1. - .35 * max(0., -wave);
+  col *= 1. - uTone.y * .6 * smoothstep(.3, 1., d);
+  float f = smoothstep(uFogNear * uHaze, uFogFar * 1.6 * uHaze, distance(cameraPosition, vWorld));
   // Inside the layer or above it the camera sees the city, not the clouds' underside.
-  float below = 1. - smoothstep(${CLOUD_BASE - 160}., ${CLOUD_BASE - 30}., cameraPosition.y);
-  gl_FragColor = vec4(mix(col, uFog, f), d * .94 * below * (1. - f * .5));
+  float below = 1. - smoothstep(uBase - 160., uBase - 30., cameraPosition.y);
+  gl_FragColor = vec4(mix(col, uFog, f), d * .94 * uTone.x * below * (1. - f * .5));
   #include <colorspace_fragment>
 }`,
 }));
-cloudLayer.position.y = CLOUD_BASE; cloudLayer.frustumCulled = false; cloudLayer.renderOrder = 9; cloudLayer.visible = false; world.add(cloudLayer);
+// The low layer (its uniforms the ground's shadows and patches read too) and the high one: its own type, cover, height and
+// haze; the drift, the holes, the light and the haze's colour shared. The high layer's ripples are none (they are the low's).
+const cloudLayer = cloudSheet(cloudUniforms);
+const highUniforms = { ...cloudUniforms, uCover: { value: 0 }, uBase: { value: 1900 }, uShape: { value: new THREE.Vector4(260, 4.5, 0.14, 0.25) }, uTone: { value: new THREE.Vector4(0.38, 0, 0.45, 0) }, uHaze: { value: 2.5 } };
+const cloudHigh = cloudSheet(highUniforms);
+for (const [layer, uniforms] of [[cloudLayer, cloudUniforms], [cloudHigh, highUniforms]]) { layer.position.y = uniforms.uBase.value; layer.frustumCulled = false; layer.renderOrder = layer === cloudHigh ? 8 : 9; layer.visible = false; world.add(layer); }
+// The clouds by the weather (the user, 2026-11-06: "first building the weather based clouds"; sky.md "Cloud types"): each
+// type at its height, of its form. Drawn heights are compressed to stay in view (the real ones: a low deck at 0.3 to 2 km,
+// a middle one at 2 to 7, cirrus at 6 to 12); the order and the gaps are kept. Each: base (m); size of its features (m);
+// stretch along the wind; edge softness; small detail; opacity; how dark its thick parts; how much it billows.
+const CLOUD_TYPES = {
+  cumulus: { base: 650, size: 170, stretch: 1.1, soft: 0.05, detail: 0.1, opacity: 0.95, dark: 0.25, billow: 0.8 },
+  stratocumulus: { base: 500, size: 230, stretch: 1.9, soft: 0.07, detail: 0.07, opacity: 0.94, dark: 0.3, billow: 0.35 },
+  stratus: { base: 330, size: 700, stretch: 2.2, soft: 0.16, detail: 0.03, opacity: 0.9, dark: 0.35, billow: 0.1 },
+  nimbostratus: { base: 270, size: 900, stretch: 1.5, soft: 0.2, detail: 0.04, opacity: 0.97, dark: 0.6, billow: 0.15 },
+  cumulonimbus: { base: 520, size: 420, stretch: 1, soft: 0.05, detail: 0.12, opacity: 1, dark: 0.75, billow: 1.2 },
+  fog: { base: 160, size: 600, stretch: 1.6, soft: 0.2, detail: 0.03, opacity: 0.8, dark: 0.2, billow: 0.1 },
+  altostratus: { base: 1300, size: 1100, stretch: 2.5, soft: 0.22, detail: 0.02, opacity: 0.55, dark: 0.1, billow: 0.1 },
+  anvil: { base: 1600, size: 650, stretch: 3, soft: 0.15, detail: 0.05, opacity: 0.7, dark: 0.2, billow: 0.4 },
+  cirrus: { base: 1900, size: 260, stretch: 4.5, soft: 0.14, detail: 0.25, opacity: 0.38, dark: 0, billow: 0.45 },
+};
+// Each weather's layers by its strength: the low layer's type and cover, the high one's (or none: hidden over a thick deck).
+const CLOUD_PLAN = {
+  clear: { light: [["cumulus", 0.12], ["cirrus", 0.2]], moderate: [["cumulus", 0.18], ["cirrus", 0.22]], heavy: [["cumulus", 0.18], ["cirrus", 0.25]] },
+  cloudy: { light: [["cumulus", 0.35], ["cirrus", 0.3]], moderate: [["stratocumulus", 0.6], ["altostratus", 0.35]], heavy: [["stratus", 0.85], null] },
+  fog: { light: [["fog", 0.4], null], moderate: [["fog", 0.5], null], heavy: [["fog", 0.6], null] },
+  rain: { light: [["stratocumulus", 0.6], ["altostratus", 0.4]], moderate: [["nimbostratus", 0.75], null], heavy: [["nimbostratus", 0.92], null] },
+  sleet: { light: [["stratocumulus", 0.6], ["altostratus", 0.3]], moderate: [["nimbostratus", 0.72], null], heavy: [["nimbostratus", 0.85], null] },
+  snow: { light: [["stratocumulus", 0.45], ["altostratus", 0.3]], moderate: [["stratus", 0.6], null], heavy: [["nimbostratus", 0.8], null] },
+  storm: { light: [["cumulonimbus", 0.85], ["anvil", 0.5]], moderate: [["cumulonimbus", 0.95], ["anvil", 0.6]], heavy: [["cumulonimbus", 1], ["anvil", 0.7]] },
+};
+/** The unit's clouds: { low: [type, cover], high: [type, cover] | null } by its weather and strength (how sure, the cover). */
+function cloudPlan(told) {
+  const kind = CLOUD_PLAN[told?.weather] ? told.weather : "clear", plan = CLOUD_PLAN[kind][told?.strength] ?? CLOUD_PLAN[kind].moderate, sure = told?.weather && told.weather !== "unknown" ? Math.min(1, (told?.sure ?? 0) / 0.6) : 1;
+  const [low, high] = plan;
+  return { kind, low: [low[0], low[1] * (kind === "clear" ? 1 : sure)], high: high ? [high[0], high[1] * sure] : ["cirrus", 0] };
+}
+// Each layer's look as drawn now, eased toward its weather's (a change of weather turns one type into the next).
+const CLOUD_KEYS = ["base", "size", "stretch", "soft", "detail", "opacity", "dark", "billow", "cover"];
+const skyClouds = { low: { ...CLOUD_TYPES.cumulus, cover: 0, type: "cumulus" }, high: { ...CLOUD_TYPES.cirrus, cover: 0, type: "cirrus" } };
+function cloudLook(look, [type, cover], uniforms, layer, k) {
+  const want = { ...CLOUD_TYPES[type], cover };
+  for (const key of CLOUD_KEYS) look[key] += (want[key] - look[key]) * k;
+  look.type = type;
+  uniforms.uBase.value = look.base; layer.position.y = look.base;
+  uniforms.uShape.value.set(look.size, look.stretch, look.soft, look.detail);
+  uniforms.uTone.value.set(look.opacity, look.dark, look.billow, uniforms === cloudUniforms ? 1 : 0);
+  uniforms.uCover.value = Math.min(0.97, look.cover * 1.05);
+}
 // The ground under the clouds: their shadows darken it (multiply), and where a hole lets the sun through, a bright patch
 // (added). Both cast along the sun.
 const groundCloud = (fragment, blending) => { const mesh = new THREE.Mesh(new THREE.PlaneGeometry(mapReach * 2.4, mapReach * 2.4).rotateX(-Math.PI / 2), new THREE.ShaderMaterial({ uniforms: cloudUniforms, transparent: true, depthWrite: false, blending, premultipliedAlpha: true, vertexShader: `varying vec3 vWorld; void main() { vec4 w = modelMatrix * vec4(position, 1.); vWorld = w.xyz; gl_Position = projectionMatrix * viewMatrix * w; }`, fragmentShader: `${CLOUD_GLSL}\nuniform float uShadow; uniform vec3 uPatch; uniform vec2 uSunShift; varying vec3 vWorld;\nvoid main() {\n  float inside, d = cloudAt(vWorld.xz + uSunShift, inside);\n${fragment}\n}` })); mesh.position.y = 0.07; mesh.renderOrder = 1; mesh.visible = false; world.add(mesh); return mesh; };
@@ -422,12 +492,63 @@ const sunPatch = groundCloud(`  gl_FragColor = vec4(uPatch * inside * (1. - d), 
 const shafts = Array.from({ length: HOLES }, () => { const mesh = new THREE.Mesh(new THREE.CylinderGeometry(1, 1, 1, 24, 1, true), new THREE.MeshBasicMaterial({ color: 0xfff2d8, transparent: true, opacity: 0, blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide })); mesh.visible = false; mesh.frustumCulled = false; mesh.renderOrder = 7; world.add(mesh); return mesh; });
 /** Holes cut in the clouds, by what cut them: where (world, at the cut), how wide, the unit, date and hour, the drift then. */
 const cloudHoles = new Map();
+// The clouds' ripples (the user, 2026-11-06: "cloud rippling"; terrain-levels §4.3's local field, on the cloud layer): a
+// height grid RIPPLE_N cells a side over RIPPLE_SIZE m round what the camera looks at, run by the wave equation (each step
+// from the last two, damped), drawn into the clouds (thicker on a crest, thinner in a trough, lit and shaded). What disturbs
+// it, each a ring pushed into the grid: a beam tearing a hole (cutClouds), a blast's shock rising (an area blow, by its
+// size), a lightning strike, anything flying through the cloud base (its wake), and a storm's turbulence.
+const RIPPLE_N = 128, RIPPLE_SIZE = 2400, RIPPLE_CELL = RIPPLE_SIZE / RIPPLE_N, RIPPLE_STEP = 1 / 30;
+const ripple = { now: new Float32Array(RIPPLE_N * RIPPLE_N), before: new Float32Array(RIPPLE_N * RIPPLE_N), bytes: new Uint8Array(RIPPLE_N * RIPPLE_N * 4).fill(128), x0: 0, z0: 0, live: false, acc: 0, kicks: 0, wakeAt: new Map(), stormAt: 0 };
+ripple.texture = new THREE.DataTexture(ripple.bytes, RIPPLE_N, RIPPLE_N, THREE.RGBAFormat); ripple.texture.magFilter = THREE.LinearFilter; ripple.texture.minFilter = THREE.LinearFilter; ripple.texture.needsUpdate = true;
+cloudUniforms.uRipple.value = ripple.texture;
+/** A ring pushed into the clouds at (x, z): `r` its radius (0, a bump), `amp` how hard (about 1 for a beam's tear). */
+function rippleKick(x, z, r, amp) {
+  // A quiet field follows the camera's target; a live one stays where it is (a kick outside it is lost).
+  if (!ripple.live) { ripple.x0 = controls.target.x - RIPPLE_SIZE / 2; ripple.z0 = controls.target.z - RIPPLE_SIZE / 2; }
+  const ci = (x - ripple.x0) / RIPPLE_CELL, cj = (z - ripple.z0) / RIPPLE_CELL, width = Math.max(1.5, r / RIPPLE_CELL * 0.35), reach = r / RIPPLE_CELL + 3 * width;
+  if (ci < -reach || cj < -reach || ci > RIPPLE_N + reach || cj > RIPPLE_N + reach) return;
+  for (let j = Math.max(1, Math.floor(cj - reach)); j < Math.min(RIPPLE_N - 1, Math.ceil(cj + reach)); j++) for (let i = Math.max(1, Math.floor(ci - reach)); i < Math.min(RIPPLE_N - 1, Math.ceil(ci + reach)); i++) {
+    const d = Math.hypot(i - ci, j - cj) - r / RIPPLE_CELL;
+    ripple.now[j * RIPPLE_N + i] += amp * Math.exp(-(d * d) / (width * width));
+  }
+  ripple.live = true; ripple.kicks++;
+}
+/** The field one frame on: steps of the wave equation at RIPPLE_STEP, then into the texture the clouds read. */
+function rippleTick(dt) {
+  // What disturbs it every frame: a pawn at the cloud base leaves a wake (a bump every 0.3 s where it is); a storm stirs the
+  // clouds round the camera's target (a bump at random every second or so, more the stronger).
+  const now = performance.now();
+  for (const [id, { pawn }] of pawns) if (pawn.parent && Math.abs(pawn.position.y - skyClouds.low.base) < 25 && now - (ripple.wakeAt.get(id) ?? 0) > 300) { ripple.wakeAt.set(id, now); rippleKick(pawn.position.x, pawn.position.z, 6, 0.35); }
+  if (daylight.on && wx.cloud > 0.3 && (wx.lightning > 0.2 || wx.wind > 0.6) && now > ripple.stormAt) { ripple.stormAt = now + 600 + Math.random() * 900; rippleKick(controls.target.x + (Math.random() - 0.5) * 1600, controls.target.z + (Math.random() - 0.5) * 1600, 20 + Math.random() * 40, 0.25 + 0.3 * wx.wind); }
+  if (!ripple.live) { cloudUniforms.uRippleBox.value.w = 0; return; }
+  ripple.acc += Math.min(dt, 0.2);
+  const N = RIPPLE_N, c2 = 0.18, damp = 0.986;
+  while (ripple.acc >= RIPPLE_STEP) {
+    ripple.acc -= RIPPLE_STEP;
+    const next = ripple.before;
+    for (let j = 1; j < N - 1; j++) for (let i = 1; i < N - 1; i++) {
+      const k = j * N + i, h = ripple.now[k];
+      next[k] = (2 * h - next[k] + c2 * (ripple.now[k - 1] + ripple.now[k + 1] + ripple.now[k - N] + ripple.now[k + N] - 4 * h)) * damp;
+    }
+    ripple.before = ripple.now; ripple.now = next;
+  }
+  let peak = 0;
+  for (let k = 0; k < N * N; k++) { const h = ripple.now[k], a = Math.abs(h); if (a > peak) peak = a; ripple.bytes[k * 4] = Math.max(0, Math.min(255, Math.round(128 + 127 * Math.max(-1, Math.min(1, h))))); }
+  ripple.texture.needsUpdate = true;
+  cloudUniforms.uRippleBox.value.set(ripple.x0, ripple.z0, RIPPLE_SIZE, 1);
+  // Quiet again: the field cleared, and the next kick finds it where the camera looks then.
+  if (peak < 0.004) { ripple.live = false; ripple.now.fill(0); ripple.before.fill(0); ripple.bytes.fill(128); ripple.texture.needsUpdate = true; cloudUniforms.uRippleBox.value.w = 0; }
+}
+window.__clouds = () => Object.fromEntries(Object.entries(skyClouds).map(([name, look]) => [name, { type: look.type, base: Math.round(look.base), cover: Math.round(look.cover * 100) / 100 }]));
+window.__ripple = (kick) => { if (kick) rippleKick(kick.x ?? controls.target.x, kick.z ?? controls.target.z, kick.r ?? 60, kick.amp ?? 1); return { live: ripple.live, kicks: ripple.kicks, box: [Math.round(ripple.x0), Math.round(ripple.z0), RIPPLE_SIZE] }; };
 const unitOrder = new Map((data.director?.units ?? []).map((unit, k) => [unit.id, { k, date: String(unit.when ?? "").split(":").slice(0, 3).join(":") }]));
 function cutClouds(key, unitId, at, width) {
   if (cloudHoles.has(key)) return;
   const told = daylight.force ?? skyUnits?.[unitId] ?? null, order = unitOrder.get(unitId) ?? { k: 0, date: "" };
   cloudHoles.set(key, { unit: unitId, k: order.k, date: order.date, hour: told?.hour ?? unitHours.get(unitId) ?? 12, x: at.x, z: at.z, r: Math.max(25, width ?? 120) / 2, drift: cloudUniforms.uDrift.value.clone(), place: shownPlace, forced: !!daylight.force });
   while (cloudHoles.size > 24) cloudHoles.delete(cloudHoles.keys().next().value);
+  // The tear sends a ring out through the clouds round it.
+  rippleKick(at.x, at.z, Math.max(25, width ?? 120) / 2, 1);
 }
 /** How open each hole still is at this unit: closing over six units or an hour and a half; none before its cut, at another place or on another date. */
 function holeLeft(hole, unitId, hour) {
@@ -438,13 +559,20 @@ function holeLeft(hole, unitId, hour) {
 const WIND_WAY = new THREE.Vector2(1, 0.35).normalize();
 let lineScenes = null;
 /** Whether a blow goes through the clouds: the fight says so (its breaks name the clouds), or its unit's sky has a cloud cut. */
-const cutsClouds = (blow, unitId) => !blow.held && blow.kind === "line" && (blow.clouds || !!(daylight.force ?? skyUnits?.[unitId])?.cloudCut || !!daylight.force?.cutBeams);
+// Only a beam that reaches the open sky tears the clouds (terrain-levels §8.3): never one a ceiling stopped, nor one fired
+// under the street that met no ceiling on its way (its target under the same ground).
+const cutsClouds = (blow, unitId, from = null) => !blow.held && blow.kind === "line" && !blow.ceiling?.stopped && (!!blow.ceiling || !from || from.y >= -1) && (blow.clouds || !!(daylight.force ?? skyUnits?.[unitId])?.cloudCut || !!daylight.force?.cutBeams);
 function cloudTick(unitId, told, dt, hour, bolt, shownSky) {
   // A unit whose sky says the clouds were cut with no beam played in it: the clouds open over what the camera looks at.
   lineScenes ??= new Set(segments.filter((segment) => segment.kind === "event" && segment.event.blows?.some((blow) => blow.kind === "line")).map((segment) => segment.scene.id));
   if (told?.cloudCut && !daylight.force && !lineScenes.has(unitId)) cutClouds(`unit|${unitId}`, unitId, controls.target, told.cloudCut.width);
   const cover = wx.cloud, day = daylight.day, twilight = Math.max(0, 1 - Math.abs(day - 0.5) * 2.2);
-  cloudUniforms.uCover.value = Math.min(0.97, cover * 1.05);
+  // The weather's clouds: each layer eased toward its type and cover (at once when the look is snapped). The low layer
+  // covers at least what the weather's look says (wx.cloud: as sure as the reading).
+  const plan = cloudPlan(told), k = daylight.snap > 0 ? 1 : Math.min(1, dt * 0.6);
+  cloudLook(skyClouds.low, [plan.low[0], Math.max(plan.low[1], cover)], cloudUniforms, cloudLayer, k);
+  cloudLook(skyClouds.high, plan.high, highUniforms, cloudHigh, k);
+  const lowCover = skyClouds.low.cover;
   cloudUniforms.uDrift.value.addScaledVector(WIND_WAY, dt * (3 + wx.wind * 22));
   // Lit by the hour: white by day, warm toward the sun at dawn and dusk, the city's glow underneath at night; darker the
   // thicker; a lightning flash lights them.
@@ -454,8 +582,8 @@ function cloudTick(unitId, told, dt, hour, bolt, shownSky) {
   cloudUniforms.uFog.value.copy(shownSky); cloudUniforms.uFogNear.value = baseFog.near; cloudUniforms.uFogFar.value = baseFog.far;
   // The sun's direction casts the shadows and the patches; by day only, and scattered clouds cast the clearest.
   const toSun = sun.position.clone().normalize(), up = Math.max(0.2, toSun.y), sunUp = day > 0.3 ? Math.min(1, (day - 0.3) / 0.4) : 0;
-  cloudUniforms.uSunShift.value.set(toSun.x / up * CLOUD_BASE, toSun.z / up * CLOUD_BASE).clampLength(0, 1500);
-  cloudUniforms.uShadow.value = 0.48 * sunUp * Math.max(0, 1 - Math.max(0, cover - 0.55) / 0.4);
+  cloudUniforms.uSunShift.value.set(toSun.x / up * skyClouds.low.base, toSun.z / up * skyClouds.low.base).clampLength(0, 1500);
+  cloudUniforms.uShadow.value = 0.48 * sunUp * Math.max(0, 1 - Math.max(0, lowCover - 0.55) / 0.4);
   cloudUniforms.uPatch.value.copy(new THREE.Color(0xfff0d0).lerp(sun.color, 0.5)).multiplyScalar(0.1 * sunUp * Math.min(1, cover * 1.4));
   // The holes, in the clouds' frame (they drift with them).
   const live = [...cloudHoles.values()].map((hole) => ({ hole, left: holeLeft(hole, unitId, hour) })).filter((entry) => entry.left > 0.01).sort((a, b) => b.hole.k - a.hole.k).slice(0, HOLES);
@@ -465,18 +593,18 @@ function cloudTick(unitId, told, dt, hour, bolt, shownSky) {
     const { hole, left } = entry, moved = cloudUniforms.uDrift.value.clone().sub(hole.drift), x = hole.x - moved.x, z = hole.z - moved.y;
     slot.set(x, z, hole.r, left);
     // The shaft: from the hole down along the sunlight to the patch.
-    const top = new THREE.Vector3(x, CLOUD_BASE, z), foot = new THREE.Vector3(x - cloudUniforms.uSunShift.value.x, 0, z - cloudUniforms.uSunShift.value.y);
+    const top = new THREE.Vector3(x, skyClouds.low.base, z), foot = new THREE.Vector3(x - cloudUniforms.uSunShift.value.x, 0, z - cloudUniforms.uSunShift.value.y);
     stretch(shaft, foot, top, hole.r * (0.45 + 0.55 * left) * 0.8);
     shaft.material.opacity = 0.03 * sunUp * Math.min(1, cover * 1.3) * left; shaft.visible = shaft.material.opacity > 0.004;
   });
-  const shown = cover > 0.02;
-  cloudLayer.visible = shown && cloudUniforms.uCover.value > 0.1;
-  for (const mesh of [cloudLayer, cloudShadow, sunPatch, ...shafts]) if (mesh.userData.hidden) mesh.visible = false; cloudShadow.visible = shown && cloudUniforms.uShadow.value > 0.01; sunPatch.visible = shown && live.length > 0 && sunUp > 0;
+  const shown = lowCover > 0.02;
+  cloudLayer.visible = shown && cloudUniforms.uCover.value > 0.1; cloudHigh.visible = highUniforms.uCover.value > 0.04;
+  for (const mesh of [cloudLayer, cloudHigh, cloudShadow, sunPatch, ...shafts]) if (mesh.userData.hidden) mesh.visible = false; cloudShadow.visible = shown && cloudUniforms.uShadow.value > 0.01; sunPatch.visible = shown && live.length > 0 && sunUp > 0;
 }
 function weatherTick(dt, day) {
   // The volume falls between the camera and what it looks at (where the eye sees it, the way games keep weather round the
   // camera), from the ground to above the camera.
-  const away = camera.position.distanceTo(controls.target), center = camera.position.clone().lerp(controls.target, 0.5), box = Math.min(600, Math.max(30, away * 0.9)), ground = controls.target.y, high = Math.max(20, camera.position.y - ground + box * 0.15), t = performance.now() / 1000;
+  const away = camera.position.distanceTo(controls.target), center = camera.position.clone().lerp(controls.target, 0.5), box = Math.min(600, Math.max(30, away * 0.9)), ground = ceilings.focus ? 0 : controls.target.y, high = Math.max(20, camera.position.y - ground + box * 0.15), t = performance.now() / 1000;
   const lit = new THREE.Color(0x52637a).lerp(new THREE.Color(0xc4d0dc), day);
   // Snow drifts down, sways and blows with the wind; rain falls fast in streaks, slanted by it; each wraps round the box
   // the camera looks into, as many as the weather's amount.
@@ -505,7 +633,7 @@ function lightningTick(now) {
   if (wx.lightning < 0.2) { flash.level = 0; flash.armed = false; return 0; }
   // A storm coming on strikes first after a few seconds, never at once.
   if (!flash.armed) { flash.armed = true; flash.next = Math.max(flash.next, now + 2000 + Math.random() * 4000); }
-  if (now >= flash.next) { flash.at = now; flash.next = now + ((3 + Math.random() * 9) / wx.lightning) * 1000; }
+  if (now >= flash.next) { flash.at = now; flash.next = now + ((3 + Math.random() * 9) / wx.lightning) * 1000; rippleKick(controls.target.x + (Math.random() - 0.5) * 900, controls.target.z + (Math.random() - 0.5) * 900, 30, 0.6); }
   const s = (now - flash.at) / 1000;
   flash.level = s < 0.08 ? 1 : s < 0.16 ? 0.25 : s < 0.24 ? 0.85 : s < 0.7 ? 0.85 * (1 - (s - 0.24) / 0.46) : 0;
   return flash.level * Math.min(1, wx.lightning);
@@ -544,8 +672,8 @@ function daylightTick(unitId, dt) {
 // lying, snap }) holds it whatever the unit (snap: at once, not eased); __sky(null) gives the story's back; __sky({ strike: true }) strikes lightning now (in
 // a storm); __sky({ cut: <metres across> }) clears a hole in the clouds over what the camera looks at (while a sky is
 // held; cutBeams: true in a held sky sends every beam through the clouds); __sky() says the look's parameters now.
-window.__cloudParts = (hide = []) => { const parts = { layer: cloudLayer, shadow: cloudShadow, patch: sunPatch, shafts }; for (const [name, part] of Object.entries(parts)) for (const mesh of [part].flat()) mesh.userData.hidden = hide.includes(name); return Object.fromEntries(Object.entries(parts).map(([name, part]) => [name, [part].flat().some((mesh) => mesh.visible)])); };
-window.__sky = (sky) => { if (sky?.strike) { flash.armed = true; flash.next = 0; } else if (sky?.cut) cutClouds(`test|${performance.now()}`, daylight.unit, controls.target, sky.cut); else if (sky !== undefined) { const { snap, ...held } = sky ?? {}; daylight.force = sky ? { sure: 1, daypart: daypartOfHour(held.hour ?? 12), ...held } : null; daylight.said = null; daylight.snap = snap ? 3 : 0; } return { force: daylight.force ?? null, ...Object.fromEntries(WX.map((key) => [key, Math.round(wx[key] * 100) / 100])), flash: flash.level, strikeIn: wx.lightning >= 0.2 ? Math.round(flash.next - performance.now()) / 1000 : null }; };
+window.__cloudParts = (hide = []) => { const parts = { layer: cloudLayer, high: cloudHigh, shadow: cloudShadow, patch: sunPatch, shafts }; for (const [name, part] of Object.entries(parts)) for (const mesh of [part].flat()) mesh.userData.hidden = hide.includes(name); return Object.fromEntries(Object.entries(parts).map(([name, part]) => [name, [part].flat().some((mesh) => mesh.visible)])); };
+window.__sky = (sky) => { if (sky?.strike) { flash.armed = true; flash.next = 0; } else if (sky?.cut) cutClouds(`test|${performance.now()}`, daylight.unit, controls.target, sky.cut); else if (sky !== undefined) { const { snap, ...held } = sky ?? {}; daylight.force = sky ? { sure: 1, daypart: daypartOfHour(held.hour ?? 12), ...held } : null; daylight.said = null; daylight.snap = snap ? 3 : 0; daylight.on = sky ? true : !capture; } return { force: daylight.force ?? null, ...Object.fromEntries(WX.map((key) => [key, Math.round(wx[key] * 100) / 100])), flash: flash.level, strikeIn: wx.lightning >= 0.2 ? Math.round(flash.next - performance.now()) / 1000 : null }; };
 const daypartOfHour = (hour) => (hour < 4.5 ? "late night" : hour < 7.5 ? "dawn" : hour < 11 ? "morning" : hour < 14 ? "midday" : hour < 17.5 ? "afternoon" : hour < 21 ? "evening" : "night");
 const camera = new THREE.PerspectiveCamera(42, 1, 0.5, Math.max(4000, mapReach * 4)), controls = new OrbitControls(camera, renderer.domElement);
 // The orbit (docs/v2/terrain-levels.md §3.5): where the world has a floor in orbit, the camera up there sees space: stars, a
@@ -568,6 +696,178 @@ function orbitTick() {
   if (f <= 0) return;
   world.background.lerp(SPACE, f); defaultFog.color.lerp(SPACE, f);
   defaultFog.near = defaultFog.near * (1 - f) + 250 * f; defaultFog.far = defaultFog.far * (1 - f) + 1000 * f;
+}
+// Ceilings (docs/v2/terrain-levels.md §8.3–8.6, stage 2). A ceiling belongs to the level someone is in:
+// - each real hall's ceiling, the ground skin's underside, drawn only from below and fading out near the camera, with the
+//   holes blows broke in it; the holes themselves in the street, their walls the skin's thickness;
+// - the deep layer's hard ceiling, never drawn: only the marks blows left on it; its walls fade into the dark, no lid;
+// - under any ceiling but the sky, no sun, rain, snow, fog or cloud: the light is the hall's own, by its kind; under a hole,
+//   the sky's light falls in as a shaft and the rain or snow falls through it;
+// - a lift in use (a way between the layers, §3.4) drawn as a faint column while someone rides it.
+const HALL_LAMP = { mall: [0xffd2a1, 1.05], corridor: [0xffe2bd, 0.95], station: [0xe6efff, 1.05], tunnel: [0xbfd0e6, 0.7], utility: [0xd6e8d8, 0.7], parking: [0xdff0e4, 0.8], basement: [0xffe6c4, 0.75], shelter: [0xe8f0ff, 0.95], lab: [0xf4f8ff, 1.25], military: [0xeef3ff, 1.15], quantum: [0xe8f4ff, 1.3], tank: [0x5d6f80, 0.32], channel: [0x52606e, 0.25], deep: [0x8796b8, 0.55], street: [0xffd4a0, 1.0] };
+const ceilings = { halls: [], planes: [], holes: [], tiles: [], groups: [], marks: [], columns: [], riders: [], level: 0, camLevel: 0, lamp: new THREE.Color(0xffffff), lampI: 1, saved: null, focus: null };
+const ceilingOfHall = (hall) => (hall.layer === "deep" ? hall.hardAt ?? -hall.depth + hall.height : -(hall.depth - hall.height));
+/** The hall a point (metres) lies in, floor to ceiling: a real hall's, or the deep layer's floor; null in the open or another layer's. */
+function hallAround(x, y, z) {
+  for (const hall of ceilings.halls) {
+    if (y < -hall.depth - 1.5 || y > ceilingOfHall(hall) + 0.5) continue;
+    const inBox = hall.boxes.some((box) => { const c = Math.cos(-box.angle), sn = Math.sin(-box.angle), u = (x - box.x) * c - (z - box.z) * sn, v = (x - box.x) * sn + (z - box.z) * c; return Math.abs(u) <= box.w / 2 && Math.abs(v) <= box.d / 2; });
+    const inBore = hall.bores.some((bore) => { const dx = bore.b[0] - bore.a[0], dz = bore.b[1] - bore.a[1], t = Math.max(0, Math.min(1, ((x - bore.a[0]) * dx + (z - bore.a[1]) * dz) / (dx * dx + dz * dz || 1))); return Math.hypot(x - bore.a[0] - t * dx, z - bore.a[1] - t * dz) <= bore.width / 2; });
+    if (inBox || inBore) return hall;
+  }
+  return null;
+}
+/** A hall's plan as rotated boxes (a bore as the box along it). */
+const planBoxes = (hall) => [...hall.boxes, ...hall.bores.map((bore) => ({ x: (bore.a[0] + bore.b[0]) / 2, z: (bore.a[1] + bore.b[1]) / 2, w: Math.hypot(bore.b[0] - bore.a[0], bore.b[1] - bore.a[1]), d: bore.width, angle: Math.atan2(bore.b[1] - bore.a[1], bore.b[0] - bore.a[0]) }))];
+function buildCeilings(group, under, show) {
+  const halls = under.halls ?? [];
+  ceilings.halls = halls.filter((hall) => !hall.layer || hall.layer === "deep");
+  // The deep layer's hard ceiling, as the engine has it (world.ts hallCeiling): a floor above its tallest building at least.
+  for (const hall of halls.filter((entry) => entry.layer === "deep")) { const k = -Math.round(hall.depth / FLOOR), tallest = Math.max(0, ...(data.world.lots ?? []).filter((lot) => lot.k0 === k).map((lot) => lot.floors)); hall.hardAt = -hall.depth + Math.max(hall.height, tallest * FLOOR + FLOOR); }
+  // The holes, by cell, each with when it opened (bornAt).
+  const holeAt = new Map((under.breaches ?? []).map(([i, j, hall, k, when]) => [`${i},${j}`, { i, j, hall, k, at: bornAt(when) }]));
+  ceilings.holes = [...holeAt.values()];
+  // Each real hall's ceiling: a plane facing down at the skin's underside, the holes cut out of it by an alpha mask (2 m texels).
+  for (const hall of halls.filter((entry) => !entry.layer)) {
+    const y = ceilingOfHall(hall) - 0.03, [lamp] = HALL_LAMP[hall.street ? "street" : hall.kind] ?? HALL_LAMP.basement;
+    for (const box of planBoxes(hall)) {
+      const W = Math.max(1, Math.ceil(box.w / CELL)), H = Math.max(1, Math.ceil(box.d / CELL)), data = new Uint8Array(W * H * 4).fill(255), texture = new THREE.DataTexture(data, W, H, THREE.RGBAFormat);
+      texture.magFilter = THREE.NearestFilter; texture.minFilter = THREE.NearestFilter; texture.needsUpdate = true;
+      const material = new THREE.MeshBasicMaterial({ color: new THREE.Color(lamp).multiplyScalar(0.32), transparent: true, opacity: 0, alphaMap: texture, depthWrite: false, side: THREE.FrontSide });
+      const mesh = new THREE.Mesh(new THREE.PlaneGeometry(box.w, box.d).rotateX(Math.PI / 2), material);
+      mesh.position.set(box.x, y, box.z); mesh.rotation.y = -box.angle; mesh.renderOrder = 2;
+      // The texels over a hole, each with when its hole opened.
+      const c = Math.cos(box.angle), sn = Math.sin(box.angle), cut = [];
+      for (let b = 0; b < H; b++) for (let a = 0; a < W; a++) {
+        const u = ((a + 0.5) / W - 0.5) * box.w, v = ((b + 0.5) / H - 0.5) * box.d, X = box.x + u * c - v * sn, Z = box.z + u * sn + v * c, hole = holeAt.get(`${Math.floor(X / CELL)},${Math.floor(Z / CELL)}`);
+        if (hole && halls[hole.hall] === hall) cut.push({ texel: (b * W + a) * 4, at: hole.at });
+      }
+      ceilings.planes.push({ mesh, material, texture, data, cut, y, floor: -hall.depth, open: -1 });
+      show(mesh, box.x, box.z);
+    }
+  }
+  // The holes in the street: grouped by when they opened (one blow's), each group its walls (the skin's thickness, earth
+  // brown, on every side of a hole cell that meets unbroken ground), its shaft of daylight and the patch it lights below.
+  const byWhen = new Map();
+  for (const hole of ceilings.holes) (byWhen.get(hole.at) ?? byWhen.set(hole.at, []).get(hole.at)).push(hole);
+  const earth = new THREE.MeshLambertMaterial({ color: 0x4a3b2e, emissive: 0x120c08 });
+  for (const [at, cells] of byWhen) {
+    const walls = [], hall = halls[cells[0].hall], cover = Math.max(0.5, hall.depth - hall.height), floorY = -hall.depth;
+    for (const { i, j } of cells) for (const [di, dj] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) if (!holeAt.has(`${i + di},${j + dj}`)) walls.push([(i + 0.5 + di / 2) * CELL, -cover / 2, (j + 0.5 + dj / 2) * CELL, dj ? CELL : 0.3, cover, di ? CELL : 0.3]);
+    const wallMesh = instanced(earth, walls);
+    // The sky seen up through the hole from below: its cells at the street, facing down, in the sky's colour (no fog).
+    const skyTiles = new THREE.InstancedMesh(new THREE.PlaneGeometry(CELL, CELL).rotateX(Math.PI / 2), new THREE.MeshBasicMaterial({ color: 0x8fa4bc, fog: false, side: THREE.FrontSide }), cells.length);
+    cells.forEach(({ i, j }, n) => skyTiles.setMatrixAt(n, new THREE.Matrix4().makeTranslation((i + 0.5) * CELL, 0.04, (j + 0.5) * CELL)));
+    skyTiles.visible = false; group.add(skyTiles);
+    const mid = cells.reduce((sum, { i, j }) => [sum[0] + (i + 0.5) * CELL / cells.length, sum[1] + (j + 0.5) * CELL / cells.length], [0, 0]), r = Math.sqrt(cells.length * CELL * CELL / Math.PI);
+    const light = new THREE.MeshBasicMaterial({ color: 0xfff3d6, transparent: true, opacity: 0, blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide });
+    const shaft = new THREE.Mesh(new THREE.CylinderGeometry(r, r * 1.1, 60 - floorY, 20, 1, true), light); shaft.position.set(mid[0], (60 + floorY) / 2, mid[1]);
+    const patch = new THREE.Mesh(new THREE.CircleGeometry(r * 1.25, 28).rotateX(-Math.PI / 2), light.clone()); patch.position.set(mid[0], floorY + 0.06, mid[1]);
+    for (const part of [wallMesh, shaft, patch]) { part.visible = false; group.add(part); }
+    ceilings.groups.push({ at, cells, wallMesh, skyTiles, shaft, patch, floorY, r, mid });
+  }
+  // Rain and snow through the holes: their own few, falling from above the street to the hall's floor.
+  if (ceilings.holes.length) {
+    const count = 900, snow = new THREE.Points(new THREE.BufferGeometry().setAttribute("position", new THREE.BufferAttribute(new Float32Array(count * 3), 3)), new THREE.PointsMaterial({ color: 0xffffff, size: 0.25, transparent: true, opacity: 0.85, depthWrite: false }));
+    const rain = new THREE.LineSegments(new THREE.BufferGeometry().setAttribute("position", new THREE.BufferAttribute(new Float32Array(count * 6), 3)), new THREE.LineBasicMaterial({ color: 0xc4d0dc, transparent: true, opacity: 0.6, depthWrite: false }));
+    for (const part of [snow, rain]) { part.frustumCulled = false; part.visible = false; group.add(part); }
+    ceilings.fall = { snow, rain, count, u: Float32Array.from({ length: count * 3 }, () => Math.random()) };
+  }
+  // The deep layer's hard ceiling: never drawn; the marks blows left on it, dark scorches facing down.
+  const scorch = new THREE.MeshBasicMaterial({ color: 0x3a1a12, transparent: true, opacity: 0.85, depthWrite: false, side: THREE.FrontSide });
+  for (const [x, y, z, r, when] of under.marks ?? []) { const mark = new THREE.Mesh(new THREE.CircleGeometry(Math.max(1, r), 24).rotateX(Math.PI / 2), scorch); mark.position.set(x, y - 0.05, z); mark.visible = false; group.add(mark); ceilings.marks.push({ mesh: mark, at: bornAt(when) }); }
+  // The deep layer's walls: no lid, the void's sides fading up into the dark from its floor.
+  const fade = (() => { const canvas = document.createElement("canvas"); canvas.width = 2; canvas.height = 64; const g = canvas.getContext("2d"), grad = g.createLinearGradient(0, 64, 0, 0); grad.addColorStop(0, "rgba(255,255,255,0.9)"); grad.addColorStop(1, "rgba(255,255,255,0)"); g.fillStyle = grad; g.fillRect(0, 0, 2, 64); return new THREE.CanvasTexture(canvas); })();
+  for (const hall of halls.filter((entry) => entry.layer === "deep")) for (const box of hall.boxes) {
+    const room = (hall.hardAt ?? -hall.depth + hall.height) + hall.depth, material = new THREE.MeshBasicMaterial({ color: 0x0b1118, transparent: true, alphaMap: fade, depthWrite: false, side: THREE.DoubleSide }), y = -hall.depth + room / 2;
+    for (const [dx, dz, w] of [[0, box.d / 2, box.w], [0, -box.d / 2, box.w], [box.w / 2, 0, box.d], [-box.w / 2, 0, box.d]]) {
+      const wall = new THREE.Mesh(new THREE.PlaneGeometry(w, room), material), c = Math.cos(box.angle), sn = Math.sin(box.angle);
+      wall.position.set(box.x + dx * c - dz * sn, y, box.z + dx * sn + dz * c); wall.rotation.y = -box.angle + (dx ? Math.PI / 2 : 0);
+      show(wall, box.x, box.z);
+    }
+  }
+}
+/** The street's ground tile over a hole: gone once the hole opens (`ceilings.tiles`: the tile's mesh, its index, when). */
+function holeTiles() {
+  for (const tile of ceilings.tiles) {
+    const open = time >= tile.at;
+    if (tile.open === open) continue;
+    tile.open = open; tile.mesh.getMatrixAt(tile.n, ceilingMatrix);
+    if (open) { tile.matrix ??= ceilingMatrix.clone(); tile.mesh.setMatrixAt(tile.n, new THREE.Matrix4().makeScale(0, 0, 0)); } else if (tile.matrix) tile.mesh.setMatrixAt(tile.n, tile.matrix);
+    tile.mesh.instanceMatrix.needsUpdate = true;
+  }
+}
+const ceilingMatrix = new THREE.Matrix4();
+/** Each frame, before the render: the ceilings as the view and the story stand now. `ceilingRestore` after it gives the sky back. */
+function ceilingTick(dt) {
+  holeTiles();
+  // The holes cut in the ceilings' planes, and their parts, from the moment each opened.
+  for (const plane of ceilings.planes) {
+    const open = plane.cut.filter((entry) => time >= entry.at).length;
+    if (open !== plane.open) { plane.open = open; for (const entry of plane.cut) { const shown = time >= entry.at ? 0 : 255; for (let c = 0; c < 4; c++) plane.data[entry.texel + c] = shown; } plane.texture.needsUpdate = true; }
+    // Drawn only from below it and above its hall's floor (from the deep layer far under, a mall's ceiling is no ceiling of
+    // the camera's), fading out within a few metres of the camera.
+    const away = plane.y - camera.position.y;
+    plane.material.opacity = away > 0 && camera.position.y > plane.floor - 2 ? (0.6 + 0.32 * ceilings.camLevel) * Math.min(1, Math.max(0, (away - 1.5) / 5)) : 0;
+  }
+  for (const mark of ceilings.marks) mark.mesh.visible = time >= mark.at && camera.position.y < mark.mesh.position.y;
+  const day = daylight.on ? daylight.day : 0, cloud = daylight.on ? wx.cloud : 0, shown = ceilings.groups.filter((entry) => time >= entry.at);
+  for (const entry of ceilings.groups) { const on = time >= entry.at; entry.wallMesh.visible = on; entry.skyTiles.visible = on && camera.position.y < 0; entry.skyTiles.material.color.copy(world.background); entry.shaft.visible = on && day > 0.15; entry.patch.visible = entry.shaft.visible; entry.shaft.material.opacity = 0.1 * day * (1 - 0.6 * cloud); entry.patch.material.opacity = 0.22 * day * (1 - 0.5 * cloud); }
+  // The view's hall: the one what the camera looks at lies in; the camera under a ceiling when it is in that hall below it.
+  const t = controls.target, hall = hallAround(t.x, t.y, t.z), c = camera.position, camHall = hallAround(c.x, c.y, c.z);
+  ceilings.focus = hall;
+  const [lamp, lampI] = hall ? HALL_LAMP[hall.layer === "deep" ? "deep" : hall.street ? "street" : hall.kind] ?? HALL_LAMP.basement : [null, 1];
+  if (lamp !== null) { ceilings.lamp.set(lamp); ceilings.lampI = lampI; }
+  ceilings.level += ((hall ? 1 : 0) - ceilings.level) * Math.min(1, dt * 3);
+  ceilings.camLevel += ((camHall && c.y < ceilingOfHall(camHall) ? 1 : 0) - ceilings.camLevel) * Math.min(1, dt * 3);
+  // Rain and snow through the open holes, over the hall's floor under each.
+  if (ceilings.fall) {
+    const { snow, rain, count, u } = ceilings.fall, cells = shown.flatMap((entry) => entry.cells.map((cell) => ({ ...cell, floorY: entry.floorY }))), snowing = daylight.on ? wx.snow : 0, raining = daylight.on ? wx.rain : 0;
+    snow.visible = cells.length > 0 && snowing > 0.05; rain.visible = cells.length > 0 && raining > 0.05;
+    if (snow.visible || rain.visible) {
+      const n = Math.min(count, Math.round(cells.length * 40)), top = 24, ps = snow.geometry.attributes.position, pr = rain.geometry.attributes.position;
+      for (let k = 0; k < n; k++) {
+        const cell = cells[k % cells.length], span = top - cell.floorY;
+        u[k * 3 + 1] -= (snow.visible ? 2.4 : 20) * dt / span; if (u[k * 3 + 1] < 0) u[k * 3 + 1] += 1;
+        const x = (cell.i + u[k * 3]) * CELL, z = (cell.j + u[k * 3 + 2]) * CELL, y = cell.floorY + u[k * 3 + 1] * span;
+        ps.setXYZ(k, x, y, z); pr.setXYZ(k * 2, x, y, z); pr.setXYZ(k * 2 + 1, x, y - 0.8, z);
+      }
+      snow.geometry.setDrawRange(0, n); rain.geometry.setDrawRange(0, n * 2); ps.needsUpdate = true; pr.needsUpdate = true;
+    }
+  }
+  // A lift in use: a faint column up its shaft while someone rides it.
+  for (const column of ceilings.columns) column.visible = false;
+  ceilings.riders.forEach((ride, k) => {
+    let column = ceilings.columns[k];
+    if (!column) { column = new THREE.Mesh(new THREE.CylinderGeometry(1, 1, 1, 16, 1, true), new THREE.MeshBasicMaterial({ color: 0x7ce6ff, transparent: true, opacity: 0.22, blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide })); column.frustumCulled = false; world.add(column); ceilings.columns.push(column); }
+    column.position.set(ride.x, (ride.y0 + ride.y1) / 2, ride.z); column.scale.set(1.3, Math.max(0.5, ride.y1 - ride.y0), 1.3); column.visible = true;
+  });
+  ceilings.riders = [];
+  // Under a ceiling but the sky: the hall's own light, by its kind (the sun's put out); with the camera under it, no sky,
+  // no cloud, no rain or snow but through a hole, and the dark of the hall round it.
+  const level = ceilings.level, under = ceilings.camLevel;
+  if (level < 0.01 && under < 0.01) { ceilings.saved = null; return; }
+  ceilings.saved = { sun: sun.intensity, ambient: ambient.intensity, color: ambient.color.clone(), background: world.background.clone(), fog: defaultFog.color.clone(), near: defaultFog.near, far: defaultFog.far, hidden: [] };
+  sun.intensity *= 1 - level;
+  ambient.color.lerp(ceilings.lamp, level); ambient.intensity += (ceilings.lampI - ambient.intensity) * level;
+  if (under > 0.01) {
+    // The dark of the hall round the camera: its walls and the ground over it fade into it within a hall's reach (a deep
+    // world's wider), so the city above shows only through a hole.
+    // (Mixed in the renderer's linear colour: a few per cent of a lamp there reads as a brown haze, so the dark is the dark.)
+    const dark = new THREE.Color(0x06080b), deep = ceilings.focus?.layer === "deep", [near, far] = deep ? [60, 260] : [6, 70];
+    world.background.lerp(dark, under); defaultFog.color.lerp(dark, under);
+    if (world.fog === defaultFog) { defaultFog.near += (near - defaultFog.near) * under; defaultFog.far += (far - defaultFog.far) * under; }
+    if (under > 0.5) for (const part of [cloudLayer, cloudHigh, cloudShadow, sunPatch, ...shafts, snowFall.object, rainFall.object, stars].filter(Boolean)) if (part.visible) { part.visible = false; ceilings.saved.hidden.push(part); }
+  }
+  ceilings.shown = { background: world.background.getHexString(), fog: defaultFog.color.getHexString(), near: Math.round(defaultFog.near), far: Math.round(defaultFog.far), ambient: ambient.color.getHexString(), ambientI: Math.round(ambient.intensity * 100) / 100, sun: Math.round(sun.intensity * 100) / 100, fogOn: world.fog === defaultFog };
+}
+window.__ceilings = () => ({ shown: ceilings.shown ?? null, level: Math.round(ceilings.level * 100) / 100, camLevel: Math.round(ceilings.camLevel * 100) / 100, focus: ceilings.focus?.id ?? null, holes: ceilings.holes.length, open: ceilings.holes.filter((hole) => time >= hole.at).length, marks: ceilings.marks.length, planes: ceilings.planes.length });
+function ceilingRestore() {
+  const saved = ceilings.saved;
+  if (!saved) return;
+  sun.intensity = saved.sun; ambient.intensity = saved.ambient; ambient.color.copy(saved.color); world.background.copy(saved.background); defaultFog.color.copy(saved.fog); defaultFog.near = saved.near; defaultFog.far = saved.far;
+  for (const part of saved.hidden) part.visible = true;
+  ceilings.saved = null;
 }
 controls.enableDamping = true; controls.maxPolarAngle = Math.PI * 0.47; controls.minDistance = 10; controls.maxDistance = Math.max(1600, mapReach * 1.8);
 const resize = () => { const { clientWidth: w, clientHeight: h } = host; renderer.setSize(w, h, false); camera.aspect = w / h; camera.updateProjectionMatrix(); };
@@ -596,6 +896,9 @@ const mats = {
   hall: new THREE.MeshLambertMaterial({ color: 0x5a8fb8, transparent: true, opacity: 0.5, depthWrite: false }),
   tall: new THREE.MeshLambertMaterial({ color: 0x8a7ad6, transparent: true, opacity: 0.5, depthWrite: false }),
   roomWall: new THREE.MeshLambertMaterial({ color: 0x9fd2f0, transparent: true, opacity: 0.55, depthWrite: false }),
+  // A typed room's furniture (the architect: world-engine/digest/rooms.mjs), warm against the rooms' blue.
+  furniture: new THREE.MeshLambertMaterial({ color: 0xd9b48a, emissive: 0x2a1a0c, transparent: true, opacity: 0.9 }),
+  furnitureEdge: new THREE.LineBasicMaterial({ color: 0xffe2b8, transparent: true, opacity: 0.55 }),
   roomEdge: new THREE.LineBasicMaterial({ color: 0xd8f1ff, transparent: true, opacity: 0.85 }),
   roomCut: new THREE.MeshBasicMaterial({ color: 0xff4d5e, transparent: true, opacity: 0.32, depthWrite: false }),
   // A hit building's units: its walls and roof as panels, and what fell as rubble.
@@ -714,6 +1017,8 @@ function instanced(material, boxes) {
  * the grid at i0, j0. `at(u, v)`: a point u, v metres from the plan's centre along its sides; `cell(i, j)`: a cell's centre.
  */
 const plans = new WeakMap();
+/** The rooms the architect typed (data.rooms: page lot, room, kind, furniture), by `lot|room`. */
+const roomTyped = new Map((data.rooms ?? []).map((room) => [`${room.lot}|${room.room}`, room]));
 function planOf(lot) {
   if (plans.has(lot)) return plans.get(lot);
   const sx = lot.sx ?? lot.nx, sz = lot.sz ?? lot.nz, frame = Array.isArray(lot.frame) ? { x: lot.frame[0], z: lot.frame[1], angle: lot.frame[2] } : lot.frame;
@@ -754,6 +1059,8 @@ function buildPlace(id) {
       const tiles = new THREE.InstancedMesh(unit, groundMat, 256);
       for (let n = 0; n < 256; n++) { matrix.compose(new THREE.Vector3((ci * 16 + (n % 16) + 0.5) * CELL, -0.05, (cj * 16 + Math.floor(n / 16) + 0.5) * CELL), new THREE.Quaternion(), new THREE.Vector3(CELL * 0.98, 0.1, CELL * 0.98)); tiles.setMatrixAt(n, matrix); tiles.setColorAt(n, color.set(GROUND_COLOR[Number(ground[n])] ?? 0x112532)); }
       group.add(tiles); chunks.push({ mesh: tiles, at: bornAt(born), x: (ci * 16 + 8) * CELL, z: (cj * 16 + 8) * CELL });
+      // A tile over a hole a blow broke in the ground skin goes when the hole opens (terrain-levels §8.4).
+      for (const [i, j, , , when] of data.world.underground?.breaches ?? []) if (Math.floor(i / 16) === ci && Math.floor(j / 16) === cj) ceilings.tiles.push({ mesh: tiles, n: (j - cj * 16) * 16 + (i - ci * 16), at: bornAt(when), open: null });
     }
     // The underground (docs/underground-design.md): each hall a translucent volume at its depth in its kind's colour (the
     // subway teal, a mall amber, the storm water blue, a deep facility red, dressed in its model), with its pillars; every
@@ -809,7 +1116,10 @@ function buildPlace(id) {
     // an orbit's launch (§3.5) rise from the street up to their floor, a launch thinner.
     if (under.ways?.length) {
       const shafts = [], steps = [];
+      // The deep layer's virtual elevator has no shaft (§8.6): a lift there is drawn only while someone rides it (ceilingTick).
+      const virtualAt = (x, y, z) => (under.halls ?? []).some((hall) => hall.layer === "deep" && Math.abs(y + hall.depth) < 1.6 && hall.boxes.some((box) => Math.abs(x - box.x) <= box.w / 2 + 2 && Math.abs(z - box.z) <= box.d / 2 + 2));
       for (const [fx, fy, fz, tx, tz, lift] of under.ways) {
+        if (lift && virtualAt(fx, fy, fz)) continue;
         if (lift) shafts.push([fx, fy / 2, fz, lift === 2 ? 0.8 : 1.6, Math.abs(fy), lift === 2 ? 0.8 : 1.6]);
         else for (let n = 0; n < 8; n++) { const t = (n + 0.5) / 8; steps.push([tx + (fx - tx) * t, fy * t + 0.2, tz + (fz - tz) * t, 2.4, 0.4, 2.4]); }
       }
@@ -826,6 +1136,7 @@ function buildPlace(id) {
     }
     if (under.piles.length) group.add(instanced(mats.rubble, under.piles.map(([i, j, k, height]) => [(i + 0.5) * CELL, k * FLOOR + height / 2, (j + 0.5) * CELL, CELL * 0.95, height, CELL * 0.95])));
     if (under.dents.length) group.add(instanced(new THREE.MeshBasicMaterial({ color: 0x02060a, transparent: true, opacity: 0.85 }), under.dents.map(([i, j, depth]) => [(i + 0.5) * CELL, 0.06 - depth / 2, (j + 0.5) * CELL, CELL, depth, CELL])));
+    buildCeilings(group, under, show);
     const clutter = [];
     for (let n = 0; n < data.world.clutter.length; n += 2) clutter.push([(data.world.clutter[n] + 0.5) * CELL, 0.45, (data.world.clutter[n + 1] + 0.5) * CELL, 1.2, 0.9, 1.2]);
     group.add(instanced(new THREE.MeshLambertMaterial({ color: 0x9fb4c3, transparent: true, opacity: 0.5 }), clutter));
@@ -998,6 +1309,16 @@ function drawSkeletons(id, entry, count, settling = null) {
       const piece = (pu, pv, lu, lv) => { const [px, pz] = local(pu, pv); wall.push([px, y + h / 2, pz, lu, h, lv, turn]); const top = y + h, [ax, az] = lu > lv ? local(pu - lu / 2, pv) : local(pu, pv - lv / 2), [bx, bz] = lu > lv ? local(pu + lu / 2, pv) : local(pu, pv + lv / 2); roomEdges.push(ax, top, az, bx, top, bz); };
       for (let i = i0; i <= i1; i++) { const u = u0 + (i - i0 + 0.5) * CELL; if (!door.has(at(i, j0 - 1))) piece(u, v0 + 0.06, CELL, 0.12); if (!door.has(at(i, j1 + 1))) piece(u, v0 + d - 0.06, CELL, 0.12); }
       for (let j = j0; j <= j1; j++) { const v = v0 + (j - j0 + 0.5) * CELL; if (!door.has(at(i0 - 1, j))) piece(u0 + 0.06, v, 0.12, CELL); if (!door.has(at(i1 + 1, j))) piece(u0 + w - 0.06, v, 0.12, CELL); }
+      // A room the architect typed (a conversation played in it): its furniture, each piece from the room's corner, turned in
+      // the plan's frame (a piece's angle 0 faces the plan's +v).
+      const typed = place.world ? roomTyped.get(`${n}|${r}`) : null;
+      if (typed) for (const [model, pu, pv, pa] of typed.furniture) {
+        const shell = shellOf(`kk-furniture-${model}`);
+        if (!shell) continue;
+        const [px, pz] = local(u0 + pu, v0 + pv), item = new THREE.Group();
+        item.add(new THREE.Mesh(shell.fill, mats.furniture), new THREE.LineSegments(shell.edges, mats.furnitureEdge));
+        item.position.set(px, y + 0.12, pz); item.rotation.y = pa - turn; dynamic.add(item);
+      }
     });
   });
   if (roomEdges.length) dynamic.add(new THREE.LineSegments(new THREE.BufferGeometry().setAttribute("position", new THREE.Float32BufferAttribute(roomEdges, 3)), mats.roomEdge));
@@ -1159,7 +1480,11 @@ function playBlows(segment, elapsed) {
     const way = to.clone().sub(from).setY(0), metres = way.length() || 1; way.divideScalar(metres);
     const missed = blow.outcome === "dodged" || blow.outcome === "missed", aside = new THREE.Vector3(-way.z, 0, way.x);
     if (missed) to.addScaledVector(aside, 1.4);
-    const stop = blow.held ? from.clone().lerp(to, 0.5) : to;
+    // Under a ceiling (terrain-levels §8.3): a beam at the sky goes straight up to it; one a ceiling stopped (the deep layer's
+    // hard ceiling, rock past what a beam bores) ends there; one through the ground skin goes on through the hole it bored.
+    const met = blow.kind === "line" ? blow.ceiling ?? null : null, onCeiling = met ? new THREE.Vector3(met.x, met.at, met.z) : null;
+    if (met && !blow.target) to = onCeiling.clone();
+    const stop = blow.held ? from.clone().lerp(to, 0.5) : met?.stopped ? onCeiling : to;
     if (blow.kind === "line") {
       if (t < 0.25) { fx.charge.visible = true; fx.charge.position.copy(from); fx.charge.scale.setScalar(0.1 + 0.4 * (t / 0.25)); fx.charge.material.opacity = 0.9; }
       const reach = clamp01((t - 0.2) / 0.12), fade = 1 - clamp01((t - 0.6) / 0.2);
@@ -1171,11 +1496,11 @@ function playBlows(segment, elapsed) {
       const u = (t - 0.32) / 0.5;
       if (u >= 0 && u <= 1) {
         fx.flash.visible = true; fx.flash.position.copy(stop); fx.flash.scale.setScalar(blow.held ? 0.2 + 0.4 * u : 0.3 + 1.2 * easeOut(u)); fx.flash.material.opacity = 0.9 * (1 - u);
-        if (!blow.held) { fx.ring.visible = true; fx.ring.position.set(stop.x, Math.max(0.05, stop.y - 1.1), stop.z); fx.ring.scale.setScalar(0.5 + 2.2 * easeOut(u)); fx.ring.material.opacity = 0.8 * (1 - u); }
+        if (!blow.held && !(met && !blow.target)) { fx.ring.visible = true; fx.ring.position.set(stop.x, Math.max(0.05, stop.y - 1.1), stop.z); fx.ring.scale.setScalar(0.5 + 2.2 * easeOut(u)); fx.ring.material.opacity = 0.8 * (1 - u); }
       }
       // A beam through the clouds: on from where it lands up into the layer, clearing a hole as wide as it.
-      if (cutsClouds(blow, segment.scene.id)) {
-        const top = new THREE.Vector3(stop.x + way.x * 160, CLOUD_BASE + 30, stop.z + way.z * 160), rise = clamp01((t - 0.3) / 0.22), gone = 1 - clamp01((t - 0.95) / 0.45);
+      if (cutsClouds(blow, segment.scene.id, from)) {
+        const top = new THREE.Vector3(stop.x + way.x * 160, skyClouds.low.base + 30, stop.z + way.z * 160), rise = clamp01((t - 0.3) / 0.22), gone = 1 - clamp01((t - 0.95) / 0.45);
         if (rise > 0 && gone > 0) { stretch(fx.sky, stop, stop.clone().lerp(top, easeOut(rise)), 1.6 * (0.85 + 0.15 * Math.sin(t * 70))); fx.sky.material.opacity = 0.6 * gone; }
         if (rise >= 1) cutClouds(`${segment.scene.id}|${segment.eventIndex}|${k}`, segment.scene.id, top, blow.width ?? (daylight.force ?? skyUnits?.[segment.scene.id])?.cloudCut?.width);
       }
@@ -1195,6 +1520,8 @@ function playBlows(segment, elapsed) {
       const ground = to.clone().setY(to.y - 1.1), fly = clamp01(t / 0.55), arc = 2 + metres * 0.25;
       if (t < 0.55) { const p = from.clone().lerp(blow.held ? stop : ground, fly); p.y += arc * 4 * fly * (1 - fly); fx.charge.visible = true; fx.charge.position.copy(p); fx.charge.scale.setScalar(0.35); fx.charge.material.opacity = 0.95; }
       const u = (t - 0.55) / 0.8, r = blow.held ? 0.8 : blow.radius ?? 4;
+      // A blast's shock rising to the clouds over it: a ring there as wide as it is strong (one of 8 m or more).
+      if (u >= 0 && !fx.rippled && !blow.held && r >= 4) { fx.rippled = true; rippleKick(to.x, to.z, 20 + r * 4, Math.min(1, r / 16)); }
       if (u >= 0 && u <= 1) {
         const at = blow.held ? stop : ground;
         fx.shell.visible = true; fx.shell.position.copy(at); fx.shell.scale.setScalar(Math.max(0.1, r * easeOut(u))); fx.shell.material.opacity = 0.5 * (1 - u);
@@ -1805,6 +2132,8 @@ function showTraces() {
     unit.object.material.opacity = strandFocus === null ? 0.3 : unit.fork === strandFocus ? 0.6 : 0.04;
   }
 }
+// The lifts between the layers (data.world.underground.ways: foot x, y, z, top x, z, kind: 1 a lift, 2 a launch), by their ends.
+const liftAt = new Map((data.world?.underground?.ways ?? []).filter((way) => way[5]).map(([fx, , fz, tx, tz, kind]) => [`${fx},${fz}|${tx},${tz}`, kind]));
 function position(place, move, elapsed) {
   const steps = move.time.steps;
   if (move.how === "teleport") { const p = at(place, elapsed < 0.4 ? move.path[0] : move.path[1]); return { ...p, fade: Math.min(1, Math.abs(elapsed - 0.4) / 0.4), k: 2 }; }
@@ -1813,6 +2142,17 @@ function position(place, move, elapsed) {
   let k = 1; while (k < steps.length - 1 && steps[k] < elapsed) k++;
   const a = at(place, move.path[k - 1]), b = at(place, move.path[k]), f = Math.min(1, Math.max(0, (elapsed - steps[k - 1]) / Math.max(1e-6, steps[k] - steps[k - 1]))), air = airOf(move, k), arc = air ? null : flight(a, b);
   if (air) return { x: a.x + (b.x - a.x) * f, z: a.z + (b.z - a.z) * f, y: a.y + (b.y - a.y) * f, k, flying: true };
+  // A ride in a lift between the layers (terrain-levels §3.4): straight up its shaft from its foot, then across to the street
+  // (down: across, then down the shaft), with a faint column while it rides.
+  if (place.world && Math.abs(b.y - a.y) > 3.5) {
+    const up = b.y > a.y, foot = up ? a : b, top = up ? b : a, lift = liftAt.get(`${foot.x},${foot.z}|${top.x},${top.z}`);
+    if (lift) {
+      const rise = Math.abs(top.y - foot.y), across = Math.hypot(top.x - foot.x, top.z - foot.z), share = rise / (rise + across || 1), ride = { x: foot.x, z: foot.z, y0: foot.y, y1: top.y };
+      if (up) return f < share ? { x: foot.x, z: foot.z, y: foot.y + rise * (f / share), k, ride } : { x: foot.x + (top.x - foot.x) * ((f - share) / (1 - share || 1)), z: foot.z + (top.z - foot.z) * ((f - share) / (1 - share || 1)), y: top.y, k };
+      const g = 1 - share;
+      return f < g ? { x: top.x + (foot.x - top.x) * (f / (g || 1)), z: top.z + (foot.z - top.z) * (f / (g || 1)), y: top.y, k } : { x: foot.x, z: foot.z, y: top.y - rise * ((f - g) / (share || 1)), k, ride };
+    }
+  }
   if (arc) return { ...along(a, b, arc, f), k, flying: true };
   return { x: a.x + (b.x - a.x) * f, z: a.z + (b.z - a.z) * f, y: a.y + (b.y - a.y) * f, k };
 }
@@ -1940,6 +2280,7 @@ function frame(now) {
     if (!pawn.parent) world.add(pawn);
     if (travel && elapsed < travel.total) { pawn.position.copy(travelAt(travel, elapsed)); if (!body.userData.shared) body.material.opacity = 1; movers.push(pawn.position); continue; }
     pawn.position.set(p.x - entry.cx, p.y, p.z - entry.cz);
+    if (p.ride) ceilings.riders.push({ ...p.ride, x: p.ride.x - entry.cx, z: p.ride.z - entry.cz });
     // Under the street, a pawn shows through the ground above it.
     if (!body.userData.shared) { body.material.depthTest = p.y > -1; body.material.opacity = held ? 0.4 : p.fade ?? 1; }
     if (move) { movers.push(pawn.position); for (const line of pathLines) if (line.move === move && !line.ensemble && !line.tube) line.object.geometry.setDrawRange(0, Math.max(1, p.k)); }
@@ -1979,7 +2320,7 @@ function frame(now) {
   decor(time); blinkProposal(now); blinkSampled(now); playSettle(now);
   if (seeing && !sheetView) seeThrough(entry, segment, now, dt, elapsed);
   if (focusGlide) { const u = Math.min(1, (performance.now() - focusGlide.start) / 600), e = u * u * (3 - 2 * u); controls.target.lerpVectors(focusGlide.fromTarget, focusGlide.toTarget, e); camera.position.lerpVectors(focusGlide.fromCamera, focusGlide.toCamera, e); if (u >= 1) focusGlide = null; }
-  if (sheetView) renderer.render(sheetView.scene, sheetView.camera); else { controls.update(); if (liveMode) showBorn(); capLabels(); orbitTick(); renderer.render(world, camera); } if (!shownNotice) { shownNotice = true; document.querySelector(".notice")?.remove(); } requestAnimationFrame(frame);
+  if (sheetView) renderer.render(sheetView.scene, sheetView.camera); else { controls.update(); if (liveMode) showBorn(); capLabels(); orbitTick(); rippleTick(dt); ceilingTick(dt); renderer.render(world, camera); ceilingRestore(); } if (!shownNotice) { shownNotice = true; document.querySelector(".notice")?.remove(); } requestAnimationFrame(frame);
 }
 
 /**
@@ -2241,7 +2582,7 @@ window.__gallery = (entries) => {
 window.__fx = () => ({ segment: blowSegment?.scene?.id ?? null, quiet, kind: blowSegment?.kind, eventBlows: blowSegment?.event?.blows?.length ?? null, inWorld: !!blowFx.parent, parts: blowList.map((fx) => ({ kind: fx.blow.kind, attacker: !!pawns.get(fx.blow.attacker)?.pawn?.parent, target: !!pawns.get(fx.blow.target)?.pawn?.parent, shown: Object.entries(fx).filter(([key, part]) => part?.isMesh && part.visible).map(([key, part]) => `${key}@${part.position.toArray().map(Math.round)}×${part.scale.toArray().map((v) => v.toFixed(2))}`) })) });
 window.__pawnAt = (id) => { const pawn = pawns.get(id)?.pawn; return pawn?.parent ? pawn.position.toArray() : null; };
 window.__vehicleTime = (id) => segments.find((segment) => segment.kind === "event" && id in segment.scene.starts)?.start ?? null;
-window.__replay = () => ({ time, total, playing, stopAt, speed, follow, glide: glide ? { start: glide.start, seconds: glide.seconds } : null, replaying, camera: camera.position.toArray().map(Math.round), target: controls.target.toArray().map(Math.round) });
+window.__replay = () => ({ time, total, playing, stopAt, speed, follow, glide: glide ? { start: glide.start, seconds: glide.seconds } : null, replaying, sky: { on: daylight.on, units: skyUnits ? Object.keys(skyUnits).length : 0, hour: daylight.hour, day: Math.round(daylight.day * 100) / 100, weather: Object.fromEntries(WX.map((key) => [key, Math.round(wx[key] * 100) / 100])) }, camera: camera.position.toArray().map(Math.round), target: controls.target.toArray().map(Math.round) });
 function replayCard({ scene, event, camera: cam = null, once = false, slow = false, speed: pace = null, follow: keep = false }) {
   const segment = segments.find((entry) => entry.kind === "event" && entry.scene.id === scene && entry.eventIndex === event);
   if (!segment) return;
@@ -2538,7 +2879,8 @@ if (capture) {
       // The free ground to build in (the zoom engine's free space): faint squares of the hologram's light cyan on the ground.
       if (free.length) { const entry = built.get(place), sheet = new THREE.InstancedMesh(new THREE.PlaneGeometry(1, 1).rotateX(-Math.PI / 2), new THREE.MeshBasicMaterial({ color: 0x7ce6ff, transparent: true, opacity: 0.12, depthWrite: false }), free.length); free.forEach(([x0, z0, x1, z1], n) => sheet.setMatrixAt(n, new THREE.Matrix4().compose(new THREE.Vector3((x0 + x1) / 2 - entry.cx, 0.3, (z0 + z1) / 2 - entry.cz), new THREE.Quaternion(), new THREE.Vector3(x1 - x0, 1, z1 - z0)))); extras.push(sheet); world.add(sheet); }
       for (const area of areas) { const group = terrainArea(place, area, labelScale * (area.tag ?? 1)); extras.push(group); world.add(group); }
-      if (view) { const entry = built.get(place); camera.fov = view.fov ?? camera.fov; camera.updateProjectionMatrix(); camera.position.set(view.position[0] - entry.cx, view.position[1], view.position[2] - entry.cz); controls.target.set(view.target[0] - entry.cx, view.target[1], view.target[2] - entry.cz); camera.far = Math.max(camera.far, 20000); camera.updateProjectionMatrix(); controls.update(); }
+      // A camera under a ceiling may look up at it (terrain-levels §8.3): the orbit's lowest look is lifted for such a still.
+      if (view) { const entry = built.get(place); camera.fov = view.fov ?? camera.fov; camera.updateProjectionMatrix(); camera.position.set(view.position[0] - entry.cx, view.position[1], view.position[2] - entry.cz); controls.target.set(view.target[0] - entry.cx, view.target[1], view.target[2] - entry.cz); camera.far = Math.max(camera.far, 20000); camera.updateProjectionMatrix(); controls.maxPolarAngle = view.position[1] < view.target[1] ? Math.PI * 0.9 : Math.PI * 0.47; controls.update(); }
       if (solved) { const entry = built.get(place), box = new THREE.LineSegments(new THREE.EdgesGeometry(new THREE.BoxGeometry(1, 1, 1)), new THREE.LineBasicMaterial({ color: 0x5dff8a })); box.position.set((solved.x[0] + solved.x[1]) / 2 - entry.cx, (solved.y[0] + solved.y[1]) / 2, (solved.z[0] + solved.z[1]) / 2 - entry.cz); box.scale.set(solved.x[1] - solved.x[0], solved.y[1] - solved.y[0], solved.z[1] - solved.z[0]); extras.push(box); world.add(box); }
       outline(boxes);
       if (caption) { const ctx = overlay.getContext("2d"), w = overlay.width, h = overlay.height; overlay.hidden = false; ctx.font = "600 17px system-ui, 'PingFang SC', sans-serif"; const lines = []; let line = ""; for (const char of caption) { if (ctx.measureText(line + char).width > w - 40) { lines.push(line); line = ""; } line += char; } lines.push(line); const top = h - 14 - lines.length * 24; ctx.fillStyle = "rgba(6,12,18,.78)"; ctx.fillRect(0, top - 10, w, h - top + 10); ctx.fillStyle = "#e8f1f6"; lines.forEach((text, n) => ctx.fillText(text, 20, top + 14 + n * 24)); }

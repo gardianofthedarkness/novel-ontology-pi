@@ -8,10 +8,10 @@
 const inside = (lot, p, pad = 0) => p[0] >= lot.x0 - pad && p[0] <= lot.x1 + pad && p[2] >= lot.z0 - pad && p[2] <= lot.z1 + pad;
 const flat = (a, b) => Math.hypot(b[0] - a[0], b[2] - a[2]);
 
-/** The highest roof under the line from a to b (metres), the lots `skip` names left out; 0 over open ground. */
-export function clearance(a, b, lots, skip = new Set(), pad = 2) {
+/** The highest roof under the line from a to b (metres), the lots `skip` names left out; `ground` over open ground (the street's 0, a deep floor's own). */
+export function clearance(a, b, lots, skip = new Set(), pad = 2, ground = 0) {
   const n = Math.max(1, Math.ceil(flat(a, b) / 2));
-  let top = 0;
+  let top = ground;
   for (let s = 0; s <= n; s++) {
     const t = s / n, p = [a[0] + (b[0] - a[0]) * t, 0, a[2] + (b[2] - a[2]) * t];
     for (const [index, lot] of lots.entries()) if (!skip.has(index) && lot.top > top && inside(lot, p, pad)) top = lot.top;
@@ -39,12 +39,18 @@ export function wayOut(p, lot, toward) {
  *   leap    out, one arc over what lies between, its top clearing every roof under it by `margin`, in;
  *   climb   out, across to the far building's wall, up it to the far end's height, in (onto its roof).
  * Consecutive points are at most `step` metres apart along a leap's arc; a flight's legs are straight.
+ * Under a ceiling (terrain-levels §8.3: the ground skin over a hall, the deep layer's hard ceiling; `ceiling` its underside,
+ * metres), nothing goes higher than a body below it: a flight cruises there, a leap's arc tops out there. The path then says
+ * so (`capped`).
  */
-export function airPath(a, b, { lots = [], from = -1, to = -1, kind = 'flight', margin = 10, step = 8 } = {}) {
+export function airPath(a, b, { lots = [], from = -1, to = -1, kind = 'flight', margin = 10, step = 8, ceiling = Infinity, body = 1.8 } = {}) {
   // Both ends in one building: no way through the air between them (its stairs and lifts are the walk's).
   if (from >= 0 && from === to) return [a, b];
   const start = from >= 0 ? lots[from] : null, end = to >= 0 ? lots[to] : null, skip = new Set([from, to].filter(index => index >= 0));
-  const out = wayOut(a, start, b), into = wayOut(b, end, a), points = [a, out];
+  // The ground between: the street's, or a floor below it both ends stand on (the deep layer's: §3.5).
+  const ground = Math.min(0, a[1], b[1]), clear = (p, q) => clearance(p, q, lots, skip, 2, ground);
+  const out = wayOut(a, start, b), into = wayOut(b, end, a), points = [a, out], cap = ceiling - body;
+  let capped = false;
   if (kind === 'climb') {
     // The far wall where it faces the way they come, a metre out (for an end on the roof, just under its edge): across to
     // its foot at their own height, up it, in.
@@ -52,20 +58,25 @@ export function airPath(a, b, { lots = [], from = -1, to = -1, kind = 'flight', 
     points.push([wall[0], out[1], wall[2]], [wall[0], b[1], wall[2]], b);
   } else if (kind === 'leap') {
     // One arc: its middle as high as clears what lies under it, raised where a sample would still clip a roof.
-    const ya = out[1], yb = into[1], under = clearance(out, into, lots, skip), n = Math.max(2, Math.ceil(flat(out, into) / step));
+    const ya = out[1], yb = into[1], under = clear(out, into), n = Math.max(2, Math.ceil(flat(out, into) / step));
     let h = Math.max(2, Math.max(under + margin, Math.max(ya, yb) + 2) - (ya + yb) / 2);
     const arc = () => Array.from({ length: n - 1 }, (_, s) => { const t = (s + 1) / n; return [out[0] + (into[0] - out[0]) * t, ya + (yb - ya) * t + 4 * h * t * (1 - t), out[2] + (into[2] - out[2]) * t]; });
     for (let tries = 0; tries < 6; tries++) {
-      const low = arc().map((p, s) => { const t = (s + 1) / n, roof = clearance(p, p, lots, skip); return roof + 1 > p[1] ? (roof + 1 - p[1]) / (4 * t * (1 - t)) : 0; });
+      const low = arc().map((p, s) => { const t = (s + 1) / n, roof = clear(p, p); return roof + 1 > p[1] ? (roof + 1 - p[1]) / (4 * t * (1 - t)) : 0; });
       const more = Math.max(0, ...low);
       if (!more) break;
       h += more;
     }
-    points.push(...arc(), into, b);
+    // Under a ceiling the arc is cut flat a body below it: up, along under the ceiling, down (lowering the whole arc would
+    // bring its sides down through the roofs it clears).
+    const shaped = arc().map(p => { if (p[1] <= cap) return p; capped = true; return [p[0], cap, p[2]]; });
+    points.push(...shaped, into, b);
   } else {
-    const cruise = Math.max(a[1], b[1], clearance(out, into, lots, skip)) + margin;
+    let cruise = Math.max(a[1], b[1], clear(out, into)) + margin;
+    if (cruise > cap) { cruise = Math.max(a[1], b[1], cap); capped = true; }
     points.push([out[0], cruise, out[2]], [into[0], cruise, into[2]], into, b);
   }
   // Without the repeats (an end on its roof is its own way out).
-  return points.filter((p, n) => n === 0 || Math.hypot(p[0] - points[n - 1][0], p[1] - points[n - 1][1], p[2] - points[n - 1][2]) > 0.5);
+  const path = points.filter((p, n) => n === 0 || Math.hypot(p[0] - points[n - 1][0], p[1] - points[n - 1][1], p[2] - points[n - 1][2]) > 0.5);
+  return capped ? Object.assign(path, { capped: true }) : path;
 }

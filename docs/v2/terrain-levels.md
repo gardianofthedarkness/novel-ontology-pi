@@ -1,7 +1,9 @@
 # Terrain levels: the sea, the air, space and the deep underground
 
-**Status (2026-11-05): design only, nothing built.** Stages are taken one at a time (§10); each is checked with picture
-sheets of every combination before it is called done, as the weather was (docs/v2/sky.md).
+**Status (2026-11-06): stage 1 (each place's level, the layers, the ways between them) and stage 2 (the ceilings, §8.8) built;
+the air's flight (§6.2) and the orbit's floor (§3.5) built ahead of their stages; stages 3–7 design only.** Stages are taken one
+at a time (§10); each is checked with picture sheets of every combination before it is called done, as the weather was
+(docs/v2/sky.md).
 
 The user, 2026-11-05: *"Do we have ripple physics in non solid terrains? Maybe it's time to build full terrain system with
 sea, atmosphere, universe level terrain and full underground level terrain, if there's any possible underground city
@@ -149,7 +151,12 @@ marked moving (§6.3). Vol 1 should come out all land and underground; the check
   - a level with nothing new keeps its end as it was;
   - one whose new places all lie under the street settles only their layer;
   - only the slots the run changed are written back into the book's sites.
-  - Run again over a built library, the full loop re-settles every level end, and with today's code that moves 46 of library 16's places with nothing added.
+  - Run again over a built library, the full loop used to re-settle every level end: 5 places still moved on a second pass with nothing added, so it never came to rest.
+- **A bounded repair, by default (the user, 2026-11-06: "small repairs in city growth"; the dynamic-grid research, §3 and §7):**
+  - Each level end the loop settles is recorded (`terrain.ends`: when, and the sites at that level). Run again, a level whose settled end has nothing new keeps it as it was.
+  - When something new came to it, only the new places and those sharing a holder with them may move in its improving moves (`chooseSlots`' `movable`). Everything else keeps its slot, whatever a move would gain.
+  - A rebuild (`--from`) forgets the ends of the levels it drops. `--resettle` settles every end again, as before.
+  - Checked on copies of library 16 with its universe, with a fake Jev that fails if asked: a rerun asked nothing and moved nothing. The first rerun of a library built before this code shifts its city's frame once (the canvas changed in 789df20): 46 spare slots' boxes, every offset kept. Run again, nothing moved. The old full re-settle moved 70 places on its first pass and 5 more on its second.
 - **Checked on copies of library 16 with their universe, W12's stretch placed by Jev's answers replayed:** with `--add`, the stretch moves none of the 221 places on the map, changes none of the library's 166 sites, and adds exactly two things: itself and its shallow slot. With no new place, `--add` changes nothing at all.
 - **Still to come:**
   - the deep layer's own plane for a city or a district put underground (its virtual space, the virtual elevator);
@@ -274,6 +281,24 @@ Still open:
 - **Where a place of another layer is anchored:** where the canvas puts it (by its holder), not over its slot. The deep street's people started 644 m from its floor.
 - **A walk between two layers off the street** (a deck to the deep): two portals by the ground.
 - **What an orbit is made of:** today a place in space is filled with its kind's ground (an alley's lots); a station's own forms (modules, docks, a ring) are a kind still to come.
+
+### 3.6 A terrain rebuild test (the user, 2026-11-06: "do a terrain rebuild test to see if our new terrain loop work")
+
+The whole terrain of volume 1 was rebuilt on a copy of library 16 with real Jev, from the city level down
+(`novel sim terrain <copy> --spawn --run --from city`; `rehearsals/stage2/novel-T1`). Before it, the copy took the
+reading's two layering steps (the underground stretches, the underground notes), as a fresh pipeline would.
+
+- **It runs:** 134 Jev calls (pennies at $0.042 a million input tokens), 96 parts placed, 35 builds, about four minutes, nothing left unplaced: 2 cities, 12 districts, 106 streets, 68 buildings.
+- **The layers:**
+  - W12's underground stretch (units 118–123, the only place the notes mark) was kept as its own place, an alley 30 m under the street, in the shallow layer, on a slot of that layer. Jev answered −30 m, as in W12.
+  - In library 16 it had never been kept as a place.
+  - The other two places with underground evidence stay on the surface as they should: the city (2 underground units of 138) and a street (1 of 4). Their underground units start their people below the street unit by unit. The notes need no tuning for volume 1.
+- **The same rebuild with the code from before the layers** (080095a; `novel-T2`) kept 174 of the 186 sites as the same kind under the same parent, and 160 stand where the new one put them. The differences are the shallow layer's stretch and a shape.
+- **Rehearsed** (units 1–84 and 114–131, today's director, unpaid):
+  - units 114–131 play as before;
+  - units 1–84 on either rebuild break more than on library 16's own terrain (L6 13 against 9, L10 2 against 0, 17 or 21 jumps against 10). Scene 2's Kuroko and Misaka now stand 1,140 m apart, and two offices (scenes 11, 22) lie out of reach.
+  - Both rebuilds show these faults alike, so they come from rebuilding the terrain today, not from the layer code. The new code's rebuild jumps people less (17 against 21).
+  - The next run plays library 16's own terrain, which keeps none of these faults. A rebuild before it would want those three scenes looked at first.
 
 ## 4. Water (stage 3)
 
@@ -609,6 +634,91 @@ A new hall kind in the deep layer, the **cavern**:
 
 It is built when a book first has one.
 
+### 8.8 Stage 2 built: the ceilings (the user, 2026-11-06: "Let's build stage2")
+
+**The model** (`src/v2/world/underground.ts`, pure):
+- `ceilingOf(hall)`: the ceiling over a hall's floor (§8.3).
+  - A hall with a real depth: the ground skin, its underside at the hall's top, `cover` the hall's depth less its height, `bond` its band's plus a lining's (soil 3 + 4).
+  - The deep layer's floor: the hard ceiling, a floor above its tallest building at least (its room of 60 m otherwise); no bond.
+  - A deck's and an orbit's: the sky.
+- `breach(ceiling, cells, centre, r, energy, section)`: the skin a blast breaks (§8.4).
+  - A cell opens where the blast's sphere takes in the whole of its cover (its underside and the street over it) and the blow at the near face is more than the bond.
+  - The blow is the cave-in's own (`collapse`): spread over a sphere in the open, channelled along a hall it is confined in.
+  - A 16 m blast a body over a mall's floor (cover 2.5 m) opens a hole a few metres across; a 4 m one opens none; a deep lab's 80 m of rock, the hard ceiling and the sky never open.
+- `BEAM_BORE` = 25 m: a beam bores through the near band's ground and no deeper.
+
+**The world** (`apps/playground/src/data/world.ts`):
+- `underDamage.breaches` (cell → the hall it opens into) and `underDamage.marks` (where a blow reached the hard ceiling).
+- A hole is no ground. From the open ground at its rim, a drop to the hall's floor under it; back up only a wall's edge by its height, which only a climber walks (§8.4: "up only for those who leap or fly").
+- `ceilingAt(world, i, j, k)`: the ceiling over any cell, at any level.
+  - The sky outdoors, and through a hole (`open`).
+  - A slab inside a building or a basement.
+  - A hall's own: the skin, or the hard ceiling over the deep floor with its tallest building measured.
+
+**The exporter** (`world-engine/world/export-strand-demo.mjs`):
+- Every blast reaching a real hall also breaks the skin over it (never under a building: its basements are its own). The ground it held is thrown out, not piled below.
+- A blast in the deep layer that reaches the hard ceiling is stopped there and keeps its mark (no cave-in in a virtual space).
+- `beamCeiling(from, to, width)`: a beam under a ceiling.
+  - Through the skin, it bores a hole as wide as it (4 m when unsaid) where it meets it, and goes on.
+  - Against the hard ceiling, or rock deeper than BEAM_BORE, it stops and marks it.
+  - Under the open sky, or with its target under the same ceiling, it is as before.
+- The page gets `underground.breaches` and `underground.marks`, each with the moment it was made.
+
+**The director** (`world-engine/director/director.mjs`):
+- **Leaps and flights through the air** (`world/air.mjs`, option `ceiling`): under the skin or the hard ceiling they go no higher than a body below it, and the move says `stoppedBy`.
+  - The air path also now measures clearance from its own floor (a deep floor's, not the street's): a leap across the deep floor had arced up to the street.
+  - It sees the buildings of every level (a deep area's, a deck's) and which one each end stands in at its own level.
+- **A flight from below the street** rises through a hole near it in its hall (run to the floor under it, fly out: `through`), else goes by the walk and the lifts as before.
+- **A beam in a fight** (a line blow) meets the ceiling over its attacker (`ceilings` on the card).
+  - A stopped one plays to the ceiling and hits nothing (`outcome: stopped`).
+  - Only one that reaches the sky tears the clouds.
+- **Earshot** (`world/layers.mjs` `heardThrough`; L6): a public talk across the skin is heard only where stairs or a hole join the two within earshot (25 m along the sound's way), never through a lift.
+  - The card keeps who heard whom through what (`talk.heard`).
+  - The whole-run L6 check honours it: fewer talks held between people one level apart.
+
+**The page** (`world-engine/view/strand-demo.html`):
+- **Each real hall's ceiling** is drawn as the skin's underside, only to a camera under it and above that hall's floor (from the deep layer, a mall's ceiling is no ceiling). It fades out within a few metres of the camera, and holes are cut out of it from the moment they open.
+- **The holes in the street:**
+  - their ground tiles go when they open;
+  - their walls are the skin's thickness, in earth brown;
+  - by day the sky's light falls through each as a shaft onto a lit patch of the floor below;
+  - rain and snow fall through them to the hall's floor.
+- **Under a ceiling but the sky** (what the camera looks at lies in a hall):
+  - the sun is put out and the light is the hall's own, by its kind: a mall's warm lamps, a station's cool white, a facility's hard white, the storm water nearly dark, the deep layer dim;
+  - with the camera under the ceiling too, there is no sky, cloud, rain or snow but through a hole, and the dark of the hall round it: a fog closing in within a hall's reach (a deep world's wider, 60 to 260 m), so the city above shows only through a hole. Looking up through a hole from below, the sky's colour fills it.
+- **The deep layer** has no lid: its sides fade up into the dark. The hard ceiling is never drawn; the marks blows left on it show as dark scorches, from below.
+- **A lift ride between the layers** goes straight up its shaft from its foot and then across to the street (down: across, then down), with a faint column while it rides.
+- **A still** may look up from under a ceiling: the lowest look is lifted for such a camera.
+
+**Two older faults the end-to-end check found, fixed:**
+- **No director run had ever woken a hall** (docs/underground-design.md §4.8: an area's halls come alive the first moment anyone stands under it; until then no blast reaches them).
+  - Only the old picker told the exporter; the director's moves never did. So no blast of a director run reached a hall: no cave-in, no dent, and now no hole.
+  - Before each blast, every node below the street that anyone stands on or has walked through now wakes its hall or basement, once each (the exporter's `wake`, now on the engine hook).
+- **A blast snapped onto the nearest building by its plan alone**, whatever its level and however far, and a building's parts stood at the street's level whatever its own.
+  - A blast on the deep floor jumped 60 m up to the building on the street over it, and one in a mall was carried 117 m down to a tower of the deep layer.
+  - A blast picked by a building's face on the street moved onto the roof of a building of the street laid underground beneath it, through the ground.
+  - Now:
+    - a building's height span is its own level's (its k0), in the exporter's choice of what a blast strikes and in its parts' places (`structure.ts` `y0`);
+    - a blast strikes only buildings on its own side of the ground skin;
+    - it snaps only onto a building its sphere reaches.
+- **A street laid underground had no supports** for the cave-in test (it is open, with no pillars). Once its hall was awake, a 4 m blast caved in the whole of W12's stretch: 1,730 cells piled, 1,554 street cells dented. Its roof is now held for the test by columns on an 8 m grid, as a car park's. It stands at rest; a 4 m blast breaks a cell and domes over; a 32 m one fails about a tenth of it and dents the street over that part.
+
+**Checked end to end** through the exporter (`~/claude-world-first/rehearsals/stage2-holes-e2e.mjs`, on copies of library 16 with W12's stretch rebuilt, and with units 124–131's district in the deep layer):
+- A 32 m blast (Jev's largest) a body over a lined mall's floor (cover 2.5 m) opened 95 and 114 cells. Confined along the mall, it also caved its roof in round the hole (about 750 cells failed, some 500 street cells dented).
+  - The rim gave 17 and 31 drops to the floor under the hole, as many climbs back up, and the sky over that floor.
+  - Nothing piles or dents under the hole itself: its ground was thrown out.
+- A beam fired up in another mall bored 9 cells: 7 and 11 drops.
+- A military facility 80 m down opened no hole to a 32 m blast, and stopped a beam in its rock (marked).
+- In the deep layer, the hard ceiling stood at −57 m: a floor above its tallest building, 120 m on a floor at −180. A blast on that building's roof and a beam fired up both stopped there and marked it.
+- **The first quarter of vol 1 (units 1–84)** played exactly as before stage 2. All 11 of its underground moves played; the one move held is a 500 m walk on the street.
+- **W12's underground stretch (units 114–131)** played the same 89 moves, all 49 underground ones among them.
+  - Its six blasts are 4 m across on the street, too small to open the ground over its alley.
+  - One of them now touches no building (5 tunnelled instead of 6), since a blast no longer snaps to one out of its reach. The smoothing made 78 revisions instead of 76.
+
+**Not built:**
+- **Load** (§8.4): a heavy thing on the street pressing on the skin over a shallow hall. In this world a building's fallen parts settle within its own footprint, over its own basements, so they never weigh on the skin. The first case would be a crashed vehicle or thrown rubble on a street over a hall; vol 1 has none.
+- **Water through a hole** (flooding, §4.6 of the underground design) waits for stage 3.
+
 ## 9. Records
 
 - Per place: its medium and band, how sure, from what (kept as the scale is; never canon). An underground band is the
@@ -628,7 +738,7 @@ book it is for reads right.
 | Stage | What | Done when | Paid |
 | --- | --- | --- | --- |
 | 1 | Each place's level (§3.1), with the set dresser's underground note and the terrain loop's gate lifted for noted areas (§8.5); the layers as separate walk graphs joined by portals, the virtual elevator among them (§8.2, §8.6); routes that know the medium (§3.2) | vol 1's places come out land and underground (scenes 120–131 in the near-ground layer); vols 3 and 4's sea, air and orbit places are found; W12's 7 lift failures walk; L10 says by what means and in which layer | cents (one or two Jev questions per place; the note rides on the set dresser's reading) |
-| 2 | The underground's two layers and ceilings: the skin, breaches and load, the deep layer's hard ceiling, the sky and light under a ceiling, leaps and beams stopped by a ceiling, earshot (§8.1–8.6) | sheets: each hall kind and an underground world, by day and night, with the camera above, at and below the skin; a breach by a blast and by a beam, with rain falling through; a leap stopped by the hard ceiling; a ride up the virtual elevator; vol 1's first quarter rehearsed with no underground move unplayed | none |
+| 2 | **Built 2026-11-06 (§8.8).** The underground's two layers and ceilings: the skin, breaches and load, the deep layer's hard ceiling, the sky and light under a ceiling, leaps and beams stopped by a ceiling, earshot (§8.1–8.6) | sheets: each hall kind and an underground world, by day and night, with the camera above, at and below the skin; a breach by a blast and by a beam, with rain falling through; a leap stopped by the hard ceiling; a ride up the virtual elevator; vol 1's first quarter rehearsed with no underground move unplayed | none |
 | 3 | Water: bodies, waves by the weather, the ripple field, floating, drawing (§4) | sheets: sea, lake, river by the times of day by calm, breezy, gale, with rain, and each disturbance | none |
 | 4 | Underwater (§5) | sheets: depths by times of day, a blast underwater | none |
 | 5 | The air: bands, flyers, falling, moving places (§6) | a flyer's route over the towers; a fall into water and onto the ground; a ship and an aircraft carrying people | none |

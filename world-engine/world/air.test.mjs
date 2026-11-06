@@ -42,3 +42,25 @@ test('a climb up a wall: across to the wall\'s foot, up it, onto the roof', () =
   assert.deepEqual(points, [a, [-1, 0, 10], [-1, 120, 10], b]);
   assert.ok(!segmentsClip(points, [0]));
 });
+
+test('under a ceiling (terrain-levels §8.3): a leap in the deep layer tops out a body under its hard ceiling, over the tower between still; a flight cruises there; the path says so', () => {
+  // The deep floor at -180 m, a 30 m tower between, the hard ceiling a floor above it (-147 m): a leap wants 10 m over the roof.
+  const deep = [{ x0: 40, z0: 0, x1: 60, z1: 20, top: -150 }], a = [0, -180, 10], b = [100, -180, 10];
+  const free = airPath(a, b, { lots: deep, kind: 'leap' }), capped = airPath(a, b, { lots: deep, kind: 'leap', ceiling: -147 });
+  assert.ok(Math.max(...free.map(p => p[1])) >= -141 && Math.max(...free.map(p => p[1])) < -100, 'free: 10 m over the roof, measured from its own floor (not the street\'s)');
+  assert.equal(free.capped, undefined);
+  assert.equal(capped.capped, true);
+  assert.ok(Math.max(...capped.map(p => p[1])) <= -147 - 1.8 + 1e-9, 'a body under the ceiling');
+  assert.ok(capped.filter(p => p[0] > 40 && p[0] < 60).every(p => p[1] > -150), 'still over the roof between');
+  // A tower whose roof is just under the ceiling (a floor between): the arc runs flat under the ceiling, over the roof all along.
+  const wide = [{ x0: 30, z0: 0, x1: 70, z1: 20, top: -60 }], flat = airPath([0, -180, 10], [100, -180, 10], { lots: wide, kind: 'leap', ceiling: -57 });
+  assert.equal(flat.capped, true);
+  assert.ok(flat.every(p => p[1] <= -57 - 1.8 + 1e-9), 'never above a body under the ceiling');
+  assert.ok(flat.filter(p => p[0] >= 30 && p[0] <= 70).every(p => p[1] > -60), 'never through the roof under it');
+  const flight = airPath(a, b, { lots: deep, kind: 'flight', ceiling: -147 });
+  assert.equal(flight.capped, true);
+  assert.ok(flight.every(p => p[1] <= -148.8 + 1e-9));
+  // Under the ground skin of a mall (its underside 2 m down) a leap across its floor (6 m down) stays a low hop.
+  const hop = airPath([0, -6, 0], [20, -6, 0], { kind: 'leap', ceiling: -2 });
+  assert.ok(hop.capped && Math.max(...hop.map(p => p[1])) <= -3.8 + 1e-9);
+});

@@ -52,6 +52,11 @@ export interface Fixed { id: string; at: Point; box?: [number, number, number, n
 export interface LevelProblem {
   book: string;
   level: Level;
+  /**
+   * A bounded repair (the dynamic-grid research, §3: a small edit never rebuilds the city): only these mentions may move in
+   * the level's improving moves; the others stand on the slots they hold. All may move when it is not given.
+   */
+  movable?: (id: string) => boolean;
   /** Every slot of the level in the mentions' holders (earlier books' among them, standing where they are). */
   slots: Slot[];
   /** The level's mentions, in narrative order. */
@@ -197,7 +202,7 @@ export function chooseSlots(problem: LevelProblem): Choice {
   let moves = 0;
   for (let round = 0; round < (problem.improve === false ? 0 : 20); round++) {
     let moved = false;
-    const mine = problem.mentions.filter((m) => assignment[m.id] && (!m.named || slotOf(m.id).ownerBook === book));
+    const mine = problem.mentions.filter((m) => assignment[m.id] && (!m.named || slotOf(m.id).ownerBook === book) && (problem.movable?.(m.id) ?? true));
     for (const m of mine) {
       const from = slotOf(m.id);
       if (!from.at) continue;

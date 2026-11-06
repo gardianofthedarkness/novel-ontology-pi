@@ -1,7 +1,7 @@
 import { MASS, STAIR, SKELETON_CELL, FLOOR_HEIGHT, cellAt, cellIndex, furnish, generateSkeleton, skeletonStream, type Skeleton, type SkeletonKind } from "./skeleton.js";
 import { EDGE, UP, DOWN, WALL_KINDS, buildGraph, buildGraphAt, directionOf, launchOf, type MoveGraph } from "./pathIntegral.js";
 import { ARC_EFFORT, ARC_SPEEDS, GROUND, type BuildingRole, type PlaceLot, type PlacedThing } from "./skeletonPlace.js";
-import { boundsOf, inHall, intervalsOf, pillarAt, type Hall } from "./underground.js";
+import { boundsOf, ceilingOf, inHall, intervalsOf, pillarAt, type Ceiling, type Hall } from "./underground.js";
 
 /**
  * The stage's world: one city, streamed in as the story reaches it. Its source is the canvas of places with each open
@@ -102,8 +102,13 @@ export interface World {
   clutter: Set<number>;
   /** The halls on each cell (by cellKey): which hall, its floor's level, whether a pillar stands there. */
   under: Map<number, { hall: number; k: number; pillar: boolean }[]>;
-  /** What cave-ins left: per hall, the pile on each of its cells (metres, by cellKey); and the dents in the ground (metres). */
-  underDamage: { piles: Map<number, Map<number, number>>; dents: Map<number, number> };
+  /**
+   * What cave-ins left: per hall, the pile on each of its cells (metres, by cellKey); and the dents in the ground (metres).
+   * `breaches`: the ground skin's cells a blow broke open (docs/v2/terrain-levels.md §8.4), by cellKey, each the hall it
+   * opens into: no ground there, a drop to the hall's floor, the sky over it. `marks`: where a blow reached the deep layer's
+   * hard ceiling (§8.6) and stopped, metres.
+   */
+  underDamage: { piles: Map<number, Map<number, number>>; dents: Map<number, number>; breaches: Map<number, number>; marks: { x: number; y: number; z: number; r: number }[] };
   /** Node ids: the key of (i, j, k) → id, and each id's cell (i, j, k), never renumbered. */
   ids: Map<number, number>;
   cells: number[];
@@ -120,7 +125,7 @@ export const roleOf = (kind: string, floors: number): BuildingRole => (KIND_OF[k
 const seedOf = (text: string) => [...text].reduce((hash, char) => (Math.imul(hash, 31) + char.charCodeAt(0)) >>> 0, 7);
 
 export function createWorld(source: WorldSource): World {
-  const world: World = { source, chunks: new Map(), lots: [], lotAt: new Map(), lotBelow: new Map(), ground: new Map(), clutter: new Set(), under: new Map(), underDamage: { piles: new Map(), dents: new Map() }, ids: new Map(), cells: [], claimed: new Set(), dropped: new Map(), buckets: { buildings: new Map(), roads: new Map(), halls: new Map() } };
+  const world: World = { source, chunks: new Map(), lots: [], lotAt: new Map(), lotBelow: new Map(), ground: new Map(), clutter: new Set(), under: new Map(), underDamage: { piles: new Map(), dents: new Map(), breaches: new Map(), marks: [] }, ids: new Map(), cells: [], claimed: new Set(), dropped: new Map(), buckets: { buildings: new Map(), roads: new Map(), halls: new Map() } };
   const span = CHUNK * SKELETON_CELL, add = (map: Map<number, number[]>, key: number, index: number) => { const list = map.get(key); if (list) list.push(index); else map.set(key, [index]); };
   source.buildings.forEach((b, index) => { const r = Math.hypot(b.w, b.d) / 2; for (let ci = Math.floor((b.x - r) / span); ci <= Math.floor((b.x + r) / span); ci++) for (let cj = Math.floor((b.z - r) / span); cj <= Math.floor((b.z + r) / span); cj++) add(world.buckets.buildings, chunkKey(ci, cj), index); });
   source.roads.forEach((road, index) => { const r = road.width / 2 + 1; for (let ci = Math.floor((Math.min(road.a[0], road.b[0]) - r) / span); ci <= Math.floor((Math.max(road.a[0], road.b[0]) + r) / span); ci++) for (let cj = Math.floor((Math.min(road.a[1], road.b[1]) - r) / span); cj <= Math.floor((Math.max(road.a[1], road.b[1]) + r) / span); cj++) add(world.buckets.roads, chunkKey(ci, cj), index); });
@@ -330,6 +335,38 @@ export function nodeId(world: World, i: number, j: number, k: number): number {
  */
 export interface WorldWay { foot: number; top: number; hall: number; kind: "stairs" | "lift" | "launch"; rise: number; up: number; down: number }
 export interface WorldGraph { graph: MoveGraph; type: Uint8Array; lot: Int32Array; ground: Uint8Array; ways: WorldWay[] }
+/**
+ * The ceiling over a cell of the world at level k (docs/v2/terrain-levels.md §8.3): the sky outdoors, on a roof, on a deck or
+ * an orbit's floor (and through a hole a blow broke in the skin: `open`); the floor above inside a building or a basement (a
+ * slab, `at` its underside); a hall's own (underground.ts ceilingOf: the ground skin over a hall with a real depth, the deep
+ * layer's hard ceiling a floor above its tallest building at least). `hall`: the hall the cell is in.
+ */
+/** A hall's own ceiling (underground.ts ceilingOf), the deep layer's measured over the tallest building standing on its floor. */
+export function hallCeiling(world: World, index: number): Ceiling {
+  const hall = (world.source.underground?.halls ?? [])[index];
+  if (hall.layer !== "deep") return ceilingOf(hall);
+  const k = levelOf(hall.depth);
+  let tallest = 0;
+  for (const lot of world.lots) if (k0Of(lot) === k && inHall(hall, [(lot.i0 + lot.nx / 2) * SKELETON_CELL, (lot.j0 + lot.nz / 2) * SKELETON_CELL])) tallest = Math.max(tallest, lot.floors * FLOOR_HEIGHT);
+  return ceilingOf(hall, tallest);
+}
+export type WorldCeiling = Omit<Ceiling, "kind"> & { kind: Ceiling["kind"] | "slab"; hall?: number; open?: boolean };
+const SKY: WorldCeiling = { kind: "sky", at: Infinity, cover: 0, bond: Infinity };
+export function ceilingAt(world: World, i: number, j: number, k: number): WorldCeiling {
+  const key = cellKey(i, j), halls = world.source.underground?.halls ?? [], index = world.lotAt.get(key);
+  // A building of another level standing here (a street laid underground's, a deep area's, a deck's): inside, its floor above.
+  for (const other of world.lotBelow.get(key) ?? []) { const lot = world.lots[other], k0 = k0Of(lot); if (k >= k0 && k < k0 + lot.floors) return { kind: "slab", at: (k + 1) * FLOOR_HEIGHT, cover: 0, bond: Infinity }; }
+  if (k >= 0 && index !== undefined && index >= 0 && k < world.lots[index].floors) return { kind: "slab", at: (k + 1) * FLOOR_HEIGHT, cover: 0, bond: Infinity };
+  if (k < 0 && index !== undefined && index >= 0 && -k <= basementsOf(world.lots[index])) return { kind: "slab", at: (k + 1) * FLOOR_HEIGHT, cover: 0, bond: Infinity };
+  // A hall's floor and the air over it up to its ceiling (a street laid underground's buildings stand in that air).
+  const entry = hallsAt(world, i, j).filter((e) => k >= e.k && (k - e.k) * FLOOR_HEIGHT < Math.max(FLOOR_HEIGHT, halls[e.hall]?.height ?? 0)).sort((a, b) => b.k - a.k)[0];
+  if (!entry) return SKY;
+  const hall = halls[entry.hall];
+  if (hall.layer === "deep") return { ...hallCeiling(world, entry.hall), hall: entry.hall };
+  const own = ceilingOf(hall);
+  return own.kind === "skin" && world.underDamage.breaches.get(key) === entry.hall ? { ...SKY, hall: entry.hall, open: true } : { ...own, hall: entry.hall };
+}
+
 /** The ways' grid: one on each square this many metres a side, to open ground within WAY_REACH cells; stairs to STAIRS_DEPTH. */
 export const WAY_EVERY = 40, WAY_REACH = 10, WAY_FAR = 60, STAIRS_DEPTH = 20, LIFT_SPEED = 5, LIFT_WAIT = 20, WALK_SPEED = 1.4;
 /** A virtual layer's ride, seconds, whatever its level (its depth or height is not a number, §3.5): the deep's lift, an orbit's launch. */
@@ -391,7 +428,8 @@ export function worldGraph(world: World, standing: Uint8Array[], things: PlacedT
       return { type: 5, lot: HALL_LOT + hall.hall, local: NOT };
     }
     if (thing >= 0 && k === things[thing].top && (index < 0 || k > world.lots[index].floors)) return { type: 4, lot: 1000 + thing, local: NOT };
-    if (index < 0) return { type: k === 0 && known(i, j) && !world.clutter.has(key) && !(thing >= 0 && things[thing].grounded) ? 1 : 0, lot: NOT, local: NOT };
+    // A cell of the ground skin a blow broke open (§8.4) is no ground: a hole over its hall.
+    if (index < 0) return { type: k === 0 && known(i, j) && !world.clutter.has(key) && !(thing >= 0 && things[thing].grounded) && !world.underDamage.breaches.has(key) ? 1 : 0, lot: NOT, local: NOT };
     return inLot(index, i, j, k);
   };
   // A building's street doors (the user, 2026-11-02: people chose a building and never got in): its entrance cell of the
@@ -478,6 +516,16 @@ export function worldGraph(world: World, standing: Uint8Array[], things: PlacedT
       if (roof.type !== 4 || roof.lot !== index) continue;
       const height = floors * FLOOR_HEIGHT, wall = height <= 10 ? EDGE.wallLow : height <= 30 ? EDGE.wallMid : EDGE.wallHigh, top = nodeId(world, i + dx, j + dz, floors);
       add(node, top, 0, 0, 2 + height, wall, UP); add(top, node, 0, 0, 2 + height / 2, wall, DOWN);
+    }
+    // A hole in the ground skin (§8.4) is a way between the street and the hall under it: from the open ground at its rim a
+    // drop to the hall's floor under the hole, and back up only for one who climbs or leaps (a wall's edge by its height).
+    if (here.type === 1 && k === 0) for (const [dx, dz] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
+      const hall = world.underDamage.breaches.get(cellKey(i + dx, j + dz));
+      if (hall === undefined || !inside(i + dx, j + dz)) continue;
+      const floor = hallsAt(world, i + dx, j + dz).find((entry) => entry.hall === hall);
+      if (!floor || what(i + dx, j + dz, floor.k).type !== 5) continue;
+      const bottom = nodeId(world, i + dx, j + dz, floor.k), drop = -floor.k * FLOOR_HEIGHT, wall = drop <= 10 ? EDGE.wallLow : drop <= 30 ? EDGE.wallMid : EDGE.wallHigh;
+      add(node, bottom, dx, dz, 1 + drop, EDGE.fall, DOWN); add(bottom, node, -dx, -dz, 2 + drop, wall, UP);
     }
     // A building's stairs go on down through its basements, a floor at a time.
     const stairAt = (index: number) => { if (index < 0 || index >= HALL_LOT) return false; const lot = world.lots[index], at = lot && k0Of(lot) === 0 ? localCell(lot, i, j) : null; if (!at) return false; const cell = cellIndex(lot.skeleton, at[0], at[1], 0); return !!standing[index]?.[cell] && lot.skeleton.cells[cell] === STAIR; };

@@ -113,7 +113,9 @@ export function talk({ played, speakers }) {
     const here = card.positions;
     if (!here[said.who]) { out.push(violation('L6', `${card.scene} · ${line.id}`, `speaker ${said.who} is not present`, { who: said.who, sure: said.sure })); continue; }
     // A talk the card knows to be remote (a phone, a door, a message: M8) needs no nearness; public, earshot.
-    if (said.to && here[said.to] && card.talk !== 'remote') {
+    // Heard through an open way between the levels (the director's: stairs, a hole in the ground skin; terrain-levels §8.3).
+    const heard = (card.heard ?? []).some(([p, q]) => (p === said.who && q === said.to) || (p === said.to && q === said.who));
+    if (said.to && here[said.to] && card.talk !== 'remote' && !heard) {
       const gap = distance(here[said.who], here[said.to]), floors = Math.abs(here[said.who].y - here[said.to].y);
       if (gap > EARSHOT || floors > 1) out.push(violation('L6', `${card.scene} · ${line.id}`, `${said.who} speaks to ${said.to} from ${Math.round(gap)} m${floors > 1 ? `, ${Math.round(floors / 3)} floors apart` : ''}: remote, or someone is misplaced (kind not asked yet)`, { who: said.who, to: said.to, metres: Math.round(gap), needsKind: true }));
     }

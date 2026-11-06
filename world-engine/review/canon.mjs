@@ -66,9 +66,14 @@ export function canonOf({ run, record, ledger, pins, scenes, events, script, str
     out.push({ file: 'scenes.jsonl', record: { ...canon, charactersPresent: present, locationId: location, turns, world }, gate: 'applied', why: `played: ${present.length} present at ${location}; ${turns.filter(turn => turn.speakerId).length} of ${turns.length} spoken lines with a speaker` });
     // Where each person is when the scene ends: its place, after its last event; held where a law held them in it.
     const after = lastEventOf.get(played.scene);
+    // What each came to hold, drive or ride in the scene and what they let go (the transport specialist's possession: the
+    // run's cards' holdings, net over the scene).
+    const holding = new Map();
+    for (const card of played.cards ?? []) for (const entry of card.holdings ?? []) { const mine = holding.get(entry.who) ?? holding.set(entry.who, new Map()).get(entry.who); mine.set(entry.thing, entry.change); }
+    const possessions = who => { const mine = [...(holding.get(who) ?? new Map())]; return { possessionsAdd: mine.filter(([, change]) => change === 'takes').map(([thing]) => thing), possessionsRemove: mine.filter(([, change]) => change === 'leaves').map(([thing]) => thing) }; };
     if (after) for (const who of present) {
       const lawful = !held.some(entry => entry.subject === who);
-      out.push({ file: 'state-changes.jsonl', record: { id: `sc_world_${played.scene}_${who}`, characterId: who, afterEventId: after, emotions: {}, knowledgeAdd: [], goalsAdd: [], relationships: {}, location, possessionsAdd: [], possessionsRemove: [], world }, gate: lawful ? 'applied' : 'held', why: lawful ? 'at the scene\'s place at its end' : 'a law held them in this scene' });
+      out.push({ file: 'state-changes.jsonl', record: { id: `sc_world_${played.scene}_${who}`, characterId: who, afterEventId: after, emotions: {}, knowledgeAdd: [], goalsAdd: [], relationships: {}, location, ...possessions(who), world }, gate: lawful ? 'applied' : 'held', why: lawful ? 'at the scene\'s place at its end' : 'a law held them in this scene' });
     }
   }
   // Identities the review settled (pins.same): a description that is a named person becomes an alias of theirs.
