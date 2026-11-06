@@ -13,7 +13,8 @@ export const meansOf = how => { const kind = String(how ?? 'walk').split(':')[0]
 export const LAYER_WORDS = { near: 'at street level and just under it', deep: 'more than 20 m down' };
 
 /**
- * A walk between the layers. `portals`: { foot, top, up, down, virtual } (foot in the deep layer, top above it; up and
+ * A walk between the layers. `portals`: { foot, top, up, down, virtual, kind } (foot in the lower band, top above it; kind
+ * stairs or lift; up and
  * down the ride's cost as metres walked); `walkIn(from, targets, layer)` a leg inside one layer (a path of nodes, or null);
  * `at(node)` [x, y, z]. The portals are tried cheapest first (metres to it as the crow flies, the ride, metres on from it),
  * at most `tries` of them. Returns { path, portal } or { path: null, why }.
@@ -27,7 +28,7 @@ export function acrossLayers({ from, targets, mine, portals, walkIn, at, how = '
   }).sort((a, b) => a.score - b.score);
   let why = null;
   for (const portal of ranked.slice(0, tries)) {
-    const name = portal.virtual ? 'virtual lift' : 'lift';
+    const name = `${portal.virtual ? 'virtual ' : ''}${portal.kind ?? 'lift'}`;
     const first = portal.enter === from ? [from] : walkIn(from, [portal.enter], mine);
     if (!first) { why = `no way ${meansOf(how)} ${LAYER_WORDS[mine]} to the ${name} ${Math.round(flat(p, at(portal.enter)))} m off`; continue; }
     const rest = targets.includes(portal.leave) ? [portal.leave] : walkIn(portal.leave, targets, there);

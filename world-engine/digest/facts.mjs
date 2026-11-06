@@ -18,7 +18,9 @@ export const binding = fact => (fact.basis === 'stated' || fact.basis === 'pictu
  * `positionOf(id)` where someone else stands ([x, y, z]) or null.
  */
 export function holds(fact, node, positionOf = () => null) {
-  const k = Math.round(node.y / FLOOR);
+  // Its building's own floor where the director gives it (a building of a street laid underground has its ground floor 30 m
+  // down), else its level from the street.
+  const k = node.floor ?? Math.round(node.y / FLOOR);
   switch (fact.kind) {
     // Indoors is a building's rooms and corridors; underground only when a fact says underground (M4: "indoors" moved
     // someone 72 m into a basement in W9's scene 19).

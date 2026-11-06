@@ -1,4 +1,4 @@
-import { LANDSCAPES, roomUnder, sunkStreet, underground, type Landscape, type Patch } from "./landscape.js";
+import { LANDSCAPES, formOf, roomUnder, sunkStreet, underground, type Landscape, type Patch } from "./landscape.js";
 import { stageStream } from "./stream.js";
 
 /**
@@ -101,13 +101,23 @@ export function boundsOf(hall: Pick<Hall, "boxes" | "bores">) {
 export function hallsOf(landscape: Landscape): Hall[] {
   const halls: Hall[] = [], modern = landscape.patches.filter((patch) => LANDSCAPES[patch.type].era === "modern");
   // A part that lies under the street (terrain spawning: its median below 0): a hall that deep over its ground, a passage
-  // along a linear part (a box patch: a street), a mall under any other; stairs up at its ends. Its surface is open.
+  // along a linear part (a box patch: a street), a mall under any other; stairs up at its ends. The surface over it stays as
+  // it was: it lies in another layer (docs/v2/terrain-levels.md §3.3).
   for (const patch of modern.filter(underground)) {
     const depth = Math.max(4, -(patch.median ?? 0)), linear = patch.shape.family === "box", w = round(1.8 * patch.R), d = round(Math.max(8, linear ? 1.8 * patch.R * (patch.shape.aspect ?? 0.3) : 1.2 * patch.R));
     const kind = (patch.hall && patch.hall in LIES_UNDER ? patch.hall : linear ? "corridor" : "mall") as HallKind;
     // A street laid underground, built out (landscape.ts sunkForm): the hall is its open ground, the whole street wide, open up
     // to the ground skin; its buildings stand on its floor and hold the ground up (no pillars).
-    if (sunkStreet(patch)) { const sw = round(2 * patch.R), sd = round(Math.max(8, linear ? 2 * patch.R * (patch.shape.aspect ?? 0.3) : 2 * patch.R)); halls.push({ id: `${patch.id}:under`, kind, depth, height: Math.max(HALL_HEIGHT[kind] ?? 4, round(roomUnder(patch))), boxes: [{ x: round(patch.x), z: round(patch.z), w: sw, d: sd, angle: patch.shape.turn }], bores: [], pillars: 0, lined: true, up: ends(patch.x, patch.z, sw, patch.shape.turn), street: true }); continue; }
+    // Its box holds every building of its form with a lane of 4 m round them (sized by the area's radius, 49 of W12's 145
+    // stood outside it, their doors on no floor).
+    if (sunkStreet(patch)) {
+      const angle = patch.shape.turn, corners = formOf(patch).buildings.flatMap((b) => [[-1, -1], [1, -1], [1, 1], [-1, 1]].map(([su, sv]) => { const [dx, dz] = turn(b.angle, [(su * b.w) / 2, (sv * b.d) / 2]); return turn(-angle, [b.x + dx - patch.x, b.z + dz - patch.z]); }));
+      const us = corners.map(([u]) => u), vs = corners.map(([, v]) => v), lane = 4;
+      const [u0, u1, v0, v1] = corners.length ? [Math.min(...us) - lane, Math.max(...us) + lane, Math.min(...vs) - lane, Math.max(...vs) + lane] : [-patch.R, patch.R, -patch.R, patch.R];
+      const [cx, cz] = turn(angle, [(u0 + u1) / 2, (v0 + v1) / 2]), sw = round(u1 - u0), sd = round(Math.max(8, v1 - v0)), x = round(patch.x + cx), z = round(patch.z + cz);
+      halls.push({ id: `${patch.id}:under`, kind, depth, height: Math.max(HALL_HEIGHT[kind] ?? 4, round(roomUnder(patch))), boxes: [{ x, z, w: sw, d: sd, angle }], bores: [], pillars: 0, lined: true, up: ends(x, z, sw, angle), street: true });
+      continue;
+    }
     halls.push({ id: `${patch.id}:under`, kind, depth, height: HALL_HEIGHT[kind] ?? 4, boxes: [{ x: round(patch.x), z: round(patch.z), w, d, angle: patch.shape.turn }], bores: [], pillars: ["corridor", "utility", "tunnel"].includes(kind) ? 0 : 8, lined: true, up: ends(patch.x, patch.z, w, patch.shape.turn) });
   }
   for (const patch of modern) {

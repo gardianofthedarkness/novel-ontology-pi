@@ -144,7 +144,7 @@ export const insideBy = (patch: Patch, p: Point) => reachOf(patch, p) - Math.hyp
 export const depthOf = (patch: Patch, p: Point) => Math.max(0, Math.min(1, 1 - Math.hypot(p[0] - patch.x, p[1] - patch.z) / reachOf(patch, p)));
 
 /** The patch a point lies inside (by the hard outline): the oldest such. */
-export const ownerOf = (landscape: Landscape, p: Point) => landscape.patches.find((patch) => insideBy(patch, p) > 0) ?? null;
+export const ownerOf = (landscape: Landscape, p: Point) => surfacePatches(landscape).find((patch) => insideBy(patch, p) > 0) ?? null;
 /**
  * The probabilistic manifold: how surely a point belongs to a patch, σ(signed distance / softness): about 1 deep
  * inside, ½ on the outline, fading outside over the type's softness (a castle's edge is a wall, a village's fades).
@@ -156,7 +156,13 @@ export const membership = (patch: Patch, p: Point) => 1 / (1 + Math.exp(-insideB
  * only ever draws for lots every older patch passed over, so it never takes one an older patch has.
  */
 /** Patches in the order they claim ground: borrowed ones first (docs/v2/world-engine-v2.md §2.0.12), then by birth. */
-export const claimOrder = (landscape: Landscape) => [...landscape.patches.filter((patch) => patch.borrowed), ...landscape.patches.filter((patch) => !patch.borrowed)];
+/**
+ * The patches of the surface, the layer the city's fabric is cut, owned and built on (docs/v2/terrain-levels.md §3.3: each
+ * layer is its own plane). A patch under the street lies in another layer: it claims no surface ground, cuts no block and
+ * lends no height, so laying a street under the street leaves the surface as it was, building for building.
+ */
+export const surfacePatches = (landscape: Landscape) => landscape.patches.filter((patch) => !((patch.median ?? 0) < 0));
+export const claimOrder = (landscape: Landscape) => { const surface = surfacePatches(landscape); return [...surface.filter((patch) => patch.borrowed), ...surface.filter((patch) => !patch.borrowed)]; };
 export function ownerOfLot(landscape: Landscape, lot: { id: string; centre: Point }): Patch | null {
   for (const patch of claimOrder(landscape)) if (insideBy(patch, lot.centre) > -fringe(patch) && skeletonStream(landscape.seed, "own", lot.id, patch.id)() < membership(patch, lot.centre)) return patch;
   return null;
@@ -175,7 +181,7 @@ function contains(pts: Point[], p: Point): boolean {
 /** How far past its outline a patch's soft edge can still claim ground: beyond it, nothing. */
 function fringe(patch: Patch) { return 3 * LANDSCAPES[patch.type].soft + 10; }
 /** The circle that holds the whole landscape, with a margin: it grows as patches are added. */
-export const circleOf = (landscape: Landscape, margin = 10) => Math.max(0, ...landscape.patches.map((patch) => Math.hypot(patch.x, patch.z) + patch.R + fringe(patch))) + margin;
+export const circleOf = (landscape: Landscape, margin = 10) => Math.max(0, ...surfacePatches(landscape).map((patch) => Math.hypot(patch.x, patch.z) + patch.R + fringe(patch))) + margin;
 /** How far inside the landscape a point is (negative outside): a scene within `margin` of the edge needs a new part. */
 export const depthInside = (landscape: Landscape, p: Point) => Math.max(-Infinity, ...landscape.patches.map((patch) => insideBy(patch, p)));
 
@@ -602,7 +608,7 @@ export function landscapeStyle(landscape: Landscape): FillStyle {
       // taller, never past the peak. Only the newer part's lots draw this way; the older part's never change.
       let from = owner, cap = kind.cap;
       if (kind.era === "modern") for (const older of landscape.patches.slice(0, landscape.patches.indexOf(owner))) {
-        if (LANDSCAPES[older.type].era === "modern" && rng() < reachOfHeights(older, lot.centre)) { from = older; cap = Math.max(cap, LANDSCAPES[older.type].cap); break; }
+        if (LANDSCAPES[older.type].era === "modern" && !underground(older) && rng() < reachOfHeights(older, lot.centre)) { from = older; cap = Math.max(cap, LANDSCAPES[older.type].cap); break; }
       }
       // No taller than SLENDER times its footprint's width: tall buildings need wide lots.
       const width = Math.max(4, Math.sqrt(lot.area) - 2 * kind.back), h = drawHeight(from, Math.max(0.02, LANDSCAPES[from.type].axis || LANDSCAPES[from.type].band ? axisDepth(from, lot.centre) : depthOf(from, lot.centre)), rng);

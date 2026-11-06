@@ -318,7 +318,14 @@ export function nodeId(world: World, i: number, j: number, k: number): number {
 }
 
 /** What each node is, from the last graph: 0 none, 1 outdoor, 2 circulation, 3 room, 4 roof, 5 underground, 6 rubble (L18); its lot; its ground. */
-export interface WorldGraph { graph: MoveGraph; type: Uint8Array; lot: Int32Array; ground: Uint8Array }
+/**
+ * A way between a layer and the ground (docs/v2/terrain-levels.md §3.4): `foot` on the space's floor, `top` on the open
+ * ground above, stairs or a lift, its rise in metres and its cost each way. Virtual: the world's own, on every square.
+ */
+export interface WorldWay { foot: number; top: number; hall: number; kind: "stairs" | "lift"; rise: number; up: number; down: number }
+export interface WorldGraph { graph: MoveGraph; type: Uint8Array; lot: Int32Array; ground: Uint8Array; ways: WorldWay[] }
+/** The ways' grid: one on each square this many metres a side, to open ground within WAY_REACH cells; stairs to STAIRS_DEPTH. */
+export const WAY_EVERY = 40, WAY_REACH = 10, WAY_FAR = 60, STAIRS_DEPTH = 20, LIFT_SPEED = 5, LIFT_WAIT = 20, WALK_SPEED = 1.4;
 
 /**
  * The movement graph over the materialized world and what stands (`standing` per lot), with the things placed in it
@@ -582,6 +589,39 @@ export function worldGraph(world: World, standing: Uint8Array[], things: PlacedT
     const from = nodeId(world, i, j, k), to = nodeId(world, i, j, levelOf(halls[tank].depth));
     add(from, to, 0, 0, 2 + 8 * (levelOf(halls[tank].depth) - k) * FLOOR_HEIGHT, EDGE.climb, UP); add(to, from, 0, 0, 2 + (levelOf(halls[tank].depth) - k) * FLOOR_HEIGHT, EDGE.descend, DOWN);
   });
+  // Ways between the layers, dense and virtual (the user, 2026-11-06: "general and dense enough virtual stairs and elevators
+  // that always connects the underground to the ground, for any layer"; docs/v2/terrain-levels.md §3.4): over every hall's
+  // floor, one way on each WAY_EVERY m square of the world's grid, from the floor cell nearest the square's middle to the
+  // nearest open ground above; stairs up to STAIRS_DEPTH m (a building's stairs, a floor's climb at a time), a lift deeper
+  // (its rise at LIFT_SPEED and a wait, as metres walked). A hall that gets none so (the ground over it all built) gets one
+  // from its floor's cell nearest open ground, however far. The text's own ways (`up`, above) stand beside them.
+  const ways: WorldWay[] = [];
+  {
+    const best = new Map<string, { hall: number; i: number; j: number; k: number; d: number }>(), floors = new Set<number>(), joined = new Set<number>();
+    for (const [i, j, k] of cells) {
+      if (k >= 0) continue;
+      const here = what(i, j, k);
+      if (here.type !== 5 || here.lot < HALL_LOT) continue;
+      const hall = here.lot - HALL_LOT, x = (i + 0.5) * SKELETON_CELL, z = (j + 0.5) * SKELETON_CELL, gi = Math.floor(x / WAY_EVERY), gj = Math.floor(z / WAY_EVERY);
+      const key = `${hall}|${k}|${gi}|${gj}`, d = Math.hypot(x - (gi + 0.5) * WAY_EVERY, z - (gj + 0.5) * WAY_EVERY), known = best.get(key);
+      if (!known || d < known.d || (d === known.d && (i < known.i || (i === known.i && j < known.j)))) best.set(key, { hall, i, j, k, d });
+      floors.add(hall);
+    }
+    const join = ({ hall, i, j, k }: { hall: number; i: number; j: number; k: number }, reach: number) => {
+      const street = outdoorNear((i + 0.5) * SKELETON_CELL, (j + 0.5) * SKELETON_CELL, reach);
+      if (!street) return false;
+      const rise = -k * FLOOR_HEIGHT, across = Math.hypot(street[0] - i, street[1] - j) * SKELETON_CELL, lift = rise > STAIRS_DEPTH, ride = (rise / LIFT_SPEED + LIFT_WAIT) * WALK_SPEED;
+      const up = across + (lift ? ride : (rise / FLOOR_HEIGHT) * (2 + 8 * FLOOR_HEIGHT)), down = across + (lift ? ride : (rise / FLOOR_HEIGHT) * (2 + FLOOR_HEIGHT));
+      const foot = nodeId(world, i, j, k), top = nodeId(world, street[0], street[1], 0);
+      add(foot, top, 0, 0, up, EDGE.climb, UP); add(top, foot, 0, 0, down, EDGE.descend, DOWN);
+      ways.push({ foot, top, hall, kind: lift ? "lift" : "stairs", rise, up: Math.round(up * 10) / 10, down: Math.round(down * 10) / 10 });
+      joined.add(hall);
+      return true;
+    };
+    const squares = [...best.values()].sort((a, b) => a.hall - b.hall || a.k - b.k || a.i - b.i || a.j - b.j);
+    for (const square of squares) join(square, WAY_REACH);
+    for (const hall of floors) if (!joined.has(hall)) for (const square of squares.filter((entry) => entry.hall === hall)) if (join(square, WAY_FAR)) break;
+  }
   // Positions of every node ever seen (those that no longer stand have no edges), and what each is now.
   const count = world.cells.length / 3, type = new Uint8Array(count), lot = new Int32Array(count).fill(NOT), ground = new Uint8Array(count);
   // Every node's place, kept with the world and grown as nodes are numbered (a node's place never changes).
@@ -601,7 +641,7 @@ export function worldGraph(world: World, standing: Uint8Array[], things: PlacedT
   // Each step once (the same cells, way and kind): one added by two of the rules above counted twice in the walk sum.
   const once = new Map<string, (typeof edges)[number]>();
   for (const edge of edges) { const key = `${edge.from}|${edge.to}|${edge.dir}|${edge.kind}`, known = once.get(key); if (!known || edge.cost < known.cost) once.set(key, edge); }
-  return { graph: buildGraphAt(at, [...once.values()]), type, lot, ground };
+  return { graph: buildGraphAt(at, [...once.values()]), type, lot, ground, ways };
 }
 
 /**

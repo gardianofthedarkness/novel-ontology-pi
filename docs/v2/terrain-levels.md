@@ -100,6 +100,86 @@ marked moving (§6.3). Vol 1 should come out all land and underground; the check
 - **Falling** joins every level: anyone in the air without flight falls under gravity with drag (a person reaches about
   55 m/s), into water (a splash, §4.3) or onto the ground (an impact, as a blow).
 
+### 3.3 Layers: the third dimension of the manifold model (the user, 2026-11-06)
+
+> "A underground street should be compatible with its upper layer. It means placing it down won't affect the streets on
+> top. City and district level can be placed underground, but they will automatically be the without ceiling underground
+> layer. We haven't done atmosphere level and universe levels yet which also belongs to this switching layer logic. This
+> is basically, a third dimensional layer to the vector manifold mathematical model we have"
+
+**The model.** A manifold (borrow-and-spawn.md §8) keeps its kind, its vector from its parent's centre, its radius, its seed and its average height. It now also keeps a **layer**: the plane it lies in.
+
+| Layer | What lies there | Depth or height | Its ceiling | Built |
+| --- | --- | --- | --- | --- |
+| space | orbit | above 100 km | none | not yet (§7) |
+| atmosphere | floating places, the sky | over the rooftops | none | not yet (§6) |
+| surface | the city as now | the street | the sky | yes |
+| shallow underground | every hall with a real depth: basements, malls, the subway, a street laid under, storm water, deep facilities | its own, however deep | the ground skin | yes |
+| deep underground | an underground world: a virtual space | none of its own | none felt (§8.6) | not yet |
+
+**The rules:**
+1. **Each layer is its own plane.** Topology, pressure and squeezing (§8.3) and height unification (§8.6) act only between manifolds of one layer. A manifold never moves, squeezes or re-heights one in another layer, so placing a street under the street changes nothing on top.
+2. **The vectors cross layers.** A manifold's parent may lie in another layer. Its vector is kept in the parent's frame (§8.5), so a street laid under a district stays under it when the district moves, and a squeeze of the parent scales it like any child.
+3. **The layer follows the scale and the height answer.**
+   - A street, a building or a room answered below the street lies in the shallow layer, under the skin.
+   - A city or a district answered below the street lies in the deep layer automatically: no ceiling is asked, and its depth is not a number.
+   - A place answered above (a floating shape, §8.9 of borrow-and-spawn) lies in the atmosphere, and an orbit in space.
+4. **Neighbouring layers are compatible.** The shallow layer and the surface share the ground's column. The surface keeps its form; the shallow manifold takes only the ground under it (the surface's basements stop above its air); its ways up land on the surface's open ground; nothing of it shows on top.
+5. **Switching layers is a portal:**
+   - stairs, a lift or a shaft between the surface and the shallow layer;
+   - the virtual elevator between the surface and the deep layer;
+   - flight or a take-off into the atmosphere, a launch into space.
+   - A walk is solved inside one layer, and a route switches at a portal (§8.2, `world-engine/world/layers.mjs`).
+6. **Saved in the map.** A manifold's layer is part of the map (§8.1 there) and its log (§8.8).
+
+**Built first: the shallow layer (2026-11-06).**
+- **Slots keep their layer** as `plane` (`layer` already names a slot's kind of holding). The terrain loop gives a place the note puts underground the shallow layer (a street, a building, a room) or the deep one (a city, a district) (`planeOfPart` in terrain-spawn.mjs).
+- **Choosing, moving and spares stay inside one layer:**
+  - a place borrows or spawns only a slot of its own layer;
+  - a spawn is placed by its story's travel among its own layer's places, and a surface spawn's re-layout of its parent is never run for it;
+  - the level's moves and its spares' places look only at their own layer;
+  - children's slots take their parent's layer.
+  - W12's stretch now spawns `slot:loc_000004:alley:2` in the shallow layer, where before it took district 7's surface alley.
+- **The surface's fabric ignores what lies below** (`landscape.ts` `surfacePatches`): a patch answered under the street claims no surface lot, cuts no block, lends no height and does not widen the city's circle. A world test checks that the surface over a street laid 30 m under is the same, building for building, as without it.
+- **The canvas keeps layers apart** (`placeCanvas.ts` `onSurface`):
+  - a place of another layer is never the area a surface building is sampled into, dwells in or is hosted by;
+  - it takes no room, pushes nothing and grows nothing on top.
+  - The export lays the surface out as if a below-street place's scenes stood at its holder (the area the script filed them in: the trips, the continuity ties, the order places are born in), and lays the below-street places out after it.
+- **Adding to a built world** (`terrain-spawn.mjs --add`, option `add`):
+  - a level with nothing new keeps its end as it was;
+  - one whose new places all lie under the street settles only their layer;
+  - only the slots the run changed are written back into the book's sites.
+  - Run again over a built library, the full loop re-settles every level end, and with today's code that moves 46 of library 16's places with nothing added.
+- **Checked on copies of library 16 with their universe, W12's stretch placed by Jev's answers replayed:** with `--add`, the stretch moves none of the 221 places on the map, changes none of the library's 166 sites, and adds exactly two things: itself and its shallow slot. With no new place, `--add` changes nothing at all.
+- **Still to come:**
+  - the deep layer's own plane for a city or a district put underground (its virtual space, the virtual elevator);
+  - the atmosphere and space, by the same rules.
+
+**A correction (2026-11-06).** "Adding one place re-ran the whole city" (the test of 2026-11-05) was the test copies' doing, not the engine's. A book copied outside its library keeps its universe inside the copy (`pools.ts` `universeOf`), so the copies started with no slot registry and the terrain loop spawned every spare slot afresh: with no new place at all, a first run moved 87 spare slots, and a second run moved none. A test copy needs its library's universe beside it.
+
+### 3.4 Ways between layers: dense, general, always there (the user, 2026-11-06)
+
+> "Before you move to the deep and sky and universe, we need to make sure there are general and dense enough virtual stairs
+> and elevators that always connects the underground to the ground, for any layer."
+
+**The rule.** Every space of another layer is joined to the ground by ways that are always there, dense enough that nobody
+has to look for one:
+- **Where:** over the space's floor, one way on each 40 m square of the world's grid, from the floor cell nearest that square's middle. So no spot of a floor is more than about 30 m from a way.
+- **To:** the nearest open ground above, within 20 m.
+- **Always:** a space whose floor gets no way that way (the ground over it all built) gets one from its cell nearest open ground, however far.
+- **What:** stairs where the rise is up to 20 m, costed as a building's stairs, a floor's climb at a time (a climb never cheaper than the solver's guide, so it never scales its guide down). Deeper, a lift, costed as the ride: its rise at 5 m/s plus a 20 s wait, at a walk's 1.4 m/s.
+- **Virtual:** they are the world's own, not the text's. The text's own ways (a station's stairs, a facility's shaft: a hall's `up`) stand beside them, and a route takes whichever is cheaper.
+- **In the walk graph** (`world.ts` `worldGraph`, its `ways`): every walk and route sees them. A way into a space more than 20 m down is a portal between the solver's bands (§8.2).
+
+**For any layer, by the same rule.** Each layer joins the ground by its own kind of way on the same grid:
+
+| Layer | Its ways to the ground |
+| --- | --- |
+| shallow underground | stairs to 20 m, a lift deeper (built) |
+| deep underground | the virtual elevator: a lift on every square (§8.6) |
+| atmosphere | a lift or a landing down to the ground under a floating place (stage 5) |
+| space | a launch or a space elevator (stage 6) |
+
 ## 4. Water (stage 3)
 
 ### 4.1 Bodies of water
@@ -318,12 +398,23 @@ The skin is one sheet per region over the near-ground layer, derived from the ci
   - **The director starts a noted place's units in its own hall:** `<place>:shape`, `<place>:under`, or the hall of the slot it borrows in spawn mode.
   - **Tried on a test copy of library 16 with Jev's real answers:** units 118–123 start in the stretch's corridor at −30 m, ride lifts down 9 times and up 8, and every route arrives. But in spawn mode the place took a spare alley slot of district 7, 1.8 km from where the story was. So against the units' own settings it does worse: failing facts 14 → 18 and arrivals over 500 m 0 → 6, though key-check retakes 5 → 2. Library 16 is not changed.
   - **Open:** placing a stretch near the place its story comes from (the bar of units 114–117), before it is adopted.
-- **Portals** (`world-engine/world/layers.mjs`, the engine's `portalsNear`): a walk whose targets all lie in the other layer goes to a portal in its own layer, rides it, and walks on, each leg solved inside its layer. The portals are tried cheapest first, up to four.
-- **The virtual elevator:** one lift every 40 m over every deep floor, its top on the nearest open ground within 20 m. A ride costs its depth at 5 m/s plus a 20 s wait, as metres walked, so the text's own lifts are taken first.
-  - Checked on library 16: down into and up out of a 90 m military facility by its lift, a lab by a virtual lift, and a hall with no real lift by the virtual elevator alone. Each trip crosses layers once.
-- **L10 says how and where:** "no way there on foot (at street level and just under it)", "no way climbing in the deep layer from the lift to there", "no lift, shaft or ladder within 120 m".
+- **Portals** (`world-engine/world/layers.mjs`, the engine's `portalsNear`): a walk between the street's band and the halls more than 20 m down goes to a portal in its own band (a lift, a shaft, stairs, a ladder), rides it, and walks on, each leg solved inside its band. The portals are tried cheapest first, up to four. The bands are the solver's, not layers: every real hall is the shallow layer, and a hall's or a building's band is where it stands (a building of a street 30 m under is in the lower band up to its roof).
+- **The virtual elevator,** now part of the general ways of §3.4: every hall's floor has stairs or a lift on every 40 m square of the world's grid, built into the walk graph. A virtual deep layer will take the same grid of lifts.
+  - Checked on library 16 (before the correction, with virtual lifts over real halls): down into and up out of a 90 m military facility by its lift; every trip crossed bands once.
+- **L10 says how and where:** "no way there on foot (at street level and just under it)", "no way climbing more than 20 m down from the lift to there", "no lift, shaft, stairs or ladder within 120 m".
 - **A start walled into a sliver** of open ground between buildings (a cell or two; W12's unit 169) steps out to the nearest ground a walk leaves from, within 8 m. The unit's record counts these (`freed`).
 - **Rehearsed (unpaid):** units 1–84 unchanged with the portals in; units 144–171, where W12 failed near lifts, have 0 "no way there" and 0 of 5 arrivals unreached.
+
+**A street laid underground, built out (the user, 2026-11-05: "Yes, build it out"):**
+- **Its form:** a street-scale area the terrain loop answers below the street is laid as a street of its kind (its rows, a square's rings) on its floor (`landscape.ts` `sunkForm`). Its heights are half the room up to the 3 m ground skin on average, and every roof stays under the skin. It has no road, water or plaza: its open ground is its hall's floor.
+- **Its hall** (`underground.ts`, `street: true`) holds every building of the form with a 4 m lane round them, open up to the skin, with stairs up at its ends and no pillars.
+- **One street per place:** a place that borrows a slot (spawn mode) takes its underground street from the slot's form only. Its depth keeps the terrain loop from mapping it, so the export also gave it a landscape of its own, and two streets were laid 30 m down on one spot at two angles.
+- **Its buildings** stand on its floor as lots with a level `k0` (world.ts), holding their cells in `lotBelow`, so a building on the street above keeps the same column. Their doors open onto the hall's floor, their floors count from their own ground floor, and the street's basements stop above its air.
+- **Its heights from Jev:** a building borrowing a lot of such a street is offered only the floors that fit under the skin, and no slice below its street.
+- **The director** names such spots ("a room of the shop (5 floors), floor 1, 30 m under the street"; "an underground street, 30 m down") and counts floor facts from the building's own ground floor. "Underground, on the ground floor" (W12's unit 120) now holds there.
+- **The viewer** draws its buildings on its floor, the hall as its floor and its ceiling in outline, and fades the street's buildings over it while anyone is below.
+- **Rehearsed (unpaid)** on a copy of library 16, with W12's stretch placed by the real Jev's answers replayed (an alley, −30 m): units 118–123 start in it, walk into its shops and up its stairs, and every walk and arrival is found. Units 1–84 and 115–131 come out the same as before the change.
+- **Open:** where a stretch is placed (spawn mode put it in a spare alley slot 1.8 km from the bar), and adding a place without moving the rest of a built world.
 
 ### 8.6 The deep layer's ceiling, and the virtual elevator
 

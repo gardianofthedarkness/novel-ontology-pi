@@ -171,6 +171,7 @@ export async function strandDemo(novelDir, options) {
   const dirty = [], changed = (boxes = null) => { shared.version++; dirty.push({ version: shared.version, boxes }); };
   const overlaps = (a, b) => a.x0 <= b.x1 && b.x0 <= a.x1 && a.z0 <= b.z1 && b.z0 <= a.z1;
   const lotBounds = lot => ({ x0: lot.i0 * 2, x1: (lot.i0 + lot.nx) * 2, z0: lot.j0 * 2, z1: (lot.j0 + lot.nz) * 2 });
+  const allWays = new Map();
   const graphOf = (focus = null, half = 0) => {
     if (shared.built?.version !== shared.version) {
       if (windows.size) cost.cleared++;
@@ -181,7 +182,11 @@ export async function strandDemo(novelDir, options) {
       dirty.length = 0; shared.built = { version: shared.version };
     }
     const f = focus ?? { x: 0, z: 0 }, cx = Math.round(f.x / 128) * 128, cz = Math.round(f.z / 128) * 128, h = Math.max(192, Math.ceil((half + Math.max(Math.abs(f.x - cx), Math.abs(f.z - cz))) / 64) * 64), key = `${cx}|${cz}|${h}`;
-    if (!windows.has(key)) { const started = performance.now(), box = { x0: cx - h, x1: cx + h, z0: cz - h, z1: cz + h }; windows.set(key, { version: shared.version, box, ...W.worldGraph(world, shared.standing, [...shared.things.values()], box, shared.rubble) }); cost.builds++; cost.ms += performance.now() - started; }
+    if (!windows.has(key)) {
+      const started = performance.now(), box = { x0: cx - h, x1: cx + h, z0: cz - h, z1: cz + h }; windows.set(key, { version: shared.version, box, ...W.worldGraph(world, shared.standing, [...shared.things.values()], box, shared.rubble) }); cost.builds++; cost.ms += performance.now() - started;
+      // The ways between the layers this window laid (terrain-levels §3.4), kept for the page: each once, by its two ends.
+      for (const way of windows.get(key).ways ?? []) { const id = `${way.foot}|${way.top}`; if (!allWays.has(id)) { const f = W.nodePos(world, way.foot), t = W.nodePos(world, way.top); allWays.set(id, [f.x, f.y, f.z, t.x, t.z, way.kind === 'lift' ? 1 : 0]); } }
+    }
     return windows.get(key);
   };
   /**
@@ -249,34 +254,26 @@ export async function strandDemo(novelDir, options) {
   };
   /**
    * The ways between the street's band and the halls more than DEEP metres down round two points (docs/v2/terrain-levels.md
-   * §8.1–8.2): every edge of the walk graph that joins a node below DEEP to one above it (a hall's lift or shaft, its stairs
-   * at its ends, a ladder). All of these are real halls in the shallow layer (the user, 2026-11-05: "30m to be honest is a
-   * shallow layer"); the split at DEEP is the solver's band, so a long street walk never holds a 90 m lift at a flat cost.
-   * The virtual elevator (§8.6) serves only the deep layer, a virtual space with no depth of its own: over a hall marked
-   * `virtual` (none yet) a lift every 40 m, its top on the nearest open ground, a ride its depth at 5 m/s and a 20 s wait,
-   * at a walk's 1.4 m/s. Each: { foot, top, up, down, virtual }.
+   * §3.4, §8.2): every edge of the walk graph that joins a node below DEEP to one above it. They are the halls' own ways (a
+   * station's stairs, a facility's shaft: their `up`) and the world's dense virtual ones (world.ts `ways`: stairs or a lift
+   * on every 40 m square of a floor); the band is the solver's, every real hall being the shallow layer. Each portal:
+   * { foot, top, up, down, virtual, kind }.
    */
-  const LIFT_EVERY = 40, LIFT_SPEED = 5, LIFT_WAIT = 20, WALK_SPEED = 1.4;
   const portalsNear = (a, b, radius = 120) => {
     const p = W.nodePos(world, a), q = W.nodePos(world, b), x0 = Math.min(p.x, q.x) - radius, x1 = Math.max(p.x, q.x) + radius, z0 = Math.min(p.z, q.z) - radius, z1 = Math.max(p.z, q.z) + radius;
     reach((x0 + x1) / 2, (z0 + z1) / 2, Math.max(x1 - x0, z1 - z0) / 2);
-    const built = graphOf({ x: (x0 + x1) / 2, z: (z0 + z1) / 2 }, Math.max(x1 - x0, z1 - z0) / 2), g = built.graph, out = [], cells = new Map();
+    const built = graphOf({ x: (x0 + x1) / 2, z: (z0 + z1) / 2 }, Math.max(x1 - x0, z1 - z0) / 2), g = built.graph, out = [];
+    const virtual = new Map((built.ways ?? []).map(way => [`${way.foot}|${way.top}`, way]));
     const inBox = n => g.x[n] >= x0 && g.x[n] <= x1 && g.z[n] >= z0 && g.z[n] <= z1;
     const costOf = (from, to) => { for (let e = g.offsets[from]; e < g.offsets[from + 1]; e++) if (g.to[e] === to) return g.cost[e]; return null; };
     for (let n = 0; n < built.type.length; n++) {
       if (!built.type[n] || !bandDeep(built, n) || !inBox(n) || g.offsets[n + 1] === g.offsets[n]) continue;
-      for (let e = g.offsets[n]; e < g.offsets[n + 1]; e++) { const m = g.to[e]; if (!bandDeep(built, m)) { const down = costOf(m, n); out.push({ foot: n, top: m, up: g.cost[e], down: down ?? g.cost[e], virtual: false }); } }
-      const hall = built.lot[n] >= W.HALL_LOT ? (world.source.underground?.halls ?? [])[built.lot[n] - W.HALL_LOT] : null;
-      if (built.type[n] !== 5 || !hall?.virtual) continue;
-      const key = `${Math.floor(g.x[n] / LIFT_EVERY)}|${Math.floor(g.z[n] / LIFT_EVERY)}|${Math.round(g.y[n])}`, cx = (Math.floor(g.x[n] / LIFT_EVERY) + 0.5) * LIFT_EVERY, cz = (Math.floor(g.z[n] / LIFT_EVERY) + 0.5) * LIFT_EVERY, d = Math.hypot(g.x[n] - cx, g.z[n] - cz);
-      if (!cells.has(key) || d < cells.get(key).d) cells.set(key, { n, d });
-    }
-    for (const { n } of cells.values()) {
-      const street = W.streetNear(world, g.x[n], g.z[n], 10);
-      const top = street ? W.nodeNear(world, built, street[0], street[1], 0) : null;
-      if (top === null || built.type[top] !== 1) continue;
-      const ride = (-g.y[n] / LIFT_SPEED + LIFT_WAIT) * WALK_SPEED;
-      out.push({ foot: n, top, up: ride, down: ride, virtual: true });
+      for (let e = g.offsets[n]; e < g.offsets[n + 1]; e++) {
+        const m = g.to[e];
+        if (bandDeep(built, m)) continue;
+        const way = virtual.get(`${n}|${m}`), down = costOf(m, n);
+        out.push({ foot: n, top: m, up: g.cost[e], down: down ?? g.cost[e], virtual: !!way, kind: way?.kind ?? (Math.abs(g.y[m] - g.y[n]) > 20 ? 'lift' : 'stairs') });
+      }
     }
     return out;
   };
@@ -584,13 +581,14 @@ export async function strandDemo(novelDir, options) {
       if (!ground.has(id)) ground.set(id, terrainGround(id) ? { type: terrainGround(id).ground, by: 'jev', from: 'terrain' } : groundFor(inputs.landscape?.places[id], pathOf(id).filter(at => at !== id).reverse(), at => inputs.landscape?.places[at], scale));
       return ground.get(id).type;
     };
-    const trips = (a, b) => bookTrips.filter(m => m.from && m.to && (pathOf(m.from).includes(a) && pathOf(m.to).includes(b) || pathOf(m.from).includes(b) && pathOf(m.to).includes(a))).length;
+    // A trip to or from a place of another layer counts at its holder for the surface's layout (standIn).
+    const trips = (a, b) => bookTrips.filter(m => m.from && m.to && (pathOf(standIn(m.from)).includes(a) && pathOf(standIn(m.to)).includes(b) || pathOf(standIn(m.from)).includes(b) && pathOf(standIn(m.to)).includes(a))).length;
     const canvas = C.emptyCanvas();
     // Toward where the terrain step put it in this parent, else toward the sibling it has the most travel with.
-    const toward = (id, parent) => terrain?.sites?.[id]?.parent === parent ? terrain.sites[id].toward : Object.values(canvas.places).filter(place => place.parent === parent && place.id !== id).map(place => [place, trips(id, place.id)]).filter(([, count]) => count).sort((x, y) => y[1] - x[1])[0]?.[0].at;
+    const toward = (id, parent) => terrain?.sites?.[id]?.parent === parent ? terrain.sites[id].toward : Object.values(canvas.places).filter(place => place.parent === parent && place.id !== id && C.onSurface(place) === (planeOf(id) === 'surface')).map(place => [place, trips(id, place.id)]).filter(([, count]) => count).sort((x, y) => y[1] - x[1])[0]?.[0].at;
     const birth = (id, parent) => {
       if (canvas.places[id]) return;
-      C.bear(canvas, { id, label: name(id), scale: scaleOf(id) ?? (ownGrids.has(id) ? kindOf(id) : 'district'), parent, landscape: landscapeOf(id), toward: toward(id, parent), ground: groundPatch(id), ...(Array.isArray(terrain?.sites?.[id]?.at) ? { fixed: terrain.sites[id].at } : {}) });
+      C.bear(canvas, { id, label: name(id), scale: scaleOf(id) ?? (ownGrids.has(id) ? kindOf(id) : 'district'), parent, landscape: landscapeOf(id), toward: toward(id, parent), ground: groundPatch(id), plane: planeOf(id), ...(Array.isArray(terrain?.sites?.[id]?.at) ? { fixed: terrain.sites[id].at } : {}) });
     };
     // An unnamed place (a v2 reading's EM² place) is never an area of the build: it is a marker in one, until Jev places it.
     const areaScale = id => { if (String(id).startsWith('unnamed:')) return null; const scale = scaleOf(id) ?? scaleOfName(name(id)); return OPEN.has(scale) ? scale : null; };
@@ -602,13 +600,24 @@ export async function strandDemo(novelDir, options) {
     // A street that took the ground's own road or crossing (street.json `takes`, laid on one: its site's `on`) builds no form:
     // the city's lots round it are its buildings (landscape.ts `takes`).
     const takesOf = site => { if (terrain?.mode !== 'spawn' || site?.scale !== 'street' || !site.on) return null; const takes = SP.streetTakes(site.kind, spawning); return takes?.road ? 'road' : takes?.crossing ? 'crossing' : null; };
+    // The layer a place lies in (terrain-levels §3.3): its slot's, or the slot it lies in; the surface else. The canvas never
+    // samples a surface building into a place of another layer, so a street laid under the street moves nothing on top.
+    const planeOf = id => { const slots = terrain?.slots ?? {}, site = terrain?.sites?.[id]; return slots[id]?.plane ?? (site?.slot ? slots[site.slot]?.plane : null) ?? 'surface'; };
+    // Where a place of another layer stands for the surface's layout: its holder (the area the script filed it in).
+    const standIn = id => (planeOf(id) !== 'surface' ? terrain?.sites?.[id]?.holder ?? id : id);
     const embeddedOf = id => { const site = terrain?.sites?.[id]; return terrain?.mode === 'spawn' && site?.mapped && Array.isArray(site.toward) ? { embedded: true, at: site.toward, ground: null, landscape: null } : {}; };
-    const areas = placeTree.filter(place => areaScale(place.id)).map(place => ({ id: place.id, label: name(place.id), scale: areaScale(place.id), ground: groundPatch(place.id), parent: place.parentId ?? terrain?.sites?.[place.id]?.parent ?? null, proposed: place.proposedParentId ?? null, ...(poolArea(place.id) ? { pool: poolArea(place.id) } : {}), landscape: landscapeOf(place.id, areaScale(place.id)) , ...embeddedOf(place.id) }));
+    const areas = placeTree.filter(place => areaScale(place.id)).map(place => ({ id: place.id, label: name(place.id), scale: areaScale(place.id), ground: groundPatch(place.id), parent: place.parentId ?? terrain?.sites?.[place.id]?.parent ?? null, proposed: place.proposedParentId ?? null, ...(poolArea(place.id) ? { pool: poolArea(place.id) } : {}), landscape: landscapeOf(place.id, areaScale(place.id)), plane: planeOf(place.id), ...embeddedOf(place.id) }));
     const dwelling = C.centralBuild(canvas, areas, toward), dwellingUnits = {};
     // A pool's member (docs/v2/world-engine-v2.md §2.0.14): one Jev kept stands where its box put it; any other is sampled
     // at the free spot nearest the members continuity ties it to (the characters going between their scenes), the more
     // ties the nearer; with none, nearest the pool's middle.
-    const ties = worldScript ? continuityTies(worldScript) : {};
+    // Continuity ties for the surface's layout: a tie to or from a place of another layer counts at its holder (standIn),
+    // as it did before the place was laid under the street, so nothing on top is sampled or dwelt elsewhere for it.
+    const ties = (() => {
+      const own = worldScript ? continuityTies(worldScript) : {}, out = {};
+      for (const [a, row] of Object.entries(own)) for (const [b, n] of Object.entries(row)) { const [x, y] = [standIn(a), standIn(b)]; if (x === y) continue; (out[x] ??= {})[y] = (out[x][y] ?? 0) + n; }
+      return out;
+    })();
     const keptIn = (holder, id) => { const site = terrain?.sites?.[id]; return site?.parent === holder && Array.isArray(site.toward) ? [site.toward[0], site.toward[1]] : null; };
     const memberAt = (holder, unit) => { if (!canvas.places[holder]?.pool) return {}; const at = keptIn(holder, unit.id) ?? C.tiedSpot(canvas, holder, unit, ties[unit.id]); return at ? { at } : {}; };
     // A building that borrowed a lot of its street's form (terrain spawning's building level, docs/v2/borrow-and-spawn.md §6)
@@ -620,34 +629,40 @@ export async function strandDemo(novelDir, options) {
     const floatedAt = (id, holder) => { const site = terrain?.sites?.[id]; return site?.floated && Array.isArray(site.at) && site.by !== 'borrow' && site.by !== 'tenant' && (!site.floated.parent || site.floated.parent === holder) ? { at: [site.at[0], site.at[1]] } : {}; };
     const lotOf = (holder, id) => { const site = terrain?.sites?.[id]; return terrain?.mode === 'spawn' && (site?.by === 'borrow' || site?.by === 'tenant') && site.parent === holder && Array.isArray(site.toward) ? { at: site.toward } : null; };
     notes.build = { areas: areas.length, byName: areas.filter(area => !scaleOf(area.id)).length, dwelling: Object.entries(dwelling).map(([id, host]) => `${name(id)} in ${name(host)}`), unscaled: placeTree.filter(place => !scaleOf(place.id) && !areaScale(place.id)).length };
-    for (const scene of chosen) {
-      const chain = pathOf(scene.placeId), open = chain.filter(id => id !== scene.placeId && isOpen(id));
+    // A place of another layer (terrain-levels §3.3: a street laid under the street) is laid out after the surface, and the
+    // surface is laid out as if its scenes stood at its holder (where the script filed them before it was laid under), so
+    // nothing on top is born, sampled or leaned in another order for it.
+    const placeScene = placeId => {
+      const chain = pathOf(placeId), open = chain.filter(id => id !== placeId && isOpen(id));
       open.forEach((id, n) => birth(id, n ? open[n - 1] : null));
-      if (isOpen(scene.placeId)) { birth(scene.placeId, open.at(-1) ?? null); continue; }
-      if (Object.values(canvas.places).some(place => place.units.some(unit => unit.id === scene.placeId))) continue;
-      const host = open.length ? null : C.dwellingFor(canvas, scene.placeId, placeTree.find(place => place.id === scene.placeId)?.proposedParentId);
+      if (isOpen(placeId)) { birth(placeId, open.at(-1) ?? null); return; }
+      if (Object.values(canvas.places).some(place => place.units.some(unit => unit.id === placeId))) return;
+      const host = open.length ? null : C.dwellingFor(canvas, placeId, placeTree.find(place => place.id === placeId)?.proposedParentId);
       if (host) {
         // A building the place tree puts in no larger place dwells at a random spot of the central build until the text names where it is.
-        const holder = C.holderFor(canvas, host, scaleOf(scene.placeId) ?? 'building', scene.placeId);
-        const unit = { id: scene.placeId, label: name(scene.placeId), kind: 'building', r: gridRadius(scene.placeId) };
+        const holder = C.holderFor(canvas, host, scaleOf(placeId) ?? 'building', placeId);
+        const unit = { id: placeId, label: name(placeId), kind: 'building', r: gridRadius(placeId) };
         C.addUnit(canvas, holder, { ...unit, ...memberAt(holder, unit), ...floatedAt(unit.id, holder) });
-        dwellingUnits[scene.placeId] = host; notes.build.dwelling.push(`${name(scene.placeId)} in ${name(host)}`);
-        continue;
+        dwellingUnits[placeId] = host; notes.build.dwelling.push(`${name(placeId)} in ${name(host)}`);
+        return;
       }
       if (!open.length) {
         // With no area in the build at all: an unnamed area of its own round it (a temporary district of ordinary ground,
         // until the text names where it is), so it stands in a city rather than on bare ground.
-        const area = `tmp:${scene.placeId}`;
-        if (!canvas.places[area]) { C.bear(canvas, { id: area, label: `round ${name(scene.placeId)}`, scale: 'district', parent: null, landscape: 'residential' }); canvas.places[area].temporary = true; }
-        C.addUnit(canvas, area, { id: scene.placeId, label: name(scene.placeId), kind: 'building', r: gridRadius(scene.placeId), ...floatedAt(scene.placeId, area) });
-        continue;
+        const area = `tmp:${placeId}`;
+        if (!canvas.places[area]) { C.bear(canvas, { id: area, label: `round ${name(placeId)}`, scale: 'district', parent: null, landscape: 'residential' }); canvas.places[area].temporary = true; }
+        C.addUnit(canvas, area, { id: placeId, label: name(placeId), kind: 'building', r: gridRadius(placeId), ...floatedAt(placeId, area) });
+        return;
       }
-      const holder = C.holderFor(canvas, open.at(-1), scaleOf(scene.placeId) ?? 'building', scene.placeId), picked = C.sampledIn(canvas, open.at(-1), holder) || guessed(scene.placeId);
+      const holder = C.holderFor(canvas, open.at(-1), scaleOf(placeId) ?? 'building', placeId), picked = C.sampledIn(canvas, open.at(-1), holder) || guessed(placeId);
       // Near where the terrain step put the building (the site on the chain it stands for) in this holder.
       const site = [...chain].reverse().find(at => terrain?.sites?.[at]), near = site && terrain.sites[site].parent === holder ? terrain.sites[site].toward : undefined;
-      const lot = lotOf(holder, scene.placeId), unit = { id: scene.placeId, label: name(scene.placeId), kind: 'building', r: gridRadius(scene.placeId), ...(picked && !lot ? { sampled: open.at(-1) } : {}) };
+      const lot = lotOf(holder, placeId), unit = { id: placeId, label: name(placeId), kind: 'building', r: gridRadius(placeId), ...(picked && !lot ? { sampled: open.at(-1) } : {}) };
       C.addUnit(canvas, holder, { ...unit, ...memberAt(holder, unit), ...(lot ?? {}), ...floatedAt(unit.id, holder) }, near);
-    }
+    };
+    const laterScenes = [];
+    for (const scene of chosen) { if (planeOf(scene.placeId) !== 'surface') { placeScene(standIn(scene.placeId)); laterScenes.push(scene.placeId); } else placeScene(scene.placeId); }
+    for (const placeId of laterScenes) placeScene(placeId);
     // Every other building, room and unnamed place of the tree (a v2 reading's EM² places among them), laid out as the
     // scenes' are, buildings before the rooms they hold: in the area the tree puts it in (sampled into one of a city's
     // areas where it says only the city), beside the building that holds a room, dwelling where it says nothing. Only
@@ -736,7 +751,7 @@ export async function strandDemo(novelDir, options) {
       C.grow(canvas, pool.id);
       // Street buildings (§2.0.15): a building of the pool tied to one of its streets dwells in that street's building of its
       // use (by the words of its name), Jev not asked; one of a use its streets do not have is left for Jev.
-      const filled = fillOf(pool.landscape), streets = new Map(pool.units.filter(unit => unit.borrows === 'own').map(unit => [unit.id, filled.landmarks.filter(b => String(b.lot).startsWith(`${unit.id}:`) && b.use)]));
+      const filled = fillOf(pool.landscape), streets = new Map(pool.units.filter(unit => unit.borrows === 'own' && planeOf(unit.id) === 'surface').map(unit => [unit.id, filled.landmarks.filter(b => String(b.lot).startsWith(`${unit.id}:`) && b.use)]));
       const { dwells, forJev } = C.dwellInStreets(pool, streets, ties, unit => buildingUseOf(unit.label), dwelt.get(pool.id) ?? dwelt.set(pool.id, new Set()).get(pool.id));
       notes.build.dwells = (notes.build.dwells ?? 0) + Object.keys(dwells).length; notes.build.forJev = (notes.build.forJev ?? 0) + forJev.length;
     }
@@ -863,7 +878,10 @@ export async function strandDemo(novelDir, options) {
     // A street laid underground keeps its buildings on its floor (landscape.ts sunkForm): none of the surface's pushing,
     // clearing, growing or parting applies to them (they stand under it), and a height decided for one stops under the skin.
     const sunken = b => (b.y0 ?? 0) < 0;
-    const sunk = filled.landmarks.filter(sunken).map(asDecided).map(b => { const most = Math.max(1, Math.floor((-b.y0 - SKIN) / 3) - 1); return b.floors > most ? { ...b, floors: most } : b; });
+    // A place that borrows a slot (spawn mode) has its street from the slot's own form: an underground one is not laid again
+    // from the place's own landscape (W12's stretch: two streets, 30 m down on one spot at two angles).
+    const borrowsSlot = !!terrain?.sites?.[place.id]?.slot;
+    const sunk = (borrowsSlot ? [] : filled.landmarks.filter(sunken)).map(asDecided).map(b => { const most = Math.max(1, Math.floor((-b.y0 - SKIN) / 3) - 1); return b.floors > most ? { ...b, floors: most } : b; });
     const placed = [...[...filled.fabric.buildings, ...filled.landmarks.filter(b => !sunken(b)), ...filled.keeps].map(pushed), ...standing].filter(b => clear(b.x, b.z, Math.max(b.w, b.d) / 2)).map(asDecided);
     const localRoads = filled.fabric.roads.filter(road => clear((road.a[0] + road.b[0]) / 2, (road.a[1] + road.b[1]) / 2, 0)), held = new Set([...filled.keeps, ...standing].map(b => b.lot));
     const fixedOf = b => held.has(b.lot) || decided.has(b.lot) || /:(landmark|bowl|fountain)$/.test(String(b.lot));
@@ -877,7 +895,7 @@ export async function strandDemo(novelDir, options) {
     // A composite building's parts, each its use's model inside its host (composite.mjs).
     const parts = partsIn({ terrain, buildings, place, here, modelFor: (b, id) => UM.modelFor(b, id, modelSizes) });
     // What lies under it (hallsOf, src/v2/world/underground.ts): malls, the storm water, deep facilities, in world metres.
-    const shift = ([x, z]) => [Math.round((x + wx) * 10) / 10, Math.round((z + wz) * 10) / 10], under = U.hallsOf(place.landscape).map(hall => ({ ...hall, boxes: hall.boxes.map(box => { const [x, z] = shift([box.x, box.z]); return { ...box, x, z }; }), bores: hall.bores.map(bore => ({ ...bore, a: shift(bore.a), b: shift(bore.b) })), up: hall.up.map(shift) }));
+    const shift = ([x, z]) => [Math.round((x + wx) * 10) / 10, Math.round((z + wz) * 10) / 10], under = U.hallsOf(place.landscape).filter(hall => !(borrowsSlot && hall.street)).map(hall => ({ ...hall, boxes: hall.boxes.map(box => { const [x, z] = shift([box.x, box.z]); return { ...box, x, z }; }), bores: hall.bores.map(bore => ({ ...bore, a: shift(bore.a), b: shift(bore.b) })), up: hall.up.map(shift) }));
     const roads = shaped.roads.map(road => ({ a: [road.a[0] + wx, road.a[1] + wz], b: [road.b[0] + wx, road.b[1] + wz], width: road.width, level: road.level }));
     // Each patch (manifold) in birth order: its type and era, its centre and radius, its outline as 48 points (world metres),
     // and its fingerprint; each building's manifold in `buildings` order.
@@ -937,7 +955,7 @@ export async function strandDemo(novelDir, options) {
   // raised platform moved among tall enough buildings stays there.
   const keptAt = id => { const site = terrain?.sites?.[id], holder = site?.parent ? macroOf.get(site.parent) : null; return holder && Array.isArray(site.toward) ? { x: Math.round((holder.x + site.toward[0]) * 10) / 10, z: Math.round((holder.z + site.toward[1]) * 10) / 10 } : null; };
   const terrainShapes = Object.entries(terrain?.shapes ?? {}).map(([id, shape]) => { const node = keptAt(id) ?? macroOf.get(id), [x0, z0, x1, z1] = shape.box; return node ? { id, label: name(id), kind: shape.kind, x: node.x, z: node.z, w: Math.round((x1 - x0) * 10) / 10, d: Math.round((z1 - z0) * 10) / 10, top: shape.top ?? null, ...(shape.bottom != null ? { bottom: shape.bottom } : {}), hall: (shape.top ?? 0) < 0 ? undergroundKindOf(name(id)) : null } : null; }).filter(Boolean);
-  const halls = [...landscapes.flatMap(entry => entry.source.underground.filter(hall => !['tank', 'channel'].includes(hall.kind) || entry.place === city?.id)), ...(city && !options.plain ? U.subwayOf(stops, city.id, city.r) : []), ...terrainShapes.filter(shape => (shape.top ?? 0) < 0).map(shape => U.shapeHall(shape))].map(hall => { const b = U.boundsOf(hall); return { ...hall, area: areaAt((b.x0 + b.x1) / 2, (b.z0 + b.z1) / 2), label: U.HALL_LABEL[hall.kind] }; });
+  const halls = [...landscapes.flatMap(entry => entry.source.underground.filter(hall => !['tank', 'channel'].includes(hall.kind) || entry.place === city?.id)), ...(city && !options.plain ? U.subwayOf(stops, city.id, city.r) : []), ...terrainShapes.filter(shape => (shape.top ?? 0) < 0).map(shape => U.shapeHall(shape))].map(hall => { const b = U.boundsOf(hall); return { ...hall, area: areaAt((b.x0 + b.x1) / 2, (b.z0 + b.z1) / 2), label: hall.street ? `an underground street, ${hall.depth} m down` : U.HALL_LABEL[hall.kind] }; });
   const underground = { halls };
   notes.underground = { halls: Object.fromEntries(Object.entries(halls.reduce((count, hall) => ({ ...count, [hall.kind]: (count[hall.kind] ?? 0) + 1 }), {}))), stops: stops.length, active: {}, hits: 0 };
   world = W.createWorld({ buildings: landscapes.flatMap(entry => entry.source.buildings), roads: landscapes.flatMap(entry => entry.source.roads), plazas: landscapes.flatMap(entry => entry.source.plazas), anchors, underground });
@@ -1314,6 +1332,8 @@ export async function strandDemo(novelDir, options) {
       }),
       piles: [...world.underDamage.piles].flatMap(([index, cells]) => [...cells].map(([key, height]) => [...cellOf(key), W.levelOf(halls[index].depth), height])),
       dents: [...world.underDamage.dents].map(([key, depth]) => [...cellOf(key), depth]),
+      // The ways between the layers (terrain-levels §3.4): [foot x, foot y, foot z, top x, top z, 1 a lift / 0 stairs].
+      ways: [...allWays.values()],
       awake: [...awake.keys()],
     };
   };

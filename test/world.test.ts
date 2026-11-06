@@ -111,6 +111,38 @@ test("under the street: halls in the ground, each kind reached on foot from the 
   }
 });
 
+test("ways between the layers (terrain-levels §3.4): every hall joined to the ground, a way within about 30 m of most of its floor, stairs where shallow and a lift where deep, and a hall the text gave no way still reached", () => {
+  const halls: Hall[] = [
+    ...hallsOf(firstLandscape("d", "commercial")).filter((hall) => hall.kind === "mall"),
+    ...subwayOf([{ id: "a", x: -140, z: 30 }, { id: "b", x: 160, z: 30 }], "city", 400),
+    { id: "tank", kind: "tank", depth: 40, height: 18, boxes: [{ x: 0, z: -60, w: 60, d: 40, angle: 0 }], bores: [], pillars: 10, lined: true, up: [[0, -60]] },
+    // A deep lab the text gave no way up at all.
+    { id: "bare", kind: "lab", depth: 90, height: 10, boxes: [{ x: -70, z: -70, w: 30, d: 24, angle: 0 }], bores: [], pillars: 0, lined: false, up: [] },
+  ];
+  const world = createWorld({ ...source(), underground: { halls } });
+  ensure(world, 0, 0, 200, 0);
+  const built = worldGraph(world, standingOf(world)), byHall = new Map<number, typeof built.ways>();
+  for (const way of built.ways) (byHall.get(way.hall) ?? byHall.set(way.hall, []).get(way.hall)!).push(way);
+  // Every hall with a floor in the graph is joined.
+  const floors = new Map<number, number[]>();
+  for (let id = 0; id < built.type.length; id++) if (built.type[id] === 5 && built.lot[id] >= 1_000_000 && built.graph.offsets[id + 1] > built.graph.offsets[id]) (floors.get(built.lot[id] - 1_000_000) ?? floors.set(built.lot[id] - 1_000_000, []).get(built.lot[id] - 1_000_000)!).push(id);
+  assert.ok(floors.size >= 4);
+  for (const [hall, cells] of floors) assert.ok(byHall.get(hall)?.length, `${halls[hall].id} (${cells.length} cells) has a way up`);
+  // Dense: most of every floor within about 30 m of a way.
+  for (const [hall, cells] of floors) {
+    const feet = byHall.get(hall)!.map((way) => nodePos(world, way.foot)), near = cells.filter((id) => { const p = nodePos(world, id); return feet.some((q) => Math.hypot(p.x - q.x, p.z - q.z) <= 30); }).length;
+    assert.ok(near / cells.length >= 0.9, `${halls[hall].id}: ${near} of ${cells.length} cells within 30 m of a way`);
+  }
+  // Stairs where shallow (a climb never cheaper than the solver's guide of 8 a metre), a lift where deep.
+  for (const way of built.ways) {
+    assert.equal(way.kind, way.rise > 20 ? "lift" : "stairs", `${halls[way.hall].id} at ${way.rise} m`);
+    if (way.kind === "stairs") assert.ok(way.up >= 8 * way.rise, "a stair's climb at least the guide's");
+  }
+  // The lab the text gave no way: reached from the street on foot, by a lift of the world's own.
+  const lab = halls.findIndex((hall) => hall.id === "bare"), from = nodeNear(world, built, 0, 0, 0)!, seen = reachableIn(built.graph, from);
+  assert.ok(floors.get(lab)!.some((id) => seen[id]), "the bare lab is reached from the street");
+});
+
 test("a street walk's window leaves the deep layer out (terrain-levels §8.2): no deep facility's lift in it, and the walk still goes along the street", () => {
   const lab: Hall = { id: "lab", kind: "lab", depth: 90, height: 10, boxes: [{ x: -70, z: -70, w: 30, d: 24, angle: 0 }], bores: [], pillars: 0, lined: false, up: [[-70, -70]] };
   const world = createWorld({ ...source(), underground: { halls: [lab] } });
@@ -146,6 +178,10 @@ test("a street laid underground, built out (terrain-levels §8): its buildings s
   const fill = fillLandscape(landscape), sunk = fill.landmarks.filter((b) => (b.y0 ?? 0) < 0);
   assert.ok(sunk.length >= 6, `its own buildings: ${sunk.length}`);
   assert.ok(sunk.every((b) => b.y0 === -30 && (b.floors + 1) * 3 <= 30 - 3), "each on its floor, its roof under the 3 m skin");
+  // Compatible with the layer above (the user, 2026-11-06: "placing it down won't affect the streets on top"): the surface
+  // is the same, building for building, as without the street under it.
+  const surfaceOf = (fill: ReturnType<typeof fillLandscape>) => [...fill.fabric.buildings, ...fill.landmarks.filter((b) => !((b.y0 ?? 0) < 0))].map((b) => `${b.lot}|${b.x}|${b.z}|${b.floors}|${b.kind}`).sort();
+  assert.deepEqual(surfaceOf(fill), surfaceOf(fillLandscape(firstLandscape("d", "commercial"))), "the surface over it as it was");
   const hall = hallsOf(landscape).find((entry) => entry.street)!;
   assert.ok(hall && hall.depth === 30 && hall.height === 27 && hall.pillars === 0, "its hall is its open ground, open up to the skin");
   const buildings = [...fill.fabric.buildings, ...fill.landmarks].map((b, n) => ({ ...b, id: `b${n}` }));

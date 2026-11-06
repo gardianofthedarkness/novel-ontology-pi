@@ -777,6 +777,18 @@ function buildPlace(id) {
         canopy.position.set(sx, 1.4, sz); canopy.rotation.y = -Math.atan2(ez - sz, ex - sx); show(canopy, sx, sz);
       }
     }
+    // The ways between the layers (terrain-levels §3.4): a lift as a faint shaft from the floor below to the street, stairs as
+    // a flight of steps down from the street to the floor; the world's own, on every 40 m square of a floor.
+    if (under.ways?.length) {
+      const shafts = [], steps = [];
+      for (const [fx, fy, fz, tx, tz, lift] of under.ways) {
+        if (lift) shafts.push([fx, fy / 2, fz, 1.6, -fy, 1.6]);
+        else for (let n = 0; n < 8; n++) { const t = (n + 0.5) / 8; steps.push([tx + (fx - tx) * t, fy * t + 0.2, tz + (fz - tz) * t, 2.4, 0.4, 2.4]); }
+      }
+      const [x0, , z0] = under.ways[0];
+      if (shafts.length) show(instanced(mats.subway, shafts), x0, z0);
+      if (steps.length) show(instanced(mats.subway, steps), x0, z0);
+    }
     for (const [name, matrices] of underModels) { const set = instancedEdges(shellOf(name).edges, matrices, 0x8fd6ff, 0.15); underLines.push(set.lines.material); show(set.lines, 0, 0); }
     for (const lot of data.world.lots) {
       const floors = lot.height ?? lot.floors, levels = floors >= 20 ? 3 : floors >= 10 ? 2 : floors >= 2 ? 1 : 0;

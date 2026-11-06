@@ -315,13 +315,19 @@ export async function direct(novelDir, { reading, readingPath = null, prefilm = 
       const lotName = index => { const lot = world.lots[index]; return lot.label ?? `the ${lot.role ?? 'building'} (${lot.height ?? lot.floors} floors)`; };
       // What stands at a point, in words: a building's room, corridor or stairs on a floor, its roof, open ground, the air.
       const said = ([x, y, z]) => {
-        const index = lotOf(x, z), k = Math.round(y / FLOOR);
+        // A building of a street laid underground holds its column below the street's own (world.ts lotBelow): its floors
+        // count from its own ground floor, on that street's floor.
+        const key = W.cellKey(Math.floor(x / CELL), Math.floor(z / CELL)), below = world.lotBelow?.get(key), level = Math.round(y / FLOOR);
+        const sunk = below !== undefined && level >= (world.lots[below].k0 ?? 0) && level <= (world.lots[below].k0 ?? 0) + world.lots[below].floors;
+        const index = sunk ? below : lotOf(x, z), k = level - (sunk ? world.lots[below].k0 ?? 0 : 0), down = sunk ? `, ${-(world.lots[below].k0 ?? 0) * FLOOR} m under the street` : '';
+        const street = !sunk && index === undefined && y < -1 ? W.hallsAt(world, Math.floor(x / CELL), Math.floor(z / CELL)).map(entry => world.source.underground?.halls?.[entry.hall]).find(hall => hall?.street && Math.abs(-hall.depth - y) < 1.5) : null;
+        if (street) return `an underground street, ${street.depth} m down`;
         if (index === undefined) return y < -1 ? 'underground' : y < 1.5 ? `open ground (${['', 'the street', 'a plaza', 'the avenue'][world.ground.get(W.cellKey(Math.floor(x / CELL), Math.floor(z / CELL))) ?? 0] || 'outside'})` : `the open air, ${Math.round(y)} m up`;
         const lot = world.lots[index], i = Math.floor(x / CELL) - lot.i0, j = Math.floor(z / CELL) - lot.j0;
-        if (k >= lot.floors) return k === lot.floors ? `the roof of ${lotName(index)}` : `the air over ${lotName(index)}`;
+        if (k >= lot.floors) return k === lot.floors ? `the roof of ${lotName(index)}${down}` : `the air over ${lotName(index)}`;
         if (k < 0) return `under ${lotName(index)}`;
         const cell = lot.skeleton.cells[S.cellIndex(lot.skeleton, i, j, k)], room = lot.rooms.find(box => box.floor <= k && k <= box.top && i >= box.i0 && i <= box.i1 && j >= box.j0 && j <= box.j1);
-        return cell === S.STAIR ? `the stairs of ${lotName(index)}, floor ${k + 1}` : cell === S.CORRIDOR ? `a corridor of ${lotName(index)}, floor ${k + 1}` : room ? `${room.kind === 'room' ? 'a room' : room.kind === 'hall' ? 'a hall' : 'a hall rising through floors'} of ${lotName(index)}, floor ${room.floor + 1}` : `a wall of ${lotName(index)}, floor ${k + 1}`;
+        return (cell === S.STAIR ? `the stairs of ${lotName(index)}, floor ${k + 1}` : cell === S.CORRIDOR ? `a corridor of ${lotName(index)}, floor ${k + 1}` : room ? `${room.kind === 'room' ? 'a room' : room.kind === 'hall' ? 'a hall' : 'a hall rising through floors'} of ${lotName(index)}, floor ${room.floor + 1}` : `a wall of ${lotName(index)}, floor ${k + 1}`) + down;
       };
       // The walkable nodes round a point (within `radius` metres), with what each is: the pool spots and boxes are taken from.
       const around = (x, z, radius) => {
@@ -625,7 +631,10 @@ export async function direct(novelDir, { reading, readingPath = null, prefilm = 
         const halls = world.source.underground?.halls ?? [], ownHall = (() => { if (!below) return -1; for (let id = scene.placeId, guard = 0; id && guard < 12; id = script.places?.[id]?.parent ?? null, guard++) { const own = [id, citySites[id]?.slot].filter(Boolean), index = halls.findIndex(hall => own.some(name => hall.id === `${name}:shape` || hall.id === `${name}:under`)); if (index >= 0) return index; } return -1; })();
         if (ownHall >= 0 && anchor !== null && anchor !== undefined) {
           const p = at(anchor), [box] = halls[ownHall].boxes, inHall = around(box.x, box.z, Math.max(box.w, box.d) / 2 + 4).nodes.filter(node => node.lot === W.HALL_LOT + ownHall);
-          if (!inHall.some(node => node.id === anchor)) {
+          // Already in it: on its floor, or inside one of the buildings standing on it (a street laid underground), between
+          // its floor and its ceiling over a cell of it.
+          const there = W.hallsAt(world, Math.floor(p[0] / CELL), Math.floor(p[2] / CELL)).some(entry => entry.hall === ownHall) && p[1] >= -halls[ownHall].depth - 0.5 && p[1] <= -halls[ownHall].depth + halls[ownHall].height;
+          if (!there && !inHall.some(node => node.id === anchor)) {
             const down = inHall.sort((a, b) => Math.hypot(a.x - box.x, a.z - box.z) - Math.hypot(b.x - box.x, b.z - box.z))[0] ?? null;
             sceneRecord.underground = { place: placeNote?.inherited ?? scene.placeId, hall: halls[ownHall].kind, depth: halls[ownHall].depth, from: said(p), to: down ? said([down.x, down.y, down.z]) : null, metres: down ? Math.round(Math.hypot(down.x - p[0], down.z - p[2])) : null };
             if (down) { anchor = down.id; wentDown = true; }
@@ -816,7 +825,9 @@ export async function direct(novelDir, { reading, readingPath = null, prefilm = 
         // What a node is, for the facts (facts.mjs): how far its building's outer wall is (outdoors: whether a building is
         // beside it), an entrance near, stairs, a street.
         const describe = node => {
-          const lot = node.lot >= 0 && node.lot < world.lots.length ? world.lots[node.lot] : null, k = Math.round(node.y / FLOOR);
+          // `floor`: its building's own floor (0 its ground floor; a building of a street laid underground counts from that
+          // street's floor), else its level from the street (facts.mjs holds).
+          const lot = node.lot >= 0 && node.lot < world.lots.length ? world.lots[node.lot] : null, k = Math.round(node.y / FLOOR) - (lot?.k0 ?? 0);
           let edge = 99, stairs = false;
           if (lot) {
             const x0 = lot.i0 * CELL, x1 = (lot.i0 + lot.nx) * CELL, z0 = lot.j0 * CELL, z1 = (lot.j0 + lot.nz) * CELL;
@@ -824,7 +835,7 @@ export async function direct(novelDir, { reading, readingPath = null, prefilm = 
             try { stairs = lot.skeleton.cells[S.cellIndex(lot.skeleton, Math.floor(node.x / CELL) - lot.i0, Math.floor(node.z / CELL) - lot.j0, k)] === S.STAIR; } catch { stairs = false; }
           } else if (node.type === FA.TYPE.outdoor) edge = [[-1, 0], [1, 0], [0, -1], [0, 1]].some(([di, dj]) => lotOf(node.x + di * CELL, node.z + dj * CELL) !== undefined) ? CELL : 99;
           const door = (node.type === FA.TYPE.outdoor && edge <= CELL) || (lot && k === 0 && node.type !== FA.TYPE.roof && edge <= 3) ? 2 : 99;
-          return { ...node, edge, door, stairs, street: node.type === FA.TYPE.outdoor && [1, 3].includes(node.ground || 1) };
+          return { ...node, edge, door, stairs, floor: k, street: node.type === FA.TYPE.outdoor && [1, 3].includes(node.ground || 1) };
         };
         const nodeAt = id => { const p = at(id), found = around(p[0], p[2], 3).nodes.find(node => node.id === id); return describe(found ?? { id, x: p[0], y: p[1], z: p[2], type: 0, lot: -1 }); };
         let factsUpTo = -1, itemsUpTo = -1, cameraBeat = null, cameraGroup = new Set();

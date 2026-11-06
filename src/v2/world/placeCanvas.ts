@@ -29,7 +29,13 @@ export interface Unit { id: string; label: string; kind: "building" | "street" |
  * stands exactly at its kept offset inside the parent's ground, its own ground a patch of the parent's; it is never pushed
  * and pushes nothing, the fading of the patches being how it meets its neighbours.
  */
-export interface CanvasPlace { id: string; label: string; scale: string; parent: string | null; at: Point; landscape: Landscape | null; units: Unit[]; r: number; born: number; embedded?: boolean; fixed?: boolean; temporary?: boolean; dwelling?: string; pool?: string }
+/**
+ * `plane`: the layer it lies in (docs/v2/terrain-levels.md §3.3; absent: the surface). A place in another layer is never
+ * picked as the area a surface building is sampled into, dwells in, or is hosted by: adding one changes nothing on top.
+ */
+export interface CanvasPlace { id: string; label: string; scale: string; parent: string | null; at: Point; landscape: Landscape | null; units: Unit[]; r: number; born: number; embedded?: boolean; fixed?: boolean; temporary?: boolean; dwelling?: string; pool?: string; plane?: string }
+/** Whether a canvas place lies on the surface (the layer the city's buildings are sampled into). */
+export const onSurface = (place: { plane?: string } | undefined) => !place?.plane || place.plane === "surface";
 export interface Canvas { places: Record<string, CanvasPlace>; born: number }
 
 /** The least radius of a place of each scale, in metres, before anything is built in it. */
@@ -44,7 +50,7 @@ const childrenOf = (canvas: Canvas, id: string | null) => Object.values(canvas.p
 /** What a place's circle must hold, in its own frame: its ground, its units, its children. */
 export function radiusOf(canvas: Canvas, id: string): number {
   const place = canvas.places[id];
-  const parts = [LEAST[place.scale] ?? 30, ...(place.landscape?.patches.length ? [circleOf(place.landscape, 0)] : []), ...place.units.map((unit) => Math.hypot(...unit.at) + unit.r), ...childrenOf(canvas, id).map((child) => Math.hypot(...child.at) + child.r)];
+  const parts = [LEAST[place.scale] ?? 30, ...(place.landscape?.patches.length ? [circleOf(place.landscape, 0)] : []), ...place.units.map((unit) => Math.hypot(...unit.at) + unit.r), ...childrenOf(canvas, id).filter((child) => onSurface(child) || !onSurface(place)).map((child) => Math.hypot(...child.at) + child.r)];
   return Math.round(Math.max(...parts) + GAP);
 }
 
@@ -59,11 +65,12 @@ export function grow(canvas: Canvas, id: string): Canvas {
   for (let round = 0; round < 60; round++) {
     let moved = false;
     for (const a of siblings) {
-      if (a.embedded) continue;
+      // A place in another layer neither pushes nor is pushed by those on top (terrain-levels §3.3).
+      if (a.embedded || onSurface(a) !== onSurface(place)) continue;
       const fromOwn = Math.hypot(...a.at), clearOwn = own ? own + a.r + GAP : 0;
       if (own && fromOwn < clearOwn) { const u: Point = fromOwn > 1e-6 ? [a.at[0] / fromOwn, a.at[1] / fromOwn] : [1, 0]; a.at = [Math.round(u[0] * clearOwn * 10) / 10, Math.round(u[1] * clearOwn * 10) / 10]; moved = true; }
       for (const b of siblings) {
-        if (a === b || b.embedded) continue;
+        if (a === b || b.embedded || onSurface(b) !== onSurface(a)) continue;
         const d = Math.hypot(b.at[0] - a.at[0], b.at[1] - a.at[1]), need = a.r + b.r + GAP;
         if (d >= need) continue;
         const pushed = b.id === id ? a : a.id === id ? b : a.born > b.born ? a : b, other = pushed === a ? b : a;
@@ -81,20 +88,20 @@ export function grow(canvas: Canvas, id: string): Canvas {
  * A place born on the canvas: at the free spot nearest its parent's middle (or toward a direction), then grown up. `ground`:
  * its first patch as given (terrain spawning: the type and the size Jev chose), in place of one sampled from its type.
  */
-export function bear(canvas: Canvas, place: { id: string; label: string; scale: string; parent: string | null; landscape?: LandscapeType | null; toward?: Point; ground?: Patch | null; at?: Point; embedded?: boolean; fixed?: Point }): Canvas {
+export function bear(canvas: Canvas, place: { id: string; label: string; scale: string; parent: string | null; landscape?: LandscapeType | null; toward?: Point; ground?: Patch | null; at?: Point; embedded?: boolean; fixed?: Point; plane?: string }): Canvas {
   if (canvas.places[place.id]) return canvas;
   // A manifold of its parent's ground stands exactly where it was kept, in the parent's ground (no spot of its own to find).
   if (place.embedded && place.parent && canvas.places[place.parent]) {
-    canvas.places[place.id] = { id: place.id, label: place.label, scale: place.scale, parent: place.parent, at: place.at ?? [0, 0], landscape: null, units: [], r: 0, born: ++canvas.born, embedded: true };
+    canvas.places[place.id] = { id: place.id, label: place.label, scale: place.scale, parent: place.parent, at: place.at ?? [0, 0], landscape: null, units: [], r: 0, born: ++canvas.born, embedded: true, ...(place.plane && place.plane !== "surface" ? { plane: place.plane } : {}) };
     canvas.places[place.id].r = radiusOf(canvas, place.id);
     return grow(canvas, place.parent);
   }
   const landscape = place.ground ? { version: LANDSCAPE_VERSION, seed: place.id, patches: [place.ground] } : place.landscape ? firstLandscape(place.id, place.landscape) : null, born = ++canvas.born;
-  const entry: CanvasPlace = { id: place.id, label: place.label, scale: place.scale, parent: place.parent, at: [0, 0], landscape, units: [], r: 0, born };
+  const entry: CanvasPlace = { id: place.id, label: place.label, scale: place.scale, parent: place.parent, at: [0, 0], landscape, units: [], r: 0, born, ...(place.plane && place.plane !== "surface" ? { plane: place.plane } : {}) };
   canvas.places[place.id] = entry;
   entry.r = radiusOf(canvas, place.id);
   const parent = place.parent ? canvas.places[place.parent] : null, own = parent?.landscape?.patches.length ? [{ x: 0, z: 0, r: circleOf(parent.landscape, 0) }] : [];
-  const occupied = [...own, ...(parent?.units ?? []).map((unit) => ({ x: unit.at[0], z: unit.at[1], r: unit.r })), ...childrenOf(canvas, place.parent).filter((child) => child.id !== place.id && !child.embedded).map((child) => ({ x: child.at[0], z: child.at[1], r: child.r }))];
+  const occupied = [...own, ...(parent?.units ?? []).map((unit) => ({ x: unit.at[0], z: unit.at[1], r: unit.r })), ...childrenOf(canvas, place.parent).filter((child) => child.id !== place.id && !child.embedded && onSurface(child) === onSurface(place)).map((child) => ({ x: child.at[0], z: child.at[1], r: child.r }))];
   // A place the floating terrain moved (L19, world-engine/terrain/float.mjs; the terrain site's `at`) stands where it was
   // moved, beside its parent (siblings then kept clear by its parent's growing); every other at its free spot.
   if (place.fixed) { entry.at = [place.fixed[0], place.fixed[1]]; entry.fixed = true; }
@@ -112,7 +119,8 @@ export function bearChain(canvas: Canvas, chain: { id: string; label: string; sc
 }
 
 /** What already stands in a place, in its own frame: its units and its children's circles. */
-const occupiedIn = (canvas: Canvas, placeId: string) => [...canvas.places[placeId].units.map((entry) => ({ x: entry.at[0], z: entry.at[1], r: entry.r })), ...childrenOf(canvas, placeId).map((child) => ({ x: child.at[0], z: child.at[1], r: child.r }))];
+// A child in another layer (a street laid under the street) takes no room from what stands on top (terrain-levels §3.3).
+const occupiedIn = (canvas: Canvas, placeId: string) => [...canvas.places[placeId].units.map((entry) => ({ x: entry.at[0], z: entry.at[1], r: entry.r })), ...childrenOf(canvas, placeId).filter(onSurface).map((child) => ({ x: child.at[0], z: child.at[1], r: child.r }))];
 
 /** A named building, street or room built inside a place (in its own frame, at the free spot nearest `near`); the circle grows to hold it. */
 export function addUnit(canvas: Canvas, placeId: string, unit: Omit<Unit, "at"> & { at?: Point }, near?: Point): Canvas {
@@ -201,7 +209,7 @@ export function holderFor(canvas: Canvas, placeId: string, unitScale: string, un
   if (pool && (RANK[unitScale] ?? 1) <= (RANK[canvas.places[pool].scale] ?? 0)) return pool;
   if ((RANK[place.scale] ?? 0) < RANK.city || (RANK[place.scale] ?? 0) - (RANK[unitScale] ?? 1) < 2) return placeId;
   const inside = (id: string): boolean => { for (let at = canvas.places[id]?.parent; at; at = canvas.places[at]?.parent) if (at === placeId) return true; return false; };
-  const areas = Object.values(canvas.places).filter((area) => isArea(area) && inside(area.id) && (RANK[area.scale] ?? 0) > (RANK[unitScale] ?? 1) && (RANK[area.scale] ?? 0) < (RANK[place.scale] ?? 0));
+  const areas = Object.values(canvas.places).filter((area) => isArea(area) && onSurface(area) && inside(area.id) && (RANK[area.scale] ?? 0) > (RANK[unitScale] ?? 1) && (RANK[area.scale] ?? 0) < (RANK[place.scale] ?? 0));
   const least = Math.min(...areas.map((area) => RANK[area.scale] ?? 0));
   if (areas.length) return pickBy(unitId, areas.filter((area) => (RANK[area.scale] ?? 0) === least).map((area) => area.id));
   const id = `tmp:${placeId}:${unitId}`;
@@ -230,7 +238,7 @@ export function adopt(canvas: Canvas, temporaryId: string, named: { id: string; 
 }
 
 /** An area of the central build (a place larger than a building), the place the ontology puts it in, if any, and else the one proposed for it (a pending review), if any. */
-export interface BuildArea { id: string; label: string; scale: string; parent: string | null; proposed?: string | null; landscape?: LandscapeType | null; ground?: Patch | null; pool?: string; at?: Point; embedded?: boolean }
+export interface BuildArea { id: string; label: string; scale: string; parent: string | null; proposed?: string | null; landscape?: LandscapeType | null; ground?: Patch | null; pool?: string; at?: Point; embedded?: boolean; plane?: string }
 /** One of several choices, picked by a seed (a place's id), so the same in every run; the choices' order does not matter. */
 function pickBy(seed: string, choices: string[]): string {
   const sorted = [...choices].sort(), hash = [...seed].reduce((sum, char) => (Math.imul(sum, 31) + char.charCodeAt(0)) >>> 0, 7);
@@ -259,7 +267,7 @@ export function centralBuild(canvas: Canvas, areas: BuildArea[], toward?: (id: s
     for (const area of left) {
       const parent = named.get(area.id) ?? null;
       if (parent && !canvas.places[parent]) { waiting.push(area); continue; }
-      const hosts = parent ? [] : Object.values(canvas.places).filter((place) => isArea(place) && rank(place.scale) > rank(area.scale));
+      const hosts = parent ? [] : Object.values(canvas.places).filter((place) => isArea(place) && onSurface(place) && rank(place.scale) > rank(area.scale));
       const nearest = Math.min(...hosts.map((place) => rank(place.scale))), host = hosts.length ? pickBy(area.id, hosts.filter((place) => rank(place.scale) === nearest).map((place) => place.id)) : null;
       const into = parent ?? host, dwells = host ?? (parent && proposed.has(area.id) ? parent : null);
       bear(canvas, { ...area, parent: into, toward: toward?.(area.id, into) });
@@ -280,9 +288,9 @@ export function centralBuild(canvas: Canvas, areas: BuildArea[], toward?: (id: s
 export function dwellingFor(canvas: Canvas, unitId: string, proposed?: string | null): string | null {
   if (proposed && canvas.places[proposed] && isArea(canvas.places[proposed])) return proposed;
   // With sampling pools, any pool, each as likely (the user's design); else as before.
-  const pools = Object.values(canvas.places).filter((place) => place.pool && isArea(place));
+  const pools = Object.values(canvas.places).filter((place) => place.pool && isArea(place) && onSurface(place));
   if (pools.length) return pickBy(unitId, pools.map((place) => place.id));
-  const areas = Object.values(canvas.places).filter(isArea), own = areas.filter((place) => place.scale === "district" || place.scale === "street");
+  const areas = Object.values(canvas.places).filter((place) => isArea(place) && onSurface(place)), own = areas.filter((place) => place.scale === "district" || place.scale === "street");
   const choices = (own.length ? own : areas).map((place) => place.id);
   return choices.length ? pickBy(unitId, choices) : null;
 }

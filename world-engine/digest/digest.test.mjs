@@ -52,6 +52,11 @@ test('facts are regions: indoors, a floor, near someone, by a window; the best s
   const street = { x: 0, y: 0, z: 0, type: TYPE.outdoor, edge: 99, door: 99, street: true }, room = { x: 6, y: 6, z: 0, type: TYPE.room, edge: 1, door: 99 }, hall = { x: 4, y: 0, z: 0, type: TYPE.circulation, edge: 2, door: 2 };
   assert.equal(holds({ kind: 'indoors' }, street), false); assert.equal(holds({ kind: 'indoors' }, room), true); assert.equal(holds({ kind: 'indoors' }, { ...room, type: TYPE.underground }), false, 'a basement is not indoors unless said');
   assert.equal(holds({ kind: 'floor', value: 3 }, room), true); assert.equal(holds({ kind: 'floor', value: 'ground' }, room), false);
+  // A building of a street laid underground (terrain-levels §8): its ground floor 30 m down is underground and the ground
+  // floor at once (W12's unit 120 says both); its floors count from its own ground floor (the director's `floor`).
+  const sunkRoom = { x: 6, y: -30, z: 0, type: TYPE.room, edge: 1, door: 99, floor: 0 };
+  assert.equal(holds({ kind: 'floor', value: 'ground' }, sunkRoom), true); assert.equal(holds({ kind: 'underground' }, sunkRoom), true); assert.equal(holds({ kind: 'indoors' }, sunkRoom), true);
+  assert.equal(holds({ kind: 'floor', value: 2 }, { ...sunkRoom, y: -27, floor: 1 }), true);
   assert.equal(holds({ kind: 'feature', value: 'window' }, room), true); assert.equal(holds({ kind: 'feature', value: 'window' }, { ...street, edge: 2 }), true); assert.equal(holds({ kind: 'feature', value: 'door' }, hall), true);
   assert.equal(holds({ kind: 'near', value: 'b' }, street, () => [2, 0, 1]), true); assert.equal(holds({ kind: 'near', value: 'b' }, street, () => null), null);
   assert.equal(binding({ basis: 'implied', sure: 0.6 }), false); assert.equal(binding({ basis: 'stated', sure: 0.6 }), true);

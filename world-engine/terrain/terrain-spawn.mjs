@@ -65,7 +65,7 @@ const CLEAR = { near: 1e6, far: 2e6 };
 
 async function replace(file, body) { const temporary = `${file}.${process.pid}.tmp`; await writeFile(temporary, body, { mode: 0o644 }); await rename(temporary, file); }
 
-export async function terrainSpawn(novelDir, { jev: given = null, run = false, parts: limit = Infinity, spawn = false, from: fromLevel = null, until = null, heightProbe = false, notes: notesPath = null, log = () => {} } = {}) {
+export async function terrainSpawn(novelDir, { jev: given = null, run = false, parts: limit = Infinity, spawn = false, from: fromLevel = null, until = null, heightProbe = false, notes: notesPath = null, add = false, log = () => {} } = {}) {
   const { stageInputs } = await load('dist/src/cli/commands/extract/stageCommands.js');
   const { simStrandList } = await load('dist/src/cli/commands/extract/simCommands.js');
   const { loadWorkspaceSentences } = await load('dist/src/cli/commands/extract/timeplaceCommands.js');
@@ -89,6 +89,12 @@ export async function terrainSpawn(novelDir, { jev: given = null, run = false, p
   // The underground note on each place (docs/v2/terrain-levels.md §8.5; experiments/v2/underground-notes.mjs), beside the
   // reading: a city or a district the note puts under the street is offered the underground's slices too.
   const underNotes = JSON.parse(await readFile(notesPath ?? (reading ? join(reading, 'v2', 'underground-notes.json') : '/nonexistent'), 'utf8').catch(() => 'null'));
+  // The layer a place lies in, the manifold model's third dimension (terrain-levels §3.3): a place the note puts under the
+  // street lies in the shallow layer (a street, a building, a room: a real depth, under the skin) or the deep one (a city, a
+  // district: a virtual space); any other on the surface. A slot keeps its layer as `plane`; choosing, the level's moves and
+  // the spares' places act only within one layer, so laying a place under the street moves nothing on top.
+  const planeOfPart = (id, scale = null) => (underNotes?.places?.[id]?.noted ? (['city', 'district'].includes(scale ?? terrain?.sites?.[id]?.scale) ? 'deep' : 'shallow') : 'surface');
+  const planeOfSlot = slot => slot?.plane ?? 'surface';
   // Jev's own reports of each paid request's tokens (stage/terrain/jev-usage.json), so a terrain run can be priced.
   const client = given ?? jevFromEnv({ ...process.env, JEV_MODEL: PICKER_MODEL }), jev = cachedDecisions(client, join(folder, 'cache'));
   const live = await createLive(novelDir, { command: 'sim terrain', lines: [{ id: 'terrain', title: 'Terrain: the ground of the volume\'s places' }], model: jev.modelId, fresh: true });
@@ -355,8 +361,12 @@ export async function terrainSpawn(novelDir, { jev: given = null, run = false, p
     };
     // The sites of the slots no name owns (spare, or shared this book): the export builds each as an area of its level
     // (src/v2/terrain/tree.ts), on its first sharer's terrain, else its kind's default (§2.2); a spare one has no pin.
+    // An `add` run mirrors into the book's sites only the slots it changed (`slotsBefore`: the registry as the run found it),
+    // so a site the build left as it was is not re-derived for a place added elsewhere (terrain-levels §3.3).
+    let slotsBefore = null;
     const syncSlots = () => {
       for (const slot of Object.values(registry.slots)) {
+        if (slotsBefore && slotsBefore.get(slot.id) === JSON.stringify(slot)) continue;
         // A building slot is a lot of its street's form (§6): no area of its own; what borrows it has its site.
         if (slot.level === 'building') continue;
         if (!slot.toward || slot.owner) { if (terrain.sites[slot.id]?.by === 'slot') delete terrain.sites[slot.id]; continue; }
@@ -582,13 +592,16 @@ export async function terrainSpawn(novelDir, { jev: given = null, run = false, p
     // Buildings share a lot only when their heights are near (heights.json `share`): the level's moves keep to it as the
     // borrowing does, a slot's mentions as the moves leave them.
     const topOf = id => terrain.sites[id]?.top, nearHeights = (slot, m) => typeof topOf(m.id) !== 'number' || [slot.owner, ...S.sharersIn(slot, bookId).map(share => share.mention)].every(id => !id || id === m.id || typeof topOf(id) !== 'number' || S.heightsShare(topOf(id), topOf(m.id), H.share));
-    const spawnEnd = async level => {
+    // `planes`: settle only these layers (an `add` run whose new places at this level all lie under the street, §3.3): their
+    // places' moves, their spares, their areas' children; the surface's level stands as it was.
+    const spawnEnd = async (level, planes = null) => {
       if (!spawn) return;
-      const mine = terrain.order.filter(id => terrain.sites[id]?.scale === level && terrain.sites[id].slot && registry.slots[terrain.sites[id].slot]);
+      const ours = id => !planes || planes.has(planeOfPart(id, level));
+      const mine = terrain.order.filter(id => terrain.sites[id]?.scale === level && terrain.sites[id].slot && registry.slots[terrain.sites[id].slot] && ours(id));
       let moves = 0;
       if (mine.length) {
         const mentions = mine.map(id => ({ id, label: terrain.sites[id].label, named: !id.startsWith('unnamed:'), kind: terrain.sites[id].kind, holder: terrain.sites[id].holder ?? terrain.sites[id].parent, scene: world[id]?.scene ?? null, pin: terrain.sites[id].pin ?? null }));
-        const choice = S.chooseSlots({ book: bookId, level, slots: slotsAt(level), mentions, assigned: Object.fromEntries(mine.map(id => [id, terrain.sites[id].slot])), ties: (a, b) => tiesAt(level)[a]?.[b] ?? 0, fixed: fixedFor(mine, level), within: (id, of) => id === of || within(id, of), sceneIndex: scene => sceneAt.get(scene) ?? 0, place: () => null, allow: (slot, m) => fits(m.kind, slot.parent) && (level !== 'building' || nearHeights(slot, m)) });
+        const choice = S.chooseSlots({ book: bookId, level, slots: slotsAt(level), mentions, assigned: Object.fromEntries(mine.map(id => [id, terrain.sites[id].slot])), ties: (a, b) => tiesAt(level)[a]?.[b] ?? 0, fixed: fixedFor(mine, level), within: (id, of) => id === of || within(id, of), sceneIndex: scene => sceneAt.get(scene) ?? 0, place: () => null, allow: (slot, m) => fits(m.kind, slot.parent) && planeOfSlot(slot) === planeOfPart(m.id, level) && (level !== 'building' || nearHeights(slot, m)) });
         moves = choice.moves;
         for (const id of mine) {
           const slotId = choice.assignment[id], site = terrain.sites[id];
@@ -608,28 +621,31 @@ export async function terrainSpawn(novelDir, { jev: given = null, run = false, p
       // The spares (§2.2): each slot of the level no part borrowed stands where the program places an area of its kind in
       // its area, clear of the level's other areas, on its kind's default terrain.
       let spares = 0;
-      for (const slot of Object.values(registry.slots).filter(entry => entry.level === level && !entry.toward)) {
+      for (const slot of Object.values(registry.slots).filter(entry => entry.level === level && !entry.toward && (!planes || planes.has(planeOfSlot(entry))))) {
         const node = nodeOf(slot.parent);
         if (!node) continue;
         const made = S.defaultTerrain(level, slot.kind) ?? {}, size = sizeFor(level, made.ground, 0);
-        const taken = Object.entries(terrain.sites).filter(([, site]) => site.scale === level && Array.isArray(site.box)).map(([id, site]) => siteBox(id, site));
+        const taken = Object.entries(terrain.sites).filter(([id, site]) => site.scale === level && Array.isArray(site.box) && planeOfPart(id, level) === planeOfSlot(slot)).map(([id, site]) => siteBox(id, site));
         const placed = placeIn(slot.parent, size, made.ground, null, taken, [], new Map(), level);
         Object.assign(slot, { toward: [round(placed.at[0] - node.x), round(placed.at[1] - node.z)], size, mapped: true }, placed.onto ? { turn: placed.onto.turn, on: placed.onto.what } : {});
         logMap({ level, what: 'spawn', id: slot.id, parent: slot.parent, kind: slot.kind, at: slot.toward, r: Math.max(...size) / 2, seed: slot.id });
         syncSlots(); spares++;
       }
-      adoptChildren(level);
+      if (!planes) adoptChildren(level);
       // Every area of the level spawns its children's slots by its kind (config/terrain): a city its districts', a district
       // its streets'; a street's building slots are its form's lots (formSlots, after the street level's build).
       let born = 0;
       if (S.CHILD[level] !== 'building') for (const [id, site] of Object.entries(terrain.sites).filter(([sid, site]) => site.scale === level && site.kind && (level === 'city' || site.by === 'slot' || (site.slot && !sid.startsWith('unnamed:'))))) {
         // An area with a topology whose children stand already (a born or re-decided city) keeps them: deformCity manages them.
         if (resolver({ id, label: site.label, level, kind: site.kind })?.topology && Object.values(registry.slots).some(slot => slot.parent === id && slot.level === S.CHILD[level])) continue;
-        for (const { at, ...child } of S.spawnChildren({ id, label: site.label, level, kind: site.kind }, resolver, bookId, Object.values(registry.slots))) { registry.slots[child.id] = { ...child, toward: null }; born++; }
+        if (!ours(id)) continue;
+        // A child lies in its parent's layer (a deep district's streets are deep).
+        const plane = planeOfPart(id, level);
+        for (const { at, ...child } of S.spawnChildren({ id, label: site.label, level, kind: site.kind }, resolver, bookId, Object.values(registry.slots))) { registry.slots[child.id] = { ...child, toward: null, ...(plane !== 'surface' ? { plane } : {}) }; born++; }
       }
       // A parent whose configuration has a topology (§8.2: a city) lays out the children it has not placed yet.
       const laid = [];
-      if (S.CHILD[level] !== 'building') for (const [id, site] of Object.entries(terrain.sites).filter(([, site]) => site.scale === level && site.kind)) {
+      if (S.CHILD[level] !== 'building') for (const [id, site] of Object.entries(terrain.sites).filter(([sid, site]) => site.scale === level && site.kind && ours(sid))) {
         if (!Object.values(registry.slots).some(slot => slot.parent === id && slot.level === S.CHILD[level] && !slot.toward)) continue;
         const said = layOutChildren(id, level);
         if (said) laid.push(said);
@@ -640,7 +656,7 @@ export async function terrainSpawn(novelDir, { jev: given = null, run = false, p
       log(`${level} level ends: ${moves} moves, ${spares} spares placed, ${born} slots below`);
       await live.phase(`building the world after the ${level} level`); await build(); await live.phase('terrain');
       // The streets' buildings, as their forms build them, are the building level's slots (§6).
-      if (level === 'street') { const made = formSlots(); await saveSlots(); await live.outcome({ subject: 'streets', text: `${made.spares} building slots from the streets' forms (${made.held} held by buildings already)` }); }
+      if (level === 'street' && !planes) { const made = formSlots(); await saveSlots(); await live.outcome({ subject: 'streets', text: `${made.spares} building slots from the streets' forms (${made.held} held by buildings already)` }); }
     };
     // Spawn mode (docs/v2/borrow-and-spawn.md §2.6): level by level, the named and the unnamed alike in the order the text
     // first comes to them; each level ends (`end`) with its moves, its spares placed and its areas' children spawned.
@@ -656,7 +672,10 @@ export async function terrainSpawn(novelDir, { jev: given = null, run = false, p
       ...['district', 'street'].flatMap(level => cities.flatMap(city => (partsOf.get(city.id) ?? []).filter(part => part.scale === level).map(part => ({ part, city }))).sort((a, b) => Number(!!world[a.part.id]?.pool) - Number(!!world[b.part.id]?.pool) || a.part.at - b.part.at)),
     ];
     const total = queue.filter(item => item.part).length;
-    const levelEnd = async level => spawnEnd(level);
+    const levelEnd = async (level, planes = null) => spawnEnd(level, planes);
+    // An `add` run (terrain-levels §3.3: adding a place to a built world moves nothing else): what was kept before it starts.
+    const keptAtStart = new Set(Object.keys(terrain.sites));
+    if (add) slotsBefore = new Map(Object.entries(registry.slots).map(([id, slot]) => [id, JSON.stringify(slot)]));
     let placed = 0;
     // A part already kept (a stopped run's stage/terrain.json) stays as it is: the run picks up where it stopped (the user's
     // call, 2026-10-31). A fresh run moves terrain.json aside first.
@@ -678,6 +697,12 @@ export async function terrainSpawn(novelDir, { jev: given = null, run = false, p
           adoptChildren(end);
           if (end === 'street') { const made = formSlots(); await saveSlots(); await live.outcome({ subject: 'streets', text: `${made.spares} building slots from the streets' forms (${made.held} held by buildings already)` }); }
           else await saveSlots();
+        } else if (add) {
+          // Adding to a built world: a level with nothing new keeps its end as it was (run again, its moves and spares would
+          // re-settle what the build settled); one whose new places all lie under the street settles only their layer.
+          const fresh = Object.keys(terrain.sites).filter(id => !keptAtStart.has(id) && !id.startsWith('slot:') && terrain.sites[id].scale === end), planes = new Set(fresh.map(id => planeOfPart(id, end)));
+          if (!fresh.length) await live.outcome({ subject: `${end}s`, text: `nothing new at the ${end} level: it stands as it was` });
+          else await levelEnd(end, planes.has('surface') ? null : planes);
         } else await levelEnd(end);
         // The world built again once the tenants stand in their hosts (the level's end built it before they joined).
         if (end === 'building' && tenants.waiting()) { placed += await tenants.place(); reshape(); await build(); }
@@ -767,7 +792,11 @@ export async function terrainSpawn(novelDir, { jev: given = null, run = false, p
         // Its height: slices through a core of its street round its spot, the buildings standing there cut; a building's from
         // its type's least floors (heights.json, a hard gate as every level's), a floating shape's its distance from the
         // ground (then its thickness), a ground shape's its top; each with the measures its sentences give (measures.ts).
-        const heights = shape ? T.terrainHeights('building', shape) : T.buildingHeights((type && H?.buildings[type]) || 1), { measure, standard } = heights;
+        // A building of a street laid underground stands on that street's floor, its roof under the 3 m ground skin
+        // (landscape.ts sunkForm, SKIN): offered only the floors that fit, and nothing below its own street.
+        const streetDepth = -(terrain.sites[lot.street]?.median ?? registry.slots?.[lot.street]?.median ?? 0), room = streetDepth > 0 ? Math.max(1, Math.floor((streetDepth - 3) / 3) - 1) : null;
+        const offeredHeights = shape ? T.terrainHeights('building', shape) : T.buildingHeights(Math.min((type && H?.buildings[type]) || 1, room ?? Infinity));
+        const heights = room && !shape ? { ...offeredHeights, slices: offeredHeights.slices.filter(entry => entry.y > 0 && entry.y <= room * 3) } : offeredHeights, { measure, standard } = heights;
         const tops = T.withMeasures(heights.slices, M.measuresIn(textsOf(part)), standard), lo = tops[0].y, hi = tops.at(-1).y, span = hi - lo, core = Math.max(CORE_MIN, Math.max(...lot.size) * 1.5);
         const at = lot.at, sample = [round(at[0] - core), round(at[1] - core), round(at[0] + core), round(at[1] + core)];
         const lots = data.world.lots.map(entry => ({ box: [entry.i0 * CELL, entry.j0 * CELL, (entry.i0 + entry.nx) * CELL, (entry.j0 + entry.nz) * CELL], top: (entry.floors ?? 1) * FLOOR })).filter(entry => entry.box[0] < sample[2] && sample[0] < entry.box[2] && entry.box[1] < sample[3] && sample[1] < entry.box[3]);
@@ -901,25 +930,27 @@ export async function terrainSpawn(novelDir, { jev: given = null, run = false, p
         // Borrowing and spawning by type (docs/v2/borrow-and-spawn.md §2.3–2.5): sized by its pins as below; then the slot of
         // its kind it raises the characters' travel least by (an unplaced one where the program would place it), or a spawn
         // where nothing can be borrowed. The slot's area holds it from now on; the level's moves come when the level ends.
-        const [w, d] = sizeFor(part.scale, ground, pinsOf(part)), placements = new Map();
+        const [w, d] = sizeFor(part.scale, ground, pinsOf(part)), placements = new Map(), plane = planeOfPart(part.id, part.scale);
         const place = (m, parent) => {
           const into = parent ?? spawnArea(holder, part.scale, [w, d], ground, pinAt, tiedTo, kind);
           // Placed inside an area, that area and those above it are no obstacles (the part will stand in them); no canvas spot.
-          const obstacles = Object.entries(terrain.sites).filter(([id, site]) => clash(id, site) && id !== into && !within(into, id)).map(([id, site]) => boxNow(id, site));
-          if (into && !placements.has(into)) placements.set(into, placeIn(into, [w, d], ground, null, obstacles, crowds().map(entry => entry.box), tiedTo, part.scale));
+          // Only its own layer's places are in its way (a street laid under the street lies under anything on top).
+          const obstacles = Object.entries(terrain.sites).filter(([id, site]) => clash(id, site) && id !== into && !within(into, id) && planeOfPart(id, site.scale) === plane).map(([id, site]) => boxNow(id, site));
+          if (into && !placements.has(into)) placements.set(into, placeIn(into, [w, d], ground, null, obstacles, plane === 'surface' ? crowds().map(entry => entry.box) : [], tiedTo, part.scale));
           return into && placements.get(into) ? { parent: into, at: placements.get(into).at } : null;
         };
         // No pin: where the canvas has an undecided place for now is no evidence; the characters' travel decides (§4).
         const mention = { id: part.id, label: part.label, named: !part.id.startsWith('unnamed:'), kind, holder, scene: world[part.id]?.scene ?? null, pin: null };
-        const choice = S.chooseSlots({ book: bookId, level: part.scale, slots: slotsAt(part.scale), mentions: [mention], ties: (a, b) => tiesAt(part.scale)[a]?.[b] ?? 0, fixed: fixedFor([part.id], part.scale), within: (id, of) => id === of || within(id, of), sceneIndex: scene => sceneAt.get(scene) ?? 0, place, improve: false, allow: (slot, m) => fits(m.kind, slot.parent) });
+        const choice = S.chooseSlots({ book: bookId, level: part.scale, slots: slotsAt(part.scale), mentions: [mention], ties: (a, b) => tiesAt(part.scale)[a]?.[b] ?? 0, fixed: fixedFor([part.id], part.scale), within: (id, of) => id === of || within(id, of), sceneIndex: scene => sceneAt.get(scene) ?? 0, place, improve: false, allow: (slot, m) => fits(m.kind, slot.parent) && planeOfSlot(slot) === plane });
         const slot = choice.slots.find(entry => entry.id === choice.assignment[part.id]);
         if (!slot?.at) { await live.outcome({ subject: part.label, text: 'no slot of its kind and nowhere to spawn one: it stands at its spot' }); box = [round((pinAt ?? [at.x, at.z])[0] - w / 2), round((pinAt ?? [at.x, at.z])[1] - d / 2), round((pinAt ?? [at.x, at.z])[0] + w / 2), round((pinAt ?? [at.x, at.z])[1] + d / 2)]; }
         else {
           const fresh = !registry.slots[slot.id]?.toward, made = fresh ? placements.get(slot.parent) : null;
-          keepSlots(part.scale, choice.slots, { [slot.id]: { size: [w, d], ...(made?.onto ? { turn: made.onto.turn, on: made.onto.what } : {}) } });
-          // A spawn in a parent laid out by topology (a third CBD in a metropolis) is laid out with the rest (§8.3), not apart.
+          keepSlots(part.scale, choice.slots, { [slot.id]: { size: [w, d], ...(plane !== 'surface' ? { plane } : {}), ...(made?.onto ? { turn: made.onto.turn, on: made.onto.what } : {}) } });
+          // A spawn in a parent laid out by topology (a third CBD in a metropolis) is laid out with the rest (§8.3), not apart;
+          // one in another layer is not (its parent's surface layout is not its own).
           const parentKind = terrain.sites[slot.parent]?.kind;
-          if (choice.spawned.includes(slot.id) && parentKind && resolver({ id: slot.parent, label: name(slot.parent), level: scaleOf(slot.parent), kind: parentKind })?.topology) {
+          if (plane === 'surface' && choice.spawned.includes(slot.id) && parentKind && resolver({ id: slot.parent, label: name(slot.parent), level: scaleOf(slot.parent), kind: parentKind })?.topology) {
             Object.assign(registry.slots[slot.id], { toward: null }); delete registry.slots[slot.id].size; delete registry.slots[slot.id].turn; delete registry.slots[slot.id].on;
             const said = layOutChildren(slot.parent, scaleOf(slot.parent));
             if (said) await live.outcome({ subject: part.label, text: `spawned beyond its city's configuration: ${said}` });
@@ -1214,8 +1245,8 @@ export async function terrainSpawn(novelDir, { jev: given = null, run = false, p
 }
 
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
-  const { values, positionals } = parseArgs({ allowPositionals: true, options: { run: { type: 'boolean' }, parts: { type: 'string' }, spawn: { type: 'boolean' }, from: { type: 'string' }, until: { type: 'string' }, 'probe-heights': { type: 'boolean' } } });
+  const { values, positionals } = parseArgs({ allowPositionals: true, options: { run: { type: 'boolean' }, parts: { type: 'string' }, spawn: { type: 'boolean' }, from: { type: 'string' }, until: { type: 'string' }, 'probe-heights': { type: 'boolean' }, add: { type: 'boolean' }, notes: { type: 'string' } } });
   const [novelDir] = positionals, levels = ['city', 'district', 'street', 'building'];
-  if (!novelDir || (values.from && !levels.includes(values.from)) || (values.until && !levels.includes(values.until))) { console.error('usage: node world-engine/terrain/terrain-spawn.mjs <novel-dir> [--run] [--parts N] [--spawn] [--from city|district|street] [--until city|district|street]'); process.exit(2); }
-  console.log(JSON.stringify(await terrainSpawn(resolve(novelDir), { run: values.run, parts: values.parts ? Number(values.parts) : Infinity, spawn: values.spawn, from: values.from ?? null, until: values.until ?? null, heightProbe: !!values['probe-heights'], log: line => console.error(line) })));
+  if (!novelDir || (values.from && !levels.includes(values.from)) || (values.until && !levels.includes(values.until))) { console.error('usage: node world-engine/terrain/terrain-spawn.mjs <novel-dir> [--run] [--parts N] [--spawn] [--from city|district|street] [--until city|district|street] [--add] [--notes <underground-notes.json>]'); process.exit(2); }
+  console.log(JSON.stringify(await terrainSpawn(resolve(novelDir), { run: values.run, parts: values.parts ? Number(values.parts) : Infinity, spawn: values.spawn, from: values.from ?? null, until: values.until ?? null, heightProbe: !!values['probe-heights'], add: !!values.add, notes: values.notes ?? null, log: line => console.error(line) })));
 }
