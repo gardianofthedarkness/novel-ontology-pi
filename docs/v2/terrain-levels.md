@@ -256,11 +256,24 @@ Checked:
   - people on a layer's floor land at a way's foot and stand only where a walk from it goes;
   - the director words each floor ("a deck in the air, 306 m up", "the deep underground").
 
+**The orbit, constructed (the user, 2026-11-06: "construct the orbit on the new system").** A copy of library 16
+(`novel-L3`): W12's stretch was answered into space by hand (`--layer <place>=space`), and Jev's answers were replayed
+through the terrain loop with no payment.
+
+- It was kept as an alley on the orbit's floor at 1200 m: 51 buildings and 25 launches.
+- Units 114–124 break no law. Its people start on the floor in 4 scenes, and every ride up is reached.
+- The 149 street lots the rehearsal reached are identical to the run with the stretch underground.
+- A route through the layers now counts each ride's own time: a launch 600 s, a virtual lift 60 s, a real lift its rise at 5 m/s and a 20 s wait, stairs about 18 s a floor. Before, a ride up to orbit was timed as the path's metres run, 35 s.
+- **The viewer:**
+  - where the world has an orbit, a camera more than 700 m up sees space: stars, a black sky, and the ground's city fogged out below (the orbit's height is virtual, not air over the city); full from 1000 m;
+  - a floor of another layer is drawn open, its rim only (the orbit's warm), with no ceiling box;
+  - the launches rise from the street as thin columns.
+
 Still open:
 
 - **Where a place of another layer is anchored:** where the canvas puts it (by its holder), not over its slot. The deep street's people started 644 m from its floor.
 - **A walk between two layers off the street** (a deck to the deep): two portals by the ground.
-- **The viewer** at 1200 m: the orbit is drawn, but no camera frames it yet.
+- **What an orbit is made of:** today a place in space is filled with its kind's ground (an alley's lots); a station's own forms (modules, docks, a ring) are a kind still to come.
 
 ## 4. Water (stage 3)
 

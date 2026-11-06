@@ -544,6 +544,27 @@ window.__cloudParts = (hide = []) => { const parts = { layer: cloudLayer, shadow
 window.__sky = (sky) => { if (sky?.strike) { flash.armed = true; flash.next = 0; } else if (sky?.cut) cutClouds(`test|${performance.now()}`, daylight.unit, controls.target, sky.cut); else if (sky !== undefined) { const { snap, ...held } = sky ?? {}; daylight.force = sky ? { sure: 1, daypart: daypartOfHour(held.hour ?? 12), ...held } : null; daylight.said = null; daylight.snap = snap ? 3 : 0; } return { force: daylight.force ?? null, ...Object.fromEntries(WX.map((key) => [key, Math.round(wx[key] * 100) / 100])), flash: flash.level, strikeIn: wx.lightning >= 0.2 ? Math.round(flash.next - performance.now()) / 1000 : null }; };
 const daypartOfHour = (hour) => (hour < 4.5 ? "late night" : hour < 7.5 ? "dawn" : hour < 11 ? "morning" : hour < 14 ? "midday" : hour < 17.5 ? "afternoon" : hour < 21 ? "evening" : "night");
 const camera = new THREE.PerspectiveCamera(42, 1, 0.5, Math.max(4000, mapReach * 4)), controls = new OrbitControls(camera, renderer.domElement);
+// The orbit (docs/v2/terrain-levels.md §3.5): where the world has a floor in orbit, the camera up there sees space: stars, a
+// black sky, and the ground's city out of sight below (the orbit's height is virtual, not 1200 m of air over the city).
+// From 700 m up it fades in, full from 1000 m; below that nothing changes.
+const ORBIT = (data.world?.underground?.halls ?? []).some((hall) => hall.layer === "space"), SPACE = new THREE.Color(0x010207), DARK = new THREE.Color(0x060c12);
+const stars = (() => {
+  if (!ORBIT) return null;
+  let seed = 7; const rnd = () => ((seed = (seed * 16807) % 2147483647) / 2147483647), points = [];
+  for (let n = 0; n < 2600; n++) { const u = rnd() * 2 - 1, a = rnd() * Math.PI * 2, r = Math.sqrt(1 - u * u), d = 3000; points.push(r * Math.cos(a) * d, u * d, r * Math.sin(a) * d); }
+  const field = new THREE.Points(new THREE.BufferGeometry().setAttribute("position", new THREE.Float32BufferAttribute(points, 3)), new THREE.PointsMaterial({ color: 0xdfe8ff, size: 1.6, sizeAttenuation: false, transparent: true, opacity: 0, fog: false, depthWrite: false }));
+  field.frustumCulled = false; field.visible = false; world.add(field); return field;
+})();
+function orbitTick() {
+  if (!ORBIT) return;
+  const f = Math.min(1, Math.max(0, (camera.position.y - 700) / 300));
+  stars.visible = f > 0.01; stars.material.opacity = f; stars.position.copy(camera.position);
+  // Without daylight the sky and the fog keep their own dark: set again each frame, so leaving the orbit gives them back.
+  if (!daylight.on) { world.background.copy(DARK); defaultFog.color.copy(DARK); defaultFog.near = baseFog.near; defaultFog.far = baseFog.far; }
+  if (f <= 0) return;
+  world.background.lerp(SPACE, f); defaultFog.color.lerp(SPACE, f);
+  defaultFog.near = defaultFog.near * (1 - f) + 250 * f; defaultFog.far = defaultFog.far * (1 - f) + 1000 * f;
+}
 controls.enableDamping = true; controls.maxPolarAngle = Math.PI * 0.47; controls.minDistance = 10; controls.maxDistance = Math.max(1600, mapReach * 1.8);
 const resize = () => { const { clientWidth: w, clientHeight: h } = host; renderer.setSize(w, h, false); camera.aspect = w / h; camera.updateProjectionMatrix(); };
 new ResizeObserver(resize).observe(host);
@@ -747,9 +768,11 @@ function buildPlace(id) {
       const material = tint[hall.kind] ?? mats.deep, y = -hall.depth + hall.height / 2;
       // A street laid underground (terrain-levels §8): its floor, the street's ground under the skin, and the skin's underside
       // as its ceiling in outline; open air between, where its buildings stand (drawn as lots, on its floor). No tunnel.
+      // Another layer's floor (§3.5: the deep's, a deck's, an orbit's) has no ceiling: its floor and its rim only.
       if (hall.street) {
         for (const box of hall.boxes) {
           const floor = new THREE.Mesh(new THREE.BoxGeometry(box.w, 0.2, box.d), mats.arcade); floor.position.set(box.x, -hall.depth + 0.1, box.z); floor.rotation.y = -box.angle; show(floor, box.x, box.z);
+          if (hall.layer) { const rim = new THREE.LineSegments(new THREE.EdgesGeometry(new THREE.BoxGeometry(box.w, 0.2, box.d)), new THREE.LineBasicMaterial({ color: hall.layer === "space" ? 0xffd9a0 : 0x8fd6ff, transparent: true, opacity: 0.7 })); rim.position.set(box.x, -hall.depth + 0.1, box.z); rim.rotation.y = -box.angle; show(rim, box.x, box.z); continue; }
           const ceiling = new THREE.LineSegments(new THREE.EdgesGeometry(new THREE.BoxGeometry(box.w, hall.height, box.d)), new THREE.LineBasicMaterial({ color: 0x8fd6ff, transparent: true, opacity: 0.15 }));
           underLines.push(ceiling.material); ceiling.position.set(box.x, y, box.z); ceiling.rotation.y = -box.angle; show(ceiling, box.x, box.z);
         }
@@ -1951,7 +1974,7 @@ function frame(now) {
   decor(time); blinkProposal(now); blinkSampled(now); playSettle(now);
   if (seeing && !sheetView) seeThrough(entry, segment, now, dt, elapsed);
   if (focusGlide) { const u = Math.min(1, (performance.now() - focusGlide.start) / 600), e = u * u * (3 - 2 * u); controls.target.lerpVectors(focusGlide.fromTarget, focusGlide.toTarget, e); camera.position.lerpVectors(focusGlide.fromCamera, focusGlide.toCamera, e); if (u >= 1) focusGlide = null; }
-  if (sheetView) renderer.render(sheetView.scene, sheetView.camera); else { controls.update(); if (liveMode) showBorn(); capLabels(); renderer.render(world, camera); } if (!shownNotice) { shownNotice = true; document.querySelector(".notice")?.remove(); } requestAnimationFrame(frame);
+  if (sheetView) renderer.render(sheetView.scene, sheetView.camera); else { controls.update(); if (liveMode) showBorn(); capLabels(); orbitTick(); renderer.render(world, camera); } if (!shownNotice) { shownNotice = true; document.querySelector(".notice")?.remove(); } requestAnimationFrame(frame);
 }
 
 /**

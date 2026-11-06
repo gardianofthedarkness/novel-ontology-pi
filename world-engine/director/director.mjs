@@ -785,12 +785,28 @@ export async function direct(novelDir, { reading, readingPath = null, prefilm = 
             const last = runTo(who, [alight[0], from[1]], b, near.length ? near : [dest], 'from-station');
             return { path: [...first.path, ...last.path], legs: first.legs + last.legs, of: first.of + last.of, reached: last.reached, trip, ride: { from: first.path.at(-1), to: alight[0] } };
           };
+          // The rides on a route through the layers (terrain-levels §3.4–3.5), each its own time: a launch to an orbit its
+          // fixed long ride, a virtual lift its fixed one, a real lift its rise at its speed and the wait, stairs climbed. A
+          // ride is a step of more than a floor and a half up or down.
+          const ridesOf = path => {
+            const out = [];
+            for (let k = 0; k + 1 < path.length; k++) {
+              const u = at(path[k]), v = at(path[k + 1]), rise = Math.abs(v[1] - u[1]);
+              if (rise <= 1.5 * FLOOR) continue;
+              const off = Math.abs(u[1]) > Math.abs(v[1]) ? u : v, hall = W.hallsAt(world, Math.floor(off[0] / CELL), Math.floor(off[2] / CELL)).map(entry => world.source.underground?.halls?.[entry.hall]).find(entry => entry && Math.abs(-entry.depth - off[1]) < 1.5);
+              const by = hall?.layer === 'space' ? 'launch' : hall?.virtual ? 'virtual lift' : rise > W.STAIRS_DEPTH ? 'lift' : 'stairs';
+              const seconds = by === 'launch' ? W.LAUNCH_RIDE : by === 'virtual lift' ? W.VIRTUAL_RIDE : by === 'lift' ? rise / W.LIFT_SPEED + W.LIFT_WAIT : rise / FLOOR * 18;
+              out.push({ by, rise: Math.round(rise), seconds: Math.round(seconds) });
+            }
+            return out;
+          };
           sceneRecord.routes = [];
           for (const entry of travels) {
             const p = at(entry.dest), { nodes } = around(p[0], p[2], 6), near = nodes.filter(node => Math.abs(node.y - p[1]) < 1 && Math.hypot(node.x - p[0], node.z - p[2]) <= 2.5).map(node => node.id);
             if (entry.route) {
               const route = routeWalk(entry.who, entry.from, entry.dest, near), metres = Math.round(route.path.slice(1).reduce((sum, node, k) => { const u = at(route.path[k]), v = at(node); return sum + Math.hypot(v[0] - u[0], v[2] - u[2], v[1] - u[1]); }, 0));
-              sceneRecord.routes.push({ who: entry.who, metres, by: route.trip.by, seconds: route.trip.seconds, legs: route.legs, of: route.of, reached: route.reached, from: metresOf(entry.from[0]), dest: metresOf(entry.dest), ...(route.stopped ? { stopped: route.stopped } : {}) });
+              const rides = ridesOf(route.path);
+              sceneRecord.routes.push({ who: entry.who, metres, by: route.trip.by, seconds: route.trip.seconds + rides.reduce((sum, ride) => sum + ride.seconds, 0), ...(rides.length ? { rides } : {}), legs: route.legs, of: route.of, reached: route.reached, from: metresOf(entry.from[0]), dest: metresOf(entry.dest), ...(route.stopped ? { stopped: route.stopped } : {}) });
               if (route.path.length > 1) { E.moves.set(`${scene.id}|${event.id}|${entry.who}`, { person: entry.who, how: 'run', path: route.path, ensemble: [] }); positions[entry.who] = [route.path.at(-1), entry.from[1]]; }
               if (!route.reached) { positions[entry.who] = [entry.dest, entry.from[1]]; sceneRecord.offPage.push(entry.who); }
               continue;
