@@ -97,6 +97,12 @@ export interface Patch {
   id: string; type: LandscapeType; x: number; z: number; R: number; H: number; lot: number; median?: number; manifold?: Manifold;
   /** A pool's member's ground, borrowed from the pool's default where it stands: it claims lots before the default does. */
   borrowed?: boolean;
+  /**
+   * The layer the patch lies in, where it is not the surface or the shallow underground (docs/v2/terrain-levels.md §3.5): the
+   * deep underground, the air, an orbit. It is filled as if it stood alone on the ground and lifted onto its layer's floor
+   * (layerBuildings); `deck` a floor in the air raised over what stands under it (metres).
+   */
+  plane?: Layer; deck?: number;
   /** A street that is the ground's own (config/terrain/street.json `takes`): it took a road or a crossing of the city, builds no form, and its buildings are the city's lots in it. */
   takes?: "road" | "crossing";
   /** A part below the street: the kind of hall its name says it is (a parking garage, a passage), else by its shape. */
@@ -161,7 +167,7 @@ export const membership = (patch: Patch, p: Point) => 1 / (1 + Math.exp(-insideB
  * layer is its own plane). A patch under the street lies in another layer: it claims no surface ground, cuts no block and
  * lends no height, so laying a street under the street leaves the surface as it was, building for building.
  */
-export const surfacePatches = (landscape: Landscape) => landscape.patches.filter((patch) => !((patch.median ?? 0) < 0));
+export const surfacePatches = (landscape: Landscape) => landscape.patches.filter((patch) => !patch.plane && !((patch.median ?? 0) < 0));
 export const claimOrder = (landscape: Landscape) => { const surface = surfacePatches(landscape); return [...surface.filter((patch) => patch.borrowed), ...surface.filter((patch) => !patch.borrowed)]; };
 export function ownerOfLot(landscape: Landscape, lot: { id: string; centre: Point }): Patch | null {
   for (const patch of claimOrder(landscape)) if (insideBy(patch, lot.centre) > -fringe(patch) && skeletonStream(landscape.seed, "own", lot.id, patch.id)() < membership(patch, lot.centre)) return patch;
@@ -264,7 +270,19 @@ export function withManifold(patch: Patch, median: number, manifold: Manifold): 
   return { ...made, H: underground(made) ? 1 : Math.round(localMedian(made, 1)) };
 }
 /** A part that lies under the street (its median below 0): its surface is open, its floors a hall that deep (underground.ts). */
-export const underground = (patch: Patch) => (patch.median ?? 0) < 0;
+export const underground = (patch: Patch) => !patch.plane && (patch.median ?? 0) < 0;
+/**
+ * The layers beyond the surface and the shallow underground (docs/v2/terrain-levels.md §3.5), and each one's floor in metres
+ * above the street: the deep underground's virtual floor, 60 levels down, below every real hall (the deepest, 110 m); a deck
+ * in the air above the towers; an orbit's virtual floor far above the air. A virtual floor stands open LAYER_ROOM metres up
+ * (its depth or height is not a number: the room is the world's grid's, not the ground's).
+ */
+export type Layer = "deep" | "air" | "space";
+export const LAYERS: Layer[] = ["deep", "air", "space"];
+export const LAYER_FLOOR: Record<Layer, number> = { deep: -180, air: 150, space: 1200 };
+export const LAYER_ROOM = 60;
+/** A layer's floor under these patches (metres above the street): a deck as high as the highest asked of it. */
+export const floorOf = (patches: Patch[], plane: Layer) => plane === "air" ? Math.max(LAYER_FLOOR.air, ...patches.map((patch) => patch.deck ?? 0)) : LAYER_FLOOR[plane];
 /**
  * The ground skin over a street laid underground (docs/v2/terrain-levels.md §8.4), metres: the street's slab and the soil
  * between it and the underground street's open air. Its buildings' roofs stay under it.
@@ -627,6 +645,14 @@ export function landscapeStyle(landscape: Landscape): FillStyle {
 export interface LandscapeFill { fabric: Fabric; owner: Record<string, string>; walls: [Point, Point][]; keeps: Building[]; landmarks: Building[]; plazas: { x: number; z: number; r: number }[]; radius: number; waters: Road[] }
 /** A place's ground filled from its landscape (and a window of it, when given): the fabric, which patch owns each lot, and castles' walls and keeps. */
 export function fillLandscape(landscape: Landscape, window?: { x0: number; z0: number; x1: number; z1: number }): LandscapeFill {
+  // The other layers (docs/v2/terrain-levels.md §3.5): their patches are no part of the surface's fill (they claim, cut and
+  // lend nothing there); their buildings join the landmarks on their own floors (layerBuildings).
+  if (landscape.patches.some((patch) => patch.plane)) {
+    const surface = landscape.patches.filter((patch) => !patch.plane);
+    const filled: LandscapeFill = surface.length ? fillLandscape({ ...landscape, patches: surface }, window) : { fabric: { roads: [], blocks: [], lots: [], buildings: [] }, owner: {}, walls: [], keeps: [], landmarks: [], plazas: [], radius: 0, waters: [] };
+    filled.landmarks.push(...layerBuildings(landscape, window));
+    return filled;
+  }
   const radius = circleOf(landscape), fabric = materialize({ seed: landscape.seed, r0: radius, r: radius }, window, undefined, landscapeStyle(landscape));
   const owner = Object.fromEntries(fabric.lots.map((lot) => [lot.id, ownerOfLot(landscape, lot)!.id]));
   const walls: [Point, Point][] = [], keeps: Building[] = [], landmarks: Building[] = [], plazas: { x: number; z: number; r: number }[] = [], waters: Road[] = [];
@@ -667,6 +693,23 @@ export function fillLandscape(landscape: Landscape, window?: { x0: number; z0: n
   // Where a landmark moved to, the city's buildings under it give way.
   if (moved.length) fabric.buildings = fabric.buildings.filter((b) => !moved.some((landmark) => Math.hypot(b.x - landmark.x, b.z - landmark.z) < (Math.max(landmark.w, landmark.d) + Math.max(b.w, b.d)) / 2 + 4));
   return { fabric, owner, walls, keeps, landmarks, plazas, radius, waters };
+}
+/**
+ * The buildings of a landscape's patches in the other layers (docs/v2/terrain-levels.md §3.5), each layer's patches filled
+ * as if they stood alone on the ground (their own fabric, forms, landmarks and keeps; nothing of the surface's) and lifted
+ * onto the layer's floor (`y0`): what was their streets and plazas is that floor. A virtual floor's buildings stop under its
+ * room. A patch under the street with no height of its own on the ground (Jev's median below 0) stands at its kind's middle.
+ */
+export function layerBuildings(landscape: Landscape, window?: { x0: number; z0: number; x1: number; z1: number }): (Building & { plane: Layer })[] {
+  const onGround = ({ plane, deck, ...patch }: Patch): Patch => ((patch.median ?? 0) < 0 ? { ...patch, median: undefined, manifold: undefined, H: (LANDSCAPES[patch.type].height[0] + LANDSCAPES[patch.type].height[1]) / 2 } : patch);
+  return LAYERS.flatMap((plane) => {
+    const group = landscape.patches.filter((patch) => patch.plane === plane);
+    if (!group.length) return [];
+    const own = fillLandscape({ ...landscape, patches: group.map(onGround) }, window), y0 = floorOf(group, plane), most = plane === "air" ? Infinity : Math.floor(LAYER_ROOM / 3) - 1;
+    // The fabric's lots named by their layer (a fill's own lot names repeat in every fill); a form's, a landmark's and a keep's
+    // carry their patch's id already.
+    return [...own.fabric.buildings.map((b) => ({ ...b, lot: `${plane}/${b.lot}` })), ...own.landmarks, ...own.keeps].map((b) => ({ ...b, y0, floors: Math.max(1, Math.min(b.floors, most)), plane }));
+  });
 }
 
 /*

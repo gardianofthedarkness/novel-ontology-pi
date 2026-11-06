@@ -15,7 +15,7 @@ const FACT_SURE = 0.6;
  * settings: settings.json's `units` ({ [unit]: { setting, sure } }); facts: per unit, its underground facts' sureness
  * ({ [unit]: number[] }), optional. Returns { places: { [id]: note }, noted: [ids] }.
  */
-export function undergroundNotes({ script, settings = {}, facts = {}, minUnits = 2, minShare = 0.5 }) {
+export function undergroundNotes({ script, settings = {}, facts = {}, minUnits = 2, minShare = 0.5, hand = {} }) {
   const unitsOf = new Map();
   for (const scene of script?.scenes ?? []) if (scene.place) (unitsOf.get(scene.place) ?? unitsOf.set(scene.place, []).get(scene.place)).push(scene.id);
   const places = {};
@@ -34,12 +34,54 @@ export function undergroundNotes({ script, settings = {}, facts = {}, minUnits =
     if (noted.has(id)) continue;
     for (let up = parentOf(id), guard = 0; up && guard < 12; up = parentOf(up), guard++) if (noted.has(up)) { places[id] = { ...(places[id] ?? { units: unitsOf.get(id)?.length ?? 0, underground: [], share: 0, sure: 0 }), noted: true, inherited: up, layer: places[up].layer, layerBy: places[up].layerBy }; break; }
   }
+  withLayers(places, script, hand, id => ({ units: unitsOf.get(id)?.length ?? 0, underground: [], share: 0, sure: 0, noted: false }));
   return { places, noted: Object.keys(places).filter(id => places[id].noted) };
+}
+
+// The other layers by a place's name (docs/v2/terrain-levels.md §3.5): words that put it in the air (floating, an airship, a
+// city or a fortress in the sky) or in space (the universe, outer space, a satellite, a space station, the moon). A satellite
+// town is on the ground; a sky bridge or a roof garden (words of the air on a building) is the surface's, so the air's words
+// are whole compounds. In escapes: the books' words stay out of the repository's text.
+const AIR_WORDS = ['\u6d6e\u6e38', '\u6d6e\u7a7a', '\u98de\u884c\u8239', '\u98de\u8247', '\u7a7a\u4e2d\u8981\u585e', '\u7a7a\u4e2d\u90fd\u5e02', '\u7a7a\u4e2d\u57ce', '\u5929\u7a7a\u57ce', '\u5929\u7a7a\u4e4b\u57ce'];
+const SPACE_WORDS = ['\u5b87\u5b99', '\u592a\u7a7a', '\u536b\u661f', '\u7a7a\u95f4\u7ad9', '\u6708\u7403', '\u6708\u9762'];
+const GROUND_WORDS = ['\u536b\u661f\u57ce'];
+const AIR_EN = /\b(floating|airship|sky (city|fortress|island))\b/i, SPACE_EN = /\b(orbit|orbital|satellite|space station|outer space|lunar|moon base)\b/i, GROUND_EN = /\bsatellite (town|city)\b/i;
+/** The layer a place's name puts it in: 'air', 'space', or null (its name says nothing of another layer). */
+export const layerOfName = label => {
+  const text = String(label ?? '');
+  if (GROUND_WORDS.some(word => text.includes(word)) || GROUND_EN.test(text)) return null;
+  if (SPACE_WORDS.some(word => text.includes(word)) || SPACE_EN.test(text)) return 'space';
+  if (AIR_WORDS.some(word => text.includes(word)) || AIR_EN.test(text)) return 'air';
+  return null;
+};
+/** The layers a note can give: under the street near the ground ('near'), the deep underground, the air, space; or the surface (a hand's answer only). */
+export const NOTE_LAYERS = ['surface', 'near', 'deep', 'air', 'space'];
+
+/**
+ * The layer words of the names, then a hand's answers (`hand`: { [place]: layer }, NOTE_LAYERS), each over the underground's
+ * evidence and passed down the tree (a building on a floating island floats with it) to the places that have none of their
+ * own. A place in the air or in space is no place under the street (`noted` false); a hand's 'near' or 'deep' notes it.
+ */
+function withLayers(places, script, hand, blank) {
+  const parentOf = id => script?.places?.[id]?.parent ?? null, own = new Map();
+  for (const [id, place] of Object.entries(script?.places ?? {})) { const layer = layerOfName(place.label ?? place.name); if (layer) own.set(id, { layer, layerBy: 'name' }); }
+  for (const [id, layer] of Object.entries(hand ?? {})) if (NOTE_LAYERS.includes(layer)) own.set(id, { layer, layerBy: 'hand' });
+  const set = (id, layer, layerBy, from = null) => { places[id] = { ...(places[id] ?? blank(id)), layer, layerBy, noted: layer === 'near' || layer === 'deep', ...(from ? { inherited: from } : {}) }; if (!from) delete places[id].inherited; };
+  for (const id of new Set([...Object.keys(script?.places ?? {}), ...own.keys()])) {
+    if (own.has(id)) { set(id, own.get(id).layer, own.get(id).layerBy); continue; }
+    for (let up = parentOf(id), guard = 0; up && guard < 12; up = parentOf(up), guard++) if (own.has(up)) { set(id, own.get(up).layer, own.get(up).layerBy, up); break; }
+  }
 }
 
 /** Whether a place (or one it stands in) is noted underground. */
 export function notedUnderground(notes, place, script = null) {
   for (let id = place, guard = 0; id && guard < 12; id = script?.places?.[id]?.parent ?? null, guard++) if (notes?.places?.[id]?.noted) return notes.places[id];
+  return null;
+}
+
+/** The note that puts a place (or one it stands in) in another layer: noted under the street, or in the air or in space. */
+export function layerNote(notes, place, script = null) {
+  for (let id = place, guard = 0; id && guard < 12; id = script?.places?.[id]?.parent ?? null, guard++) { const note = notes?.places?.[id]; if (note?.noted || note?.layer === 'air' || note?.layer === 'space') return note; if (note?.layer === 'surface') return null; }
   return null;
 }
 

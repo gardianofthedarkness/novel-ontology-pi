@@ -778,11 +778,12 @@ function buildPlace(id) {
       }
     }
     // The ways between the layers (terrain-levels §3.4): a lift as a faint shaft from the floor below to the street, stairs as
-    // a flight of steps down from the street to the floor; the world's own, on every 40 m square of a floor.
+    // a flight of steps down from the street to the floor; the world's own, on every 40 m square of a floor. A deck's lift and
+    // an orbit's launch (§3.5) rise from the street up to their floor, a launch thinner.
     if (under.ways?.length) {
       const shafts = [], steps = [];
       for (const [fx, fy, fz, tx, tz, lift] of under.ways) {
-        if (lift) shafts.push([fx, fy / 2, fz, 1.6, -fy, 1.6]);
+        if (lift) shafts.push([fx, fy / 2, fz, lift === 2 ? 0.8 : 1.6, Math.abs(fy), lift === 2 ? 0.8 : 1.6]);
         else for (let n = 0; n < 8; n++) { const t = (n + 0.5) / 8; steps.push([tx + (fx - tx) * t, fy * t + 0.2, tz + (fz - tz) * t, 2.4, 0.4, 2.4]); }
       }
       const [x0, , z0] = under.ways[0];

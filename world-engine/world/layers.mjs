@@ -10,7 +10,7 @@
 export const meansOf = how => { const kind = String(how ?? 'walk').split(':')[0]; return kind === 'ride' ? 'riding' : kind === 'climb' ? 'climbing' : 'on foot'; };
 
 /** Where each band is, in words for "no way there" (L10 says where). */
-export const LAYER_WORDS = { near: 'at street level and just under it', deep: 'more than 20 m down' };
+export const LAYER_WORDS = { near: 'at street level and just under it', deep: 'more than 20 m down or in another layer (a deck, an orbit)' };
 
 /**
  * A walk between the layers. `portals`: { foot, top, up, down, virtual, kind } (foot in the lower band, top above it; kind
@@ -20,7 +20,10 @@ export const LAYER_WORDS = { near: 'at street level and just under it', deep: 'm
  * at most `tries` of them. Returns { path, portal } or { path: null, why }.
  */
 export function acrossLayers({ from, targets, mine, portals, walkIn, at, how = 'walk', tries = 4, search = 120 }) {
-  const there = mine === 'near' ? 'deep' : 'near', p = at(from), q = at(targets[0]), flat = (u, v) => Math.hypot(u[0] - v[0], u[2] - v[2]);
+  // Ranked by the height each end lands at too (8 a metre, the solver's guide for climbing): the lower band holds every
+  // layer off the street (a lab 90 m down, a deck 306 m up), and a lab's cheaper lift ranked by its plan alone took all
+  // four tries of a walk up to a deck (L1's scene 119).
+  const there = mine === 'near' ? 'deep' : 'near', p = at(from), q = at(targets[0]), flat = (u, v) => Math.hypot(u[0] - v[0], u[2] - v[2]) + 8 * Math.abs(u[1] - v[1]);
   if (!portals.length) return { path: null, why: `no way between the street and the halls more than 20 m down: no lift, shaft, stairs or ladder within ${search} m` };
   const ranked = portals.map(portal => {
     const enter = mine === 'near' ? portal.top : portal.foot, leave = mine === 'near' ? portal.foot : portal.top, ride = mine === 'near' ? portal.down : portal.up;
@@ -30,7 +33,7 @@ export function acrossLayers({ from, targets, mine, portals, walkIn, at, how = '
   for (const portal of ranked.slice(0, tries)) {
     const name = `${portal.virtual ? 'virtual ' : ''}${portal.kind ?? 'lift'}`;
     const first = portal.enter === from ? [from] : walkIn(from, [portal.enter], mine);
-    if (!first) { why = `no way ${meansOf(how)} ${LAYER_WORDS[mine]} to the ${name} ${Math.round(flat(p, at(portal.enter)))} m off`; continue; }
+    if (!first) { why = `no way ${meansOf(how)} ${LAYER_WORDS[mine]} to the ${name} ${Math.round(Math.hypot(p[0] - at(portal.enter)[0], p[2] - at(portal.enter)[2]))} m off`; continue; }
     const rest = targets.includes(portal.leave) ? [portal.leave] : walkIn(portal.leave, targets, there);
     if (!rest) { why = `no way ${meansOf(how)} ${LAYER_WORDS[there]} from the ${name} to there`; continue; }
     const foot = at(portal.foot);

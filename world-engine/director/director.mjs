@@ -317,11 +317,12 @@ export async function direct(novelDir, { reading, readingPath = null, prefilm = 
       const said = ([x, y, z]) => {
         // A building of a street laid underground holds its column below the street's own (world.ts lotBelow): its floors
         // count from its own ground floor, on that street's floor.
-        const key = W.cellKey(Math.floor(x / CELL), Math.floor(z / CELL)), below = world.lotBelow?.get(key), level = Math.round(y / FLOOR);
-        const sunk = below !== undefined && level >= (world.lots[below].k0 ?? 0) && level <= (world.lots[below].k0 ?? 0) + world.lots[below].floors;
-        const index = sunk ? below : lotOf(x, z), k = level - (sunk ? world.lots[below].k0 ?? 0 : 0), down = sunk ? `, ${-(world.lots[below].k0 ?? 0) * FLOOR} m under the street` : '';
-        const street = !sunk && index === undefined && y < -1 ? W.hallsAt(world, Math.floor(x / CELL), Math.floor(z / CELL)).map(entry => world.source.underground?.halls?.[entry.hall]).find(hall => hall?.street && Math.abs(-hall.depth - y) < 1.5) : null;
-        if (street) return `an underground street, ${street.depth} m down`;
+        const key = W.cellKey(Math.floor(x / CELL), Math.floor(z / CELL)), level = Math.round(y / FLOOR), below = (world.lotBelow?.get(key) ?? []).find(index => level >= (world.lots[index].k0 ?? 0) && level <= (world.lots[index].k0 ?? 0) + world.lots[index].floors);
+        const sunk = below !== undefined;
+        const index = sunk ? below : lotOf(x, z), k = level - (sunk ? world.lots[below].k0 ?? 0 : 0), down = sunk ? ((world.lots[below].k0 ?? 0) < 0 ? `, ${-(world.lots[below].k0 ?? 0) * FLOOR} m under the street` : `, ${(world.lots[below].k0 ?? 0) * FLOOR} m up`) : '';
+        // On a floor of its own: an underground street's, or another layer's (§3.5: a deck in the air, an orbit, the deep).
+        const street = !sunk && Math.abs(y) > 1 ? W.hallsAt(world, Math.floor(x / CELL), Math.floor(z / CELL)).map(entry => world.source.underground?.halls?.[entry.hall]).find(hall => hall?.street && Math.abs(-hall.depth - y) < 1.5) : null;
+        if (street) return street.layer === 'air' ? `a deck in the air, ${-street.depth} m up` : street.layer === 'space' ? 'a floor in orbit' : street.layer === 'deep' ? 'the deep underground' : `an underground street, ${street.depth} m down`;
         if (index === undefined) return y < -1 ? 'underground' : y < 1.5 ? `open ground (${['', 'the street', 'a plaza', 'the avenue'][world.ground.get(W.cellKey(Math.floor(x / CELL), Math.floor(z / CELL))) ?? 0] || 'outside'})` : `the open air, ${Math.round(y)} m up`;
         const lot = world.lots[index], i = Math.floor(x / CELL) - lot.i0, j = Math.floor(z / CELL) - lot.j0;
         if (k >= lot.floors) return k === lot.floors ? `the roof of ${lotName(index)}${down}` : `the air over ${lotName(index)}`;
@@ -623,23 +624,30 @@ export async function direct(novelDir, { reading, readingPath = null, prefilm = 
         // it reaches, in the near-ground layer first (§8.1); those standing above the street walk down to it (W12's units
         // 118–123: everyone started on the street, and every "underground" fact of theirs failed).
         // Or the unit's place is noted underground, or stands in a place that is (§8.5: its streets, buildings and rooms).
-        const dressed = prepared?.setDresser, placeNote = UN.notedUnderground(prefilm?.underground, scene.placeId, script), below = (dressed?.setting === 'underground' && (dressed.sure ?? 0) >= 0.5) || !!placeNote;
-        let wentDown = false;
+        // Or in the air or in space (§3.5: the note's layer, by the place's name or a hand's answer): its people start on that
+        // layer's floor, its hall `<place>:under`, and never go down to the street's underground.
+        const dressed = prepared?.setDresser, placeNote = UN.layerNote(prefilm?.underground, scene.placeId, script), lifted = ['air', 'space'].includes(placeNote?.layer), below = (!lifted && dressed?.setting === 'underground' && (dressed.sure ?? 0) >= 0.5) || !!placeNote;
+        let wentDown = false, onLayer = false;
         // A noted place the terrain loop laid under the street (an underground stretch's own place: its area or its shape is a
         // hall, `<place>:under` or `<place>:shape`, or named by the slot it borrows in spawn mode, at the depth Jev chose, deep or
         // near): its people start in that hall.
-        const halls = world.source.underground?.halls ?? [], ownHall = (() => { if (!below) return -1; for (let id = scene.placeId, guard = 0; id && guard < 12; id = script.places?.[id]?.parent ?? null, guard++) { const own = [id, citySites[id]?.slot].filter(Boolean), index = halls.findIndex(hall => own.some(name => hall.id === `${name}:shape` || hall.id === `${name}:under`)); if (index >= 0) return index; } return -1; })();
+        const halls = world.source.underground?.halls ?? [], ownHall = (() => { if (!below) return -1; for (let id = scene.placeId, guard = 0; id && guard < 12; id = script.places?.[id]?.parent ?? null, guard++) { const own = [id, citySites[id]?.slot].filter(Boolean), index = halls.findIndex(hall => own.some(name => hall.id === `${name}:shape` || hall.id === `${name}:under` || !!hall.parts?.includes(name))); if (index >= 0) return index; } return -1; })();
         if (ownHall >= 0 && anchor !== null && anchor !== undefined) {
           const p = at(anchor), [box] = halls[ownHall].boxes, inHall = around(box.x, box.z, Math.max(box.w, box.d) / 2 + 4).nodes.filter(node => node.lot === W.HALL_LOT + ownHall);
           // Already in it: on its floor, or inside one of the buildings standing on it (a street laid underground), between
           // its floor and its ceiling over a cell of it.
           const there = W.hallsAt(world, Math.floor(p[0] / CELL), Math.floor(p[2] / CELL)).some(entry => entry.hall === ownHall) && p[1] >= -halls[ownHall].depth - 0.5 && p[1] <= -halls[ownHall].depth + halls[ownHall].height;
           if (!there && !inHall.some(node => node.id === anchor)) {
-            const down = inHall.sort((a, b) => Math.hypot(a.x - box.x, a.z - box.z) - Math.hypot(b.x - box.x, b.z - box.z))[0] ?? null;
-            sceneRecord.underground = { place: placeNote?.inherited ?? scene.placeId, hall: halls[ownHall].kind, depth: halls[ownHall].depth, from: said(p), to: down ? said([down.x, down.y, down.z]) : null, metres: down ? Math.round(Math.hypot(down.x - p[0], down.z - p[2])) : null };
-            if (down) { anchor = down.id; wentDown = true; }
+            // To the hall's middle; on another layer's floor (§3.5: a district's in the deep runs 700 m), to the foot of the way
+            // nearest them: joined to the street by its lift (the floor's node nearest them, a deck's corner between its
+            // buildings, was reached by no walk: L1's scene 119).
+            const feet = halls[ownHall].layer ? new Set((E.graphOf({ x: p[0], z: p[2] }, Math.max(box.w, box.d)).ways ?? []).filter(way => way.hall === ownHall).map(way => way.foot)) : null;
+            const [mx, mz] = halls[ownHall].layer ? [p[0], p[2]] : [box.x, box.z], landing = feet?.size ? inHall.filter(node => feet.has(node.id)) : inHall;
+            const down = (landing.length ? landing : inHall).sort((a, b) => Math.hypot(a.x - mx, a.z - mz) - Math.hypot(b.x - mx, b.z - mz))[0] ?? null;
+            sceneRecord.underground = { place: placeNote?.inherited ?? scene.placeId, hall: halls[ownHall].kind, ...(halls[ownHall].layer ? { layer: halls[ownHall].layer } : {}), depth: halls[ownHall].depth, from: said(p), to: down ? said([down.x, down.y, down.z]) : null, metres: down ? Math.round(Math.hypot(down.x - p[0], down.z - p[2])) : null };
+            if (down) { anchor = down.id; wentDown = true; onLayer = !!halls[ownHall].layer; }
           }
-        } else if (below && anchor !== null && anchor !== undefined && at(anchor)[1] > -1) {
+        } else if (below && !lifted && anchor !== null && anchor !== undefined && at(anchor)[1] > -1) {
           const p = at(anchor), down = downFrom(anchor)[0] ?? null;
           sceneRecord.underground = { setting: dressed?.setting === 'underground' ? dressed.sure : null, place: placeNote ? (placeNote.inherited ?? scene.placeId) : null, from: said(p), to: down ? said([down.x, down.y, down.z]) : null, metres: down ? Math.round(Math.hypot(down.x - p[0], down.z - p[2])) : null };
           if (down) { anchor = down.id; wentDown = true; }
@@ -647,7 +655,8 @@ export async function direct(novelDir, { reading, readingPath = null, prefilm = 
         // A spot an arm's length to a body or two from the anchor on its level, the same for the same person each time.
         const beside = (who, spread = [BODY, 2.5 * BODY]) => {
           if (anchor === null || anchor === undefined) return null;
-          const p = at(anchor), { nodes } = around(p[0], p[2], spread[1] + 2), ring = nodes.filter(node => Math.abs(node.y - p[1]) < 1 && Math.hypot(node.x - p[0], node.z - p[2]) >= spread[0] && Math.hypot(node.x - p[0], node.z - p[2]) <= spread[1]);
+          // On another layer's floor, only where a walk from the anchor goes (a deck's floor between its buildings has pockets).
+          const p = at(anchor), { nodes } = around(p[0], p[2], spread[1] + 2), reach = onLayer ? onFoot(anchor, spread[1] + 2) : null, ring = nodes.filter(node => Math.abs(node.y - p[1]) < 1 && Math.hypot(node.x - p[0], node.z - p[2]) >= spread[0] && Math.hypot(node.x - p[0], node.z - p[2]) <= spread[1] && (!reach || reach.has(node.id)));
           return ring.length ? ring[Math.floor(seeded(`${scene.id}|${who}|beside`)() * ring.length)].id : anchor;
         };
         const positions = {}, travels = [];

@@ -1,4 +1,4 @@
-import { LANDSCAPES, formOf, roomUnder, sunkStreet, underground, type Landscape, type Patch } from "./landscape.js";
+import { LANDSCAPES, LAYERS, LAYER_ROOM, floorOf, formOf, layerBuildings, roomUnder, sunkStreet, underground, type Landscape, type Layer, type Patch } from "./landscape.js";
 import { stageStream } from "./stream.js";
 
 /**
@@ -9,7 +9,7 @@ import { stageStream } from "./stream.js";
  * Pure: metres and plain data. The world (apps/playground/src/data/world.ts) puts the halls on its 2 m grid and walks them.
  */
 export type Point = [number, number];
-export type HallKind = "tunnel" | "station" | "corridor" | "mall" | "tank" | "channel" | "lab" | "military" | "quantum" | "parking" | "utility" | "shelter" | "basement";
+export type HallKind = "tunnel" | "station" | "corridor" | "mall" | "tank" | "channel" | "lab" | "military" | "quantum" | "parking" | "utility" | "shelter" | "basement" | "deep" | "deck" | "orbit";
 /** A rotated box (centre, size, turn about y) and a bore (a segment and its width), in metres. */
 export interface HallBox { x: number; z: number; w: number; d: number; angle: number }
 export interface Bore { a: Point; b: Point; width: number }
@@ -19,10 +19,15 @@ export interface Bore { a: Point; b: Point; width: number }
  * reach the surface (a station's ends, a shaft), and `down` points where it meets the hall below (a tank's channel).
  */
 /**
- * `street`: a street laid under the street (terrain-levels §8): its floor at `depth`, open up to the ground skin (`height`),
- * its own buildings standing on its floor. `virtual`: the deep layer's space, with no depth of its own (§8.6; none yet).
+ * `street`: a floor of its own with its buildings standing on it, open up to its ceiling (`height`): a street laid under the
+ * street (terrain-levels §8), a deep area's, a deck's, an orbit's. `virtual`: a layer whose level is not a number (§3.5).
  */
-export interface Hall { id: string; kind: HallKind; depth: number; height: number; boxes: HallBox[]; bores: Bore[]; pillars: number; lined: boolean; up: Point[]; label?: string; street?: boolean; virtual?: boolean }
+/**
+ * `layer`: the layer a floor of another layer belongs to (terrain-levels §3.5): the deep underground's and the orbit's are
+ * `virtual` (their level is not a number); the atmosphere's is a deck, its `depth` below 0 (a height). `parts`: the patches
+ * whose floor it is (one floor holds every patch of its layer in a landscape).
+ */
+export interface Hall { id: string; kind: HallKind; depth: number; height: number; boxes: HallBox[]; bores: Bore[]; pillars: number; lined: boolean; up: Point[]; label?: string; street?: boolean; virtual?: boolean; layer?: Layer; parts?: string[] }
 
 /** The ground in three bands by depth (metres): how wide an opening stands unsupported, what breaks it, how it arches and bulks when it falls. */
 export interface Band { name: "soil" | "weathered" | "hard"; to: number; span: number; bond: number; arch: number; bulk: number }
@@ -44,8 +49,9 @@ export const LINING = { span: 12, bond: 4 }, PILLAR_BOND = 5;
 export const INTERVALS = { shallow: [0, 25], subway: [5, 20], deep: [20, 110] } as const;
 export type Interval = keyof typeof INTERVALS;
 const SUBWAY_KINDS = new Set(["station", "tunnel", "corridor"]);
-export const intervalsOf = (hall: Pick<Hall, "depth" | "height"> & { kind?: string }): Interval[] => (hall.kind && SUBWAY_KINDS.has(hall.kind) ? ["subway"] : (["shallow", "deep"] as Interval[]).filter((key) => hall.depth - hall.height <= INTERVALS[key][1] && hall.depth >= INTERVALS[key][0]));
-export const HALL_LABEL: Record<HallKind, string> = { tunnel: "a subway tunnel", station: "a subway station", corridor: "a subway passage", mall: "an underground mall", tank: "a storm-water tank", channel: "a storm-water channel", lab: "an experiment lab", military: "a military bunker", quantum: "a quantum research facility", parking: "an underground car park", utility: "a utility tunnel", shelter: "a shelter", basement: "a basement" };
+// A floor of another layer (§3.5) is in neither interval: what Jev picks underground is the shallow layer's.
+export const intervalsOf = (hall: Pick<Hall, "depth" | "height"> & { kind?: string; layer?: Layer }): Interval[] => hall.layer ? [] : (hall.kind && SUBWAY_KINDS.has(hall.kind) ? ["subway"] : (["shallow", "deep"] as Interval[]).filter((key) => hall.depth - hall.height <= INTERVALS[key][1] && hall.depth >= INTERVALS[key][0]));
+export const HALL_LABEL: Record<HallKind, string> = { tunnel: "a subway tunnel", station: "a subway station", corridor: "a subway passage", mall: "an underground mall", tank: "a storm-water tank", channel: "a storm-water channel", lab: "an experiment lab", military: "a military bunker", quantum: "a quantum research facility", parking: "an underground car park", utility: "a utility tunnel", shelter: "a shelter", basement: "a basement" , deep: "the deep underground", deck: "a deck in the air", orbit: "a floor in orbit" };
 /**
  * The city's common underground spaces (docs/v2/world-engine-v2.md §2.0.17; the compatibility page) and the street kinds
  * each usually lies under ("*": any): transport (the subway's tunnels, stations and passages), commerce (an underground
@@ -59,6 +65,8 @@ export const LIES_UNDER: Record<HallKind, string[]> = {
   utility: ["avenue", "shopping", "alley", "residential"], tank: ["park", "stadium", "square"], channel: ["*"],
   shelter: ["park", "square", "centre", "residential"], basement: ["centre", "avenue", "shopping", "station", "residential"],
   lab: ["avenue", "centre", "park", "square"], military: ["park", "square", "stadium"], quantum: ["avenue", "centre", "park"],
+  // The other layers' floors lie under no street: they are layers of their own (terrain-levels §3.5).
+  deep: [], deck: [], orbit: [],
 };
 /** How tall each kind of hall is made for a part below the street (metres from its floor). */
 const HALL_HEIGHT: Partial<Record<HallKind, number>> = { corridor: 4, mall: 5, station: 7, tunnel: 6, parking: 3, utility: 3, shelter: 4, basement: 4, channel: 6, tank: 12, lab: 6, military: 6, quantum: 8 };
@@ -99,7 +107,8 @@ export function boundsOf(hall: Pick<Hall, "boxes" | "bores">) {
  * Ancient ground has none. Basements are the buildings' own (world.ts); the subway is the city's (`subwayOf`).
  */
 export function hallsOf(landscape: Landscape): Hall[] {
-  const halls: Hall[] = [], modern = landscape.patches.filter((patch) => LANDSCAPES[patch.type].era === "modern");
+  // A patch of another layer has nothing under it: its layer's floor is its ground (layerFloors).
+  const halls: Hall[] = layerFloors(landscape), modern = landscape.patches.filter((patch) => !patch.plane && LANDSCAPES[patch.type].era === "modern");
   // A part that lies under the street (terrain spawning: its median below 0): a hall that deep over its ground, a passage
   // along a linear part (a box patch: a street), a mall under any other; stairs up at its ends. The surface over it stays as
   // it was: it lies in another layer (docs/v2/terrain-levels.md §3.3).
@@ -157,6 +166,27 @@ export function hallsOf(landscape: Landscape): Hall[] {
     }
   }
   return halls;
+}
+/** The kind of floor each other layer has (§3.5). */
+export const LAYER_KIND: Record<Layer, HallKind> = { deep: "deep", air: "deck", space: "orbit" };
+/**
+ * The floors of a landscape's patches in the other layers (docs/v2/terrain-levels.md §3.5): one for each layer, a hall at the
+ * layer's floor, open LAYER_ROOM metres up, holding its patches' circles and every building lifted onto it with a lane of 4 m
+ * round them (landscape.ts layerBuildings); no pillars. The deep's and the orbit's are virtual. No stairs of its own: the
+ * world joins every floor to the ground on its 40 m squares (world.ts ways, §3.4).
+ */
+export function layerFloors(landscape: Landscape): Hall[] {
+  if (!landscape.patches.some((patch) => patch.plane)) return [];
+  const lifted = layerBuildings(landscape);
+  return LAYERS.flatMap((plane) => {
+    const group = landscape.patches.filter((patch) => patch.plane === plane);
+    if (!group.length) return [];
+    const xs: number[] = [], zs: number[] = [], lane = 4;
+    for (const patch of group) xs.push(patch.x - patch.R, patch.x + patch.R), zs.push(patch.z - patch.R, patch.z + patch.R);
+    for (const b of lifted.filter((entry) => entry.plane === plane)) { const r = Math.hypot(b.w, b.d) / 2 + lane; xs.push(b.x - r, b.x + r); zs.push(b.z - r, b.z + r); }
+    const [x0, x1, z0, z1] = [Math.min(...xs), Math.max(...xs), Math.min(...zs), Math.max(...zs)];
+    return [{ id: `${group[0].id}:under`, kind: LAYER_KIND[plane], depth: -floorOf(group, plane), height: LAYER_ROOM, boxes: [{ x: round((x0 + x1) / 2), z: round((z0 + z1) / 2), w: round(x1 - x0), d: round(z1 - z0), angle: 0 }], bores: [], pillars: 0, lined: true, up: [], street: true, virtual: plane !== "air", layer: plane, parts: group.map((patch) => patch.id) }];
+  });
 }
 const ends = (x: number, z: number, length: number, angle: number): Point[] => [[round(x - Math.cos(angle) * (length / 2 - 4)), round(z - Math.sin(angle) * (length / 2 - 4))], [round(x + Math.cos(angle) * (length / 2 - 4)), round(z + Math.sin(angle) * (length / 2 - 4))]];
 const widen = (hall: Hall, by: number): Hall => ({ ...hall, boxes: hall.boxes.map((box) => ({ ...box, w: box.w + 2 * by, d: box.d + 2 * by })), bores: hall.bores.map((bore) => ({ ...bore, width: bore.width + 2 * by })) });

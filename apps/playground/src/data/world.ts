@@ -44,7 +44,7 @@ export const levelOf = (depth: number) => -Math.round(depth / FLOOR_HEIGHT);
 /** The level a lot's ground floor stands on (0 the street). */
 export const k0Of = (lot: { k0?: number }) => lot.k0 ?? 0;
 /** The lots holding a column, by level: a building under the street (its `k0` below 0) and the one on the street above. */
-export const holdsCell = (world: World, index: number, i: number, j: number) => { const key = cellKey(i, j); return world.lotAt.get(key) === index || world.lotBelow.get(key) === index; };
+export const holdsCell = (world: World, index: number, i: number, j: number) => { const key = cellKey(i, j); return world.lotAt.get(key) === index || !!world.lotBelow.get(key)?.includes(index); };
 const carParkPillar = (lot: WorldLot, i: number, j: number) => (i - lot.i0) % 4 === 2 && (j - lot.j0) % 4 === 2 && i - lot.i0 < lot.nx - 1 && j - lot.j0 < lot.nz - 1;
 /** The open ground nearest a point (metres) within `radius` cells, on ground the world has laid: where a hall's stairs come up. */
 export function streetNear(world: World, x: number, z: number, radius = 30): [number, number] | null {
@@ -93,8 +93,11 @@ export interface World {
   chunks: Map<number, number | string>;
   lots: WorldLot[];
   lotAt: Map<number, number>;
-  /** The cells a building under the street holds (its `k0` below 0), by cellKey. */
-  lotBelow: Map<number, number>;
+  /**
+   * The cells buildings off the street's level hold, by cellKey: a street laid underground's, a deep area's, a deck's in the
+   * air, an orbit's (each lot's `k0` not 0); several in one column, each in its own levels (docs/v2/terrain-levels.md §3.5).
+   */
+  lotBelow: Map<number, number[]>;
   ground: Map<number, number>;
   clutter: Set<number>;
   /** The halls on each cell (by cellKey): which hall, its floor's level, whether a pillar stands there. */
@@ -202,7 +205,7 @@ export function footprintOf(b: { x: number; z: number; w: number; d: number; ang
 function ownCell(world: World, order: number, i: number, j: number): boolean {
   const x = (i + 0.5) * SKELETON_CELL, z = (j + 0.5) * SKELETON_CELL;
   for (const other of world.buckets.buildings.get(chunkKey(Math.floor(i / CHUNK), Math.floor(j / CHUNK))) ?? []) {
-    if (other >= order || ((world.source.buildings[other].y0 ?? 0) < 0) !== ((world.source.buildings[order].y0 ?? 0) < 0)) continue;
+    if (other >= order || Math.round((world.source.buildings[other].y0 ?? 0) / FLOOR_HEIGHT) !== Math.round((world.source.buildings[order].y0 ?? 0) / FLOOR_HEIGHT)) continue;
     const b = world.source.buildings[other], dx = x - b.x, dz = z - b.z, c = Math.cos(b.angle), s = Math.sin(b.angle);
     // Strictly inside: a cell on its edge is not held by its plan either, so it stays this building's.
     if (Math.abs(dx * c + dz * s) < b.w / 2 && Math.abs(-dx * s + dz * c) < b.d / 2) return false;
@@ -214,14 +217,17 @@ function standTurned(world: World, b: SourceBuilding, order: number, lot: Omit<W
   // one, 2026-11-02); where it is built into a neighbour, the part an earlier building covers is that one's (ownCell). It
   // stands with whatever is its own, so every building drawn has its inside (the user: a cinema in a mall walked out of and
   // back into).
-  const below = (b.y0 ?? 0) < 0, held = below ? world.lotBelow : world.lotAt;
-  const foot = footprintOf(b), free = foot.cells.filter(([i, j]) => !held.has(cellKey(i, j)) && ownCell(world, order, i, j));
+  // Off the street's level (a street laid underground, a deep area, a deck, an orbit: `y0` not 0) it holds its column in
+  // `lotBelow`, beside whatever stands on the street and any building of another layer.
+  const off = (b.y0 ?? 0) !== 0, k0 = Math.round((b.y0 ?? 0) / FLOOR_HEIGHT), top = k0 + Math.max(1, Math.min(WALK_FLOORS, b.floors));
+  const taken = (i: number, j: number) => { const key = cellKey(i, j); return off ? (world.lotBelow.get(key) ?? []).some((other) => { const o = world.lots[other], ok0 = k0Of(o); return k0 <= ok0 + o.floors && ok0 <= top; }) : world.lotAt.has(key); };
+  const foot = footprintOf(b), free = foot.cells.filter(([i, j]) => !taken(i, j) && ownCell(world, order, i, j));
   if (foot.cells.length < 4 || free.length < 4) return false;
   const w = Math.max(2 * SKELETON_CELL, b.w), d = Math.max(2 * SKELETON_CELL, b.d);
   const skeleton: Skeleton = generateSkeleton(kind, seed, { width: w, depth: d, floors: lot.floors, cores: (w * d) / (SKELETON_CELL * SKELETON_CELL) > 48 ? 2 : 1 });
   const index = world.lots.push({ ...lot, i0: foot.i0, j0: foot.j0, nx: foot.nx, nz: foot.nz, frame: { x: b.x, z: b.z, angle: b.angle }, side: "west", skeleton, rooms: furnish(skeleton, 1) }) - 1;
   // Held: the free cells that fall inside its plan (a plan is whole 2 m cells, so an edge cell may fall just outside it).
-  for (const [i, j] of free) if (localCell(world.lots[index], i, j)) held.set(cellKey(i, j), index);
+  for (const [i, j] of free) if (localCell(world.lots[index], i, j)) { const key = cellKey(i, j); if (off) (world.lotBelow.get(key) ?? world.lotBelow.set(key, []).get(key)!).push(index); else world.lotAt.set(key, index); }
   return true;
 }
 /** A lot standing on cells i0..i0+nx, j0..j0+nz, unless one of them is taken (a lot, or a road). */
@@ -261,7 +267,7 @@ function materialize(world: World, ci: number, cj: number, born: number | string
     world.claimed.add(b.id);
     // At its true size and turn, on the free cells of its footprint (half of them at least).
     const floors = Math.max(1, Math.min(WALK_FLOORS, b.floors)), role = roleOf(b.kind, b.floors);
-    const stood = standTurned(world, b, index, { id: b.id, label: null, role, floors, height: b.floors, source: b.id, manifold: b.manifold ?? "", era: b.era ?? "modern", born, place: null, ...((b.y0 ?? 0) < 0 ? { k0: Math.round(b.y0! / FLOOR_HEIGHT) } : {}) }, KIND_OF[b.kind] ?? ROLE_KIND[role], seedOf(b.id));
+    const stood = standTurned(world, b, index, { id: b.id, label: null, role, floors, height: b.floors, source: b.id, manifold: b.manifold ?? "", era: b.era ?? "modern", born, place: null, ...((b.y0 ?? 0) !== 0 ? { k0: Math.round(b.y0! / FLOOR_HEIGHT) } : {}) }, KIND_OF[b.kind] ?? ROLE_KIND[role], seedOf(b.id));
     if (!stood) world.dropped.set(b.id, born);
   }
   // Clutter on open ground (one cell in ten), never on a road or in front of a door.
@@ -322,10 +328,12 @@ export function nodeId(world: World, i: number, j: number, k: number): number {
  * A way between a layer and the ground (docs/v2/terrain-levels.md §3.4): `foot` on the space's floor, `top` on the open
  * ground above, stairs or a lift, its rise in metres and its cost each way. Virtual: the world's own, on every square.
  */
-export interface WorldWay { foot: number; top: number; hall: number; kind: "stairs" | "lift"; rise: number; up: number; down: number }
+export interface WorldWay { foot: number; top: number; hall: number; kind: "stairs" | "lift" | "launch"; rise: number; up: number; down: number }
 export interface WorldGraph { graph: MoveGraph; type: Uint8Array; lot: Int32Array; ground: Uint8Array; ways: WorldWay[] }
 /** The ways' grid: one on each square this many metres a side, to open ground within WAY_REACH cells; stairs to STAIRS_DEPTH. */
 export const WAY_EVERY = 40, WAY_REACH = 10, WAY_FAR = 60, STAIRS_DEPTH = 20, LIFT_SPEED = 5, LIFT_WAIT = 20, WALK_SPEED = 1.4;
+/** A virtual layer's ride, seconds, whatever its level (its depth or height is not a number, §3.5): the deep's lift, an orbit's launch. */
+export const VIRTUAL_RIDE = 60, LAUNCH_RIDE = 600;
 
 /**
  * The movement graph over the materialized world and what stands (`standing` per lot), with the things placed in it
@@ -362,9 +370,12 @@ export function worldGraph(world: World, standing: Uint8Array[], things: PlacedT
   const what = (i: number, j: number, k: number): { type: number; lot: number; local: number } => {
     if (!inside(i, j)) return { type: 0, lot: NOT, local: NOT };
     const key = cellKey(i, j), index = world.lotAt.get(key) ?? NOT, thing = thingAt.get(key) ?? NOT;
-    // A building of a street laid underground, on its own levels (its ground floor on that street's floor).
-    const below = world.lotBelow.get(key);
-    if (below !== undefined && known(i, j)) { const lot = world.lots[below], k0 = k0Of(lot); if (k >= k0 && k <= k0 + lot.floors) return inLot(below, i, j, k - k0); }
+    // A building of a street laid underground, on its own levels (its ground floor on that street's floor); a deck's or an
+    // orbit's, on its floor's. Above the street, a building standing on the street keeps its own floors (a tower through a
+    // deck stays the surface's: §3.3, nothing on top is moved).
+    if (known(i, j) && !(k > 0 && index >= 0 && k <= world.lots[index].floors)) for (const other of world.lotBelow.get(key) ?? []) { const lot = world.lots[other], k0 = k0Of(lot); if (k >= k0 && k <= k0 + lot.floors) return inLot(other, i, j, k - k0); }
+    // A floor above the street (a deck in the air, an orbit's floor: a hall whose depth is below 0), over any building there.
+    if (k > 0 && !(index >= 0 && k <= world.lots[index].floors)) { const deck = hallsAt(world, i, j).find((entry) => entry.k === k); if (deck && known(i, j)) return deck.pillar ? { type: 0, lot: NOT, local: NOT } : { type: 5, lot: HALL_LOT + deck.hall, local: NOT }; }
     if (k < 0) {
       // Underground: a building's basements under its footprint (its car park's pillars closed); else a hall laid here at
       // this level (its pillars, and its cells under a pile of fallen ground 2 m or more, closed).
@@ -414,7 +425,7 @@ export function worldGraph(world: World, standing: Uint8Array[], things: PlacedT
   for (const [key] of world.chunks) { const ci = Math.floor(key / 65536) - OFF, cj = (key % 65536) - OFF; if (!nearBox(ci, cj)) continue; for (let j = cj * CHUNK; j < (cj + 1) * CHUNK; j++) for (let i = ci * CHUNK; i < (ci + 1) * CHUNK; i++) if (inside(i, j)) {
     const index = world.lotAt.get(cellKey(i, j)), under = index === undefined ? null : world.lots[index];
     if (!under) cells.push([i, j, 0]);
-    for (const entry of hallsAt(world, i, j)) if (!(under && -entry.k <= basementsOf(under))) cells.push([i, j, entry.k]);
+    for (const entry of hallsAt(world, i, j)) if (entry.k < 0 ? !(under && -entry.k <= basementsOf(under)) : !(under && entry.k <= under.floors)) cells.push([i, j, entry.k]);
   } }
   world.lots.forEach((lot) => { if (box && ((lot.i0 + lot.nx) * SKELETON_CELL < box.x0 || lot.i0 * SKELETON_CELL > box.x1 || (lot.j0 + lot.nz) * SKELETON_CELL < box.z0 || lot.j0 * SKELETON_CELL > box.z1)) return; const k0 = k0Of(lot); for (let k = 0; k <= lot.floors; k++) for (let j = lot.j0; j < lot.j0 + lot.nz; j++) for (let i = lot.i0; i < lot.i0 + lot.nx; i++) if (inside(i, j)) cells.push([i, j, k0 + k]); if (k0 === 0) for (let k = -1; k >= -basementsOf(lot); k--) for (let j = lot.j0; j < lot.j0 + lot.nz; j++) for (let i = lot.i0; i < lot.i0 + lot.nx; i++) if (inside(i, j)) cells.push([i, j, k]); });
   for (const thing of things) for (let j = thing.j0; j <= thing.j1; j++) for (let i = thing.i0; i <= thing.i1; i++) if (inside(i, j)) cells.push([i, j, thing.top]);
@@ -454,7 +465,7 @@ export function worldGraph(world: World, standing: Uint8Array[], things: PlacedT
         // between the world's), to the open ground next to it, any way it faces for a turned building; for a building of a
         // street laid underground, on its own ground level, to that street's floor.
         const lot = here.type === 2 ? world.lots[here.lot] : there.type === 2 ? world.lots[there.lot] : null, inside = here.type === 2 ? here : there;
-        ok = !!lot && k === k0Of(lot) && (!dx || !!lot.frame) && doorsOf(inside.lot).has(inside.local) && [here.type, there.type].some((type) => type === 1 || (type === 5 && k < 0));
+        ok = !!lot && k === k0Of(lot) && (!dx || !!lot.frame) && doorsOf(inside.lot).has(inside.local) && [here.type, there.type].some((type) => type === 1 || (type === 5 && k !== 0));
       }
       if (ok) add(node, nodeId(world, i + dx, j + dz, k), dx, dz, SKELETON_CELL * Math.hypot(dx, dz), EDGE.walk);
     }
@@ -488,14 +499,16 @@ export function worldGraph(world: World, standing: Uint8Array[], things: PlacedT
       for (const [dx, dz] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
         const out = what(i + dx, j + dz, k);
         if (out.type === 4 && out.lot === here.lot) continue;
-        const ground = k < 0 && here.lot >= 0 && here.lot < world.lots.length ? k0Of(world.lots[here.lot]) : 0, landing = what(i + dx, j + dz, ground).type;
-        if (landing === 1 || (ground < 0 && landing === 5)) add(node, nodeId(world, i + dx, j + dz, ground), dx, dz, 1 + (k - ground) * FLOOR_HEIGHT, EDGE.fall, DOWN);
-        for (let level = k; level >= 1; level--) { const across = what(i + 2 * dx, j + 2 * dz, level); if (!world.lotAt.has(cellKey(i + dx, j + dz)) && across.type === 4 && across.lot !== here.lot) { add(node, nodeId(world, i + 2 * dx, j + 2 * dz, level), dx, dz, 2 * SKELETON_CELL + 2, EDGE.jump); break; } }
+        // A roof drops to the ground its building stands on (the street, or its own layer's floor); only a roof on the street
+        // jumps to the next roofs (a deck's or an orbit's building is no step from the city's rooftops).
+        const ground = here.lot >= 0 && here.lot < world.lots.length && (k < 0 || world.lotBelow.get(cellKey(i, j))?.includes(here.lot)) ? k0Of(world.lots[here.lot]) : 0, landing = what(i + dx, j + dz, ground).type;
+        if (landing === 1 || (ground !== 0 && landing === 5)) add(node, nodeId(world, i + dx, j + dz, ground), dx, dz, 1 + (k - ground) * FLOOR_HEIGHT, EDGE.fall, DOWN);
+        if (ground === 0) for (let level = k; level >= 1; level--) { const across = what(i + 2 * dx, j + 2 * dz, level); if (!world.lotAt.has(cellKey(i + dx, j + dz)) && across.type === 4 && across.lot !== here.lot) { add(node, nodeId(world, i + 2 * dx, j + 2 * dz, level), dx, dz, 2 * SKELETON_CELL + 2, EDGE.jump); break; } }
       }
     }
     // Sky arcs from a roof, as on a place's grid (an arc never gains height, so from the street it only lands on street a
     // walk reaches anyway); landing only on ground already in the world.
-    if (here.type !== 4) continue;
+    if (here.type !== 4 || (here.lot >= 0 && world.lotBelow.get(cellKey(i, j))?.includes(here.lot))) continue;
     const x0 = (i + 0.5) * SKELETON_CELL, z0 = (j + 0.5) * SKELETON_CELL, y0 = k * FLOOR_HEIGHT;
     for (const [sx, sz] of [[1, 1], [1, -1], [-1, 1], [-1, -1]]) for (const speed of ARC_SPEEDS) {
       const vh = speed * Math.cos(ELEVATION) / Math.SQRT2, vy = speed * Math.sin(ELEVATION);
@@ -599,7 +612,7 @@ export function worldGraph(world: World, standing: Uint8Array[], things: PlacedT
   {
     const best = new Map<string, { hall: number; i: number; j: number; k: number; d: number }>(), floors = new Set<number>(), joined = new Set<number>();
     for (const [i, j, k] of cells) {
-      if (k >= 0) continue;
+      if (k === 0) continue;
       const here = what(i, j, k);
       if (here.type !== 5 || here.lot < HALL_LOT) continue;
       const hall = here.lot - HALL_LOT, x = (i + 0.5) * SKELETON_CELL, z = (j + 0.5) * SKELETON_CELL, gi = Math.floor(x / WAY_EVERY), gj = Math.floor(z / WAY_EVERY);
@@ -610,11 +623,15 @@ export function worldGraph(world: World, standing: Uint8Array[], things: PlacedT
     const join = ({ hall, i, j, k }: { hall: number; i: number; j: number; k: number }, reach: number) => {
       const street = outdoorNear((i + 0.5) * SKELETON_CELL, (j + 0.5) * SKELETON_CELL, reach);
       if (!street) return false;
-      const rise = -k * FLOOR_HEIGHT, across = Math.hypot(street[0] - i, street[1] - j) * SKELETON_CELL, lift = rise > STAIRS_DEPTH, ride = (rise / LIFT_SPEED + LIFT_WAIT) * WALK_SPEED;
-      const up = across + (lift ? ride : (rise / FLOOR_HEIGHT) * (2 + 8 * FLOOR_HEIGHT)), down = across + (lift ? ride : (rise / FLOOR_HEIGHT) * (2 + FLOOR_HEIGHT));
-      const foot = nodeId(world, i, j, k), top = nodeId(world, street[0], street[1], 0);
-      add(foot, top, 0, 0, up, EDGE.climb, UP); add(top, foot, 0, 0, down, EDGE.descend, DOWN);
-      ways.push({ foot, top, hall, kind: lift ? "lift" : "stairs", rise, up: Math.round(up * 10) / 10, down: Math.round(down * 10) / 10 });
+      // Below the street a way rises to the ground; from a deck or an orbit it comes down. A virtual layer's ride takes its
+      // fixed time (its level is not a number), an orbit's a launch's.
+      const spec = hallList[hall], virtual = !!spec?.virtual, orbit = spec?.layer === "space", rise = Math.abs(k) * FLOOR_HEIGHT, across = Math.hypot(street[0] - i, street[1] - j) * SKELETON_CELL;
+      const kind: WorldWay["kind"] = orbit ? "launch" : virtual || rise > STAIRS_DEPTH ? "lift" : "stairs", ride = (orbit ? LAUNCH_RIDE : virtual ? VIRTUAL_RIDE : rise / LIFT_SPEED + LIFT_WAIT) * WALK_SPEED;
+      const climb = across + (kind === "stairs" ? (rise / FLOOR_HEIGHT) * (2 + 8 * FLOOR_HEIGHT) : ride), drop = across + (kind === "stairs" ? (rise / FLOOR_HEIGHT) * (2 + FLOOR_HEIGHT) : ride);
+      const foot = nodeId(world, i, j, k), top = nodeId(world, street[0], street[1], 0), [up, down] = k < 0 ? [climb, drop] : [drop, climb];
+      if (k < 0) { add(foot, top, 0, 0, up, EDGE.climb, UP); add(top, foot, 0, 0, down, EDGE.descend, DOWN); }
+      else { add(foot, top, 0, 0, up, EDGE.descend, DOWN); add(top, foot, 0, 0, down, EDGE.climb, UP); }
+      ways.push({ foot, top, hall, kind, rise, up: Math.round(up * 10) / 10, down: Math.round(down * 10) / 10 });
       joined.add(hall);
       return true;
     };

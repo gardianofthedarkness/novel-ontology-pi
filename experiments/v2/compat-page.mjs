@@ -52,7 +52,8 @@ export async function compatPage() {
   for (const model of Object.keys(library.models).sort()) { const category = themes.models[model]?.category ?? 'uncategorised'; (byCategory[category] ??= []).push(model); }
   const libraryRows = Object.entries(byCategory).map(([category, models]) => `<tr><th scope="row">${esc(category)}</th><td class="models">${models.map(model => `<span class="chip ${modelUses[model] ? 'own' : 'unused'}" title="${esc([themes.models[model]?.theme, ...(modelUses[model] ?? [])].filter(Boolean).join(' · '))}">${esc(model)}</span>`).join('')}</td></tr>`).join('');
   // The underground: what each kind usually lies under, and its models (and what the web offers for a gap).
-  const halls = Object.keys(U.LIES_UNDER), underWords = Object.fromEntries(ZH.undergroundKinds.map(([pattern, kind]) => [kind, pattern.source.split('|').map(word => word.replace(/[$^\\]/g, ''))]));
+  // The other layers' floors (deep, deck, orbit: terrain-levels §3.5) lie under no street: no rows of their own here.
+  const halls = Object.keys(U.LIES_UNDER).filter(kind => U.LIES_UNDER[kind].length), underWords = Object.fromEntries(ZH.undergroundKinds.map(([pattern, kind]) => [kind, pattern.source.split('|').map(word => word.replace(/[$^\\]/g, ''))]));
   const underRows = halls.map(kind => { const under = U.LIES_UNDER[kind], any = under.includes('*'); return `<tr><th scope="row" title="${esc(U.HALL_LABEL[kind])}">${esc(kind)}</th>${kinds.map(street => { const yes = any || under.includes(street.id); return `<td class="${yes ? 'yes' : 'no'}">${yes ? (any ? '○' : '●') : '·'}</td>`; }).join('')}</tr>`; }).join('');
   const underModelRows = halls.map(kind => {
     const entry = UNDERGROUND_MODELS[kind] ?? { own: [], standIn: [] }, chip = (model, fit) => `<span class="chip ${fit}">${esc(model)}</span>`;

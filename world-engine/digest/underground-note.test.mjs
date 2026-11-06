@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { factsOf, notedUnderground, undergroundNotes, undergroundStretches } from './underground-note.mjs';
+import { factsOf, layerOfName, notedUnderground, undergroundNotes, undergroundStretches } from './underground-note.mjs';
 
 // A city of ten units, a district under it with three, and a hall in the district with one; plus a street of two.
 const script = {
@@ -59,4 +59,26 @@ test('an underground stretch: units of one city and one sequence with undergroun
   assert.equal(one.id, 'place_a1_under'.replace('a1', 'a1'.slice(-6)));
   const apart = undergroundStretches({ scenes, script: city, settings: { a1: settings.a1 }, facts: { a5: [{ sure: 0.9, sentence: 'f5' }] } });
   assert.equal(apart.length, 0, 'three units apart is two stretches of one, so none');
+});
+
+test('the other layers (terrain-levels §3.5): a name puts a place in the air or in space and its places with it; a satellite town stays on the ground; a hand answers over both', () => {
+  // A floating fortress over the city with a hall in it, a space station, a satellite town, and the underground district.
+  const layered = {
+    places: { ...script.places, fort: { scale: 'district', parent: 'city', label: '\u7a7a\u4e2d\u8981\u585e' }, keep: { scale: 'building', parent: 'fort', label: 'keep' }, station: { scale: 'street', parent: 'city', label: '\u7a7a\u95f4\u7ad9' }, town: { scale: 'district', parent: 'city', label: '\u536b\u661f\u57ce' }, sky: { scale: 'street', parent: 'city', label: 'Sky Bridge' } },
+    scenes: script.scenes,
+  };
+  const { places } = undergroundNotes({ script: layered, settings });
+  assert.deepEqual([places.fort.layer, places.fort.layerBy, places.fort.noted], ['air', 'name', false]);
+  assert.deepEqual([places.keep.layer, places.keep.inherited], ['air', 'fort'], 'a building in it floats with it');
+  assert.equal(places.station.layer, 'space');
+  assert.equal(places.town, undefined, 'a satellite town is on the ground');
+  assert.equal(places.sky, undefined, 'a sky bridge is the surface\'s');
+  assert.equal(places.under.layer, 'near', 'the underground\'s evidence as before');
+  // A hand's answers: the underground district on the surface after all (its hall with it), the town in orbit.
+  const hand = undergroundNotes({ script: layered, settings, hand: { under: 'surface', town: 'space', fort: 'nonsense' } }).places;
+  assert.deepEqual([hand.under.layer, hand.under.layerBy, hand.under.noted], ['surface', 'hand', false]);
+  assert.equal(hand.hall.noted, false, 'its hall is on the surface with it');
+  assert.equal(hand.town.layer, 'space');
+  assert.equal(hand.fort.layerBy, 'name', 'an answer that is no layer is not taken');
+  assert.equal(layerOfName('a moonlit bar'), null);
 });

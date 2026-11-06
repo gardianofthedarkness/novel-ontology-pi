@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { createWorld, ensure, inscribed, localCell, nodeId, nodeNear, nodePos, reachableIn, spotsNear, windowOf, worldGraph, worldSpot, CHUNK, type WorldSource } from "../apps/playground/src/data/world.js";
-import { addPatch, fillLandscape, firstLandscape } from "../src/v2/world/landscape.js";
+import { LAYER_FLOOR, addPatch, fillLandscape, firstLandscape, samplePatch, type Layer, type Patch } from "../src/v2/world/landscape.js";
 import { collapse, hallsOf, intervalPrecision, subwayOf, type Hall } from "../src/v2/world/underground.js";
 import { solveWalk, sampleWalk, temperatureBound } from "../apps/playground/src/data/pathIntegral.js";
 import { cellAt, skeletonStream } from "../apps/playground/src/data/skeleton.js";
@@ -202,6 +202,49 @@ test("a street laid underground, built out (terrain-levels §8): its buildings s
   assert.ok(reached.length > 0, `a room under the street is reached from the street on foot (${reached.length} of ${rooms.length})`);
   const path = sampleWalk(built.graph, solveWalk(built.graph, reached.slice(0, 12), { T, kappa: 1, lambda: 8 }), from, 0, skeletonStream("sunk"));
   assert.ok(path && reached.includes(path.at(-1)!), "a walk goes down the stairs, along the street under, through a door into the room");
+});
+
+test("the other layers (terrain-levels §3.5): a district in the deep, a street on a deck in the air and a district in orbit, stacked over a city, each on its own floor, the surface as it was, and each reached from the street by its ways", () => {
+  const base = firstLandscape("d", "commercial"), layered = (type: Patch["type"], id: string, plane: Layer, at: [number, number]): Patch => ({ ...samplePatch(type, id, "d", at), plane });
+  const landscape = { ...base, patches: [...base.patches, layered("residential", "under", "deep", [0, 0]), layered("shopping", "deck", "air", [30, 0]), layered("residential", "orbit", "space", [-30, 0])] };
+  const fill = fillLandscape(landscape), surfaceOf = (fill: ReturnType<typeof fillLandscape>) => [...fill.fabric.buildings, ...fill.landmarks.filter((b) => !b.y0)].map((b) => `${b.lot}|${b.x}|${b.z}|${b.floors}|${b.kind}`).sort();
+  // Nothing on top moved (§3.3): the surface is the same, building for building, as with no other layer.
+  assert.deepEqual(surfaceOf(fill), surfaceOf(fillLandscape(base)), "the surface as it was");
+  const floorAt: Record<Layer, number> = { deep: -180, air: 150, space: 1200 };
+  assert.deepEqual(LAYER_FLOOR, floorAt);
+  for (const plane of ["deep", "air", "space"] as Layer[]) {
+    const own = fill.landmarks.filter((b) => (b as { plane?: Layer }).plane === plane);
+    assert.ok(own.length >= 4 && own.every((b) => b.y0 === floorAt[plane]), `${plane}: ${own.length} buildings on its floor`);
+    if (plane !== "air") assert.ok(own.every((b) => (b.floors + 1) * 3 <= 60), `${plane}: under its virtual room`);
+  }
+  // Each layer's floor: a hall of its kind, virtual where its level is not a number; nothing of the shallow layer under them.
+  const halls = hallsOf(landscape), floors = halls.filter((hall) => hall.layer);
+  assert.deepEqual(floors.map((hall) => [hall.layer, hall.kind, hall.depth, !!hall.virtual, hall.pillars]), [["deep", "deep", 180, true, 0], ["air", "deck", -150, false, 0], ["space", "orbit", -1200, true, 0]]);
+  assert.ok(!halls.some((hall) => !hall.layer && ["under", "deck", "orbit"].some((id) => hall.id.startsWith(`${id}:`))), "no mall, storm water or lab under a patch of another layer");
+  const buildings = [...fill.fabric.buildings, ...fill.landmarks].map((b, n) => ({ ...b, id: `b${n}` }));
+  const world = createWorld({ buildings, roads: fill.fabric.roads.map((road) => ({ a: road.a, b: road.b, width: road.width, level: road.level })), plazas: fill.plazas, anchors: [], underground: { halls } });
+  ensure(world, 0, 0, 260, 0);
+  const built = worldGraph(world, standingOf(world)), from = nodeNear(world, built, 0, 0, 0)!, seen = reachableIn(built.graph, from);
+  // The surface's lots as in a world with no other layer.
+  const plainFill = fillLandscape(base), plain = createWorld({ buildings: [...plainFill.fabric.buildings, ...plainFill.landmarks].map((b, n) => ({ ...b, id: `b${n}` })), roads: plainFill.fabric.roads.map((road) => ({ a: road.a, b: road.b, width: road.width, level: road.level })), plazas: plainFill.plazas, anchors: [], underground: { halls: hallsOf(base) } });
+  ensure(plain, 0, 0, 260, 0);
+  const lotsOf = (w: typeof world) => w.lots.filter((lot) => !lot.k0).map((lot) => `${lot.id}|${lot.i0}|${lot.j0}|${lot.nx}|${lot.nz}|${lot.floors}`).sort();
+  assert.deepEqual(lotsOf(world), lotsOf(plain), "the surface's lots as they were");
+  for (const [plane, level, way] of [["deep", -60, "lift"], ["air", 50, "lift"], ["space", 400, "launch"]] as const) {
+    const lots = world.lots.filter((lot) => lot.k0 === level);
+    assert.ok(lots.length >= 2, `${plane}: ${lots.length} buildings standing at level ${level}`);
+    const hall = halls.indexOf(floors.find((entry) => entry.layer === plane)!), ways = built.ways.filter((entry) => entry.hall === hall);
+    assert.ok(ways.length >= 4 && ways.every((entry) => entry.kind === way), `${plane}: ${ways.length} ways, each a ${way}`);
+    const rooms: number[] = [];
+    for (let id = 0; id < built.type.length; id++) if (built.type[id] === 3 && built.lot[id] >= 0 && built.lot[id] < world.lots.length && world.lots[built.lot[id]].k0 === level) rooms.push(id);
+    const reached = rooms.filter((id) => seen[id]);
+    assert.ok(reached.length > 0.5 * rooms.length, `${plane}: rooms reached from the street, ${reached.length} of ${rooms.length}`);
+  }
+  // A walk from the street to a room in the deep: down a virtual lift, along its floor, in by a door.
+  const deepRooms: number[] = [];
+  for (let id = 0; id < built.type.length; id++) if (built.type[id] === 3 && seen[id] && built.lot[id] >= 0 && built.lot[id] < world.lots.length && world.lots[built.lot[id]].k0 === -60) deepRooms.push(id);
+  const T = 0.6 * temperatureBound({ step: 2, kappa: 1, lambda: 8, floorHeight: 3, arcCost: 7 }), path = sampleWalk(built.graph, solveWalk(built.graph, deepRooms.slice(0, 12), { T, kappa: 1, lambda: 8 }), from, 0, skeletonStream("deep"));
+  assert.ok(path && deepRooms.includes(path.at(-1)!), "a walk reaches a room in the deep");
 });
 
 test("a city's halls and basements: a box finds its hall at least 90% of the time just under the street, in the subway, and deep, over six generated cities", () => {

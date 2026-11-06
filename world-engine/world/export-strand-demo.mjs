@@ -185,7 +185,7 @@ export async function strandDemo(novelDir, options) {
     if (!windows.has(key)) {
       const started = performance.now(), box = { x0: cx - h, x1: cx + h, z0: cz - h, z1: cz + h }; windows.set(key, { version: shared.version, box, ...W.worldGraph(world, shared.standing, [...shared.things.values()], box, shared.rubble) }); cost.builds++; cost.ms += performance.now() - started;
       // The ways between the layers this window laid (terrain-levels §3.4), kept for the page: each once, by its two ends.
-      for (const way of windows.get(key).ways ?? []) { const id = `${way.foot}|${way.top}`; if (!allWays.has(id)) { const f = W.nodePos(world, way.foot), t = W.nodePos(world, way.top); allWays.set(id, [f.x, f.y, f.z, t.x, t.z, way.kind === 'lift' ? 1 : 0]); } }
+      for (const way of windows.get(key).ways ?? []) { const id = `${way.foot}|${way.top}`; if (!allWays.has(id)) { const f = W.nodePos(world, way.foot), t = W.nodePos(world, way.top); allWays.set(id, [f.x, f.y, f.z, t.x, t.z, way.kind === 'launch' ? 2 : way.kind === 'lift' ? 1 : 0]); } }
     }
     return windows.get(key);
   };
@@ -211,12 +211,14 @@ export async function strandDemo(novelDir, options) {
   /**
    * Whether a node is in the band below DEEP (the solver's, terrain-levels §8.1–8.2), by where it stands: a hall's node by
    * its hall's floor, a building's by its own ground floor (a building of a street laid 30 m under is in that band up to its
-   * roof; cutting it at 20 m took its own stairs for lifts), anything else by its height.
+   * roof; cutting it at 20 m took its own stairs for lifts), anything else by its height. A floor of another layer and what
+   * stands on it (a deck in the air, an orbit, the deep underground: §3.5) are in the band too: a deck's lift or an orbit's
+   * launch at a ride's cost in a street walk's window would be the deep lift's flat cost again.
    */
   const bandDeep = (built, n) => {
     const lot = built.lot[n];
-    if (lot >= W.HALL_LOT) return ((world.source.underground?.halls ?? [])[lot - W.HALL_LOT]?.depth ?? -built.graph.y[n]) > -DEEP;
-    if (lot >= 0 && lot < world.lots.length && (world.lots[lot].k0 ?? 0) < 0) return -world.lots[lot].k0 * 3 > -DEEP;
+    if (lot >= W.HALL_LOT) { const hall = (world.source.underground?.halls ?? [])[lot - W.HALL_LOT]; return !!hall?.layer || (hall?.depth ?? -built.graph.y[n]) > -DEEP; }
+    if (lot >= 0 && lot < world.lots.length && (world.lots[lot].k0 ?? 0) !== 0) return Math.abs(world.lots[lot].k0) * 3 > -DEEP;
     return built.graph.y[n] <= DEEP;
   };
   const deepAt = id => bandDeep(graphOf(W.nodePos(world, id)), id);
@@ -561,7 +563,11 @@ export async function strandDemo(novelDir, options) {
     // A pool's extent in its own frame: the span of the boxes its members were kept in (each at its offset in the pool, its
     // size), a fifth more all round (Z.poolExtent); null with none boxed.
     const poolExtentOf = id => Z.poolExtent(Object.values(terrain?.sites ?? {}).filter(site => site.parent === id && Array.isArray(site.toward) && Array.isArray(site.size)).map(site => Z.turnedBox(site.toward, site.size, site.turn ?? 0)), null);
-    const groundPatch = id => {
+    // A place of another layer (the deep underground, the air, an orbit: terrain-levels §3.5) has its ground in that layer:
+    // its patches are filled as if alone on the ground and lifted onto the layer's floor (landscape.ts layerBuildings).
+    const LIFTED = new Set(['deep', 'air', 'space']), inLayer = (id, patch) => (patch && LIFTED.has(planeOf(id)) ? { ...patch, plane: planeOf(id) } : patch);
+    const groundPatch = id => inLayer(id, ownGroundPatch(id));
+    const ownGroundPatch = id => {
       // A city of manifolds (docs/v2/borrow-and-spawn.md §8): its own patch is its open ground, at that ground's height.
       const own = terrainGround(id), site = own?.open ? { ...own, ...own.open } : own, made = site?.median && site.manifold ? { median: site.median, manifold: manifoldOfSite(site) } : null;
       if (!site) return null;
@@ -602,7 +608,7 @@ export async function strandDemo(novelDir, options) {
     const takesOf = site => { if (terrain?.mode !== 'spawn' || site?.scale !== 'street' || !site.on) return null; const takes = SP.streetTakes(site.kind, spawning); return takes?.road ? 'road' : takes?.crossing ? 'crossing' : null; };
     // The layer a place lies in (terrain-levels §3.3): its slot's, or the slot it lies in; the surface else. The canvas never
     // samples a surface building into a place of another layer, so a street laid under the street moves nothing on top.
-    const planeOf = id => { const slots = terrain?.slots ?? {}, site = terrain?.sites?.[id]; return slots[id]?.plane ?? (site?.slot ? slots[site.slot]?.plane : null) ?? 'surface'; };
+    const planeOf = id => { const slots = terrain?.slots ?? {}, site = terrain?.sites?.[id]; return slots[id]?.plane ?? (site?.slot ? slots[site.slot]?.plane : null) ?? site?.plane ?? 'surface'; };
     // Where a place of another layer stands for the surface's layout: its holder (the area the script filed it in).
     const standIn = id => (planeOf(id) !== 'surface' ? terrain?.sites?.[id]?.holder ?? id : id);
     const embeddedOf = id => { const site = terrain?.sites?.[id]; return terrain?.mode === 'spawn' && site?.mapped && Array.isArray(site.toward) ? { embedded: true, at: site.toward, ground: null, landscape: null } : {}; };
@@ -704,7 +710,7 @@ export async function strandDemo(novelDir, options) {
       const order = new Map((terrain?.order ?? []).map((id, n) => [id, n])), standing = [], named = new Set();
       for (const unit of [...pool.units].sort((a, b) => (order.get(a.id) ?? Infinity) - (order.get(b.id) ?? Infinity))) {
         const site = terrain?.sites?.[unit.id];
-        if (!Array.isArray(site?.size) || !Array.isArray(site.toward) || (site.median ?? site.top ?? 0) < 0 || named.has(baseName(unit.label))) continue;
+        if (!Array.isArray(site?.size) || !Array.isArray(site.toward) || (site.median ?? site.top ?? 0) < 0 || planeOf(unit.id) !== 'surface' || named.has(baseName(unit.label))) continue;
         named.add(baseName(unit.label));
         let [x, z] = site.toward;
         const bounds = Z.turnedBox([0, 0], site.size, site.turn ?? 0), [w, d] = [bounds[2] - bounds[0], bounds[3] - bounds[1]];
@@ -733,7 +739,7 @@ export async function strandDemo(novelDir, options) {
         const name = baseName(unit.label), original = first.get(name), [w, depth] = Array.isArray(site.size) ? site.size : [GROUND[site.scale] ?? 120, GROUND[site.scale] ?? 120], half = Math.max(w, depth) / 2;
         // Below the street, the hall its name says it is (§2.0.17: 地下停车场 a car park), else by its shape.
         const hall = site.median < 0 ? undergroundKindOf(unit.label) : null;
-        const made = (at, turn = site.turn) => ({ ...turnedAs({ turn }, patchFromBox(site.ground, unit.id, unit.id, { x0: at[0] - w / 2, z0: at[1] - depth / 2, x1: at[0] + w / 2, z1: at[1] + depth / 2 }, { by: 'jev' }, { median: site.median, manifold: manifoldOfSite(site) })), borrowed: true, ...(hall ? { hall } : {}) });
+        const made = (at, turn = site.turn) => inLayer(unit.id, { ...turnedAs({ turn }, patchFromBox(site.ground, unit.id, unit.id, { x0: at[0] - w / 2, z0: at[1] - depth / 2, x1: at[0] + w / 2, z1: at[1] + depth / 2 }, { by: 'jev' }, { median: site.median, manifold: manifoldOfSite(site) })), borrowed: true, ...(hall ? { hall } : {}) });
         if (!original) {
           const road = relaid(unit, site, w, depth);
           if (road) { unit.at = road.at; notes.build.relaid = (notes.build.relaid ?? 0) + 1; }
@@ -772,7 +778,7 @@ export async function strandDemo(novelDir, options) {
     for (const place of Object.values(canvas.places)) {
       const manifolds = mappedIn(place.id);
       if (!manifolds.length || !place.landscape) continue;
-      const patches = manifolds.map(([id, site]) => { const [w, d] = site.size, [x, z] = site.toward; return { ...turnedAs(site, patchFromBox(site.ground, id, id, { x0: x - w / 2, z0: z - d / 2, x1: x + w / 2, z1: z + d / 2 }, { by: 'jev' }, site.median && site.manifold ? { median: site.median, manifold: manifoldOfSite(site) } : null)), borrowed: true, ...(takesOf(site) ? { takes: takesOf(site) } : {}) }; });
+      const patches = manifolds.map(([id, site]) => { const [w, d] = site.size, [x, z] = site.toward; return inLayer(id, { ...turnedAs(site, patchFromBox(site.ground, id, id, { x0: x - w / 2, z0: z - d / 2, x1: x + w / 2, z1: z + d / 2 }, { by: 'jev' }, site.median && site.manifold ? { median: site.median, manifold: manifoldOfSite(site) } : null)), borrowed: true, ...(takesOf(site) ? { takes: takesOf(site) } : {}) }); });
       // The manifolds before the open ground, the deepest first (a street claims its ground before its district), then the
       // tallest: a lot draws its height from older ground that reaches it, so a CBD's towers fade out into what is round it,
       // and the open ground never flattens a CBD.
@@ -830,7 +836,7 @@ export async function strandDemo(novelDir, options) {
     // stands on: that patch with the older patches that cut its ground, and the fill's recipe, so a newer patch never
     // changes an older one's buildings (damage kept for them in world.json stays theirs). `era`: that patch's.
     // A form's building's lot is `<patch>:<lot>`, and a slot's patch id has colons of its own: the longest patch id it starts with.
-    const patchOf = b => place.landscape.patches.find(patch => patch.id === filled.owner[b.lot]) ?? [...place.landscape.patches].filter(patch => String(b.lot).startsWith(`${patch.id}:`)).sort((x, y) => y.id.length - x.id.length)[0] ?? place.landscape.patches[0];
+    const patchOf = b => (b.plane ? place.landscape.patches.filter(patch => patch.plane === b.plane).sort((x, y) => Number(String(b.lot).startsWith(`${y.id}:`)) - Number(String(b.lot).startsWith(`${x.id}:`)))[0] : null) ?? place.landscape.patches.find(patch => patch.id === filled.owner[b.lot]) ?? [...place.landscape.patches].filter(patch => String(b.lot).startsWith(`${patch.id}:`)).sort((x, y) => y.id.length - x.id.length)[0] ?? place.landscape.patches[0];
     const manifoldOf = patch => createHash('sha256').update(JSON.stringify({ recipe: 1, patch, older: place.landscape.patches.slice(0, place.landscape.patches.indexOf(patch)) })).digest('hex').slice(0, 12);
     if (process.env.DEBUG_CLEAR) { const lost = {}, by = {}; for (const b of [...filled.fabric.buildings, ...filled.landmarks]) { const t = patchOf(b).type, hit = keep.find(({ at, r }) => Math.hypot(b.x - at[0], b.z - at[1]) <= r + Math.max(b.w, b.d) / 2); (lost[t] ??= [0, 0])[1]++; if (hit) { lost[t][0]++; const who = Object.values(canvas.places).find(c => c.parent === place.id && c.at === hit.at); by[`${t} by ${who?.id} r${Math.round(hit.r)}`] = (by[`${t} by ${who?.id} r${Math.round(hit.r)}`] ?? 0) + 1; } } console.error('DEBUG_CLEAR', place.id, JSON.stringify(lost), JSON.stringify(Object.entries(by).sort((x, y) => y[1] - x[1]).slice(0, 8))); }
     // A building Jev decided on a lot (terrain spawning's building level): the lot takes its kind and its height, a named
@@ -877,11 +883,12 @@ export async function strandDemo(novelDir, options) {
     // its lots and the slots naming them stay; what the text placed (and a landmark, a keep) is never cleared or cut.
     // A street laid underground keeps its buildings on its floor (landscape.ts sunkForm): none of the surface's pushing,
     // clearing, growing or parting applies to them (they stand under it), and a height decided for one stops under the skin.
-    const sunken = b => (b.y0 ?? 0) < 0;
+    // A building of another layer (a deep area's, a deck's, an orbit's: §3.5) likewise stands on its own floor, untouched.
+    const sunken = b => (b.y0 ?? 0) !== 0;
     // A place that borrows a slot (spawn mode) has its street from the slot's own form: an underground one is not laid again
     // from the place's own landscape (W12's stretch: two streets, 30 m down on one spot at two angles).
     const borrowsSlot = !!terrain?.sites?.[place.id]?.slot;
-    const sunk = (borrowsSlot ? [] : filled.landmarks.filter(sunken)).map(asDecided).map(b => { const most = Math.max(1, Math.floor((-b.y0 - SKIN) / 3) - 1); return b.floors > most ? { ...b, floors: most } : b; });
+    const sunk = (borrowsSlot ? [] : filled.landmarks.filter(sunken)).map(asDecided).map(b => { const most = b.plane ? Infinity : Math.max(1, Math.floor((-b.y0 - SKIN) / 3) - 1); return b.floors > most ? { ...b, floors: most } : b; });
     const placed = [...[...filled.fabric.buildings, ...filled.landmarks.filter(b => !sunken(b)), ...filled.keeps].map(pushed), ...standing].filter(b => clear(b.x, b.z, Math.max(b.w, b.d) / 2)).map(asDecided);
     const localRoads = filled.fabric.roads.filter(road => clear((road.a[0] + road.b[0]) / 2, (road.a[1] + road.b[1]) / 2, 0)), held = new Set([...filled.keeps, ...standing].map(b => b.lot));
     const fixedOf = b => held.has(b.lot) || decided.has(b.lot) || /:(landmark|bowl|fountain)$/.test(String(b.lot));
@@ -891,11 +898,11 @@ export async function strandDemo(novelDir, options) {
     const grown = terrain?.mode === 'spawn' ? tallAndWide(placed, localRoads, fixedOf, podium) : { buildings: placed, roads: localRoads };
     // Then none stands inside another (tall.ts clearOverlaps): the city drawn at true size shows every overlap.
     const apartNow = clearOverlaps(grown.buildings, fixedOf), shaped = { ...grown, buildings: apartNow.buildings, overlapped: apartNow.overlapped, movedAside: apartNow.moved };
-    const buildings = [...shaped.buildings, ...sunk].map(b => { const patch = patchOf(b), era = LANDSCAPES[patch.type]?.era ?? 'modern'; return { id: `${place.id}:${b.lot}`, x: b.x + wx, z: b.z + wz, w: b.w, d: b.d, angle: b.angle, floors: b.floors, kind: b.kind, model: UM.modelFor({ ...b, era }, `${place.id}:${b.lot}`, modelSizes), ...(b.use ? { use: b.use } : {}), ...(b.base ? { base: b.base } : {}), ...(sunken(b) ? { y0: b.y0 } : {}), manifold: manifoldOf(patch), era, patch: patch.id }; });
+    const buildings = [...shaped.buildings, ...sunk].map(b => { const patch = patchOf(b), era = LANDSCAPES[patch.type]?.era ?? 'modern'; return { id: `${place.id}:${b.lot}`, x: b.x + wx, z: b.z + wz, w: b.w, d: b.d, angle: b.angle, floors: b.floors, kind: b.kind, model: UM.modelFor({ ...b, era }, `${place.id}:${b.lot}`, modelSizes), ...(b.use ? { use: b.use } : {}), ...(b.base ? { base: b.base } : {}), ...(sunken(b) ? { y0: b.y0 } : {}), ...(b.plane ? { plane: b.plane } : {}), manifold: manifoldOf(patch), era, patch: patch.id }; });
     // A composite building's parts, each its use's model inside its host (composite.mjs).
     const parts = partsIn({ terrain, buildings, place, here, modelFor: (b, id) => UM.modelFor(b, id, modelSizes) });
     // What lies under it (hallsOf, src/v2/world/underground.ts): malls, the storm water, deep facilities, in world metres.
-    const shift = ([x, z]) => [Math.round((x + wx) * 10) / 10, Math.round((z + wz) * 10) / 10], under = U.hallsOf(place.landscape).filter(hall => !(borrowsSlot && hall.street)).map(hall => ({ ...hall, boxes: hall.boxes.map(box => { const [x, z] = shift([box.x, box.z]); return { ...box, x, z }; }), bores: hall.bores.map(bore => ({ ...bore, a: shift(bore.a), b: shift(bore.b) })), up: hall.up.map(shift) }));
+    const shift = ([x, z]) => [Math.round((x + wx) * 10) / 10, Math.round((z + wz) * 10) / 10], under = U.hallsOf(place.landscape).filter(hall => !(borrowsSlot && hall.street)).map(hall => ({ ...hall, ...(hall.layer && hall.id === 'p0:under' ? { id: `${place.id}:under` } : {}), boxes: hall.boxes.map(box => { const [x, z] = shift([box.x, box.z]); return { ...box, x, z }; }), bores: hall.bores.map(bore => ({ ...bore, a: shift(bore.a), b: shift(bore.b) })), up: hall.up.map(shift) }));
     const roads = shaped.roads.map(road => ({ a: [road.a[0] + wx, road.a[1] + wz], b: [road.b[0] + wx, road.b[1] + wz], width: road.width, level: road.level }));
     // Each patch (manifold) in birth order: its type and era, its centre and radius, its outline as 48 points (world metres),
     // and its fingerprint; each building's manifold in `buildings` order.
@@ -955,6 +962,15 @@ export async function strandDemo(novelDir, options) {
   // raised platform moved among tall enough buildings stays there.
   const keptAt = id => { const site = terrain?.sites?.[id], holder = site?.parent ? macroOf.get(site.parent) : null; return holder && Array.isArray(site.toward) ? { x: Math.round((holder.x + site.toward[0]) * 10) / 10, z: Math.round((holder.z + site.toward[1]) * 10) / 10 } : null; };
   const terrainShapes = Object.entries(terrain?.shapes ?? {}).map(([id, shape]) => { const node = keptAt(id) ?? macroOf.get(id), [x0, z0, x1, z1] = shape.box; return node ? { id, label: name(id), kind: shape.kind, x: node.x, z: node.z, w: Math.round((x1 - x0) * 10) / 10, d: Math.round((z1 - z0) * 10) / 10, top: shape.top ?? null, ...(shape.bottom != null ? { bottom: shape.bottom } : {}), hall: (shape.top ?? 0) < 0 ? undergroundKindOf(name(id)) : null } : null; }).filter(Boolean);
+  // A deck in the air stands above whatever stands on the street under it (terrain-levels §3.5, nothing on top moved): raised
+  // with its buildings to 6 m over the tallest building of the surface its floor covers.
+  for (const entry of landscapes) for (const deck of entry.source.underground.filter(hall => hall.layer === 'air')) {
+    const b = U.boundsOf(deck), under = landscapes.flatMap(other => other.source.buildings).filter(other => !other.y0 && other.x + other.w / 2 > b.x0 && other.x - other.w / 2 < b.x1 && other.z + other.d / 2 > b.z0 && other.z - other.d / 2 < b.z1);
+    const floor = -deck.depth, need = Math.ceil((Math.max(0, ...under.map(other => other.floors * 3)) + 6) / 3) * 3, lift = Math.max(0, need - floor);
+    if (!lift) continue;
+    deck.depth -= lift; for (const building of entry.source.buildings) if (building.plane === 'air') building.y0 += lift;
+    notes.build.decksRaised = (notes.build.decksRaised ?? 0) + 1;
+  }
   const halls = [...landscapes.flatMap(entry => entry.source.underground.filter(hall => !['tank', 'channel'].includes(hall.kind) || entry.place === city?.id)), ...(city && !options.plain ? U.subwayOf(stops, city.id, city.r) : []), ...terrainShapes.filter(shape => (shape.top ?? 0) < 0).map(shape => U.shapeHall(shape))].map(hall => { const b = U.boundsOf(hall); return { ...hall, area: areaAt((b.x0 + b.x1) / 2, (b.z0 + b.z1) / 2), label: hall.street ? `an underground street, ${hall.depth} m down` : U.HALL_LABEL[hall.kind] }; });
   const underground = { halls };
   notes.underground = { halls: Object.fromEntries(Object.entries(halls.reduce((count, hall) => ({ ...count, [hall.kind]: (count[hall.kind] ?? 0) + 1 }), {}))), stops: stops.length, active: {}, hits: 0 };
@@ -1328,11 +1344,11 @@ export async function strandDemo(novelDir, options) {
         if (hall.pillars) for (let x = Math.floor(b.x0 / 2) * 2 + 1; x <= b.x1; x += 2) for (let z = Math.floor(b.z0 / 2) * 2 + 1; z <= b.z1; z += 2) if (U.pillarAt(hall, [x, z])) pillars.push([x, z]);
         // A passage's stairs: from the pavement nearest its end (where the world joins them) down to the passage.
         const stairs = hall.kind === 'corridor' ? hall.up.map(([x, z]) => { const [sx, sz] = W.streetNear(world, x, z, 30) ?? [x, z]; return [sx, sz, x, z]; }) : undefined;
-        return { id: hall.id, kind: hall.kind, label: hall.label, area: hall.area, depth: hall.depth, height: hall.height, boxes: hall.boxes, bores: hall.bores, pillars, ...(stairs ? { stairs } : {}), ...(hall.street ? { street: true } : {}), ...(hall.virtual ? { virtual: true } : {}) };
+        return { id: hall.id, kind: hall.kind, label: hall.label, area: hall.area, depth: hall.depth, height: hall.height, boxes: hall.boxes, bores: hall.bores, pillars, ...(stairs ? { stairs } : {}), ...(hall.street ? { street: true } : {}), ...(hall.virtual ? { virtual: true } : {}), ...(hall.layer ? { layer: hall.layer } : {}) };
       }),
       piles: [...world.underDamage.piles].flatMap(([index, cells]) => [...cells].map(([key, height]) => [...cellOf(key), W.levelOf(halls[index].depth), height])),
       dents: [...world.underDamage.dents].map(([key, depth]) => [...cellOf(key), depth]),
-      // The ways between the layers (terrain-levels §3.4): [foot x, foot y, foot z, top x, top z, 1 a lift / 0 stairs].
+      // The ways between the layers (terrain-levels §3.4): [foot x, foot y, foot z, top x, top z, 2 a launch / 1 a lift / 0 stairs].
       ways: [...allWays.values()],
       awake: [...awake.keys()],
     };
@@ -1501,9 +1517,11 @@ export async function strandDemo(novelDir, options) {
     // The world as the page draws it: one grid over everything explored (oi, oj: the offset of world cell 0, 0 on it), its nodes
     // as that grid's dense cells, each lot and chunk with the moment it was first reached.
     const bounds = W.worldBounds(world), NX = bounds.i1 - bounds.i0, NZ = bounds.j1 - bounds.j0, oi = -bounds.i0, oj = -bounds.j0;
-    const K = Math.max(1, ...world.lots.map(lot => lot.floors + 1), ...[...shared.things.values()].map(thing => thing.top + 1));
+    const K = Math.max(1, ...world.lots.map(lot => (lot.k0 ?? 0) + lot.floors + 1), ...[...shared.things.values()].map(thing => thing.top + 1));
     // Levels below the street are negative: they are packed from `ok` levels down, so every node is a non-negative number.
-    const ok = W.UNDER_LEVELS, dense = id => { if (id === null || id === undefined) return id; const { i, j, k } = W.cellOf(world, id); return ((k + ok) * NZ + (j + oj)) * NX + (i + oi); };
+    // Levels down to the deepest node (the deep underground's floor is 60 down, §3.5), never fewer than the halls' own.
+    let lowest = 0; for (let n = 2; n < world.cells.length; n += 3) if (world.cells[n] < lowest) lowest = world.cells[n];
+    const ok = Math.max(W.UNDER_LEVELS, -lowest), dense = id => { if (id === null || id === undefined) return id; const { i, j, k } = W.cellOf(world, id); return ((k + ok) * NZ + (j + oj)) * NX + (i + oi); };
     const denseMove = move => ({ ...move, path: move.path.map(dense), ensemble: move.ensemble.map(path => path.map(dense)) });
     const worldLots = world.lots.map((lot, index) => ({ model: shells[index], label: lot.label, detected: named('world', index) ? { name: named('world', index).name, scene: named('world', index).scene, event: named('world', index).event } : null, role: named('world', index) && ROLE_FOR[named('world', index).model] === 'hospital' ? 'hospital' : lot.role,
       i0: lot.i0, j0: lot.j0, nx: lot.nx, nz: lot.nz, floors: lot.floors, height: lot.height, born: lot.born, source: lot.source, manifold: lot.manifold, era: lot.era, place: lot.place,

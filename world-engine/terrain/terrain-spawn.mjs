@@ -93,7 +93,14 @@ export async function terrainSpawn(novelDir, { jev: given = null, run = false, p
   // street lies in the shallow layer (a street, a building, a room: a real depth, under the skin) or the deep one (a city, a
   // district: a virtual space); any other on the surface. A slot keeps its layer as `plane`; choosing, the level's moves and
   // the spares' places act only within one layer, so laying a place under the street moves nothing on top.
-  const planeOfPart = (id, scale = null) => (underNotes?.places?.[id]?.noted ? (['city', 'district'].includes(scale ?? terrain?.sites?.[id]?.scale) ? 'deep' : 'shallow') : 'surface');
+  // In the air or in space (§3.5): the note's layer, by the place's name or a hand's answer; a hand's 'deep' puts even a
+  // street in the deep layer, a hand's 'near' even a district in the shallow one.
+  const planeOfPart = (id, scale = null) => {
+    const note = underNotes?.places?.[id];
+    if (['air', 'space'].includes(note?.layer)) return note.layer;
+    if (note?.layerBy === 'hand' && note.layer !== 'surface') return note.layer === 'near' ? 'shallow' : note.layer;
+    return note?.noted ? (['city', 'district'].includes(scale ?? terrain?.sites?.[id]?.scale) ? 'deep' : 'shallow') : 'surface';
+  };
   const planeOfSlot = slot => slot?.plane ?? 'surface';
   // Jev's own reports of each paid request's tokens (stage/terrain/jev-usage.json), so a terrain run can be priced.
   const client = given ?? jevFromEnv({ ...process.env, JEV_MODEL: PICKER_MODEL }), jev = cachedDecisions(client, join(folder, 'cache'));
@@ -1070,10 +1077,13 @@ export async function terrainSpawn(novelDir, { jev: given = null, run = false, p
       // street, unless the underground note puts it there (terrain-levels §8.5, the user, 2026-11-05: "Jev never picks
       // anything larger than building level to go underground").
       // With the measures its sentences give (measures.ts), each a slice of its own (the user, 2026-11-01).
-      const offered = T.terrainHeights(part.scale, kind, factor ? { factor, underground: !['city', 'district'].includes(part.scale) || !!underNotes?.places?.[part.id]?.noted } : undefined, H?.areas[part.scale]?.[kind]), { measure, standard } = offered;
+      // A place of the deep underground, the air or space (§3.5) stands on its layer's own floor: its heights are its buildings'
+      // there, as on the ground, and it is offered no underground's slices.
+      const planeHere = planeOfPart(part.id, part.scale), liftedHere = ['deep', 'air', 'space'].includes(planeHere);
+      const offered = T.terrainHeights(part.scale, kind, factor ? { factor, underground: !liftedHere && (!['city', 'district'].includes(part.scale) || planeHere === 'shallow') } : undefined, H?.areas[part.scale]?.[kind]), { measure, standard } = offered;
       // A place the underground note puts under the street (terrain-levels §8.5) is offered the underground's slices only: the
       // note says it lies below, Jev says how deep (W12's underground stretch, offered every height, was answered a 5 m alley).
-      const measured = T.withMeasures(offered.slices, M.measuresIn(textsOf(part)), standard), noteHere = !!underNotes?.places?.[part.id]?.noted;
+      const measured = T.withMeasures(offered.slices, M.measuresIn(textsOf(part)), standard), noteHere = planeHere === 'shallow';
       const tops = noteHere && measured.some(entry => entry.y < 0) ? measured.filter(entry => entry.y < 0) : measured, lo = tops[0].y, hi = tops.at(-1).y, span = hi - lo;
       const core = Math.min(Math.max(box[2] - box[0], box[3] - box[1]) / 2, Math.max(CORE_MIN, span * CORE)), cc = [(box[0] + box[2]) / 2, (box[1] + box[3]) / 2];
       // The slices through a core of the area round a point, labelled as heights, or as additions to the minimum (the probe).
@@ -1177,6 +1187,8 @@ export async function terrainSpawn(novelDir, { jev: given = null, run = false, p
         // A pool's member borrows its pool's ground in the box Jev gave it (the engine builds it there).
         : { label: part.label, parent: holder, parentLabel: name(holder), scale: part.scale, kind, ...(shape ? { shape } : { ground }), ...(sampled ? { member: holder } : {}), size: laid?.size ?? [round(box[2] - box[0]), round(box[3] - box[1])], ...(laid ? { turn: laid.turn, on: laid.on } : {}), toward, ...(settled?.pin ? { pinToward: settled.pin } : {}), box, ...(median ? { median, manifold: entry.manifold } : {}), ...(upTo ? { top: upTo } : {}), ...(bottom !== null ? { bottom, thickness: thick } : {}), by: poolOf ? 'pool' : reusedFrom ? 'universe' : 'jev', ...(poolOf ? { pool: poolOf } : {}), ...(reusedFrom ? { from: reusedFrom } : {}),
           confidence: { box: boxBy?.confidence ?? null, kind: what?.confidence ?? null, height: rise?.confidence ?? null } };
+      // Its layer (§3.3, §3.5), where not the surface, on its site too: the build reads it there when no slot carries it.
+      if (!empty && planeOfPart(part.id, part.scale) !== 'surface') terrain.sites[part.id].plane = planeOfPart(part.id, part.scale);
       // Spawn mode: the part is its slot's (its own for good when it is named, a share of this book when not). A named place
       // stands in the slot's area as its own ground; an unnamed one is a marker in the slot, whose ground the slot's site
       // carries (syncSlots).

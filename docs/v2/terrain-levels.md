@@ -180,6 +180,88 @@ has to look for one:
 | atmosphere | a lift or a landing down to the ground under a floating place (stage 5) |
 | space | a launch or a space elevator (stage 6) |
 
+### 3.5 Building the other layers: deep underground, atmosphere, universe (the user, 2026-11-06)
+
+> "Yes push, then build the option of deep underground, atmosphere and universe"
+
+Each layer is built from the same three pieces the shallow layer already has: a **floor** of its own, **buildings
+standing on it** at their own level (a lot's `k0`, as an underground street's), and **ways** joining the floor to the
+ground on the 40 m grid (§3.4).
+
+| Layer | Its floor | Where the floor lies | Its ways to the ground | A place gets there |
+| --- | --- | --- | --- | --- |
+| deep underground | a virtual floor, open far up | a virtual level below every real hall (60 levels, 180 m down) | a virtual lift on every square, a fixed ride (its depth is not a number) | a city or a district the note puts under the street |
+| atmosphere | a deck in the air | its height answer, else 150 m (above the towers) | a lift on every square down to the ground under it | a place the note puts in the air |
+| universe | a virtual floor in orbit | a virtual level far above the air (400 levels) | a launch on every square: a fixed long ride | a place the note puts in space |
+
+- **The floors are halls** of the world (`underground.ts` `Hall`): the deep floor and the orbit's are `virtual`; the atmosphere's is a `deck`, with a depth below 0, which is a height. Each is `street`-like: open air up to its ceiling, its buildings on its floor, no pillars.
+- **A place's whole landscape is laid in its layer:** its buildings stand on the floor, its roads and plazas are the floor itself (they belong to the surface only on the surface), and the floor's box holds its whole circle.
+- **The note says which layer** (`underground-notes.json`, a place's `layer`):
+  - the underground's evidence gives the shallow layer (a street, a building, a room) or the deep one (a city, a district);
+  - the words of a place's name give the air (sky, floating) or space (orbit, a station, a satellite, the moon);
+  - an answer given by hand overrides both.
+- **The rules of §3.3 hold for each:** its own plane, the vectors crossing, nothing on top moved.
+- **Walks:** each floor is a band of its own for the solver, joined to the street's band by its ways. A route between two other layers goes by the ground (two portals): still to come.
+
+**Built (2026-11-06).**
+
+- **The ground** (`landscape.ts`):
+  - a patch carries its layer (`plane`: deep, air or space);
+  - `layerBuildings` fills each layer's patches as if they stood alone on the ground (their own fabric, forms, landmarks), then lifts the buildings onto the layer's floor (`LAYER_FLOOR`: −180 m, 150 m, 1200 m);
+  - a virtual floor stands open 60 m, and its buildings stop under that;
+  - the surface's fill never sees these patches: they claim, cut and lend nothing there.
+- **The floors** (`underground.ts` `layerFloors`):
+  - one hall per layer per landscape, of kind `deep`, `deck` or `orbit`; `parts` names the patches it holds;
+  - nothing of the shallow layer is generated under a patch of another layer (no mall, storm water or lab);
+  - Jev's underground intervals leave the floors out.
+- **The world** (`world.ts`):
+  - a column holds buildings of several layers, each in its own levels;
+  - a floor above the street is walked like a hall's;
+  - a building standing on the street keeps its own floors where a deck crosses it;
+  - from a deck the ways are lifts down to the ground; from an orbit, launches (600 s); the deep's are virtual lifts (60 s).
+- **The note** (`underground-note.mjs`):
+  - a place's name puts it in the air (floating, an airship, a city or a fortress in the sky) or in space (the universe, outer space, a satellite, a space station, the moon); the words are kept in escapes;
+  - a satellite town stays on the ground, and so does a sky bridge;
+  - a hand's answer (`underground-notes.mjs --layer <place>=<layer>`) is kept when the notes are made again;
+  - every layer passes down the tree to the places with none of their own.
+- **The terrain loop:**
+  - a part's layer comes from its note;
+  - a part in the deep, the air or space is offered its kind's own heights (its buildings' on its floor), never the underground's slices;
+  - its site records its layer.
+- **The build:**
+  - patches take their place's layer: its own ground, a pool's member, a mapped manifold;
+  - a layer's buildings stand untouched by the surface's pushing and growing;
+  - a deck is raised to 6 m over the tallest building under it;
+  - the walk puts every other layer's floor in its lower band, so a ride's flat cost never sits in a street walk's window;
+  - the page's grid reaches down to the deep floor.
+- **The director:** the people of a place in the air or in space start on its floor.
+
+Checked:
+
+- **A generated city:** a commercial district with a residential district in the deep, a shopping street on a deck and a residential district in orbit.
+  - The surface is the same, building for building, and lot for lot.
+  - 61, 16 and 121 buildings stand on their floors, with 138, 20 and 168 ways.
+  - No floor point is more than 32 m from a way, and about 90% of the rooms are reached from the street.
+- **A copy of library 16, the air** (`rehearsals/stage2/novel-L1`): W12's underground stretch was answered into the air by hand, and Jev's answers were replayed through the terrain loop with no payment.
+  - It was kept as an alley on a deck. The build raised the deck to 306 m, 6 m over the 100-floor office under it: 51 buildings, 25 lifts.
+  - The 155 street lots that both rehearsals of units 114–124 reached are identical to the run with the stretch underground.
+  - Its people start on the deck in 4 scenes and ride up: 7 journeys, all reached, no law broken.
+- **A copy of library 16, the deep** (`novel-L2`): district 15's CBD and its 22 places were answered into the deep.
+  - One floor 180 m down, 643 × 717 m: 176 buildings and 485 virtual lifts.
+  - Units 124–131 break no law; the street in it starts its people on the deep floor, and both ride down.
+  - The surface lost the CBD (moved, not added). Its lots are the city's again, and so are the heights it lent round it, to about 700 m. That is what moving a district already on the surface means; adding one leaves the surface as it was (the generated city above).
+- **Units 1–84 on a fresh copy:** identical to before (175 cards, 253 moved, the same laws).
+- **Fixed on the way:**
+  - the walk's lower band holds every layer off the street, and a lab's cheaper lift outranked a deck's (portals are now ranked by the height they land at too);
+  - people on a layer's floor land at a way's foot and stand only where a walk from it goes;
+  - the director words each floor ("a deck in the air, 306 m up", "the deep underground").
+
+Still open:
+
+- **Where a place of another layer is anchored:** where the canvas puts it (by its holder), not over its slot. The deep street's people started 644 m from its floor.
+- **A walk between two layers off the street** (a deck to the deep): two portals by the ground.
+- **The viewer** at 1200 m: the orbit is drawn, but no camera frames it yet.
+
 ## 4. Water (stage 3)
 
 ### 4.1 Bodies of water
