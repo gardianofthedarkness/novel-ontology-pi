@@ -65,7 +65,7 @@ const CLEAR = { near: 1e6, far: 2e6 };
 
 async function replace(file, body) { const temporary = `${file}.${process.pid}.tmp`; await writeFile(temporary, body, { mode: 0o644 }); await rename(temporary, file); }
 
-export async function terrainSpawn(novelDir, { jev: given = null, run = false, parts: limit = Infinity, spawn = false, from: fromLevel = null, until = null, heightProbe = false, log = () => {} } = {}) {
+export async function terrainSpawn(novelDir, { jev: given = null, run = false, parts: limit = Infinity, spawn = false, from: fromLevel = null, until = null, heightProbe = false, notes: notesPath = null, log = () => {} } = {}) {
   const { stageInputs } = await load('dist/src/cli/commands/extract/stageCommands.js');
   const { simStrandList } = await load('dist/src/cli/commands/extract/simCommands.js');
   const { loadWorkspaceSentences } = await load('dist/src/cli/commands/extract/timeplaceCommands.js');
@@ -86,6 +86,9 @@ export async function terrainSpawn(novelDir, { jev: given = null, run = false, p
   const name = id => inputs.names[id] ?? id, scaleOf = id => inputs.scale?.places[id]?.scale ?? null;
   const tree = new Map(inputs.placeTree.map(place => [place.id, place]));
   const data2 = reading ? JSON.parse(await readFile(join(reading, 'v2', 'data.json'), 'utf8').catch(() => 'null')) : null;
+  // The underground note on each place (docs/v2/terrain-levels.md §8.5; experiments/v2/underground-notes.mjs), beside the
+  // reading: a city or a district the note puts under the street is offered the underground's slices too.
+  const underNotes = JSON.parse(await readFile(notesPath ?? (reading ? join(reading, 'v2', 'underground-notes.json') : '/nonexistent'), 'utf8').catch(() => 'null'));
   // Jev's own reports of each paid request's tokens (stage/terrain/jev-usage.json), so a terrain run can be priced.
   const client = given ?? jevFromEnv({ ...process.env, JEV_MODEL: PICKER_MODEL }), jev = cachedDecisions(client, join(folder, 'cache'));
   const live = await createLive(novelDir, { command: 'sim terrain', lines: [{ id: 'terrain', title: 'Terrain: the ground of the volume\'s places' }], model: jev.modelId, fresh: true });
@@ -1032,10 +1035,15 @@ export async function terrainSpawn(novelDir, { jev: given = null, run = false, p
       // The underground's slices first (below the street), then the kind's own: the picture spans them all.
       // Spawn mode asks the kind's standard plus an addition, as averages (docs/v2/borrow-and-spawn.md §8.9).
       const kindManifold = T.terrainKind(part.scale, kind)?.manifold, factor = spawn && kindManifold ? averageOverMedian(kindManifold) : null;
-      // As averages, the kind's minimum a hard gate (§8.9; the user, 2026-11-01): a city or a district is never under the street.
+      // As averages, the kind's minimum a hard gate (§8.9; the user, 2026-11-01): a city or a district is never under the
+      // street, unless the underground note puts it there (terrain-levels §8.5, the user, 2026-11-05: "Jev never picks
+      // anything larger than building level to go underground").
       // With the measures its sentences give (measures.ts), each a slice of its own (the user, 2026-11-01).
-      const offered = T.terrainHeights(part.scale, kind, factor ? { factor, underground: !['city', 'district'].includes(part.scale) } : undefined, H?.areas[part.scale]?.[kind]), { measure, standard } = offered;
-      const tops = T.withMeasures(offered.slices, M.measuresIn(textsOf(part)), standard), lo = tops[0].y, hi = tops.at(-1).y, span = hi - lo;
+      const offered = T.terrainHeights(part.scale, kind, factor ? { factor, underground: !['city', 'district'].includes(part.scale) || !!underNotes?.places?.[part.id]?.noted } : undefined, H?.areas[part.scale]?.[kind]), { measure, standard } = offered;
+      // A place the underground note puts under the street (terrain-levels §8.5) is offered the underground's slices only: the
+      // note says it lies below, Jev says how deep (W12's underground stretch, offered every height, was answered a 5 m alley).
+      const measured = T.withMeasures(offered.slices, M.measuresIn(textsOf(part)), standard), noteHere = !!underNotes?.places?.[part.id]?.noted;
+      const tops = noteHere && measured.some(entry => entry.y < 0) ? measured.filter(entry => entry.y < 0) : measured, lo = tops[0].y, hi = tops.at(-1).y, span = hi - lo;
       const core = Math.min(Math.max(box[2] - box[0], box[3] - box[1]) / 2, Math.max(CORE_MIN, span * CORE)), cc = [(box[0] + box[2]) / 2, (box[1] + box[3]) / 2];
       // The slices through a core of the area round a point, labelled as heights, or as additions to the minimum (the probe).
       const heightsAt = async (at, absolute = true) => {

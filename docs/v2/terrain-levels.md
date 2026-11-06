@@ -207,6 +207,14 @@ Both come from the street and the underground sharing one walk graph and one not
 
 ### 8.1 Two layers
 
+**Corrected (the user, 2026-11-05):** "30m to be honest is a shallow layer, not a deep layer ... A deep layer is a virtual space provided with no actual how deep and how tall the space is."
+- **The shallow layer is everything with a real depth,** however deep: basements, malls, the subway, W12's underground stretch at −30 m, storm water at −40 to −50 m, deep facilities at −90 m. Its halls are joined to the street and to each other by their own stairs, lifts and shafts.
+- **The deep layer is a virtual space:** an underground world the terrain loop lays there, with no depth or height of its own. Its ceiling is too far to feel, and it is left by the virtual elevator. Nothing in vol 1 is there yet.
+- **The table below splits the layers by depth (20–25 m). That split is wrong** and is kept only as the record of what was built first. The engine's split at 20 m (`DEEP` in export-strand-demo.mjs) is to be replaced:
+  - the layer becomes what a place is (a real hall, or the virtual space), not its depth;
+  - the virtual elevator serves the virtual deep layer only;
+  - a street walk's window keeps leaving out halls far below what its ends need (that is what kept W12's 90 m lifts from breaking long legs), as a matter of the solver's window, not of layers.
+
 | | Near-ground layer | Deep layer |
 | --- | --- | --- |
 | Depth | 0 to 25 m: basements, malls at −7 m, stations and tunnels at −12 m | below 20 m: storm water at −40 to −50 m, deep facilities at −80 to −100 m, and **underground worlds**: whole areas the terrain loop places down there (§8.5) |
@@ -296,7 +304,26 @@ The skin is one sheet per region over the near-ground layer, derived from the ci
 - **Said to be underground, with no way down near:** a stated fact looks for the nearest way down a walk reaches within 120 m (L14 `went down`).
 - **A walk whose way leaves its 40 m margin** is solved once more with a wider one, but only where a walk is known to reach the target. The unit's record counts these (`widened`).
 - **Rehearsed on W12's units 115–131 (unpaid):** failing facts 23 → 14, "no way there" 6 → 0, layout retakes 26 → 4, key-check retakes 14 → 5.
-- **Still to come:** the per-place note itself, the gate lifted for noted areas, and the portals and virtual elevator.
+
+**Then the rest of stage 1 (2026-11-05):**
+- **The note** is built as a free step: `experiments/v2/underground-notes.mjs` writes `underground-notes.json` beside the reading. It gathers the set dresser's settings and the pre-film notes' underground facts by place (`world-engine/digest/underground-note.mjs`), and asks nothing.
+  - A place is noted when at least 2 of its units are underground and they are at least half of all its units. Its places inherit the note.
+  - The layer is near unless the evidence says deep. The set dresser cannot tell the two apart, so every note says near for now.
+  - It has to run after the set dresser and before the terrain loop, so the set dresser moves ahead of the terrain in a library's build.
+- **The gate:** the terrain loop offers the underground's slices to a noted city or district (`terrain-spawn.mjs`, option `notes`).
+- **The director** starts a noted place's units under the street, as it does a unit the set dresser calls underground.
+- **Vol 1 notes nothing.** W12's underground stretch (units 118–125) is filed under the whole city: 7 of its 144 units are underground. The note is right not to put the city under the street, but that stretch has no place of its own to note. Today the units' own settings carry it.
+- **Underground stretches get a place of their own** (the user, 2026-11-05: yes). `experiments/v2/underground-stretches.mjs` (free, `--write` to apply) finds runs of units with underground evidence at one city- or district-scale place, in one sequence, at most two units apart (W12: units 118–123, with 119 between). Each becomes an unnamed place of the street's scale under that city, written into the reading (a slot, its units set there) and the world script. The note then notes it (W12: 5 of its 6 units).
+  - **The terrain loop offers a noted place only the underground's slices.** Offered every height, Jev answered W12's stretch "an alley, 5 m" with 10% confidence. Offered only the underground, it answered "−30 m, a deep hall" with 73% (2 paid calls each time, on test copies).
+  - **The director starts a noted place's units in its own hall:** `<place>:shape`, `<place>:under`, or the hall of the slot it borrows in spawn mode.
+  - **Tried on a test copy of library 16 with Jev's real answers:** units 118–123 start in the stretch's corridor at −30 m, ride lifts down 9 times and up 8, and every route arrives. But in spawn mode the place took a spare alley slot of district 7, 1.8 km from where the story was. So against the units' own settings it does worse: failing facts 14 → 18 and arrivals over 500 m 0 → 6, though key-check retakes 5 → 2. Library 16 is not changed.
+  - **Open:** placing a stretch near the place its story comes from (the bar of units 114–117), before it is adopted.
+- **Portals** (`world-engine/world/layers.mjs`, the engine's `portalsNear`): a walk whose targets all lie in the other layer goes to a portal in its own layer, rides it, and walks on, each leg solved inside its layer. The portals are tried cheapest first, up to four.
+- **The virtual elevator:** one lift every 40 m over every deep floor, its top on the nearest open ground within 20 m. A ride costs its depth at 5 m/s plus a 20 s wait, as metres walked, so the text's own lifts are taken first.
+  - Checked on library 16: down into and up out of a 90 m military facility by its lift, a lab by a virtual lift, and a hall with no real lift by the virtual elevator alone. Each trip crosses layers once.
+- **L10 says how and where:** "no way there on foot (at street level and just under it)", "no way climbing in the deep layer from the lift to there", "no lift, shaft or ladder within 120 m".
+- **A start walled into a sliver** of open ground between buildings (a cell or two; W12's unit 169) steps out to the nearest ground a walk leaves from, within 8 m. The unit's record counts these (`freed`).
+- **Rehearsed (unpaid):** units 1–84 unchanged with the portals in; units 144–171, where W12 failed near lifts, have 0 "no way there" and 0 of 5 arrivals unreached.
 
 ### 8.6 The deep layer's ceiling, and the virtual elevator
 

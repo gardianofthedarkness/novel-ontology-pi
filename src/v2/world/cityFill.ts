@@ -37,7 +37,8 @@ export type BuildingKind = "skyscraper" | "tower" | "office" | "house";
 /** kind: a BuildingKind for the plain city; landscapes add their own (hall, keep, farmhouse, …). */
 /** base: a building built into another (a street's shops under a tower of the ground it stands on): its lower floors' kind. */
 /** use: what it is used for, where its street says (a shop, a café, an office: landscape.ts uses), so a place can dwell in it. */
-export interface Building { lot: string; x: number; z: number; w: number; d: number; angle: number; floors: number; kind: string; base?: { floors: number; kind: string }; use?: string }
+/** `y0`: where its ground floor stands, metres; negative for a building of a street laid underground (landscape.ts sunkForm). */
+export interface Building { lot: string; x: number; z: number; w: number; d: number; angle: number; floors: number; kind: string; base?: { floors: number; kind: string }; use?: string; y0?: number }
 /**
  * How a city is filled: the lot size a block is cut into (null leaves the block empty), which lots are kept, each
  * kept lot's building (null for none: a yard, a field), and which roads are drawn. The plain city fills its whole

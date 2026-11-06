@@ -139,6 +139,35 @@ test("what a walk reaches (terrain-levels §8.2): the deep lab by its lift and t
   assert.ok(small.length > 0 && small.every((n) => Math.abs(built.graph.x[n] + 60) <= 4 && Math.abs(built.graph.z[n]) <= 4), "a tight window reaches only inside itself");
 });
 
+test("a street laid underground, built out (terrain-levels §8): its buildings stand on its floor under the skin, their doors open onto it, the street above keeps its own, and a walk from the street reaches a room under it", () => {
+  // A shopping street laid 30 m under (terrain spawning answered its height below 0), beside a commercial district.
+  const landscape = addPatch(firstLandscape("d", "commercial"), "shopping", [200, 0]), street = landscape.patches.at(-1)!;
+  street.median = -30;
+  const fill = fillLandscape(landscape), sunk = fill.landmarks.filter((b) => (b.y0 ?? 0) < 0);
+  assert.ok(sunk.length >= 6, `its own buildings: ${sunk.length}`);
+  assert.ok(sunk.every((b) => b.y0 === -30 && (b.floors + 1) * 3 <= 30 - 3), "each on its floor, its roof under the 3 m skin");
+  const hall = hallsOf(landscape).find((entry) => entry.street)!;
+  assert.ok(hall && hall.depth === 30 && hall.height === 27 && hall.pillars === 0, "its hall is its open ground, open up to the skin");
+  const buildings = [...fill.fabric.buildings, ...fill.landmarks].map((b, n) => ({ ...b, id: `b${n}` }));
+  const world = createWorld({ buildings, roads: fill.fabric.roads.map((road) => ({ a: road.a, b: road.b, width: road.width, level: road.level })), plazas: fill.plazas, anchors: [], underground: { halls: hallsOf(landscape) } });
+  ensure(world, street.x, street.z, 260, 0);
+  const built = worldGraph(world, standingOf(world)), below = world.lots.filter((lot) => (lot.k0 ?? 0) < 0);
+  assert.ok(below.length >= 4, `standing under the street: ${below.length}`);
+  assert.ok(below.every((lot) => lot.k0 === -10 && lot.k0 + lot.floors <= -1), "on the street's floor (level -10), the roofs under the skin");
+  // The street above keeps its own: a cell held below is held above too where a building of the surface stands over it.
+  const twice = [...world.lotBelow.keys()].filter((key) => world.lotAt.has(key)).length;
+  assert.ok(twice > 0, `the street above keeps its own buildings, over those under it: ${twice} cells held twice`);
+  // Its rooms, and a walk to one from the street by the street's stairs.
+  const rooms: number[] = [];
+  for (let id = 0; id < built.type.length; id++) if (built.type[id] === 3 && built.lot[id] >= 0 && built.lot[id] < world.lots.length && (world.lots[built.lot[id]].k0 ?? 0) < 0) rooms.push(id);
+  assert.ok(rooms.length > 0 && rooms.every((id) => nodePos(world, id).y < -20), "rooms under the street, at their own levels");
+  const [ux, uz] = hall.up[0], from = nodeNear(world, built, ux, uz, 0)!, T = 0.6 * temperatureBound({ step: 2, kappa: 1, lambda: 8, floorHeight: 3, arcCost: 7 });
+  const seen = reachableIn(built.graph, from), reached = rooms.filter((id) => seen[id]);
+  assert.ok(reached.length > 0, `a room under the street is reached from the street on foot (${reached.length} of ${rooms.length})`);
+  const path = sampleWalk(built.graph, solveWalk(built.graph, reached.slice(0, 12), { T, kappa: 1, lambda: 8 }), from, 0, skeletonStream("sunk"));
+  assert.ok(path && reached.includes(path.at(-1)!), "a walk goes down the stairs, along the street under, through a door into the room");
+});
+
 test("a city's halls and basements: a box finds its hall at least 90% of the time just under the street, in the subway, and deep, over six generated cities", () => {
   for (const seed of ["city", "tokyo", "gakuen", "harbor", "osaka", "kyoto"]) {
     let landscape = firstLandscape(seed, "skyscrapers");

@@ -745,6 +745,18 @@ function buildPlace(id) {
     const dress = (name, x, y, z, angle, w, h, d) => { const shell = shellOf(name); if (!shell) return; if (!underModels.has(name)) underModels.set(name, []); underModels.get(name).push(new THREE.Matrix4().compose(new THREE.Vector3(x, y, z), new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), -angle), new THREE.Vector3(w / shell.size.x, h / shell.size.y, d / shell.size.z))); };
     for (const hall of under.halls) {
       const material = tint[hall.kind] ?? mats.deep, y = -hall.depth + hall.height / 2;
+      // A street laid underground (terrain-levels §8): its floor, the street's ground under the skin, and the skin's underside
+      // as its ceiling in outline; open air between, where its buildings stand (drawn as lots, on its floor). No tunnel.
+      if (hall.street) {
+        for (const box of hall.boxes) {
+          const floor = new THREE.Mesh(new THREE.BoxGeometry(box.w, 0.2, box.d), mats.arcade); floor.position.set(box.x, -hall.depth + 0.1, box.z); floor.rotation.y = -box.angle; show(floor, box.x, box.z);
+          const ceiling = new THREE.LineSegments(new THREE.EdgesGeometry(new THREE.BoxGeometry(box.w, hall.height, box.d)), new THREE.LineBasicMaterial({ color: 0x8fd6ff, transparent: true, opacity: 0.15 }));
+          underLines.push(ceiling.material); ceiling.position.set(box.x, y, box.z); ceiling.rotation.y = -box.angle; show(ceiling, box.x, box.z);
+        }
+        if (hall.boxes[0] && hall.label) { const box = hall.boxes[0], tag = label(hall.label, "#8fd6ff", 20); tag.position.set(box.x, -hall.depth + 3, box.z); show(tag, box.x, box.z, { under: true }); }
+        for (const [sx, sz, ex, ez] of hall.stairs ?? []) { const steps = Array.from({ length: 10 }, (_, n) => { const t = (n + 0.5) / 10; return [sx + (ex - sx) * t, -hall.depth * t + 0.2, sz + (ez - sz) * t, 3, 0.45, 3]; }); show(instanced(mats.subway, steps), sx, sz); }
+        continue;
+      }
       const dressing = terrainStage ? UNDER_MODELS[hall.kind] : null;
       if (dressing) {
         for (const box of hall.boxes) dress(dressing, box.x, -hall.depth, box.z, box.angle, box.w, hall.height, box.d);
@@ -768,7 +780,7 @@ function buildPlace(id) {
     for (const [name, matrices] of underModels) { const set = instancedEdges(shellOf(name).edges, matrices, 0x8fd6ff, 0.15); underLines.push(set.lines.material); show(set.lines, 0, 0); }
     for (const lot of data.world.lots) {
       const floors = lot.height ?? lot.floors, levels = floors >= 20 ? 3 : floors >= 10 ? 2 : floors >= 2 ? 1 : 0;
-      if (!levels) continue;
+      if (!levels || lot.k0) continue;
       const { w, d, x, z, angle } = planOf(lot), mesh = instanced(mats.under, [[x, -levels * FLOOR / 2, z, w, levels * FLOOR, d, angle]]);
       group.add(mesh); chunks.push({ mesh, at: bornAt(lot.born), x, z });
     }
@@ -784,7 +796,7 @@ function buildPlace(id) {
   if (!place.world) group.add(instanced(new THREE.MeshLambertMaterial({ color: 0x9fb4c3, transparent: true, opacity: 0.5 }), place.clutter.map((cell) => [(cell % place.NX + 0.5) * CELL - cx, 0.45, (Math.floor(cell / place.NX) + 0.5) * CELL - cz, 1.2, 0.9, 1.2])));
   // Each lot's drawn parts and its box, so a still can see through the buildings in front of what it looks at. Its shell is
   // as tall as its building (`height`); its inside is walked up to `floors`.
-  const lots = [], start = () => group.children.length;
+  const lots = [], start = () => group.children.length, overStreet = [];
   for (const lot of place.lots) {
     const plan = planOf(lot), { w, d, angle } = plan, levels = lot.height ?? lot.floors, h = levels * FLOOR, x = plan.x - cx, z = plan.z - cz, first = start();
     // The building's artistic shell, stretched to its lot and height, with the walkable skeleton glowing inside; a plain box when no model is shipped.
@@ -805,9 +817,14 @@ function buildPlace(id) {
     if (lot.label) { const tag = label(lot.label); tag.position.set(x, h + 2.4, z); group.add(tag); }
     // A building the story names lights up the first time it is mentioned.
     if (lot.detected) { const tag = label(lot.detected.name.slice(0, 14), "#ffd36e"); tag.position.set(x, h + 2.4, z); tag.visible = false; group.add(tag); reveals.push({ tag, time: eventStart.get(`${lot.detected.scene}|${lot.detected.event}`) ?? Infinity }); }
+    // A building of a street laid underground (terrain-levels §8) stands on that street's floor: all it drew, lowered there.
+    const lift = (lot.k0 ?? 0) * FLOOR;
+    if (lift) for (const part of group.children.slice(first)) part.position.y += lift;
     const parts = group.children.slice(first).filter((part) => part.material).map((part) => ({ part, opacity: part.material.opacity }));
     const xs = corners.map(([px]) => px - cx), zs = corners.map(([, pz]) => pz - cz);
-    lots.push({ parts, box: new THREE.Box3(new THREE.Vector3(Math.min(...xs), 0, Math.min(...zs)), new THREE.Vector3(Math.max(...xs), h + 3, Math.max(...zs))) });
+    // A building on the street over a street laid underground: it clears with the ground when someone is below (overStreet).
+    if (!lift && place.world) { const streets = (data.world.underground?.halls ?? []).filter((hall) => hall.street); if (streets.some((hall) => hall.boxes.some((box) => Math.abs(plan.x - box.x) < (box.w + w) / 2 && Math.abs(plan.z - box.z) < (box.d + d) / 2))) overStreet.push(parts); }
+    lots.push({ parts, box: new THREE.Box3(new THREE.Vector3(Math.min(...xs), lift, Math.min(...zs)), new THREE.Vector3(Math.max(...xs), lift + h + 3, Math.max(...zs))) });
   }
   // The terrain stage (docs/v2/world-engine-v2.md §2.0.18): every building no one has reached yet stands as its shell, the
   // world's lot with its tiling, destruction and inside switched off, drawn exactly as a lot's shell above (the same
@@ -818,9 +835,10 @@ function buildPlace(id) {
     for (const lot of data.world.shells) {
       // At its building's true size and turn (its frame), as the lot it becomes when reached stands.
       const plan = planOf(lot), { w, d } = plan, levels = lot.height ?? lot.floors, h = levels * FLOOR, x = plan.x - cx, z = plan.z - cz, turn = new THREE.Quaternion().setFromAxisAngle(up, -plan.angle), shell = lot.model ? shellOf(lot.model) : null;
-      if (shell) { if (!byModel.has(lot.model)) byModel.set(lot.model, []); byModel.get(lot.model).push(new THREE.Matrix4().compose(new THREE.Vector3(x, 0, z), turn, new THREE.Vector3(w / shell.size.x, h / shell.size.y, d / shell.size.z))); }
-      else boxes.push(new THREE.Matrix4().compose(new THREE.Vector3(x, h / 2, z), turn, new THREE.Vector3(w, h, d)));
-      for (let k = 1; k <= levels; k++) floorsAt.push(new THREE.Matrix4().compose(new THREE.Vector3(x, k * FLOOR, z), turn, new THREE.Vector3(w, 1, d)));
+      const y0 = lot.y0 ?? 0;
+      if (shell) { if (!byModel.has(lot.model)) byModel.set(lot.model, []); byModel.get(lot.model).push(new THREE.Matrix4().compose(new THREE.Vector3(x, y0, z), turn, new THREE.Vector3(w / shell.size.x, h / shell.size.y, d / shell.size.z))); }
+      else boxes.push(new THREE.Matrix4().compose(new THREE.Vector3(x, y0 + h / 2, z), turn, new THREE.Vector3(w, h, d)));
+      for (let k = 1; k <= levels; k++) floorsAt.push(new THREE.Matrix4().compose(new THREE.Vector3(x, y0 + k * FLOOR, z), turn, new THREE.Vector3(w, 1, d)));
     }
     for (const [model, matrices] of byModel) {
       const shell = shellOf(model), fills = new THREE.InstancedMesh(shell.fill, shellFill, matrices.length);
@@ -847,14 +865,19 @@ function buildPlace(id) {
     }
     if (boxes.length) group.add(instancedEdges(new THREE.EdgesGeometry(new THREE.BoxGeometry(1, 1, 1)), boxes, 0x7ce6ff, 0.4).lines);
   }
-  const entry = { group, cx, cz, dynamic: null, shownHits: -1, lots, masked: new Set(), chunks, bornAt: place.world ? place.lots.map((lot) => bornAt(lot.born)) : null };
+  const entry = { group, cx, cz, dynamic: null, shownHits: -1, lots, overStreet, masked: new Set(), chunks, bornAt: place.world ? place.lots.map((lot) => bornAt(lot.born)) : null };
   built.set(id, entry);
   if (place.world) built.set("world", entry);
   return entry;
 }
 /** The skeletons after the first `count` hits on this place: what stands, what is cut off (red), rooms cut off. */
 /** A unit's place in a lot (structure.ts): a corridor slab, a stair, a wall on the outer face, a roof slab. */
-function unitBox(lot, entry, [kind, i, j, k]) {
+function unitBox(lot, entry, unit) {
+  const box = unitBoxAt(lot, entry, unit), lift = (lot.k0 ?? 0) * FLOOR;
+  if (lift) box[1] += lift;
+  return box;
+}
+function unitBoxAt(lot, entry, [kind, i, j, k]) {
   const plan = planOf(lot), u = (i + 0.5) * CELL - (plan.sx * CELL) / 2, v = (j + 0.5) * CELL - (plan.sz * CELL) / 2, [x, z] = plan.at(u, v).map((value, n) => value - (n ? entry.cz : entry.cx));
   if (kind === 4) return [x, lot.floors * FLOOR + 0.12, z, CELL * 0.96, 0.24, CELL * 0.96, plan.angle];
   if (kind === 2) return [x, k * FLOOR + FLOOR / 2, z, 1.4, FLOOR * 0.96, 1.4, plan.angle];
@@ -914,20 +937,20 @@ function drawSkeletons(id, entry, count, settling = null) {
     // Its inside only near the scene's people and where Jev looks (`deep`); a building far off stands as its shell.
     if (entry.masked.has(n) || (entry.bornAt && entry.bornAt[n] > time) || entry.far?.has(n) || (entry.deep && !entry.deep.has(n))) return;
     // Every tile of its plan in its own frame: the corridors, stairs and rooms fill the building as it stands.
-    const plan = planOf(lot), { sx, sz, angle: turn } = plan, local = (u, v) => { const [px, pz] = plan.at(u, v); return [px - entry.cx, pz - entry.cz]; };
+    const plan = planOf(lot), { sx, sz, angle: turn } = plan, local = (u, v) => { const [px, pz] = plan.at(u, v); return [px - entry.cx, pz - entry.cz]; }, lift = (lot.k0 ?? 0) * FLOOR;
     for (let cell = 0; cell < lot.cells.length; cell++) {
       const type = lot.cells[cell];
       if (type === "0" || lost[n].has(cell)) continue;
       const i = cell % sx, j = Math.floor(cell / sx) % sz, k = Math.floor(cell / (sx * sz)), [x, z] = local((i + 0.5) * CELL - (sx * CELL) / 2, (j + 0.5) * CELL - (sz * CELL) / 2);
-      if (cutCells[n].has(cell)) red.push(type === "2" ? [x, k * FLOOR + FLOOR / 2, z, 1.4, FLOOR * 0.96, 1.4, turn] : [x, k * FLOOR + 0.2, z, CELL * 0.9, 0.4, CELL * 0.9, turn]);
-      else if (type === "2") stairs.push([x, k * FLOOR + FLOOR / 2, z, 1.4, FLOOR * 0.96, 1.4, turn]);
-      else corridors.push([x, k * FLOOR + 0.15, z, CELL * 0.9, 0.3, CELL * 0.9, turn]);
+      if (cutCells[n].has(cell)) red.push(type === "2" ? [x, lift + k * FLOOR + FLOOR / 2, z, 1.4, FLOOR * 0.96, 1.4, turn] : [x, lift + k * FLOOR + 0.2, z, CELL * 0.9, 0.4, CELL * 0.9, turn]);
+      else if (type === "2") stairs.push([x, lift + k * FLOOR + FLOOR / 2, z, 1.4, FLOOR * 0.96, 1.4, turn]);
+      else corridors.push([x, lift + k * FLOOR + 0.15, z, CELL * 0.9, 0.3, CELL * 0.9, turn]);
     }
     // Each room hollow: its floor, and a thin wall along each cell edge of its outline but where a door is (the circulation
     // cell outside that edge is one of its doors), as high as its floors.
     lot.rooms.forEach(([k, i0, j0, i1, j1, top = k, kind = 0, doors = []], r) => {
       // In the plan's own frame: u0, v0 its corner, metres from the plan's centre along its sides.
-      const cut = cutRooms[n].has(r), u0 = i0 * CELL - (sx * CELL) / 2, v0 = j0 * CELL - (sz * CELL) / 2, w = (i1 - i0 + 1) * CELL, d = (j1 - j0 + 1) * CELL, h = (top - k + 1) * FLOOR - 0.3, y = k * FLOOR;
+      const cut = cutRooms[n].has(r), u0 = i0 * CELL - (sx * CELL) / 2, v0 = j0 * CELL - (sz * CELL) / 2, w = (i1 - i0 + 1) * CELL, d = (j1 - j0 + 1) * CELL, h = (top - k + 1) * FLOOR - 0.3, y = lift + k * FLOOR;
       const [rx, rz] = local(u0 + w / 2, v0 + d / 2);
       (cut ? redRooms : kind === 2 ? talls : kind === 1 ? halls : rooms).push([rx, y + 0.06, rz, w - 0.2, 0.12, d - 0.2, turn]);
       const door = new Set(doors), at = (i, j) => (k * sz + j) * sx + i, wall = cut ? redRooms : roomWalls;
@@ -1910,6 +1933,8 @@ function frame(now) {
   const seenBelow = Math.max(0, Math.min(1, (0.8 - groundSeen) / 0.65));
   for (const key of ["subway", "arcade", "under", "water", "deep", "facility"]) mats[key].opacity = 0.05 + seenBelow * 0.35;
   for (const material of underLines) { if (material.uniforms) material.uniforms.alpha.value = 0.15 + seenBelow * 0.65; else material.opacity = 0.15 + seenBelow * 0.65; }
+  // The street's buildings over a street laid underground fade as the ground does, so the street below is seen.
+  for (const parts of entry.overStreet ?? []) for (const { part, opacity } of parts) if (!part.isSprite) part.material.opacity = opacity * (0.12 + 0.88 * (1 - seenBelow));
   decor(time); blinkProposal(now); blinkSampled(now); playSettle(now);
   if (seeing && !sheetView) seeThrough(entry, segment, now, dt, elapsed);
   if (focusGlide) { const u = Math.min(1, (performance.now() - focusGlide.start) / 600), e = u * u * (3 - 2 * u); controls.target.lerpVectors(focusGlide.fromTarget, focusGlide.toTarget, e); camera.position.lerpVectors(focusGlide.fromCamera, focusGlide.toCamera, e); if (u >= 1) focusGlide = null; }

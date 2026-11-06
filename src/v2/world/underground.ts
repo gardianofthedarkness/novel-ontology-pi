@@ -1,4 +1,4 @@
-import { LANDSCAPES, underground, type Landscape, type Patch } from "./landscape.js";
+import { LANDSCAPES, roomUnder, sunkStreet, underground, type Landscape, type Patch } from "./landscape.js";
 import { stageStream } from "./stream.js";
 
 /**
@@ -18,7 +18,11 @@ export interface Bore { a: Point; b: Point; width: number }
  * none), whether it is lined, and the ways out of it it is generated with: `up` points where stairs, a lift or a ladder
  * reach the surface (a station's ends, a shaft), and `down` points where it meets the hall below (a tank's channel).
  */
-export interface Hall { id: string; kind: HallKind; depth: number; height: number; boxes: HallBox[]; bores: Bore[]; pillars: number; lined: boolean; up: Point[]; label?: string }
+/**
+ * `street`: a street laid under the street (terrain-levels §8): its floor at `depth`, open up to the ground skin (`height`),
+ * its own buildings standing on its floor. `virtual`: the deep layer's space, with no depth of its own (§8.6; none yet).
+ */
+export interface Hall { id: string; kind: HallKind; depth: number; height: number; boxes: HallBox[]; bores: Bore[]; pillars: number; lined: boolean; up: Point[]; label?: string; street?: boolean; virtual?: boolean }
 
 /** The ground in three bands by depth (metres): how wide an opening stands unsupported, what breaks it, how it arches and bulks when it falls. */
 export interface Band { name: "soil" | "weathered" | "hard"; to: number; span: number; bond: number; arch: number; bulk: number }
@@ -101,6 +105,9 @@ export function hallsOf(landscape: Landscape): Hall[] {
   for (const patch of modern.filter(underground)) {
     const depth = Math.max(4, -(patch.median ?? 0)), linear = patch.shape.family === "box", w = round(1.8 * patch.R), d = round(Math.max(8, linear ? 1.8 * patch.R * (patch.shape.aspect ?? 0.3) : 1.2 * patch.R));
     const kind = (patch.hall && patch.hall in LIES_UNDER ? patch.hall : linear ? "corridor" : "mall") as HallKind;
+    // A street laid underground, built out (landscape.ts sunkForm): the hall is its open ground, the whole street wide, open up
+    // to the ground skin; its buildings stand on its floor and hold the ground up (no pillars).
+    if (sunkStreet(patch)) { const sw = round(2 * patch.R), sd = round(Math.max(8, linear ? 2 * patch.R * (patch.shape.aspect ?? 0.3) : 2 * patch.R)); halls.push({ id: `${patch.id}:under`, kind, depth, height: Math.max(HALL_HEIGHT[kind] ?? 4, round(roomUnder(patch))), boxes: [{ x: round(patch.x), z: round(patch.z), w: sw, d: sd, angle: patch.shape.turn }], bores: [], pillars: 0, lined: true, up: ends(patch.x, patch.z, sw, patch.shape.turn), street: true }); continue; }
     halls.push({ id: `${patch.id}:under`, kind, depth, height: HALL_HEIGHT[kind] ?? 4, boxes: [{ x: round(patch.x), z: round(patch.z), w, d, angle: patch.shape.turn }], bores: [], pillars: ["corridor", "utility", "tunnel"].includes(kind) ? 0 : 8, lined: true, up: ends(patch.x, patch.z, w, patch.shape.turn) });
   }
   for (const patch of modern) {

@@ -84,7 +84,7 @@ export async function strandDemo(novelDir, options) {
   const { macroLattice, latticeNode, latticeWithin, crossings, smoothPath } = await load('dist/apps/playground/src/data/macroPath.js');
   const { structureOf, intact, blast, settle, skeletonStanding, unitAt, BLAST_ENERGY } = await load('dist/apps/playground/src/data/structure.js');
   const { tallAndWide, clearOverlaps } = await load('dist/src/v2/world/tall.js');
-  const C = await load('dist/src/v2/world/placeCanvas.js'), { fillLandscape, formsFor, groundFor, insideBy, reachOf, LANDSCAPES, patchFromBox, samplePatch, withManifold } = await load('dist/src/v2/world/landscape.js'), U = await load('dist/src/v2/world/underground.js'), W = await load('dist/apps/playground/src/data/world.js');
+  const C = await load('dist/src/v2/world/placeCanvas.js'), { fillLandscape, formsFor, groundFor, insideBy, reachOf, LANDSCAPES, patchFromBox, samplePatch, withManifold, SKIN } = await load('dist/src/v2/world/landscape.js'), U = await load('dist/src/v2/world/underground.js'), W = await load('dist/apps/playground/src/data/world.js');
   // Model themes (modelThemes.json): a thing is drawn in the theme of the manifold under it, unless Jev switched theme.
   const { themedModel } = await load('dist/apps/playground/src/data/modelThemes.js'), modelThemes = JSON.parse(await readFile(`${repository}/apps/playground/src/data/modelThemes.json`, 'utf8'));
   const { newBuildingHere } = await load('dist/src/digger/stage/objects.js');
@@ -202,7 +202,20 @@ export async function strandDemo(novelDir, options) {
    * A walk's field, solved on the world round where it goes (its targets and, given `from`, where it starts, with `pad`
    * metres of room, 40 unless asked): small however much of the city is explored. `sampleWalk` on it is wrapped to take and give world ids.
    */
-  const DEEP = -20, fields = new Map(), spotCache = new Map(), solve = (placeId, key, targets, how, from = null, pad = 40) => {
+  const DEEP = -20;
+  /**
+   * Whether a node is in the band below DEEP (the solver's, terrain-levels §8.1–8.2), by where it stands: a hall's node by
+   * its hall's floor, a building's by its own ground floor (a building of a street laid 30 m under is in that band up to its
+   * roof; cutting it at 20 m took its own stairs for lifts), anything else by its height.
+   */
+  const bandDeep = (built, n) => {
+    const lot = built.lot[n];
+    if (lot >= W.HALL_LOT) return ((world.source.underground?.halls ?? [])[lot - W.HALL_LOT]?.depth ?? -built.graph.y[n]) > -DEEP;
+    if (lot >= 0 && lot < world.lots.length && (world.lots[lot].k0 ?? 0) < 0) return -world.lots[lot].k0 * 3 > -DEEP;
+    return built.graph.y[n] <= DEEP;
+  };
+  const deepAt = id => bandDeep(graphOf(W.nodePos(world, id)), id);
+  const fields = new Map(), spotCache = new Map(), solve = (placeId, key, targets, how, from = null, pad = 40, layer = null) => {
     const points = [...targets, ...(from === null ? [] : [from])].map(id => W.nodePos(world, id));
     const box = { x0: Math.min(...points.map(p => p.x)) - pad, x1: Math.max(...points.map(p => p.x)) + pad, z0: Math.min(...points.map(p => p.z)) - pad, z1: Math.max(...points.map(p => p.z)) + pad };
     const built = graphOf({ x: (box.x0 + box.x1) / 2, z: (box.z0 + box.z1) / 2 }, Math.max(box.x1 - box.x0, box.z1 - box.z0) / 2);
@@ -212,8 +225,11 @@ export async function strandDemo(novelDir, options) {
     // cost) inside a street walk's window made the solver scale its guide away, and long legs found no walk (W12).
     // The targets are part of the key: a retake reuses its walk's key with a new target in the same box, and was handed the
     // old target's field, which need not reach where the person now stands (W12's scenes 122–123: "no way there" on 4 m).
-    const deep = points.some(p => p.y <= DEEP), aimed = [...targets].sort((a, b) => a - b).join(','), cacheKey = `${built.version}|${key}|${spec.key}|${deep ? 'deep' : 'near'}|${aimed}|${[box.x0, box.x1, box.z0, box.z1].map(Math.round).join(',')}`;
-    if (!fields.has(cacheKey)) { const part = W.windowOf(built.graph, box, deep ? undefined : n => built.graph.y[n] > DEEP), field = solveWalk(part.graph, targets.map(id => part.local[id]).filter(n => n >= 0), { T: spec.T, kappa, lambda, factors: spec.factors }); fields.set(cacheKey, { ...field, part }); }
+    // `layer` ('near' or 'deep'): the walk is solved inside that layer only, a leg of a route between layers (§8.2: the
+    // director's walk goes to a portal in one layer, rides it, and walks on in the other).
+    const deep = [...targets, ...(from === null ? [] : [from])].some(id => bandDeep(built, id)), keep = layer === 'near' ? n => !bandDeep(built, n) : layer === 'deep' ? n => bandDeep(built, n) : deep ? undefined : n => !bandDeep(built, n);
+    const aimed = [...targets].sort((a, b) => a - b).join(','), cacheKey = `${built.version}|${key}|${spec.key}|${layer ?? (deep ? 'deep' : 'near')}|${aimed}|${[box.x0, box.x1, box.z0, box.z1].map(Math.round).join(',')}`;
+    if (!fields.has(cacheKey)) { const part = W.windowOf(built.graph, box, keep), field = solveWalk(part.graph, targets.map(id => part.local[id]).filter(n => n >= 0), { T: spec.T, kappa, lambda, factors: spec.factors }); fields.set(cacheKey, { ...field, part, factors: spec.factors }); }
     return fields.get(cacheKey);
   };
   /**
@@ -225,10 +241,43 @@ export async function strandDemo(novelDir, options) {
     const p = W.nodePos(world, from), box = { x0: p.x - radius, x1: p.x + radius, z0: p.z - radius, z1: p.z + radius };
     const built = graphOf({ x: p.x, z: p.z }, radius), spec = specOf(how, ({ step, arcCost }) => 0.6 * temperatureBound({ step, kappa: 1, lambda: 8, floorHeight: 3, arcCost })), key = `${built.version}|${from}|${radius}|${spec.key}`;
     if (reachable.has(key)) return reachable.get(key);
-    const deep = p.y <= DEEP, part = W.windowOf(built.graph, box, deep ? undefined : n => built.graph.y[n] > DEEP), seen = W.reachableIn(part.graph, part.local[from], spec.factors), out = new Set();
+    const deep = bandDeep(built, from), part = W.windowOf(built.graph, box, deep ? undefined : n => !bandDeep(built, n)), seen = W.reachableIn(part.graph, part.local[from], spec.factors), out = new Set();
     for (let n = 0; n < seen.length; n++) if (seen[n]) out.add(part.ids[n]);
     if (reachable.size > 400) reachable.clear();
     reachable.set(key, out);
+    return out;
+  };
+  /**
+   * The ways between the street's band and the halls more than DEEP metres down round two points (docs/v2/terrain-levels.md
+   * §8.1–8.2): every edge of the walk graph that joins a node below DEEP to one above it (a hall's lift or shaft, its stairs
+   * at its ends, a ladder). All of these are real halls in the shallow layer (the user, 2026-11-05: "30m to be honest is a
+   * shallow layer"); the split at DEEP is the solver's band, so a long street walk never holds a 90 m lift at a flat cost.
+   * The virtual elevator (§8.6) serves only the deep layer, a virtual space with no depth of its own: over a hall marked
+   * `virtual` (none yet) a lift every 40 m, its top on the nearest open ground, a ride its depth at 5 m/s and a 20 s wait,
+   * at a walk's 1.4 m/s. Each: { foot, top, up, down, virtual }.
+   */
+  const LIFT_EVERY = 40, LIFT_SPEED = 5, LIFT_WAIT = 20, WALK_SPEED = 1.4;
+  const portalsNear = (a, b, radius = 120) => {
+    const p = W.nodePos(world, a), q = W.nodePos(world, b), x0 = Math.min(p.x, q.x) - radius, x1 = Math.max(p.x, q.x) + radius, z0 = Math.min(p.z, q.z) - radius, z1 = Math.max(p.z, q.z) + radius;
+    reach((x0 + x1) / 2, (z0 + z1) / 2, Math.max(x1 - x0, z1 - z0) / 2);
+    const built = graphOf({ x: (x0 + x1) / 2, z: (z0 + z1) / 2 }, Math.max(x1 - x0, z1 - z0) / 2), g = built.graph, out = [], cells = new Map();
+    const inBox = n => g.x[n] >= x0 && g.x[n] <= x1 && g.z[n] >= z0 && g.z[n] <= z1;
+    const costOf = (from, to) => { for (let e = g.offsets[from]; e < g.offsets[from + 1]; e++) if (g.to[e] === to) return g.cost[e]; return null; };
+    for (let n = 0; n < built.type.length; n++) {
+      if (!built.type[n] || !bandDeep(built, n) || !inBox(n) || g.offsets[n + 1] === g.offsets[n]) continue;
+      for (let e = g.offsets[n]; e < g.offsets[n + 1]; e++) { const m = g.to[e]; if (!bandDeep(built, m)) { const down = costOf(m, n); out.push({ foot: n, top: m, up: g.cost[e], down: down ?? g.cost[e], virtual: false }); } }
+      const hall = built.lot[n] >= W.HALL_LOT ? (world.source.underground?.halls ?? [])[built.lot[n] - W.HALL_LOT] : null;
+      if (built.type[n] !== 5 || !hall?.virtual) continue;
+      const key = `${Math.floor(g.x[n] / LIFT_EVERY)}|${Math.floor(g.z[n] / LIFT_EVERY)}|${Math.round(g.y[n])}`, cx = (Math.floor(g.x[n] / LIFT_EVERY) + 0.5) * LIFT_EVERY, cz = (Math.floor(g.z[n] / LIFT_EVERY) + 0.5) * LIFT_EVERY, d = Math.hypot(g.x[n] - cx, g.z[n] - cz);
+      if (!cells.has(key) || d < cells.get(key).d) cells.set(key, { n, d });
+    }
+    for (const { n } of cells.values()) {
+      const street = W.streetNear(world, g.x[n], g.z[n], 10);
+      const top = street ? W.nodeNear(world, built, street[0], street[1], 0) : null;
+      if (top === null || built.type[top] !== 1) continue;
+      const ride = (-g.y[n] / LIFT_SPEED + LIFT_WAIT) * WALK_SPEED;
+      out.push({ foot: n, top, up: ride, down: ride, virtual: true });
+    }
     return out;
   };
   const sampleWalk = (graph, field, start, heading, rng) => { if (!field.part) return walkSample(graph, field, start, heading, rng); const at = field.part.local[start]; if (at < 0) return null; const path = walkSample(field.part.graph, field, at, heading, rng); return path && path.map(n => field.part.ids[n]); };
@@ -811,7 +860,11 @@ export async function strandDemo(novelDir, options) {
     // Tall buildings and the streets round them (landscape.ts tallAndWide; the user, 2026-11-01), in a city of manifolds: a
     // street wider the more towers stand round it, a building above 100 m as thick as its height needs. After the fill, so
     // its lots and the slots naming them stay; what the text placed (and a landmark, a keep) is never cleared or cut.
-    const placed = [...[...filled.fabric.buildings, ...filled.landmarks, ...filled.keeps].map(pushed), ...standing].filter(b => clear(b.x, b.z, Math.max(b.w, b.d) / 2)).map(asDecided);
+    // A street laid underground keeps its buildings on its floor (landscape.ts sunkForm): none of the surface's pushing,
+    // clearing, growing or parting applies to them (they stand under it), and a height decided for one stops under the skin.
+    const sunken = b => (b.y0 ?? 0) < 0;
+    const sunk = filled.landmarks.filter(sunken).map(asDecided).map(b => { const most = Math.max(1, Math.floor((-b.y0 - SKIN) / 3) - 1); return b.floors > most ? { ...b, floors: most } : b; });
+    const placed = [...[...filled.fabric.buildings, ...filled.landmarks.filter(b => !sunken(b)), ...filled.keeps].map(pushed), ...standing].filter(b => clear(b.x, b.z, Math.max(b.w, b.d) / 2)).map(asDecided);
     const localRoads = filled.fabric.roads.filter(road => clear((road.a[0] + road.b[0]) / 2, (road.a[1] + road.b[1]) / 2, 0)), held = new Set([...filled.keeps, ...standing].map(b => b.lot));
     const fixedOf = b => held.has(b.lot) || decided.has(b.lot) || /:(landmark|bowl|fountain)$/.test(String(b.lot));
     // A shopping centre or a department store the text names is a podium, wide and low (the user, 2026-11-01, a photograph
@@ -820,7 +873,7 @@ export async function strandDemo(novelDir, options) {
     const grown = terrain?.mode === 'spawn' ? tallAndWide(placed, localRoads, fixedOf, podium) : { buildings: placed, roads: localRoads };
     // Then none stands inside another (tall.ts clearOverlaps): the city drawn at true size shows every overlap.
     const apartNow = clearOverlaps(grown.buildings, fixedOf), shaped = { ...grown, buildings: apartNow.buildings, overlapped: apartNow.overlapped, movedAside: apartNow.moved };
-    const buildings = shaped.buildings.map(b => { const patch = patchOf(b), era = LANDSCAPES[patch.type]?.era ?? 'modern'; return { id: `${place.id}:${b.lot}`, x: b.x + wx, z: b.z + wz, w: b.w, d: b.d, angle: b.angle, floors: b.floors, kind: b.kind, model: UM.modelFor({ ...b, era }, `${place.id}:${b.lot}`, modelSizes), ...(b.use ? { use: b.use } : {}), ...(b.base ? { base: b.base } : {}), manifold: manifoldOf(patch), era, patch: patch.id }; });
+    const buildings = [...shaped.buildings, ...sunk].map(b => { const patch = patchOf(b), era = LANDSCAPES[patch.type]?.era ?? 'modern'; return { id: `${place.id}:${b.lot}`, x: b.x + wx, z: b.z + wz, w: b.w, d: b.d, angle: b.angle, floors: b.floors, kind: b.kind, model: UM.modelFor({ ...b, era }, `${place.id}:${b.lot}`, modelSizes), ...(b.use ? { use: b.use } : {}), ...(b.base ? { base: b.base } : {}), ...(sunken(b) ? { y0: b.y0 } : {}), manifold: manifoldOf(patch), era, patch: patch.id }; });
     // A composite building's parts, each its use's model inside its host (composite.mjs).
     const parts = partsIn({ terrain, buildings, place, here, modelFor: (b, id) => UM.modelFor(b, id, modelSizes) });
     // What lies under it (hallsOf, src/v2/world/underground.ts): malls, the storm water, deep facilities, in world metres.
@@ -1257,7 +1310,7 @@ export async function strandDemo(novelDir, options) {
         if (hall.pillars) for (let x = Math.floor(b.x0 / 2) * 2 + 1; x <= b.x1; x += 2) for (let z = Math.floor(b.z0 / 2) * 2 + 1; z <= b.z1; z += 2) if (U.pillarAt(hall, [x, z])) pillars.push([x, z]);
         // A passage's stairs: from the pavement nearest its end (where the world joins them) down to the passage.
         const stairs = hall.kind === 'corridor' ? hall.up.map(([x, z]) => { const [sx, sz] = W.streetNear(world, x, z, 30) ?? [x, z]; return [sx, sz, x, z]; }) : undefined;
-        return { id: hall.id, kind: hall.kind, label: hall.label, area: hall.area, depth: hall.depth, height: hall.height, boxes: hall.boxes, bores: hall.bores, pillars, ...(stairs ? { stairs } : {}) };
+        return { id: hall.id, kind: hall.kind, label: hall.label, area: hall.area, depth: hall.depth, height: hall.height, boxes: hall.boxes, bores: hall.bores, pillars, ...(stairs ? { stairs } : {}), ...(hall.street ? { street: true } : {}), ...(hall.virtual ? { virtual: true } : {}) };
       }),
       piles: [...world.underDamage.piles].flatMap(([index, cells]) => [...cells].map(([key, height]) => [...cellOf(key), W.levelOf(halls[index].depth), height])),
       dents: [...world.underDamage.dents].map(([key, depth]) => [...cellOf(key), depth]),
@@ -1435,7 +1488,7 @@ export async function strandDemo(novelDir, options) {
     const worldLots = world.lots.map((lot, index) => ({ model: shells[index], label: lot.label, detected: named('world', index) ? { name: named('world', index).name, scene: named('world', index).scene, event: named('world', index).event } : null, role: named('world', index) && ROLE_FOR[named('world', index).model] === 'hospital' ? 'hospital' : lot.role,
       i0: lot.i0, j0: lot.j0, nx: lot.nx, nz: lot.nz, floors: lot.floors, height: lot.height, born: lot.born, source: lot.source, manifold: lot.manifold, era: lot.era, place: lot.place,
       // A turned lot's plan (sx × sz cells, `cells` in its order) stands in its own frame [x, z, angle] at the building's true size.
-      sx: lot.skeleton.nx, sz: lot.skeleton.nz, frame: lot.frame ? [Math.round(lot.frame.x * 100) / 100, Math.round(lot.frame.z * 100) / 100, Math.round(lot.frame.angle * 10000) / 10000] : null, cells: [...lot.skeleton.cells].join(''), rooms: lot.rooms.map(room => [room.floor, room.i0, room.j0, room.i1, room.j1, room.top ?? room.floor, ROOM_KINDS.indexOf(room.kind ?? 'room'), room.doors]) }));
+      sx: lot.skeleton.nx, sz: lot.skeleton.nz, ...(lot.k0 ? { k0: lot.k0 } : {}), frame: lot.frame ? [Math.round(lot.frame.x * 100) / 100, Math.round(lot.frame.z * 100) / 100, Math.round(lot.frame.angle * 10000) / 10000] : null, cells: [...lot.skeleton.cells].join(''), rooms: lot.rooms.map(room => [room.floor, room.i0, room.j0, room.i1, room.j1, room.top ?? room.floor, ROOM_KINDS.indexOf(room.kind ?? 'room'), room.doors]) }));
     notes.world = { chunks: world.chunks.size, lots: world.lots.length, shells: worldShells.length, nodes: world.cells.length / 3, grid: [NX, NZ, K] };
     return {
       models: Object.fromEntries([...worn].map(model => [model, library.models[model]])), modelSource: library.source,
@@ -1483,7 +1536,7 @@ export async function strandDemo(novelDir, options) {
   // line's starts, handed on so the loop plays forward card by card on the same world (no export again, no replay): it adds
   // its cards to the chosen scenes, its moves to `moves` and its positions to `runs`, streams the world in with `reach`, and
   // calls `assemble` for the page as far as it has played.
-  if (options.engine) await options.engine({ world, W, graphOf, cost, reach, solve, onFoot, sampleWalk, T, kappa, lambda, runs, moves, chosen, assemble, snapshot, names: inputs.names, hits, hitSphere });
+  if (options.engine) await options.engine({ world, W, graphOf, cost, reach, solve, onFoot, portalsNear, DEEP, deepAt, sampleWalk, T, kappa, lambda, runs, moves, chosen, assemble, snapshot, names: inputs.names, hits, hitSphere });
   return data;
 }
 
@@ -1505,7 +1558,7 @@ export function simulationRecord(data, strand) {
     people: data.people,
     // The world once (every lot explored, in world cells, with the moment it was first reached); each place lists the lots round its anchor.
     world: data.world ? { grid: { NX: data.world.NX, NZ: data.world.NZ, floors: data.world.K, oi: data.world.oi, oj: data.world.oj, ok: data.world.ok }, chunks: data.world.chunks.map(([ci, cj, born]) => [ci, cj, born]),
-      lots: data.world.lots.map(lot => ({ label: lot.label, detected: lot.detected, role: lot.role, model: lot.model, source: lot.source, manifold: lot.manifold, footprint: { i0: lot.i0, j0: lot.j0, nx: lot.nx, nz: lot.nz }, floors: lot.floors, height: lot.height, born: lot.born, place: lot.place, skeleton: lot.cells, rooms: lot.rooms })),
+      lots: data.world.lots.map(lot => ({ label: lot.label, detected: lot.detected, role: lot.role, model: lot.model, source: lot.source, manifold: lot.manifold, footprint: { i0: lot.i0, j0: lot.j0, nx: lot.nx, nz: lot.nz }, ...(lot.k0 ? { k0: lot.k0 } : {}), floors: lot.floors, height: lot.height, born: lot.born, place: lot.place, skeleton: lot.cells, rooms: lot.rooms })),
       earlier: data.world.earlier.map(({ lot, strand, run, scene, story }) => ({ lot, strand, run, scene, story })) } : null,
     buildings: Object.fromEntries(Object.entries(data.places).map(([id, place]) => [id, { label: place.label, path: place.path, scale: place.scale, kind: place.kind, anchor: place.anchor,
       lots: (data.world?.lots ?? []).flatMap((lot, index) => Math.hypot((lot.i0 + lot.nx / 2) * CELL - place.anchor.x, (lot.j0 + lot.nz / 2) * CELL - place.anchor.z) <= 80 ? [index] : []) }])),

@@ -259,6 +259,14 @@ export function withManifold(patch: Patch, median: number, manifold: Manifold): 
 }
 /** A part that lies under the street (its median below 0): its surface is open, its floors a hall that deep (underground.ts). */
 export const underground = (patch: Patch) => (patch.median ?? 0) < 0;
+/**
+ * The ground skin over a street laid underground (docs/v2/terrain-levels.md §8.4), metres: the street's slab and the soil
+ * between it and the underground street's open air. Its buildings' roofs stay under it.
+ */
+export const SKIN = 3;
+/** A street laid underground (terrain spawning answered its height below 0): its floor, and the room up to the skin. */
+export const sunkStreet = (patch: Patch) => underground(patch) && (STREET_TYPES as readonly string[]).includes(patch.type);
+export const roomUnder = (patch: Patch) => Math.max(0, -(patch.median ?? 0) - SKIN);
 
 /** A building's height in a patch, at depth s (1 at the centre), by the type's profile; `u` is the building's own draw. */
 export function heightAt(patch: Patch, s: number, u: number): number {
@@ -347,6 +355,18 @@ const SQUARE = (patch: Patch) => clamp(0.5 * patch.R, 20, 80);
 const CLEAR = 20;
 /** The lane between a street's rows behind its frontage (and a square's rings): a back lane's width. */
 const LANE = 4;
+/**
+ * A street laid underground, built out (terrain-levels §8): its form as a street of its kind lays it, its heights half the
+ * room up to the skin on average, each building's roof under the skin (a floor of 3 m, its roof a floor more), standing on
+ * the street's floor (`y0`, its depth). No road, water or plaza: its open ground is its hall's floor (underground.ts).
+ */
+function sunkForm(patch: Patch): ReturnType<typeof formOf> {
+  const room = roomUnder(patch), most = Math.floor(room / 3) - 1, y0 = Math.round(patch.median ?? 0);
+  if (most < 1) return { buildings: [], plazas: [], roads: [], waters: [] };
+  const laid = formOf({ ...patch, median: room / 2 });
+  const buildings = laid.buildings.map((b) => { const floors = Math.max(1, Math.min(most, b.floors)); return { ...b, floors, kind: LANDSCAPES[patch.type].building(floors), y0 }; }).map(({ base: _base, ...b }) => b);
+  return { buildings, plazas: [], roads: [], waters: [] };
+}
 /** A building of a street's row: its floors drawn from the street's manifold where it stands (from its road, or its square's middle). */
 function rowBuilding(patch: Patch, lot: string, along: number, across: number, w: number, d: number, rng: () => number, ring?: number): Building | null {
   const kind = LANDSCAPES[patch.type], [x, z] = ring === undefined ? at(patch, along, across) : [patch.x + Math.cos(along) * across, patch.z + Math.sin(along) * across];
@@ -368,7 +388,10 @@ function rowBuilding(patch: Patch, lot: string, along: number, across: number, w
 export function formOf(patch: Patch, crossing: Road[] = [], ground: Patch[] = []): { buildings: Building[]; plazas: { x: number; z: number; r: number }[]; roads: Road[]; waters: Road[] } {
   const form = { buildings: [] as Building[], plazas: [] as { x: number; z: number; r: number }[], roads: [] as Road[], waters: [] as Road[] }, kind = LANDSCAPES[patch.type];
   // A street that took the ground's own road or crossing has no form: the city's lots round it are its buildings.
-  if (underground(patch) || patch.takes) return form;
+  if (patch.takes) return form;
+  // A street laid underground (the user, 2026-11-05: "build it out"): its own form, laid as on the street (its rows, a
+  // square's rings) on its floor under the skin (sunkForm); none of the surface's roads, waters or plazas.
+  if (underground(patch)) return sunkStreet(patch) ? sunkForm(patch) : form;
   // A row breaks where one of the city's roads crosses the street, as at a crossing. A road down the street's own axis is
   // its own (an avenue laid on its ground's arterial road): its rows face it, they do not break on it.
   const ownRoad = (road: Road) => {
@@ -602,7 +625,8 @@ export function fillLandscape(landscape: Landscape, window?: { x0: number; z0: n
   const owner = Object.fromEntries(fabric.lots.map((lot) => [lot.id, ownerOfLot(landscape, lot)!.id]));
   const walls: [Point, Point][] = [], keeps: Building[] = [], landmarks: Building[] = [], plazas: { x: number; z: number; r: number }[] = [], waters: Road[] = [];
   for (const patch of landscape.patches) {
-    if (underground(patch)) continue;
+    // A street laid underground keeps its own form on its floor (sunkForm); anything else under the street is a hall only.
+    if (underground(patch)) { if (sunkStreet(patch)) landmarks.push(...formOf(patch).buildings); continue; }
     // The ground a street lands on: its place's own modern ground (the pool's default), not another street.
     const ground = landscape.patches.filter((other) => other !== patch && !other.borrowed && !underground(other) && LANDSCAPES[other.type].era === "modern" && !(STREET_TYPES as readonly string[]).includes(other.type));
     if ((STREET_TYPES as readonly string[]).includes(patch.type)) { const form = formOf(patch, fabric.roads.filter((road) => road.level !== "boulevard"), ground); landmarks.push(...form.buildings); plazas.push(...form.plazas); fabric.roads.push(...form.roads); waters.push(...form.waters); continue; }

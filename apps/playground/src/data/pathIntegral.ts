@@ -87,7 +87,7 @@ export function temperatureBound(options: { step: number; kappa: number; lambda:
   return low;
 }
 
-export interface WalkField { target: Uint8Array; h: Float64Array; weight: Float64Array; turn: number[][]; sweeps: number; converged: boolean }
+export interface WalkField { target: Uint8Array; h: Float64Array; weight: Float64Array; turn: number[][]; sweeps: number; converged: boolean; scale?: number }
 
 /** Solve the reduced partition function h̄ for first entry into `targets` (symmetric Gauss–Seidel). `factors` scale edge costs by kind. */
 export function solveWalk(graph: MoveGraph, targets: Iterable<number>, options: { T: number; kappa: number; lambda: number; factors?: number[]; tolerance?: number; maxSweeps?: number }): WalkField {
@@ -129,7 +129,7 @@ export function solveWalk(graph: MoveGraph, targets: Iterable<number>, options: 
     sweeps++;
     converged = change < tolerance;
   }
-  return { target, h, weight, turn, sweeps, converged };
+  return { target, h, weight, turn, sweeps, converged, scale };
 }
 
 /** One walk drawn exactly from the ensemble, as nodes from `start` (arriving with `heading`) to its first node in Y; null when Y cannot be reached. */

@@ -164,6 +164,9 @@ export async function loadPrefilm(dir) {
   if (merged && settings) for (const [id, entry] of Object.entries(settings.units ?? {})) if (merged.units?.[id]) merged.units[id] = { ...merged.units[id], setDresser: { setting: entry.setting, sure: entry.sure } };
   // And the book's pictures, the stills cast's (pictures.json, experiments/v2/stills.mjs): each unit a picture shows gains
   // it, its script supervisor the picture's facts (where its people are, who is near whom; basis `picture`).
-  const pictures = await read('pictures.json').catch(() => null);
-  return merged && pictures ? (await import('./stills.mjs')).withPictures(merged, pictures) : merged;
+  const pictures = await read('pictures.json').catch(() => null), pictured = merged && pictures ? (await import('./stills.mjs')).withPictures(merged, pictures) : merged;
+  // And the underground note on each place (underground-notes.json, experiments/v2/underground-notes.mjs): a unit in a
+  // noted place starts under the street (docs/v2/terrain-levels.md §8.5).
+  const underground = await read('underground-notes.json').catch(() => null);
+  return pictured && underground ? { ...pictured, underground } : pictured;
 }
