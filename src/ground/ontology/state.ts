@@ -78,6 +78,7 @@ export function foldStateAt(
     relationships: {},
     location: null,
     possessions: [],
+    conditions: [],
   };
   for (const { d } of applicable) {
     for (const [k, v] of Object.entries(d.emotions ?? {})) addClamped(state.emotions, k, v);
@@ -86,6 +87,8 @@ export function foldStateAt(
     addAll(state.goals, d.goalsAdd ?? []);
     addAll(state.possessions, d.possessionsAdd ?? []);
     removeAll(state.possessions, d.possessionsRemove ?? []);
+    addAll(state.conditions, d.conditionsAdd ?? []);
+    removeAll(state.conditions, d.conditionsRemove ?? []);
     if (d.location !== null && d.location !== undefined) state.location = d.location;
   }
   return state;

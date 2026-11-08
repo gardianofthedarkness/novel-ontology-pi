@@ -109,6 +109,8 @@ export interface DialogueCard {
   participantIds: string[];
   unresolvedParticipantIds?: string[];
   summary?: string;
+  /** A monologue: one person's thoughts or talking to themself, not an exchange between people. */
+  kind?: "monologue";
 }
 
 export interface Scene {
@@ -154,6 +156,10 @@ export interface StateChange {
   location: string | null;
   possessionsAdd: string[];
   possessionsRemove: string[];
+  /** Conditions the body is in: hurt, unconscious, bound, freed of them (set add/remove, as possessions; the user,
+   * 2026-11-03: injury and condition from the combat director). Optional: deltas written before them have none. */
+  conditionsAdd?: string[];
+  conditionsRemove?: string[];
 }
 
 /** Character state at a point = fold of the event stream up to that point. */
@@ -166,4 +172,5 @@ export interface CharacterStateAtPoint {
   relationships: Record<string, number>;
   location: string | null;
   possessions: string[];
+  conditions: string[];
 }

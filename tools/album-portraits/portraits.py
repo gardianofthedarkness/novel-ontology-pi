@@ -170,9 +170,39 @@ def main() -> int:
     ocr = None
     portraits_dir = safe_path(novel_dir, "assets/portraits", "assets")
 
+    seen_heads = {}
+
+    def portrait_record(ill, img, h, W, H, c, text, conf, match_kind):
+        x0, y0, x1, y1 = h["box"]
+        pw, ph = (x1 - x0) * 0.25, (y1 - y0) * 0.25
+        crop_box = (max(0, int(x0 - pw)), max(0, int(y0 - ph)), min(W, int(x1 + pw)), min(H, int(y1 + ph)))
+        slug = hashlib.sha256(json.dumps([ill["id"], h["box"], c["entityId"], c["name"]], ensure_ascii=False).encode()).hexdigest()
+        rel = f"assets/portraits/{slug}.png"
+        portraits_dir.mkdir(parents=True, exist_ok=True)
+        target = safe_path(novel_dir, rel, "assets")
+        temporary = None
+        try:
+            with tempfile.NamedTemporaryFile(dir=portraits_dir, suffix=".png", delete=False) as stream:
+                temporary = Path(stream.name)
+            img.crop(crop_box).save(temporary)
+            os.replace(temporary, target)
+        finally:
+            if temporary and temporary.exists():
+                temporary.unlink()
+        if c["entityId"]:
+            assigned.add(c["entityId"])
+        else:
+            assigned_names.add(norm(c["name"]))
+        return {"entityId": c["entityId"], "name": c["name"], "portrait": rel,
+                "sourceIllustration": ill["id"], "sourceAsset": ill["asset"],
+                "ocrText": text, "ocrConfidence": round(conf, 3), "matchKind": match_kind,
+                "headBox": h["box"], "headScore": round(h["score"], 3), "imageSize": [W, H]}
+
     for ill in candidates:
         if all(already_assigned(character) for character in characters):
             break
+        if ocr is None:
+            pass
         img_path = safe_path(novel_dir, ill["asset"], "assets")
         if ocr is None:
             ocr = RapidOCR()
@@ -196,7 +226,8 @@ def main() -> int:
             hit = unique_anchor(variant_sets, lines, index)
             if hit:
                 anchors.append((hit["conf"], character, hit))
-        if not anchors:
+        # A picture with no new caption match is still looked at when earlier bindings stand on it (elimination below).
+        if not anchors and not any(record.get("sourceIllustration") == ill["id"] for record in records):
             continue
         heads = []
         for box, _label, score in detect_heads(img):
@@ -210,39 +241,31 @@ def main() -> int:
         for record in records:
             if record.get("sourceIllustration") == ill["id"]:
                 claimed.update(index for index, head in enumerate(heads) if head["box"] == record.get("headBox"))
+        seen_heads[ill["id"]] = (ill, img, heads, W, H)
         for _conf, c, ln in sorted(anchors, key=lambda a: -a[0]):
             best_i = nearest_head(heads, claimed, ln, W, H)
             if best_i is None:
                 continue
             claimed.add(best_i)
-            h = heads[best_i]
-            x0, y0, x1, y1 = h["box"]
-            pw, ph = (x1 - x0) * 0.25, (y1 - y0) * 0.25
-            crop_box = (max(0, int(x0 - pw)), max(0, int(y0 - ph)), min(W, int(x1 + pw)), min(H, int(y1 + ph)))
-            slug = hashlib.sha256(json.dumps([ill["id"], h["box"], c["entityId"], c["name"]], ensure_ascii=False).encode()).hexdigest()
-            rel = f"assets/portraits/{slug}.png"
-            portraits_dir.mkdir(parents=True, exist_ok=True)
-            target = safe_path(novel_dir, rel, "assets")
-            temporary = None
-            try:
-                with tempfile.NamedTemporaryFile(dir=portraits_dir, suffix=".png", delete=False) as stream:
-                    temporary = Path(stream.name)
-                img.crop(crop_box).save(temporary)
-                os.replace(temporary, target)
-            finally:
-                if temporary and temporary.exists():
-                    temporary.unlink()
-            rec = {"entityId": c["entityId"], "name": c["name"], "portrait": rel,
-                   "sourceIllustration": ill["id"], "sourceAsset": ill["asset"],
-                   "ocrText": ln["text"], "ocrConfidence": round(ln["conf"], 3),
-                   "matchKind": ln.get("matchKind", "substring"),
-                   "headBox": h["box"], "headScore": round(h["score"], 3),
-                   "imageSize": [W, H]}
-            if c["entityId"]:
-                assigned.add(c["entityId"])
-            else:
-                assigned_names.add(norm(c["name"]))
-            records.append(rec)
+            records.append(portrait_record(ill, img, heads[best_i], W, H, c, ln["text"], ln["conf"], ln.get("matchKind", "substring")))
+
+    # The book's introduction (src/v2/extraction/front.ts; <novelDir>/ontology/intro-groups.json): the people one plate page
+    # introduces. Where a picture's captions bound some of a page's people and exactly one of them is left with exactly one
+    # face left unclaimed on it, that face is theirs (their caption was in the page's text, not in the picture).
+    groups_path = novel_dir / "ontology" / "intro-groups.json"
+    groups = json.loads(groups_path.read_text(encoding="utf8")) if groups_path.exists() else []
+    for ill_id, (ill, img, heads, W, H) in seen_heads.items():
+        here = [r for r in records if r.get("sourceIllustration") == ill_id]
+        bound_names = {norm(f) for r in here for c in characters if c["entityId"] and c["entityId"] == r.get("entityId") for f in c["forms"]}
+        for group in groups:
+            members = [c for c in characters if any(norm(f) in {norm(n) for n in group.get("names", [])} for f in c["forms"])]
+            if not any(norm(f) in bound_names for c in members for f in c["forms"]):
+                continue
+            unbound = [c for c in members if not already_assigned(c)]
+            taken = [r.get("headBox") for r in records if r.get("sourceIllustration") == ill_id]
+            free = [h for h in heads if h["box"] not in taken]
+            if len(unbound) == 1 and len(free) == 1:
+                records.append(portrait_record(ill, img, free[0], W, H, unbound[0], "", 0.0, "elimination"))
 
     if len(records) > initial_count:
         atomic_records(out_path, records)

@@ -25,6 +25,7 @@ named, take every assigned book in reading order.
 | "I found errors in vol 1", "review the data in vol 1", "something is wrong with X" | the [review workflow](references/review.md) for that book |
 | "who / where / when …", "is X in this scene?", "what happened between …" | answer from the data (`novel query`, `novel search`, `novel timeline list`, `novel timeplace show`), citing ids and source sentences |
 | new files, or several books | the `novel-library` skill first, then the checklist loop |
+| "prepare the animations", "read mode", "make demo clips" | the [novel-stage skill](../novel-stage/SKILL.md) for each book, after its checklist |
 
 Ask the user only what the data cannot settle and what is theirs to
 decide: spending beyond the job's limits, a merge two readings support

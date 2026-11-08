@@ -23,6 +23,11 @@ import { bindWorkspaceSource, sourceHash } from "../../../ground/workspace/sourc
 export interface IngestOptions {
   /** Legacy miniloop-only smoke option; a configured work model requires fact review. */
   autoApprove?: boolean;
+  /**
+   * World-first base layer: every block applied without fact review, in a workspace made with `novel init
+   * --world-first` only (its manifest says so). Presence, place, time and dialogue are the world loop's to decide.
+   */
+  baseLayer?: boolean;
   /** Stop after this many blocks. */
   maxBlocks?: number;
   /** Target block size in chars for the block cutter. */
@@ -68,6 +73,11 @@ export async function ingestNovel(
     throw new Error(
       `${novelDir} is not a novel workspace (missing ontology/manifest.json). Run \`novel init ${novelDir}\` first.`,
     );
+  }
+  if (opts.baseLayer) {
+    const manifest = JSON.parse(await readFile(join(ontologyDir, "manifest.json"), "utf8")) as { worldFirst?: boolean };
+    if (!manifest.worldFirst) throw new Error(`--base-layer applies facts without review: only in a world-first workspace (novel init <path> --world-first), and ${novelDir} is not one.`);
+    if (opts.autoApprove) throw new Error("--base-layer and --auto-approve are two different modes; use one.");
   }
   if (!resolveJevKey(env)) {
     throw new Error(
@@ -129,7 +139,7 @@ export async function ingestNovel(
   }
 
   const review = async (): Promise<ReviewDecision> =>
-    opts.autoApprove ? "approved" : "held";
+    opts.autoApprove || opts.baseLayer ? "approved" : "held";
   if (opts.autoApprove && workModel) throw new Error("Live semantic extraction requires fact review; --auto-approve cannot bypass it");
 
   const emPerBlock: { blockId: string; joined: number; created: number; checked: number; merged: number; review: string | null }[] = [];
@@ -152,7 +162,7 @@ export async function ingestNovel(
     loadCorrections: () => loadCorrections(novelDir),
     workModel: workModel ?? undefined,
     facultyGraph,
-    semanticReview: !!workModel,
+    semanticReview: !!workModel && !opts.baseLayer,
     entityMatching: true,
     onEntityMatching: (blockId, summary) => emPerBlock.push({
       blockId,
@@ -213,7 +223,7 @@ export async function ingestNovel(
     novelDir,
     file,
     source,
-    reviewMode: opts.autoApprove ? "auto-approve" : "gate",
+    reviewMode: opts.baseLayer ? "base-layer" : opts.autoApprove ? "auto-approve" : "gate",
     extraction: workModel ? "live" : "off",
     workModel: workModel?.modelId ?? null,
     blocksTotal: blocks.length,

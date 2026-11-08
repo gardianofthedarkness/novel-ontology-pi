@@ -4,7 +4,7 @@ import { basename, dirname, join, resolve } from "node:path";
 import type { BundleManifest } from "../connectors/bundle.js";
 
 /** Create a fresh workspace; existing paths (including symlinks) are refused. */
-export async function initWorkspace(path: string): Promise<{
+export async function initWorkspace(path: string, options: { worldFirst?: boolean } = {}): Promise<{
   status: "initialized";
   novelDir: string;
   manifest: BundleManifest;
@@ -24,6 +24,7 @@ export async function initWorkspace(path: string): Promise<{
     embeddingDimension: null,
     decisionModel: process.env.JEV_MODEL?.trim() || "jev-1.13.0",
     blocksProcessed: 0,
+    ...(options.worldFirst ? { worldFirst: true } : {}),
   };
 
   for (const dir of ["source", "ontology", "branches", "changesets"]) {

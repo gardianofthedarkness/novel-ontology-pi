@@ -68,6 +68,15 @@ test("fold: sets add without duplicates; possessions remove; null location never
   assert.equal(s.location, "车站");
 });
 
+test("fold: conditions add and remove as possessions do; deltas without them change nothing", () => {
+  const deltas = [
+    delta({ id: "d1", afterEventId: "e1", conditionsAdd: ["hurt", "bound"] }),
+    delta({ id: "d2", afterEventId: "e2", conditionsRemove: ["bound"] }),
+    delta({ id: "d3", afterEventId: "e2", emotions: { calm: 0.2 } }),
+  ];
+  assert.deepEqual(foldStateAt("char_1", "e3", EVENTS, deltas)!.conditions, ["hurt"]);
+});
+
 test("fold: the at-point cuts off later deltas; unknown point and orphan deltas", () => {
   const deltas = [
     delta({ id: "d1", afterEventId: "e1", emotions: { calm: 0.5 } }),

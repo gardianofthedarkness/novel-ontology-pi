@@ -21,10 +21,10 @@ test("block context buffer includes the following block without proposing or pro
   const decisions: DecisionModel = { modelId: "mock", async decide(state, questions) {
     return questions.map(question => {
       const end = question.key.startsWith("scene_end:");
-      const expanded = state.includes("READ-ONLY NEIGHBOR CONTEXT");
+      const expanded = String(state).includes("READ-ONLY NEIGHBOR CONTEXT");
       if (end && expanded) {
         retried = true;
-        assert.ok(state.includes("b0008_s0000: 次章的来源"));
+        assert.ok(String(state).includes("b0008_s0000: 次章的来源"));
         assert.ok(question.options?.every(option => option.startsWith("b0007_")));
       }
       return { key: question.key, value: end ? question.options!.at(-1)! : "NONE", confidence: end && !expanded ? 0.4 : 0.99 };
@@ -56,7 +56,7 @@ test("working scene/dialogue drafts exist before extraction or the merge gate, w
   const draftFile = join(directory, "working", "b0001.json");
   const bundle = new BundleStore(join(directory, "ontology"));
   let extractions = 0;
-  const processor = new BlockProcessor(bundle, new MockDecisionModel({ "boundary:b0000_s0001": 1 }), async () => {
+  const processor = new BlockProcessor(bundle, new MockDecisionModel({ "boundary:b0000_s0001": 1, "dlg_turn:b0000_s0001": 1 }), async () => {
     const draft = JSON.parse(await readFile(draftFile, "utf8")) as WorkingDraft;
     assert.equal(draft.stage, "gate");
     assert.equal(await readFile(join(directory, "ontology", "events.jsonl"), "utf8"), "");

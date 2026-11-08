@@ -1,0 +1,171 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Terrain Replay</title>
+<style>
+:root {
+  --bg: #f6f4ee; --surface: #fffdf7; --ink: #1e1d1a; --muted: #6b675f; --line: #e3ddd0; --chip: #eee9de; --lit: #fff2bf; --lit-edge: #d9a400;
+  --spoken: #2b66a6; --thought: #7a4dab; --fact: #9c6810; --action: #bf3f28; --environment: #2b8253; --narration: #6c6963;
+  --time: #5252cc; --anew: #bf3f28; --carry: #2b8253;
+  --cjk: "PingFang SC", "Hiragino Sans GB", "Noto Sans SC", "Source Han Sans SC", "Microsoft YaHei", system-ui, sans-serif;
+  --ui: system-ui, -apple-system, "Segoe UI", Roboto, var(--cjk);
+  --mono: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+  color-scheme: light;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #14151a; --surface: #1b1d23; --ink: #ebe9e3; --muted: #a29e97; --line: #2d3037; --chip: #262930; --lit: #3a3218; --lit-edge: #e2b53a;
+    --spoken: #79aae6; --thought: #b597e4; --fact: #dfac55; --action: #ef7f66; --environment: #6bc493; --narration: #a8a59f;
+    --time: #a2a2ff; --anew: #ef7f66; --carry: #6bc493; color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #14151a; --surface: #1b1d23; --ink: #ebe9e3; --muted: #a29e97; --line: #2d3037; --chip: #262930; --lit: #3a3218; --lit-edge: #e2b53a;
+  --spoken: #79aae6; --thought: #b597e4; --fact: #dfac55; --action: #ef7f66; --environment: #6bc493; --narration: #a8a59f;
+  --time: #a2a2ff; --anew: #ef7f66; --carry: #6bc493; color-scheme: dark;
+}
+* { box-sizing: border-box; }
+html { -webkit-text-size-adjust: 100%; }
+body { margin: 0; background: var(--bg); color: var(--ink); font: 15px/1.55 var(--ui); padding-top: env(safe-area-inset-top, 0px); padding-bottom: env(safe-area-inset-bottom, 0px); }
+.wrap { max-width: 1100px; margin: 0 auto; padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); padding-block: 18px 40px; display: grid; gap: 14px; }
+h1 { font-size: 1.5rem; margin: 0; text-wrap: balance; letter-spacing: -0.01em; }
+.eyebrow { font: 600 0.72rem/1 var(--ui); letter-spacing: 0.08em; text-transform: uppercase; color: var(--muted); margin: 0; }
+.lede { color: var(--muted); margin: 0; max-width: 70ch; }
+.bar { position: sticky; top: env(safe-area-inset-top, 0px); z-index: 5; background: var(--bg); padding: 8px 0; display: flex; flex-wrap: wrap; gap: 8px; align-items: center; border-bottom: 1px solid var(--line); }
+.bar button { font: 600 0.85rem var(--ui); padding: 7px 12px; border-radius: 999px; border: 1px solid var(--line); background: var(--surface); color: var(--ink); cursor: pointer; }
+.bar button.on { border-color: var(--time); color: var(--time); }
+.bar input[type=range] { flex: 1 1 180px; min-width: 0; }
+.bar .count { font: 0.8rem var(--mono); color: var(--muted); }
+.parts { display: flex; gap: 6px; flex-wrap: wrap; }
+.parts button { font-weight: 500; }
+.caption { position: fixed; left: 50%; top: calc(env(safe-area-inset-top, 0px) + 104px); transform: translate(-50%, -8px); z-index: 10; background: color-mix(in srgb, var(--time) 88%, black); color: #fff; font: 600 0.95rem/1.3 var(--ui); padding: 8px 16px; border-radius: 999px; opacity: 0; transition: opacity 0.35s, transform 0.35s; pointer-events: none; max-width: calc(100% - 32px); text-align: center; }
+.caption.show { opacity: 1; transform: translate(-50%, 0); }
+.step { display: grid; grid-template-columns: minmax(0, 1.05fr) minmax(0, 1fr); gap: 14px; align-items: start; }
+@media (max-width: 760px) { .step { grid-template-columns: minmax(0, 1fr); } }
+.panel { background: var(--surface); border: 1px solid var(--line); border-radius: 12px; padding: 12px; display: grid; gap: 10px; min-width: 0; }
+.panel h2 { font-size: 1.05rem; margin: 0; }
+.tag { display: inline-block; font: 600 0.7rem/1 var(--ui); letter-spacing: 0.06em; text-transform: uppercase; padding: 4px 8px; border-radius: 999px; background: var(--chip); color: var(--muted); }
+.tag.anew { color: var(--anew); } .tag.carry { color: var(--carry); }
+.pic { width: 100%; max-width: 100%; border-radius: 8px; border: 1px solid var(--line); display: block; }
+.q { font-size: 0.9rem; }
+.q b { font-weight: 600; }
+.a { font: 0.82rem/1.5 var(--mono); color: var(--muted); overflow-wrap: anywhere; }
+.a strong { color: var(--ink); }
+.stream { display: grid; gap: 4px; max-height: 70vh; overflow: auto; padding-right: 4px; }
+.card { border-left: 4px solid var(--k); padding: 4px 8px; border-radius: 0 6px 6px 0; font: 0.95rem/1.7 var(--cjk); color: var(--ink); overflow-wrap: anywhere; opacity: 0.55; }
+.card small { display: block; font: 600 0.62rem/1.2 var(--ui); letter-spacing: 0.06em; text-transform: uppercase; color: var(--k); opacity: 0.9; }
+.card.lit { opacity: 1; background: var(--lit); outline: 2px solid var(--lit-edge); outline-offset: -2px; }
+.card mark { background: color-mix(in srgb, var(--lit-edge) 45%, transparent); color: inherit; border-radius: 3px; padding: 0 1px; }
+.k-spoken { --k: var(--spoken); } .k-thought { --k: var(--thought); } .k-fact { --k: var(--fact); } .k-action { --k: var(--action); } .k-environment { --k: var(--environment); } .k-narration { --k: var(--narration); }
+.evidence { display: grid; gap: 4px; }
+.evidence div { font: 0.9rem/1.6 var(--cjk); padding: 4px 8px; border-radius: 6px; background: var(--lit); border-left: 4px solid var(--lit-edge); }
+.legend { display: flex; flex-wrap: wrap; gap: 8px; font-size: 0.78rem; color: var(--muted); }
+.legend span { border-left: 4px solid var(--k); padding-left: 6px; }
+table { border-collapse: collapse; width: 100%; font-size: 0.85rem; }
+td, th { text-align: left; padding: 5px 8px; border-bottom: 1px solid var(--line); vertical-align: top; }
+th { font: 600 0.72rem var(--ui); letter-spacing: 0.05em; text-transform: uppercase; color: var(--muted); }
+.scroll { overflow-x: auto; }
+.empty { color: var(--muted); font-size: 0.9rem; }
+</style>
+</head>
+<body>
+<div class="caption" id="caption"></div>
+<main class="wrap">
+  <header style="display:grid;gap:6px">
+    <p class="eyebrow">Vol 1 · before the world plays</p>
+    <h1>Terrain build and births, step by step</h1>
+    <p class="lede" id="lede"></p>
+  </header>
+  <div class="bar">
+    <button id="play">Play</button><button id="prev">‹</button><button id="next">›</button>
+    <input type="range" id="slider" min="0" value="0" aria-label="Step">
+    <span class="count" id="count"></span>
+  </div>
+  <div class="parts" id="parts"></div>
+  <section class="step" id="step"></section>
+  <details class="panel"><summary><b>The sites</b>: which site holds which, where</summary><div class="scroll"><table id="sites"></table></div></details>
+  <details class="panel"><summary><b>The spawn plan</b>: which scenes carry on, which start anew</summary><div class="scroll"><table id="plan"></table></div></details>
+  <div class="legend"><span class="k-spoken">spoken</span><span class="k-thought">thought</span><span class="k-fact">fact</span><span class="k-action">action</span><span class="k-environment">environment</span><span class="k-narration">narration</span><span style="--k:var(--lit-edge)">what Jev is looking at</span></div>
+</main>
+<script>
+const DATA = /*DATA*/null;
+const $ = (id) => document.getElementById(id);
+const esc = (value) => String(value ?? '').replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]);
+const PART = { terrain: 'Terrain', spawns: 'Spawn plan', births: 'Births' };
+let at = 0, timer = null, shownScene = null, captionTimer = null;
+
+$('lede').textContent = `${DATA.counts.terrain} terrain questions placed ${DATA.sites.length} sites; ${DATA.counts.spawns} questions settled which scenes start anew; then ${DATA.counts.births} birth questions as the line first loaded. Each step shows the picture Jev saw and its answer, and the scene's cards with what Jev is looking at lit.`;
+$('slider').max = DATA.steps.length - 1;
+$('parts').innerHTML = Object.entries(PART).map(([part, label]) => { const first = DATA.steps.findIndex((step) => step.part === part); return first < 0 ? '' : `<button data-at="${first}">${label}</button>`; }).join('');
+$('parts').addEventListener('click', (event) => { const button = event.target.closest('button'); if (button) show(Number(button.dataset.at)); });
+
+function answerHtml(step) {
+  if (!step.answers) return step.text ? `<p class="a">${esc(step.text)}</p>` : '';
+  return step.answers.map((answer) => {
+    const top = answer.top ? ` · ${answer.top.map(([option, p]) => `${esc(option)} ${Math.round(p * 100)}%`).join(', ')}` : '';
+    const box = answer.box ? ` · box ${['left', 'top', 'right', 'bottom'].map((side) => answer.box[side].toFixed(2)).join(' ')}` : '';
+    return `<p class="a">${esc(answer.key)}: <strong>${esc(typeof answer.value === 'number' ? answer.value.toFixed(2) : answer.value)}</strong>${answer.confidence != null ? ` (${Number(answer.confidence).toFixed(2)})` : ''}${top}${box}</p>`;
+  }).join('');
+}
+const lit = (text, words) => words.some((word) => word && (text.includes(word) || (word.length > 12 && text.includes(word.slice(0, 12)))));
+const marked = (text, words) => { let out = esc(text); for (const word of words.filter((w) => w && w.length <= 12)) out = out.split(esc(word)).join(`<mark>${esc(word)}</mark>`); return out; };
+
+function streamHtml(step) {
+  const scene = DATA.scenes[step.scene];
+  if (!scene) return '<p class="empty">No scene for this step.</p>';
+  const words = step.evidence ?? [];
+  // A card is lit where it holds what Jev was given about the site, or where EM² put the person (named, says, acts, is spoken to, described).
+  return scene.cards.map((card) => `<div class="card k-${card.kind}${(step.person && card.people?.includes(step.person)) || lit(card.text, words) ? ' lit' : ''}"><small>${card.kind}</small>${marked(card.text, words)}</div>`).join('');
+}
+
+function caption(step) {
+  const scene = DATA.scenes[step.scene];
+  if (!scene || shownScene === step.scene) return;
+  shownScene = step.scene;
+  $('caption').textContent = `Scene ${scene.index} · ${scene.when}`;
+  $('caption').classList.add('show');
+  clearTimeout(captionTimer); captionTimer = setTimeout(() => $('caption').classList.remove('show'), 3500);
+}
+
+function show(index) {
+  at = Math.max(0, Math.min(DATA.steps.length - 1, index));
+  const step = DATA.steps[at], scene = DATA.scenes[step.scene];
+  $('slider').value = at; $('count').textContent = `${at + 1} / ${DATA.steps.length} · ${PART[step.part]}`;
+  for (const button of $('parts').querySelectorAll('button')) button.classList.toggle('on', DATA.steps[Number(button.dataset.at)].part === step.part);
+  const spawn = scene?.spawn ? `<span class="tag ${scene.spawn.spawn === 'new' ? 'anew' : 'carry'}">${scene.spawn.spawn === 'new' ? 'starts anew' : 'carries on'}</span>` : '';
+  const heading = step.part === 'births' ? `Where is ${esc(step.subject)} when the scene begins?` : step.kind === 'outcome' ? esc(step.subject) : `Placing ${esc(step.subject)}`;
+  $('step').innerHTML = `
+    <div class="panel">
+      <p class="eyebrow">${PART[step.part]} · ${step.kind === 'ask' ? 'Jev is asked' : 'what it made'}</p>
+      <h2>${heading}</h2>
+      ${step.pictures.map((src) => `<img class="pic" src="${src}" alt="the picture Jev saw">`).join('')}
+      ${step.questions.map((question) => `<p class="q"><b>${esc(question.key)}</b> · ${esc(question.instructions)}</p>`).join('')}
+      ${answerHtml(step)}
+      ${step.part !== 'births' && step.evidence?.length ? `<p class="eyebrow">The text it was given</p><div class="evidence" lang="zh-Hans">${step.evidence.map((line) => `<div>${esc(line)}</div>`).join('')}</div>` : ''}
+    </div>
+    <div class="panel">
+      <p class="eyebrow">${scene ? `Scene ${scene.index} · ${esc(scene.when)}${scene.place ? ` · ${esc(scene.place)}` : ''}` : 'No scene'}</p>
+      <div>${spawn}${step.fresh ? ' <span class="tag anew">asked afresh</span>' : ''}</div>
+      <div class="stream" lang="zh-Hans">${streamHtml(step)}</div>
+    </div>`;
+  caption(step);
+  const first = $('step').querySelector('.card.lit');
+  if (first) first.scrollIntoView({ block: 'nearest' });
+}
+
+$('slider').addEventListener('input', (event) => show(Number(event.target.value)));
+$('prev').addEventListener('click', () => show(at - 1));
+$('next').addEventListener('click', () => show(at + 1));
+$('play').addEventListener('click', () => {
+  if (timer) { clearInterval(timer); timer = null; $('play').textContent = 'Play'; $('play').classList.remove('on'); return; }
+  $('play').textContent = 'Pause'; $('play').classList.add('on');
+  timer = setInterval(() => { if (at >= DATA.steps.length - 1) { $('play').click(); return; } show(at + 1); }, 2600);
+});
+$('sites').innerHTML = '<tr><th>site</th><th>scale</th><th>in</th><th>where</th></tr>' + DATA.sites.map((site) => `<tr><td lang="zh-Hans">${esc(site.label)}</td><td>${esc(site.scale)}</td><td lang="zh-Hans">${esc(site.in)}${site.held?.confidence != null ? ` <span class="a">(${Number(site.held.confidence).toFixed(2)})</span>` : ''}</td><td>${esc(site.where ?? '—')}</td></tr>`).join('');
+$('plan').innerHTML = '<tr><th>#</th><th>when</th><th>place</th><th>spawn</th><th>why</th></tr>' + DATA.plan.map((row) => `<tr><td>${row.n}</td><td>${esc(row.when)}</td><td lang="zh-Hans">${esc(row.place)}</td><td><span class="tag ${row.spawn === 'new' ? 'anew' : 'carry'}">${row.spawn === 'new' ? 'anew' : 'carries on'}</span></td><td>${esc(row.why ?? (row.p != null ? `Jev: carries on ${Math.round(row.p * 100)}%` : ''))}</td></tr>`).join('');
+show(0);
+</script>
+</body>
+</html>

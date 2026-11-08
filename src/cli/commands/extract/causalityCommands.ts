@@ -181,6 +181,9 @@ export async function runCausalitySweep(
   timeline: string;
   /** Judged pairs in a row, in rank order, since the last causal link. */
   missesInARow: number;
+  /** While not done: the run of misses that settles the sweep, and how many more it needs. */
+  stopsAfterMisses?: number;
+  missesToSettle?: number;
   note?: string;
 }> {
   const env = opts.env ?? process.env;
@@ -237,7 +240,9 @@ export async function runCausalitySweep(
   const complete = scan.deferred === 0 && (pass.summary.remaining === 0 || settled);
   if (complete) await clearCausalitySweepPending(novelDir);
   return { changesetId, ...pass.summary, complete, evaluatedTotal: scan.evaluated.length, deferredTotal: scan.deferred, missesInARow: scan.misses,
-    ...(settled && complete ? { note: `Sweep done: the last ${scan.misses} highest-ranked pairs held no causal link; ${pass.summary.remaining} lower-ranked pair(s) were not asked (novel causality candidates lists them).` } : {}) };
+    ...(settled && complete ? { note: `Sweep done: the last ${scan.misses} highest-ranked pairs held no causal link; ${pass.summary.remaining} lower-ranked pair(s) were not asked (novel causality candidates lists them).` }
+      // Not every pair is asked: the sweep settles once this many highest-ranked pairs in a row hold no link. Say how far that is, so a bounded caller keeps going.
+      : !complete && pass.summary.remaining > 0 ? { stopsAfterMisses: stopAfter, missesToSettle: Math.max(0, stopAfter - scan.misses), note: `Not done: the sweep settles after ${stopAfter} pairs in a row with no causal link (${scan.misses} so far, ${Math.max(0, stopAfter - scan.misses)} to go${scan.deferred ? `, and ${scan.deferred} deferred pair(s) to settle` : ""}); the other ${pass.summary.remaining} lower-ranked pair(s) are not all asked. Run the sweep again.` } : {}) };
 }
 
 export function causalityCommandsHelp(): Record<string, string> {

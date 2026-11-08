@@ -242,6 +242,30 @@ test('refusals say what to change; long pages are clamped; help and status forms
   assert.throws(() => authorize('cat /private/other/timeplace/run.json'));
 });
 
+test('read mode stage commands run on the assigned book, bounded, and the prep takes no options', () => {
+  assert.equal(authorize(`novel stage show ${novel}`, defaultScope).label, 'novel stage show');
+  assert.equal(authorize(`novel stage scale ${novel}`, defaultScope).label, 'novel stage scale');
+  assert.equal(authorize(`novel stage architecture ${novel}`, defaultScope).label, 'novel stage architecture');
+  assert.equal(authorize(`novel stage landscape ${novel} --no-jev`, defaultScope).label, 'novel stage landscape');
+  assert.equal(authorize(`novel stage movement ${novel} --max-calls 2000`, defaultScope).label, 'novel stage movement');
+  assert.equal(authorize(`novel stage prep ${novel}`, defaultScope).label, 'novel stage prep');
+  assert.equal(authorize(`novel stage objects ${novel} --max-calls 40`, defaultScope).label, 'novel stage objects');
+  for (const command of [`novel stage movement /tmp/other`, `novel stage movement ${novel} --max-calls 99999`, `novel stage prep ${novel} --force`, `novel stage architecture ${novel} --max-calls 5`, `novel stage scale ${novel} --max-calls 5`, `novel stage scale /tmp/other`, `novel stage landscape ${novel} --max-calls 5`, `novel stage landscape /tmp/other`, `novel stage movement ${novel} --cache /tmp/x`, `novel stage objects ${novel} --force`, `novel stage objects ${novel} --no-work`, `novel stage delete ${novel}`]) assert.throws(() => authorize(command, defaultScope), command);
+  // Its review packet goes through the shared gate like any other, once the runner lists it.
+  assert.equal(authorize(`novel review show ${novel} cs_stage_objects_1 --scope book --offset 0 --limit 20`, { ...defaultScope, stageObjectsChangesetIds: ['cs_stage_objects_1'] }).label, 'novel review show');
+  assert.throws(() => authorize(`novel review show ${novel} cs_stage_objects_2 --scope book --offset 0 --limit 20`, { ...defaultScope, stageObjectsChangesetIds: ['cs_stage_objects_1'] }));
+});
+
+test('the stage simulation: Pi ranks story lines, asks Jev and runs the engine within bounds and shows the runs; accepting a run is the user\'s', () => {
+  assert.equal(authorize(`novel sim strands ${novel}`, defaultScope).label, 'novel sim strands');
+  assert.equal(authorize(`novel sim run ${novel} --auto 3`, defaultScope).label, 'novel sim run');
+  assert.equal(authorize(`novel sim run ${novel} --strand scene_000002`, defaultScope).label, 'novel sim run');
+  assert.equal(authorize(`novel sim show ${novel}`, defaultScope).label, 'novel sim show');
+  assert.equal(authorize(`novel sim pick ${novel} --auto 3 --max-calls 40`, defaultScope).label, 'novel sim pick');
+  for (const command of [`novel sim pick ${novel} --auto 3`, `novel sim pick ${novel} --max-calls 61`, `novel sim pick ${novel} --max-calls 0`, `novel sim pick ${novel} --max-calls 10 --accept`, `novel sim run ${novel} --max-calls 10`, `novel sim pick /tmp/other --max-calls 10`]) assert.throws(() => authorize(command, defaultScope), command);
+  for (const command of [`novel sim run ${novel} --accept`, `novel sim run ${novel} --auto 9`, `novel sim run ${novel} --auto 0`, `novel sim run /tmp/other --auto 1`, `novel sim run ${novel} --strand ../x`, `novel sim show ${novel} --auto 1`, `novel sim delete ${novel}`]) assert.throws(() => authorize(command, defaultScope), command);
+});
+
 test('universal EM: Pi may show and sweep its own book; identity packets review through the shared gate', () => {
   assert.equal(authorize(`novel em show ${novel}`).label, 'novel em show');
   assert.equal(authorize(`novel em sweep ${novel} --limit 50`).label, 'novel em sweep');
@@ -261,4 +285,34 @@ test('the universe calendar: Pi may show and rebuild the clock of its book or it
   assert.equal(authorize(`novel calendar build /private/library --universe toaru`, scope).label, 'novel calendar build');
   for (const command of [`novel calendar build /elsewhere`, `novel calendar show /private/other --universe toaru`, `novel calendar decide ${novel}`]) assert.throws(() => authorize(command, scope), command);
   assert.equal(authorize(`novel review show /private/library ut_${'b'.repeat(24)} --scope universe --universe toaru`, scope).label, 'novel review show');
+});
+
+test('Pi may search the original text and answer a world-first book\'s review batches, in their bounded forms', () => {
+  const novel = defaultScope.novel;
+  assert.equal(authorizeScoped(`novel source grep ${novel} 刺猬头`, defaultScope).label, 'novel source');
+  assert.equal(authorizeScoped(`novel source similar ${novel} 茵蒂克丝咬头 --limit 5`, defaultScope).label, 'novel source');
+  assert.equal(authorizeScoped(`novel world pool ${novel}`, defaultScope).label, 'novel world');
+  assert.equal(authorizeScoped(`novel world answer ${novel} wb_0123456789abcdef wi_0123456789abcdef same --reason 'b0001_s0002 names both'`, defaultScope).label, 'novel world');
+  assert.throws(() => authorizeScoped(`novel world answer ${novel} wb_0123456789abcdef wi_0123456789abcdef same`, defaultScope));
+  assert.throws(() => authorizeScoped('novel source grep /other/book 刺猬头', defaultScope));
+});
+
+test('Pi may read the evidence for the world\'s held items: the reading, the world log and the EPUB, read-only (W5)', () => {
+  const novel = defaultScope.novel, ok = command => { try { return !!authorizeScoped(command, defaultScope); } catch { return false; } };
+  assert.ok(ok(`novel reading ${novel} card dialogue:b0000_s0300`));
+  assert.ok(ok(`novel reading ${novel} scene scene_000003`));
+  assert.ok(ok(`novel world log ${novel} --scene scene_000003`));
+  assert.ok(ok(`novel world log ${novel} --person char_000004 --run d20261102081221`));
+  assert.ok(ok(`novel source epub ${novel}`));
+  assert.ok(ok(`novel source epub ${novel} --doc 8 --offset 100 --limit 50`));
+  assert.ok(ok(`novel source epub ${novel} --grep 便利店`));
+  for (const command of [`novel reading /other/book card x`, `novel reading ${novel} chapter 1`, `novel world log ${novel}`, `novel world log ${novel} --scene a --scene b`, `novel world held ${novel}`, `novel world apply ${novel}`, `novel source epub ${novel} --doc`, `novel source epub ${novel} --write x`]) assert.ok(!ok(command), command);
+});
+
+test('Pi may pace a simulation run for the live view, within 0.5–5 s a moment, and nothing else new', async () => {
+  const book = defaultScope.novel, ok = command => { try { return authorize(command).kind === 'cli'; } catch { return false; } };
+  assert.ok(ok(`novel sim run ${book} --strand world --pace 2`));
+  assert.ok(!ok(`novel sim run ${book} --strand world --pace 9`));
+  assert.ok(!ok(`novel sim run ${book} --strand world --force`));
+  assert.ok(!ok(`novel sim pick ${book} --strand world --max-calls 60 --pace 2`));
 });

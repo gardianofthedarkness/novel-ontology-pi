@@ -11,6 +11,9 @@ export function requireSharedReviewSkills(args, loaded, packet) {
   return scope;
 }
 
+/** Where a book-scope packet lives: a changeset, or a standalone book's identity packet (universal EM) in its own shared list. */
+export const bookPacketFile = (book, packetId) => /^um_[a-f0-9]{24}$/.test(packetId) ? `${book}/cast/packets/${packetId}.json` : `${book}/changesets/${packetId}.json`;
+
 export function sharedReviewReceipt(args, outcome, volume, packet, timestamp = new Date().toISOString()) {
   return { ...outcome.proof, policy: 'review-v1', operation: args[1], scope: outcome.scope, packetId: args[3], revision: outcome.revision, volume: volume?.id ?? null,
     ...(packet ? { blockId: args[3].replace(/^cs_/, ''), packetRevision: reviewRevision(packet) } : {}),

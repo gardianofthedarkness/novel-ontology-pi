@@ -108,10 +108,10 @@ test("universe Jev batches use original passages and defer excess context withou
   let callCount = 0;
   const decisions: DecisionModel = { modelId: "synthetic", decide: async (state, questions) => {
     callCount++;
-    assert.ok(state.includes("水闸"));
-    assert.ok(state.includes("Reading order"));
-    assert.ok(!state.includes("摘要1 happens"));
-    assert.ok(state.length + JSON.stringify(questions).length <= 16000);
+    assert.ok(String(state).includes("水闸"));
+    assert.ok(String(state).includes("Reading order"));
+    assert.ok(!String(state).includes("摘要1 happens"));
+    assert.ok(String(state).length + JSON.stringify(questions).length <= 16000);
     return questions.map(question => ({ key: question.key, value: question.key.startsWith("causal:") ? 0.95 : 0.1 }));
   } };
   const result = await universeSweep(scope, decisions, 0, 20);

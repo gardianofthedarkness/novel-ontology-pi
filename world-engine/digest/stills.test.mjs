@@ -1,0 +1,89 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import { pictureFacts, sentenceSaying, settingFact, stillsBrief, stillsNote, stillsQuestions, withPictures, whereIn } from './stills.mjs';
+
+// Five units of two sentences each; the picture stands after the third unit's first sentence.
+const scenes = Array.from({ length: 5 }, (_, k) => ({ id: `u${k}`, type: 'routine', sentences: [`s${k * 2}`, `s${k * 2 + 1}`] }));
+const cards = scenes.map((scene, k) => ({ id: `c${k}`, kind: k === 3 ? 'action' : 'dialogue', first: scene.sentences[0], last: scene.sentences[1], sentences: scene.sentences, people: [{ id: 'char_1' }, ...(k >= 2 ? [{ id: 'char_2' }] : [])] }));
+const reading = { scenes, cards, chart: { entities: [{ id: 'char_1', proper: ['Kamijou'], names: ['Kamijou'] }, { id: 'char_2', proper: ['Index'], names: ['Index'] }] }, slots: [], places: { settings: [] }, time: { scenes: [] } };
+const words = { s6: 'Index said: I am hungry, Touma.', s7: 'He sighed.' };
+const text = id => words[id] ?? `Sentence ${id}.`;
+const picture = { id: 'ill_0001', sentenceId: 's4' };
+const prep = { faces: [{ letter: 'A', box: { left: 0.1, top: 0.1, right: 0.3, bottom: 0.3 } }, { letter: 'B', box: { left: 0.35, top: 0.1, right: 0.55, bottom: 0.3 } }], texts: [{ ref: 't1', text: 'I am hungry', box: { left: 0.6, top: 0.1, right: 0.8, bottom: 0.2 } }] };
+const gallery = [{ label: 'P1', entityId: 'char_1' }, { label: 'P2', entityId: 'char_2' }];
+
+test('the brief: the units both ways round the picture, raw, their cards and people, faces and texts placed in words', () => {
+  const brief = stillsBrief({ reading, text, picture, prep, gallery, window: 1 });
+  assert.deepEqual(brief.units.map(unit => unit.id), ['u1', 'u2', 'u3'], 'its own unit and one each way');
+  assert.deepEqual(Object.keys(brief.state.passage), ['s2', 's3', 's4', 's5', 's6', 's7']);
+  assert.equal(brief.state.units.u2.picture, 'stands after s4');
+  assert.deepEqual(brief.state.people.char_2, { name: 'Index', portrait: 'portrait_char_2' }, 'its own portrait picture, named by the person');
+  assert.deepEqual(brief.state.groups, [{ people: ['char_1', 'char_2'], units: 3, last: 'u4', after: 2 }], 'the named people last seen together');
+  assert.equal(brief.state.faces.A.where, 'left, top');
+  assert.equal(whereIn({ left: 0.7, top: 0.7, right: 0.9, bottom: 0.9 }), 'right, bottom');
+});
+
+test('the questions: who each face is, one decision with everything before it; each text what it is and whose', () => {
+  const brief = stillsBrief({ reading, text, picture, prep, gallery, window: 1 });
+  const keys = stillsQuestions({ prep, cards: brief.cards, people: brief.people, gallery }).map(question => question.key);
+  assert.deepEqual(keys, ['kind', 'card', 'who:A', 'card:A', 'who:B', 'card:B', 'setting', 'time', 'weather', 'action', 'text:t1', 'whose:t1']);
+});
+
+test("the note: who each face is; people together in one moment; a said line matched to the sentence that holds it; facts by basis picture", () => {
+  const brief = stillsBrief({ reading, text, picture, prep, gallery, window: 1 });
+  const replies = [
+    { key: 'kind', value: 'moment', confidence: 0.9 }, { key: 'card', value: 'c3', confidence: 0.7 },
+    { key: 'who:A', value: 'char_1', confidence: 0.95 }, { key: 'card:A', value: 'c3', confidence: 0.8 },
+    { key: 'who:B', value: 'char_2', confidence: 0.7 }, { key: 'card:B', value: 'c3', confidence: 0.8 },
+    { key: 'setting', value: 'indoors', confidence: 0.9 }, { key: 'time', value: 'night', confidence: 0.8 }, { key: 'weather', value: 'not shown', confidence: 0.8 }, { key: 'action', value: 'talking', confidence: 0.8 },
+    { key: 'text:t1', value: 'said', confidence: 0.9 }, { key: 'whose:t1', value: 'B', confidence: 0.8 },
+  ];
+  const unitOf = id => ({ c1: 'u1', c2: 'u2', c3: 'u3' })[id] ?? null, firstOf = id => brief.cards.find(card => card.id === id)?.first ?? null;
+  const note = stillsNote({ picture, prep, replies, cards: brief.cards, text, unitOf, gallery });
+  assert.deepEqual(note.faces.map(face => [face.letter, face.who, face.by]), [['A', 'char_1', 'jev'], ['B', 'char_2', 'jev']]);
+  assert.equal(note.unit, 'u3');
+  assert.deepEqual(note.near.map(pair => [pair.a, pair.b]), [['char_1', 'char_2']]);
+  assert.deepEqual(note.texts[0], { ref: 't1', kind: 'said', sure: 0.9, who: 'char_2', sentence: 's6', card: 'c3' });
+  const facts = pictureFacts(note, firstOf, unitOf);
+  assert.deepEqual(facts.map(fact => [fact.who, fact.kind, fact.value, fact.basis, fact.sentence]), [['char_1', 'indoors', null, 'picture', 's6'], ['char_2', 'indoors', null, 'picture', 's6'], ['char_1', 'near', 'char_2', 'picture', 's6']]);
+  // Into the notes: the unit it shows gains it, its script supervisor the facts.
+  const notes = { units: { u3: { scriptSupervisor: { facts: [{ kind: 'outdoors' }] } } } };
+  withPictures(notes, { pictures: [{ ...note, facts }] });
+  assert.equal(notes.units.u3.stills.length, 1);
+  assert.equal(notes.units.u3.scriptSupervisor.facts.length, 4);
+});
+
+test('a said line is found in the sentence holding it; settings say where people are', () => {
+  assert.equal(sentenceSaying('hungry', ['s6', 's7'], text), 's6');
+  assert.equal(sentenceSaying('ah', ['s6'], text), null, 'too short to tell');
+  assert.equal(settingFact('indoors'), 'indoors');
+  assert.equal(settingFact('high-rise'), 'outdoors');
+  assert.equal(settingFact('not shown'), null);
+});
+
+test("each candidate's own evidence: the book's words of looks beside their name, and its facts about them before the picture", async () => {
+  const { candidateEvidence } = await import('./stills.mjs');
+  const hair = '\u94f6\u53d1', habit = '\u4fee\u5973';
+  const words = { s1: `Index, ${hair} and a white ${habit} habit.`, s2: 'Kamijou ate. Far away, someone wore a coat with long sleeves.', s3: 'Index sang.' };
+  const book = { chart: { entities: [{ id: 'char_2', proper: ['Index'], names: ['Index'], seen: ['s1', 's3'] }, { id: 'char_1', proper: ['Kamijou'], names: ['Kamijou'], seen: ['s2'] }] }, facts: [{ first: 's3', sentences: ['s3'], about: [{ id: 'char_2' }] }] };
+  const out = candidateEvidence({ reading: book, text: id => words[id] ?? '', people: ['char_2', 'char_1'], at: 5, order: id => Number(id.slice(1)) });
+  assert.deepEqual(out.char_2.looks, [words.s1]);
+  assert.deepEqual(out.char_2.facts, [words.s3]);
+  assert.deepEqual(out.char_1.looks, [], 'no word of looks beside his name');
+});
+
+test('ground truth for the matcher: a face is a reference only when Jev is sure and the matcher agrees; one person once in a moment', async () => {
+  const { confirmedFaces, nearestReferences } = await import('./stills.mjs');
+  const prep = { faces: [
+    { letter: 'A', box: { left: 0.1, top: 0.1, right: 0.3, bottom: 0.3 }, match: { char_1: 0.10, char_2: 0.30 }, matchBy: { char_1: 'face:vol-1/ill_0008/B', char_2: 'portrait:char_2' } },
+    { letter: 'B', box: { left: 0.25, top: 0.12, right: 0.45, bottom: 0.32 }, match: { char_1: 0.12, char_2: 0.20 }, matchBy: { char_1: 'face:vol-1/ill_0014/A', char_2: 'portrait:char_2' } },
+  ], texts: [] };
+  const replies = [{ key: 'kind', value: 'moments', confidence: 0.8 }, { key: 'card', value: 'c1', confidence: 0.5 },
+    { key: 'who:A', value: 'char_1', confidence: 0.99 }, { key: 'card:A', value: 'c1', confidence: 0.5 }, { key: 'who:B', value: 'char_1', confidence: 0.7 }, { key: 'card:B', value: 'c2', confidence: 0.5 }];
+  const note = stillsNote({ picture: { id: 'ill_0015', sentenceId: 's1' }, prep, replies, cards: [], text: () => '', unitOf: () => 'u1' });
+  assert.deepEqual(note.faces.map(face => [face.letter, face.who, face.twinOf ?? null]), [['A', 'char_1', null], ['B', null, 'A']], 'side by side: two faces are two people; the surer keeps the name');
+  assert.deepEqual(confirmedFaces(note, prep).map(face => [face.letter, face.entityId]), [['A', 'char_1']], 'sure, and the matcher agrees');
+  const doubtful = stillsNote({ picture: { id: 'x', sentenceId: 's1' }, prep, replies: [{ key: 'who:A', value: 'char_2', confidence: 0.95 }], cards: [], text: () => '', unitOf: () => null });
+  assert.deepEqual(confirmedFaces(doubtful, prep), [], 'Jev sure, the matcher not: no reference');
+  assert.deepEqual([...nearestReferences(prep)], [['char_1', { ref: 'face:vol-1/ill_0008/B', difference: 0.1 }]], 'the nearest confirmed face of each candidate, never a portrait');
+});

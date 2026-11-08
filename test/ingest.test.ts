@@ -163,7 +163,7 @@ test("ingest --auto-approve runs the full loop: blocks -> Jev miniloop -> gate -
 
     // The real JevClient was consulted through the wire mock...
     assert.ok(jev.seenKeys.some((k) => k.startsWith("scene_end:")), "scene segmentation questions asked");
-    assert.ok(jev.seenKeys.some((k) => k.startsWith("dlg_start:")), "dialogue selection questions asked");
+    assert.ok(jev.seenKeys.some((k) => k.startsWith("dlg_kind:")), "sentence kind questions asked");
     // ...and the seeded entity reached the presence patch, which only
     // happens when the cumulative registry is actually loaded per block
     // (the old code hardcoded an empty registry).
@@ -485,5 +485,20 @@ test("ingest with a work LLM requires explicit fact decisions before graph appli
   } finally {
     await jev.close();
     await work.close();
+  }
+});
+
+test("--base-layer applies without fact review only in a world-first workspace; a reviewed workspace refuses it before any model runs", async () => {
+  const root = await mkdtemp(join(tmpdir(), "novel-base-layer-"));
+  try {
+    const source = join(root, "book.txt");
+    await writeFile(source, "第一章\n她走进了房间。\n");
+    const reviewed = (await initWorkspace(join(root, "reviewed"))).novelDir;
+    await assert.rejects(ingestNovel(reviewed, source, { baseLayer: true, env: {} }), /only in a world-first workspace/);
+    const worldFirst = await initWorkspace(join(root, "world"), { worldFirst: true });
+    assert.equal(worldFirst.manifest.worldFirst, true);
+    await assert.rejects(ingestNovel(worldFirst.novelDir, source, { baseLayer: true, autoApprove: true, env: {} }), /two different modes/);
+  } finally {
+    await rm(root, { recursive: true, force: true });
   }
 });

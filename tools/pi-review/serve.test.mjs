@@ -284,7 +284,7 @@ async function cliFixture(context) {
   const setup = await fixture(context);
   const tools = join(setup.directory, 'tools/pi-review');
   await mkdir(tools, { recursive: true });
-  for (const filename of ['serve.mjs', 'config.mjs', 'pi-console.mjs', 'live-stream.mjs', 'snapshot-delta.mjs', 'snapshot.mjs', 'run-outcome.mjs', 'scene-context.mjs', 'live-activity.mjs', 'time-place.mjs', 'book-catalog.mjs', 'review-progress.mjs', 'guard.mjs', 'library-live.mjs', 'album.mjs', 'timeplace-access.mjs', 'universe-time-place.mjs', 'strand-answers.mjs', 'calendar-view.mjs']) {
+  for (const filename of ['serve.mjs', 'config.mjs', 'pi-console.mjs', 'live-stream.mjs', 'snapshot-delta.mjs', 'snapshot.mjs', 'run-outcome.mjs', 'scene-context.mjs', 'live-activity.mjs', 'time-place.mjs', 'book-catalog.mjs', 'review-progress.mjs', 'guard.mjs', 'library-live.mjs', 'album.mjs', 'timeplace-access.mjs', 'universe-time-place.mjs', 'strand-answers.mjs', 'stage-reports.mjs', 'sim-play.mjs', 'run-report.mjs', 'sim-live.html', 'sim-world.html', 'calendar-view.mjs']) {
     await copyFile(fileURLToPath(new URL(filename, import.meta.url)), join(tools, filename));
   }
   const home = join(setup.directory, 'configured-home');
@@ -381,4 +381,80 @@ test('album assets are served read-only per book, and only when the host resolve
   assert.equal((await send(viewer, 'api/album-asset?id=ill_0001', { method: 'POST' })).status, 405);
   const without = await start();
   assert.equal((await send(without, 'api/album-asset?id=ill_0001')).status, 404, 'a custom host without a workspace resolver serves nothing');
+});
+
+test('read mode text: a block is found by its file name, a missing one is a 404 rather than another block under its ids', async (context) => {
+  const { bookText } = await import('./serve.mjs');
+  const directory = await mkdtemp(join(tmpdir(), 'book-text-'));
+  context.after(() => rm(directory, { recursive: true, force: true }));
+  await writeFile(join(directory, 'b0001.txt'), '第一句。');
+  await writeFile(join(directory, 'b0003.txt'), '第三句。');
+  assert.equal(await bookText(directory, 1), null, 'b0002.txt is missing');
+  const third = await bookText(directory, 2);
+  assert.deepEqual([third.block, third.blocks, third.sentences[0].id.startsWith('b0002_')], [2, 3, true]);
+  assert.equal(await bookText(directory, 3), null);
+});
+
+test('read mode book: the EPUB a spine document at a time, made safe, its pictures served by their path in the book', async (context) => {
+  const { createZip } = await import('../../dist/src/digger/intake/album/zip.js');
+  const { directory, start } = await fixture(context);
+  const epub = join(directory, 'book.epub');
+  await writeFile(epub, createZip([
+    { name: 'mimetype', data: 'application/epub+zip' },
+    { name: 'META-INF/container.xml', data: '<container><rootfiles><rootfile full-path="OEBPS/content.opf"/></rootfiles></container>' },
+    { name: 'OEBPS/content.opf', data: '<package><metadata><dc:title>书</dc:title></metadata><manifest><item id="a" href="Text/a.xhtml" media-type="application/xhtml+xml"/><item id="p" href="Images/p.jpg" media-type="image/jpeg"/></manifest><spine><itemref idref="a"/></spine></package>' },
+    { name: 'OEBPS/Text/a.xhtml', data: '<html><head><style>p{}</style></head><body onload="x()"><h1>第一章</h1><p style="color:red">第一句。<a href="https://example.com">链接</a></p><script>alert(1)</script><img src="../Images/p.jpg"/></body></html>' },
+    { name: 'OEBPS/Images/p.jpg', data: Buffer.from([255, 216, 255]) },
+  ]));
+  const viewer = await start({ resolveWorkspace: async () => directory, resolveSource: async () => ({ workspace: directory, metadataDirectory: directory, epub }) });
+  const first = await send(viewer, 'api/book-epub?item=0');
+  assert.equal(first.status, 200);
+  const { html, items, title } = JSON.parse(first.body);
+  assert.deepEqual([items, title], [1, '书']);
+  assert.match(html, /<h1>第一章<\/h1>/);
+  assert.match(html, /<img data-epub="OEBPS\/Images\/p\.jpg" alt="">/);
+  assert.doesNotMatch(html, /script|onload|style=|href=|alert/);
+  assert.equal((await send(viewer, 'api/book-epub?item=1')).status, 404);
+  const picture = await send(viewer, 'api/book-epub-file?path=OEBPS/Images/p.jpg');
+  assert.deepEqual([picture.status, picture.headers['content-type']], [200, 'image/jpeg']);
+  assert.equal((await send(viewer, 'api/book-epub-file?path=OEBPS/Text/a.xhtml')).status, 404, 'only pictures');
+  assert.equal((await send(viewer, 'api/book-epub-file?path=../x.jpg')).status, 400);
+});
+
+test('notes on the director\'s cards: added from the reader, listed for both, nothing else written', async (context) => {
+  const { directory, start } = await fixture(context);
+  const viewer = await start({ resolveWorkspace: async () => directory });
+  assert.deepEqual(JSON.parse((await send(viewer, 'play/notes.json')).body), []);
+  const added = await send(viewer, 'play/notes', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ card: 'action:b0000_s0110', scene: 'scene_000001', event: 14, sentence: 'b0000_s0110', text: 'jumps to a roof, ends on the street' }) });
+  assert.equal(added.status, 200);
+  assert.equal((await send(viewer, 'play/notes', { method: 'POST', body: '{"card":"x"}' })).status, 400, 'a note needs its text');
+  assert.equal((await send(viewer, 'play/notes', { method: 'POST', body: 'x'.repeat(5000) })).status, 413);
+  const [note] = JSON.parse((await send(viewer, 'play/notes.json')).body);
+  assert.deepEqual([note.card, note.event, note.text], ['action:b0000_s0110', 14, 'jumps to a roof, ends on the street']);
+  assert.match(await readFile(join(directory, 'stage', 'director', 'notes.jsonl'), 'utf8'), /ends on the street/);
+  assert.equal((await send(viewer, 'play/reading.json')).status, 404, 'no reading before a director run');
+  await writeFile(join(directory, 'stage', 'director', 'reading.json'), JSON.stringify({ version: 2, kinds: { b0000_s0001: 'spoken' } }));
+  assert.deepEqual(JSON.parse((await send(viewer, 'play/reading.json')).body).kinds, { b0000_s0001: 'spoken' });
+  // What the laws and the review made of the run (W7): per card, and the run's report.
+  assert.equal((await send(viewer, 'play/review.json')).status, 404, 'no review before a director run');
+  await mkdir(join(directory, 'stage', 'world', 'ledger'), { recursive: true });
+  await writeFile(join(directory, 'stage', 'director', 'run.json'), JSON.stringify({ model: 'm', from: 's1', to: 's1', scenes: [{ scene: 'scene_000001', cards: [{ card: 'dialogue:b0000_s0001', lines: [{ id: 'b0000_s0001' }], laws: [{ law: 'L6', who: 'char_1', verdict: 'held', why: 'out of earshot' }] }] }] }));
+  await writeFile(join(directory, 'stage', 'world', 'pool.jsonl'), JSON.stringify({ id: 'wi_1', kind: 'talk', scene: 'scene_000001', lines: ['b0000_s0001'], question: 'How?', options: ['live', 'remote'], status: 'answered' }) + '\n');
+  await writeFile(join(directory, 'stage', 'world', 'answers.jsonl'), JSON.stringify({ item: 'wi_1', verdict: 'remote', reason: 'a phone, b0000_s0001' }) + '\n');
+  const review = JSON.parse((await send(viewer, 'play/review.json')).body), card = review.cards['scene_000001|dialogue:b0000_s0001'];
+  assert.deepEqual([card.laws[0].verdict, card.review[0].answer], ['held', 'remote']);
+  assert.deepEqual(review.report.laws, { 'L6 held': 1 });
+  // The run report (W7): the same in words, a page of its own with no script.
+  const report = await send(viewer, 'play/report');
+  assert.equal(report.status, 200);
+  assert.match(report.body, /Run report/);
+  assert.match(report.body, /Talk needs nearness/);
+  assert.match(report.body, /a phone, b0000_s0001/, 'the main agent\'s answer and reason');
+  assert.doesNotMatch(report.body, /<script/);
+  // Developer mode: every record of one card; a bad scene refused; no run accepted yet, no run files.
+  const dev = JSON.parse((await send(viewer, 'play/dev.json?scene=scene_000001&card=dialogue%3Ab0000_s0001')).body);
+  assert.deepEqual([dev.cardRecord.laws[0].law, dev.review[0].answer.verdict], ['L6', 'remote']);
+  assert.equal((await send(viewer, 'play/dev.json?scene=../x&card=y')).status, 400);
+  assert.equal((await send(viewer, 'play/dev/file?name=record')).status, 404);
+  assert.equal((await send(viewer, 'play/dev/file?name=..%2F..%2Fsecret')).status, 404);
 });

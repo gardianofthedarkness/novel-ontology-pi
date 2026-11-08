@@ -17,8 +17,8 @@ const node = (id: string, label: string, lane: FlowLane, kind: FlowKind, names: 
 export const FLOW_NODES: FlowNode[] = [
   node("intake", "Intake", "digger", "step", [], 1.25, 0),
   node("album", "Album anchors", "digger", "step", [], 2.6, 0),
-  node("scenes", "Scene boundaries", "digger", "jev", ["scene_start", "scene_end", "scene_seam", "scene-boundaries"], 0.5, 1),
-  node("exchanges", "Dialogue exchanges", "digger", "jev", ["dlg_start", "dlg_end", "dialogue-boundaries", "dialogue-structure"], 2, 1),
+  node("scenes", "Scene boundaries", "digger", "jev", ["scene_start", "scene_end", "scene_seam", "scene-boundaries", "unit_type"], 0.5, 1),
+  node("exchanges", "Dialogue exchanges", "digger", "jev", ["dlg_kind", "dlg_turn", "blk_type", "dlg_start", "dlg_end", "dialogue-boundaries", "dialogue-structure"], 2, 1),
   node("adjudicate", "Scene adjudication", "digger", "work", ["scene-adjudication"], -0.75, 1),
   node("identity", "Entities + presence", "digger", "work", ["entities-participants"], 0, 2),
   node("understanding", "Scene understanding", "digger", "work", ["scene-understanding"], 1.15, 2),
@@ -35,11 +35,24 @@ export const FLOW_NODES: FlowNode[] = [
   node("matching", "EM after apply", "solidifier", "jev", ["matching", "same", "distinct", "variant"], -0.1, 9),
   node("atlas", "Universe atlas", "solidifier", "jev", ["atlas"], 1.25, 9.6),
   node("universe", "Universe causality", "solidifier", "jev", ["universe-causality"], 2.6, 9.6),
+  node("stage", "Stage · buildings, movement", "solidifier", "jev", ["stated_", "moves_", "how_", "dir_"], 2.6, 10.6),
+  // The v2 reading flow (src/v2, docs/v2/world-engine-v2.md §2): listing (work model), typing, unified EM and EM² roles (Jev).
+  node("listing", "Listing · v2", "digger", "work", ["v2-listing"], 3.6, 1),
+  node("typing", "Typing · v2", "digger", "jev", ["type", "proper"], 3.6, 2),
+  node("unified", "Unified EM · v2", "digger", "jev", ["em", "own"], 3.6, 3),
+  node("roles", "Roles · EM² · v2", "digger", "jev", ["role", "ref"], 3.6, 4),
+  node("placetree", "Place EM · v2", "digger", "jev", ["tree", "setting", "place"], 3.6, 6),
+  node("storytime", "Story time · v2", "digger", "jev", ["time"], 3.6, 5),
+  // Sequence headings (their setting and place questions report as place EM's) and the storyboard's cuts (storyboard.ts).
+  node("headings", "Sequence headings · v2", "digger", "jev", ["daytime"], 4.7, 6),
+  node("storyboard", "Storyboard · v2", "digger", "jev", ["cut", "size", "angle", "move", "seconds"], 4.7, 7),
 ];
 
 const edge = (source: string, target: string, context: string, feedback = false): FlowEdge => ({ id: `${source}->${target}`, source, target, context, ...(feedback ? { feedback } : {}) });
 
 export const FLOW_EDGES: FlowEdge[] = [
+  edge("placetree", "headings", "settings, unnamed places"),
+  edge("headings", "storyboard", "headings"),
   edge("intake", "album", "sentence ids"),
   edge("intake", "scenes", "sentences"),
   edge("intake", "exchanges", "sentences"),
@@ -58,6 +71,7 @@ export const FLOW_EDGES: FlowEdge[] = [
   edge("extraction", "causality", "new events, scenes"),
   edge("extraction", "gate", "block ChangeSet"),
   edge("causality", "gate", "CAUSES proposals"),
+  edge("timeplace", "stage", "place tree, strands"),
   edge("gate", "apply", "approved"),
   edge("gate", "recall", "corrections", true),
   edge("recall", "scenes", "pinned answers", true),
@@ -68,6 +82,18 @@ export const FLOW_EDGES: FlowEdge[] = [
   edge("matching", "apply", "audited merge", true),
   edge("apply", "atlas", "canon"),
   edge("apply", "universe", "canon"),
+  edge("intake", "listing", "sentence batches"),
+  edge("listing", "typing", "names"),
+  edge("typing", "unified", "typed names"),
+  edge("exchanges", "unified", "facts"),
+  edge("unified", "roles", "names, descriptions"),
+  edge("unified", "storytime", "time words"),
+  edge("scenes", "storytime", "scenes"),
+  edge("storytime", "roles", "facts by story time"),
+  edge("roles", "placetree", "who acts where (occupancy)"),
+  edge("unified", "placetree", "named places and descriptions of places"),
+  edge("scenes", "roles", "scenes"),
+  edge("exchanges", "roles", "sentence kinds"),
 ];
 
 const BY_NAME = new Map(FLOW_NODES.flatMap((entry) => entry.names.map((name) => [name, entry.id] as const)));
@@ -91,6 +117,7 @@ const COMMANDS: [string, string[]][] = [
   ["novel album", ["album"]],
   ["novel recall", ["recall", "scenes", "exchanges"]],
   ["novel fix", ["apply"]],
+  ["novel stage", ["stage"]],
 ];
 
 export function commandScope(label: string | undefined | null): string[] {

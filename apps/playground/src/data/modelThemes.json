@@ -1,0 +1,225 @@
+{
+ "note": "Each model of the place holograms' library (architectureModels.json): its theme (modern, ancient, scifi or any) and its category; a category lists its models by theme, so a thing placed on a manifold of one era is drawn as that era's version (apps/playground/src/data/modelThemes.ts). Built by tools/architecture-models-add.mjs.",
+ "themes": [
+  "modern",
+  "ancient",
+  "scifi"
+ ],
+ "models": {
+  "block-wide-a": {
+   "theme": "modern",
+   "category": "block"
+  },
+  "block-wide-b": {
+   "theme": "modern",
+   "category": "block"
+  },
+  "fountain": {
+   "theme": "any",
+   "category": "fountain"
+  },
+  "keep": {
+   "theme": "ancient",
+   "category": "tall-building"
+  },
+  "market": {
+   "theme": "ancient",
+   "category": "market"
+  },
+  "office-c": {
+   "theme": "modern",
+   "category": "tall-building"
+  },
+  "office-h": {
+   "theme": "modern",
+   "category": "tall-building"
+  },
+  "office-k": {
+   "theme": "modern",
+   "category": "tall-building"
+  },
+  "skyscraper-a": {
+   "theme": "modern",
+   "category": "tall-building"
+  },
+  "skyscraper-b": {
+   "theme": "modern",
+   "category": "tall-building"
+  },
+  "skyscraper-e": {
+   "theme": "modern",
+   "category": "tall-building"
+  },
+  "tower-a": {
+   "theme": "modern",
+   "category": "tall-building"
+  },
+  "tower-b": {
+   "theme": "modern",
+   "category": "tall-building"
+  },
+  "tower-c": {
+   "theme": "modern",
+   "category": "tall-building"
+  },
+  "tower-d": {
+   "theme": "modern",
+   "category": "tall-building"
+  },
+  "tower-e": {
+   "theme": "modern",
+   "category": "tall-building"
+  },
+  "tower-f": {
+   "theme": "modern",
+   "category": "tall-building"
+  },
+  "tower-g": {
+   "theme": "modern",
+   "category": "tall-building"
+  },
+  "tower-h": {
+   "theme": "modern",
+   "category": "tall-building"
+  },
+  "tower-i": {
+   "theme": "modern",
+   "category": "tall-building"
+  },
+  "tower-j": {
+   "theme": "modern",
+   "category": "tall-building"
+  },
+  "tower-k": {
+   "theme": "modern",
+   "category": "tall-building"
+  },
+  "tower-l": {
+   "theme": "modern",
+   "category": "tall-building"
+  },
+  "tower-m": {
+   "theme": "modern",
+   "category": "tall-building"
+  },
+  "windmill": {
+   "theme": "ancient",
+   "category": "windmill"
+  },
+  "wind-turbine": {
+   "theme": "modern",
+   "category": "windmill"
+  },
+  "wind-turbine-scifi": {
+   "theme": "scifi",
+   "category": "windmill"
+  },
+  "wagon": {
+   "theme": "ancient",
+   "category": "cart"
+  },
+  "crate-wood": {
+   "theme": "ancient",
+   "category": "crate"
+  },
+  "crate-scifi": {
+   "theme": "scifi",
+   "category": "crate"
+  },
+  "barrel-scifi": {
+   "theme": "scifi",
+   "category": "barrel"
+  },
+  "chest-scifi": {
+   "theme": "scifi",
+   "category": "chest"
+  },
+  "computer-scifi": {
+   "theme": "scifi",
+   "category": "computer"
+  }
+ },
+ "categories": {
+  "block": {
+   "modern": [
+    "block-wide-a",
+    "block-wide-b"
+   ]
+  },
+  "fountain": {
+   "any": [
+    "fountain"
+   ]
+  },
+  "tall-building": {
+   "ancient": [
+    "keep"
+   ],
+   "modern": [
+    "office-c",
+    "office-h",
+    "office-k",
+    "skyscraper-a",
+    "skyscraper-b",
+    "skyscraper-e",
+    "tower-a",
+    "tower-b",
+    "tower-c",
+    "tower-d",
+    "tower-e",
+    "tower-f",
+    "tower-g",
+    "tower-h",
+    "tower-i",
+    "tower-j",
+    "tower-k",
+    "tower-l",
+    "tower-m"
+   ]
+  },
+  "market": {
+   "ancient": [
+    "market"
+   ]
+  },
+  "windmill": {
+   "ancient": [
+    "windmill"
+   ],
+   "modern": [
+    "wind-turbine"
+   ],
+   "scifi": [
+    "wind-turbine-scifi"
+   ]
+  },
+  "cart": {
+   "ancient": [
+    "wagon"
+   ]
+  },
+  "crate": {
+   "ancient": [
+    "crate-wood"
+   ],
+   "scifi": [
+    "crate-scifi"
+   ]
+  },
+  "barrel": {
+   "scifi": [
+    "barrel-scifi"
+   ]
+  },
+  "chest": {
+   "scifi": [
+    "chest-scifi"
+   ]
+  },
+  "computer": {
+   "scifi": [
+    "computer-scifi"
+   ]
+  }
+ }
+}

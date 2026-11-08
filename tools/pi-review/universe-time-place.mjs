@@ -2,6 +2,7 @@ import { readFile, readdir, stat } from 'node:fs/promises';
 import { resolve } from 'node:path';
 import { timePlaceProjection } from './time-place.mjs';
 import { readStrandAnswers } from './strand-answers.mjs';
+import { readArchitecture, readStageBuildings } from './stage-reports.mjs';
 import { calendarView, storedYearDecisions } from './calendar-view.mjs';
 
 /**
@@ -28,13 +29,13 @@ async function stamp(paths) {
 
 async function bookProjection(workspace) {
   const files = ['entities', 'scenes', 'relations', 'events'].map(name => resolve(workspace, `ontology/${name}.jsonl`));
-  const key = await stamp([...files, resolve(workspace, 'changesets'), resolve(workspace, 'timeplace')]);
+  const key = await stamp([...files, resolve(workspace, 'changesets'), resolve(workspace, 'timeplace'), resolve(workspace, 'stage', 'architecture.json'), resolve(workspace, 'stage', 'objects.json')]);
   if (cache.get(workspace)?.key === key) return cache.get(workspace).value;
   const [entities, scenes, relations, events] = await Promise.all(files.map(rows));
   const names = await readdir(resolve(workspace, 'changesets')).catch(() => []);
   const pending = (await Promise.all(names.filter(name => /^cs_timeplace_[\w-]+\.json$/.test(name)).map(name => json(resolve(workspace, 'changesets', name), null)))).filter(entry => entry?.status === 'pending_review').flatMap(entry => entry.proposals ?? []);
   const fold = (records) => [...new Map(records.map(record => [record.id, record])).values()];
-  const value = { projection: timePlaceProjection({ entities: fold(entities), scenes: fold(scenes), relations, events: fold(events), pending, strands: await readStrandAnswers(workspace) }), entities: fold(entities) };
+  const value = { projection: timePlaceProjection({ entities: fold(entities), scenes: fold(scenes), relations, events: fold(events), pending, strands: await readStrandAnswers(workspace), architecture: await readArchitecture(workspace), buildings: await readStageBuildings(workspace) }), entities: fold(entities) };
   cache.set(workspace, { key, value });
   return value;
 }
@@ -45,7 +46,7 @@ export function mergeUniverse({ atlas, books, continuities }) {
   const clusterOf = new Map(atlas.places.flatMap(place => place.members.map(member => [member, place])));
   const universePlace = (book, localId) => { const cluster = clusterOf.get(`${book.sourceId}::${localId}`); return cluster ? `u:${cluster.id}` : `u:${book.sourceId}::${localId}`; };
   const labels = new Map(), characters = new Map(), names = {};
-  const scenes = [], times = [], placeRows = new Map();
+  const scenes = [], times = [], placeRows = new Map(), buildings = [];
   const ordered = [...books].sort((first, second) => (first.readingOrder ?? Infinity) - (second.readingOrder ?? Infinity) || first.volume - second.volume);
   const offsets = new Map();
   let sceneIndex = 0;
@@ -63,6 +64,8 @@ export function mergeUniverse({ atlas, books, continuities }) {
       for (const id of row.characterIds) characters.get(id).scenes++;
       scenes.push(row);
     }
+    // Named buildings stand at the universe place their book's place joins.
+    for (const building of projection.buildings ?? []) buildings.push({ ...building, id: qualify(book.volume, building.id), placeId: universePlace(book, building.placeId), sceneIds: building.sceneIds.map(sceneId => qualify(book.volume, sceneId)) });
     for (const time of projection.times) times.push({ ...time, id: qualify(book.volume, time.id), storyIndex: offset + time.storyIndex, narrativeIndex: offset + time.narrativeIndex, toldFromId: time.toldFromId ? qualify(book.volume, time.toldFromId) : null, anchorSceneId: time.anchorSceneId ? qualify(book.volume, time.anchorSceneId) : null, sceneIds: time.sceneIds.map(id => qualify(book.volume, id)), book: book.volume, continuityId: book.continuityId });
     for (const place of projection.places) {
       const id = universePlace(book, place.id);
@@ -94,7 +97,7 @@ export function mergeUniverse({ atlas, books, continuities }) {
   times.sort((first, second) => String(first.continuityId).localeCompare(String(second.continuityId)) || first.storyIndex - second.storyIndex);
   return {
     scope: 'universe', universe: { id: atlas.universeId, title: atlas.title }, available: times.length > 0, times, scenes, places,
-    characters: [...characters.values()].sort((first, second) => second.scenes - first.scenes).slice(0, 60), names,
+    characters: [...characters.values()].sort((first, second) => second.scenes - first.scenes).slice(0, 60), names, ...(buildings.length ? { buildings } : {}),
     books: ordered.map(({ volume, sourceId, title, continuityId, readingOrder }) => ({ volume, sourceId, title, continuityId, readingOrder })),
     continuities, conflicts: atlas.conflicts ?? [],
   };

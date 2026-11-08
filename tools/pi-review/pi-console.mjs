@@ -274,6 +274,14 @@ export function createPiConsole({ directory, agentEvents, controlToken, origin, 
       response.end(JSON.stringify(result));
     },
 
+    /**
+     * A message from a producer on this machine (the world-first loop's review batches, docs/world-first-design.md §11):
+     * into the same queue the HTTP route fills, with the same checks (Pi accepting messages, the console not expired).
+     */
+    submit(payload) {
+      return run(() => submit(payload));
+    },
+
     takeMessages() {
       return run(async () => {
         if (deadline !== null && Date.now() >= deadline) return [];
