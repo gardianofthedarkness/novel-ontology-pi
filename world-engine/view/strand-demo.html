@@ -365,8 +365,8 @@ const snowSheet = groundSheet(new THREE.MeshBasicMaterial({ color: 0xffffff, tra
 const wetSheet = groundSheet(new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, premultipliedAlpha: true, blending: THREE.MultiplyBlending, depthWrite: false }), 0.05);
 // Clouds (the user, 2026-11-05: "an destructible cloud system"; "beam weapons clears its diameter of clouds"): a layer at
 // CLOUD_BASE metres, as much of the sky as the weather's cloud covers, drifting with the wind, lit by the hour (white by
-// day, warm at dawn and dusk, the city's glow at night) and fading into the haze toward the horizon; from above, its
-// shadows on the ground. A beam the text says goes through the clouds (a blow with `clouds`, or a unit whose sky has a
+// day, warm at dawn and dusk, the city's glow at night) and fading into the haze toward the horizon. No shadows on the
+// ground (the user, 2026-11-08: "there are shades of cloud on the ground now"). A beam the text says goes through the clouds (a blow with `clouds`, or a unit whose sky has a
 // cloud cut: sky.mjs) clears a hole as wide as it: the hole drifts with the clouds and closes as the story goes on (six
 // units or an hour and a half of story time, the same place and date); by day sunlight falls through it, a shaft and a
 // bright patch on the ground.
@@ -374,7 +374,7 @@ const CLOUD_BASE = 420, HOLES = 8;
 const cloudUniforms = {
   uCover: { value: 0 }, uDrift: { value: new THREE.Vector2() }, uHoles: { value: Array.from({ length: HOLES }, () => new THREE.Vector4()) },
   uLit: { value: new THREE.Color() }, uShade: { value: new THREE.Color() }, uFog: { value: new THREE.Color() }, uFogNear: { value: 400 }, uFogFar: { value: 1600 },
-  uShadow: { value: 0 }, uPatch: { value: new THREE.Color(0, 0, 0) }, uSunShift: { value: new THREE.Vector2() },
+  uPatch: { value: new THREE.Color(0, 0, 0) }, uSunShift: { value: new THREE.Vector2() },
   uRipple: { value: null }, uRippleBox: { value: new THREE.Vector4(0, 0, 1, 0) },
   // The layer's type (CLOUD_TYPES): its height, its shape (feature size, stretch along the wind, edge softness, small
   // detail) and tone (opacity, how dark its thick parts are, how much it billows, how much the ripples move it); how far its
@@ -483,10 +483,8 @@ function cloudLook(look, [type, cover], uniforms, layer, k) {
   uniforms.uTone.value.set(look.opacity, look.dark, look.billow, uniforms === cloudUniforms ? 1 : 0);
   uniforms.uCover.value = Math.min(0.97, look.cover * 1.05);
 }
-// The ground under the clouds: their shadows darken it (multiply), and where a hole lets the sun through, a bright patch
-// (added). Both cast along the sun.
-const groundCloud = (fragment, blending) => { const mesh = new THREE.Mesh(new THREE.PlaneGeometry(mapReach * 2.4, mapReach * 2.4).rotateX(-Math.PI / 2), new THREE.ShaderMaterial({ uniforms: cloudUniforms, transparent: true, depthWrite: false, blending, premultipliedAlpha: true, vertexShader: `varying vec3 vWorld; void main() { vec4 w = modelMatrix * vec4(position, 1.); vWorld = w.xyz; gl_Position = projectionMatrix * viewMatrix * w; }`, fragmentShader: `${CLOUD_GLSL}\nuniform float uShadow; uniform vec3 uPatch; uniform vec2 uSunShift; varying vec3 vWorld;\nvoid main() {\n  float inside, d = cloudAt(vWorld.xz + uSunShift, inside);\n${fragment}\n}` })); mesh.position.y = 0.07; mesh.renderOrder = 1; mesh.visible = false; world.add(mesh); return mesh; };
-const cloudShadow = groundCloud(`  gl_FragColor = vec4(vec3(1. - uShadow * d), 1.);`, THREE.MultiplyBlending);
+// The ground under a hole in the clouds: where it lets the sun through, a bright patch (added), cast along the sun.
+const groundCloud = (fragment, blending) => { const mesh = new THREE.Mesh(new THREE.PlaneGeometry(mapReach * 2.4, mapReach * 2.4).rotateX(-Math.PI / 2), new THREE.ShaderMaterial({ uniforms: cloudUniforms, transparent: true, depthWrite: false, blending, premultipliedAlpha: true, vertexShader: `varying vec3 vWorld; void main() { vec4 w = modelMatrix * vec4(position, 1.); vWorld = w.xyz; gl_Position = projectionMatrix * viewMatrix * w; }`, fragmentShader: `${CLOUD_GLSL}\nuniform vec3 uPatch; uniform vec2 uSunShift; varying vec3 vWorld;\nvoid main() {\n  float inside, d = cloudAt(vWorld.xz + uSunShift, inside);\n${fragment}\n}` })); mesh.position.y = 0.07; mesh.renderOrder = 1; mesh.visible = false; world.add(mesh); return mesh; };
 const sunPatch = groundCloud(`  gl_FragColor = vec4(uPatch * inside * (1. - d), 1.);`, THREE.AdditiveBlending);
 // The shafts of sunlight through each hole (by day), from the hole down to its patch.
 const shafts = Array.from({ length: HOLES }, () => { const mesh = new THREE.Mesh(new THREE.CylinderGeometry(1, 1, 1, 24, 1, true), new THREE.MeshBasicMaterial({ color: 0xfff2d8, transparent: true, opacity: 0, blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide })); mesh.visible = false; mesh.frustumCulled = false; mesh.renderOrder = 7; world.add(mesh); return mesh; });
@@ -580,10 +578,9 @@ function cloudTick(unitId, told, dt, hour, bolt, shownSky) {
   lit.lerp(new THREE.Color(0xe8ecff), bolt * 0.9);
   cloudUniforms.uLit.value.copy(lit); cloudUniforms.uShade.value.copy(lit).multiplyScalar(0.55 + 0.1 * day);
   cloudUniforms.uFog.value.copy(shownSky); cloudUniforms.uFogNear.value = baseFog.near; cloudUniforms.uFogFar.value = baseFog.far;
-  // The sun's direction casts the shadows and the patches; by day only, and scattered clouds cast the clearest.
+  // The sun's direction casts the patches; by day only.
   const toSun = sun.position.clone().normalize(), up = Math.max(0.2, toSun.y), sunUp = day > 0.3 ? Math.min(1, (day - 0.3) / 0.4) : 0;
   cloudUniforms.uSunShift.value.set(toSun.x / up * skyClouds.low.base, toSun.z / up * skyClouds.low.base).clampLength(0, 1500);
-  cloudUniforms.uShadow.value = 0.48 * sunUp * Math.max(0, 1 - Math.max(0, lowCover - 0.55) / 0.4);
   cloudUniforms.uPatch.value.copy(new THREE.Color(0xfff0d0).lerp(sun.color, 0.5)).multiplyScalar(0.1 * sunUp * Math.min(1, cover * 1.4));
   // The holes, in the clouds' frame (they drift with them).
   const live = [...cloudHoles.values()].map((hole) => ({ hole, left: holeLeft(hole, unitId, hour) })).filter((entry) => entry.left > 0.01).sort((a, b) => b.hole.k - a.hole.k).slice(0, HOLES);
@@ -599,7 +596,7 @@ function cloudTick(unitId, told, dt, hour, bolt, shownSky) {
   });
   const shown = lowCover > 0.02;
   cloudLayer.visible = shown && cloudUniforms.uCover.value > 0.1; cloudHigh.visible = highUniforms.uCover.value > 0.04;
-  for (const mesh of [cloudLayer, cloudHigh, cloudShadow, sunPatch, ...shafts]) if (mesh.userData.hidden) mesh.visible = false; cloudShadow.visible = shown && cloudUniforms.uShadow.value > 0.01; sunPatch.visible = shown && live.length > 0 && sunUp > 0;
+  for (const mesh of [cloudLayer, cloudHigh, sunPatch, ...shafts]) if (mesh.userData.hidden) mesh.visible = false; sunPatch.visible = shown && live.length > 0 && sunUp > 0;
 }
 function weatherTick(dt, day) {
   // The volume falls between the camera and what it looks at (where the eye sees it, the way games keep weather round the
@@ -672,7 +669,7 @@ function daylightTick(unitId, dt) {
 // lying, snap }) holds it whatever the unit (snap: at once, not eased); __sky(null) gives the story's back; __sky({ strike: true }) strikes lightning now (in
 // a storm); __sky({ cut: <metres across> }) clears a hole in the clouds over what the camera looks at (while a sky is
 // held; cutBeams: true in a held sky sends every beam through the clouds); __sky() says the look's parameters now.
-window.__cloudParts = (hide = []) => { const parts = { layer: cloudLayer, high: cloudHigh, shadow: cloudShadow, patch: sunPatch, shafts }; for (const [name, part] of Object.entries(parts)) for (const mesh of [part].flat()) mesh.userData.hidden = hide.includes(name); return Object.fromEntries(Object.entries(parts).map(([name, part]) => [name, [part].flat().some((mesh) => mesh.visible)])); };
+window.__cloudParts = (hide = []) => { const parts = { layer: cloudLayer, high: cloudHigh, patch: sunPatch, shafts }; for (const [name, part] of Object.entries(parts)) for (const mesh of [part].flat()) mesh.userData.hidden = hide.includes(name); return Object.fromEntries(Object.entries(parts).map(([name, part]) => [name, [part].flat().some((mesh) => mesh.visible)])); };
 window.__sky = (sky) => { if (sky?.strike) { flash.armed = true; flash.next = 0; } else if (sky?.cut) cutClouds(`test|${performance.now()}`, daylight.unit, controls.target, sky.cut); else if (sky !== undefined) { const { snap, ...held } = sky ?? {}; daylight.force = sky ? { sure: 1, daypart: daypartOfHour(held.hour ?? 12), ...held } : null; daylight.said = null; daylight.snap = snap ? 3 : 0; daylight.on = sky ? true : !capture; } return { force: daylight.force ?? null, ...Object.fromEntries(WX.map((key) => [key, Math.round(wx[key] * 100) / 100])), flash: flash.level, strikeIn: wx.lightning >= 0.2 ? Math.round(flash.next - performance.now()) / 1000 : null }; };
 const daypartOfHour = (hour) => (hour < 4.5 ? "late night" : hour < 7.5 ? "dawn" : hour < 11 ? "morning" : hour < 14 ? "midday" : hour < 17.5 ? "afternoon" : hour < 21 ? "evening" : "night");
 const camera = new THREE.PerspectiveCamera(42, 1, 0.5, Math.max(4000, mapReach * 4)), controls = new OrbitControls(camera, renderer.domElement);
@@ -705,7 +702,7 @@ function orbitTick() {
 //   the sky's light falls in as a shaft and the rain or snow falls through it;
 // - a lift in use (a way between the layers, §3.4) drawn as a faint column while someone rides it.
 const HALL_LAMP = { mall: [0xffd2a1, 1.05], corridor: [0xffe2bd, 0.95], station: [0xe6efff, 1.05], tunnel: [0xbfd0e6, 0.7], utility: [0xd6e8d8, 0.7], parking: [0xdff0e4, 0.8], basement: [0xffe6c4, 0.75], shelter: [0xe8f0ff, 0.95], lab: [0xf4f8ff, 1.25], military: [0xeef3ff, 1.15], quantum: [0xe8f4ff, 1.3], tank: [0x5d6f80, 0.32], channel: [0x52606e, 0.25], deep: [0x8796b8, 0.55], street: [0xffd4a0, 1.0] };
-const ceilings = { halls: [], planes: [], holes: [], tiles: [], groups: [], marks: [], columns: [], riders: [], level: 0, camLevel: 0, lamp: new THREE.Color(0xffffff), lampI: 1, saved: null, focus: null };
+const ceilings = { halls: [], planes: [], holes: [], tiles: [], groups: [], marks: [], columns: [], riders: [], level: 0, camLevel: 0, earth: 0, lamp: new THREE.Color(0xffffff), lampI: 1, saved: null, focus: null };
 const ceilingOfHall = (hall) => (hall.layer === "deep" ? hall.hardAt ?? -hall.depth + hall.height : -(hall.depth - hall.height));
 /** The hall a point (metres) lies in, floor to ceiling: a real hall's, or the deep layer's floor; null in the open or another layer's. */
 function hallAround(x, y, z) {
@@ -820,6 +817,8 @@ function ceilingTick(dt) {
   if (lamp !== null) { ceilings.lamp.set(lamp); ceilings.lampI = lampI; }
   ceilings.level += ((hall ? 1 : 0) - ceilings.level) * Math.min(1, dt * 3);
   ceilings.camLevel += ((camHall && c.y < ceilingOfHall(camHall) ? 1 : 0) - ceilings.camLevel) * Math.min(1, dt * 3);
+  // Under the street in no hall: in the ground itself.
+  ceilings.earth += ((c.y < -0.5 && !(camHall && c.y < ceilingOfHall(camHall)) ? 1 : 0) - ceilings.earth) * Math.min(1, dt * 3);
   // Rain and snow through the open holes, over the hall's floor under each.
   if (ceilings.fall) {
     const { snow, rain, count, u } = ceilings.fall, cells = shown.flatMap((entry) => entry.cells.map((cell) => ({ ...cell, floorY: entry.floorY }))), snowing = daylight.on ? wx.snow : 0, raining = daylight.on ? wx.rain : 0;
@@ -845,8 +844,8 @@ function ceilingTick(dt) {
   ceilings.riders = [];
   // Under a ceiling but the sky: the hall's own light, by its kind (the sun's put out); with the camera under it, no sky,
   // no cloud, no rain or snow but through a hole, and the dark of the hall round it.
-  const level = ceilings.level, under = ceilings.camLevel;
-  if (level < 0.01 && under < 0.01) { ceilings.saved = null; return; }
+  const level = ceilings.level, under = ceilings.camLevel, earth = ceilings.earth;
+  if (level < 0.01 && under < 0.01 && earth < 0.01) { ceilings.saved = null; return; }
   ceilings.saved = { sun: sun.intensity, ambient: ambient.intensity, color: ambient.color.clone(), background: world.background.clone(), fog: defaultFog.color.clone(), near: defaultFog.near, far: defaultFog.far, hidden: [] };
   sun.intensity *= 1 - level;
   ambient.color.lerp(ceilings.lamp, level); ambient.intensity += (ceilings.lampI - ambient.intensity) * level;
@@ -857,7 +856,14 @@ function ceilingTick(dt) {
     const dark = new THREE.Color(0x06080b), deep = ceilings.focus?.layer === "deep", [near, far] = deep ? [60, 260] : [6, 70];
     world.background.lerp(dark, under); defaultFog.color.lerp(dark, under);
     if (world.fog === defaultFog) { defaultFog.near += (near - defaultFog.near) * under; defaultFog.far += (far - defaultFog.far) * under; }
-    if (under > 0.5) for (const part of [cloudLayer, cloudHigh, cloudShadow, sunPatch, ...shafts, snowFall.object, rainFall.object, stars].filter(Boolean)) if (part.visible) { part.visible = false; ceilings.saved.hidden.push(part); }
+    if (under > 0.5) for (const part of [cloudLayer, cloudHigh, sunPatch, ...shafts, snowFall.object, rainFall.object, stars].filter(Boolean)) if (part.visible) { part.visible = false; ceilings.saved.hidden.push(part); }
+  }
+  if (earth > 0.01) {
+    // In the ground: its dark round the camera, the distance kept open (the city's levels below are what is looked at), and
+    // no sky, cloud, rain or snow.
+    const dark = new THREE.Color(0x06080b);
+    world.background.lerp(dark, earth); defaultFog.color.lerp(dark, earth);
+    if (earth > 0.5) for (const part of [cloudLayer, cloudHigh, sunPatch, ...shafts, snowFall.object, rainFall.object, snowSheet, wetSheet, stars].filter(Boolean)) if (part.visible) { part.visible = false; ceilings.saved.hidden.push(part); }
   }
   ceilings.shown = { background: world.background.getHexString(), fog: defaultFog.color.getHexString(), near: Math.round(defaultFog.near), far: Math.round(defaultFog.far), ambient: ambient.color.getHexString(), ambientI: Math.round(ambient.intensity * 100) / 100, sun: Math.round(sun.intensity * 100) / 100, fogOn: world.fog === defaultFog };
 }
@@ -869,7 +875,37 @@ function ceilingRestore() {
   for (const part of saved.hidden) part.visible = true;
   ceilings.saved = null;
 }
-controls.enableDamping = true; controls.maxPolarAngle = Math.PI * 0.47; controls.minDistance = 10; controls.maxDistance = Math.max(1600, mapReach * 1.8);
+// By day the city's holograms take an ink (the user, 2026-11-08: "the daylight theme also makes the buildings hard to
+// see"): their pale blues are lit for a dark sky, so each takes a deep ink of its own hue as the sky lightens (by the day's
+// light, none where the camera is under a ceiling or in the ground, which are dark). Colour only: their opacities are the
+// views' own. The materials are found as the city loads (a walk over the world every 1.5 s, by their first colour).
+// Edges the darkest (they draw the shapes); fills, laid over each other, only a mid blue, or they stack to a murk.
+const DAY_INK = new Map([[0x8fd6ff, 0x163f63], [0x7ce6ff, 0x0d5566], [0xd8f1ff, 0x1f4566], [0x9fd2f0, 0x2f5f86], [0x2b86c4, 0x4a7fae], [0x5fb4e8, 0x4f7fa8], [0x5a8fb8, 0x4f78a0], [0x3d6a8a, 0x456b88]]);
+const ink = { looks: new Map(), seen: new WeakSet(), scanned: 0, level: -1 };
+function inkTick() {
+  const now = performance.now();
+  if (now - ink.scanned > 1500) {
+    ink.scanned = now;
+    const present = new Set();
+    world.traverse((object) => { for (const material of object.material ? [object.material].flat() : []) {
+      present.add(material);
+      if (ink.seen.has(material)) continue;
+      ink.seen.add(material);
+      const day = material.color && DAY_INK.get(material.color.getHex());
+      if (day !== undefined && day !== null) { ink.looks.set(material, { night: material.color.clone(), day: new THREE.Color(day) }); ink.level = -1; }
+    } });
+    for (const material of ink.looks.keys()) if (!present.has(material)) ink.looks.delete(material);
+  }
+  const level = daylight.on ? daylight.day * (1 - Math.max(ceilings.camLevel, ceilings.earth)) : 0;
+  if (Math.abs(level - ink.level) < 0.01) return;
+  ink.level = level;
+  for (const [material, look] of ink.looks) material.color.copy(look.night).lerp(look.day, level);
+}
+window.__ink = () => ({ materials: ink.looks.size, level: Math.round(ink.level * 100) / 100 });
+// The camera turns below the street too (the user, 2026-11-08: "I can't turn my camera negative axis to see underground
+// anymore"): under it, the street clears and the sky goes to the dark under the ground (ceilingTick: ceilings.earth).
+const LOOK_UNDER = Math.PI * 0.95;
+controls.enableDamping = true; controls.maxPolarAngle = LOOK_UNDER; controls.minDistance = 10; controls.maxDistance = Math.max(1600, mapReach * 1.8);
 const resize = () => { const { clientWidth: w, clientHeight: h } = host; renderer.setSize(w, h, false); camera.aspect = w / h; camera.updateProjectionMatrix(); };
 new ResizeObserver(resize).observe(host);
 const unit = new THREE.BoxGeometry(1, 1, 1), matrix = new THREE.Matrix4(), color = new THREE.Color();
@@ -2309,7 +2345,7 @@ function frame(now) {
   // The ground stands from the start as the buildings do (not only once the story has reached it).
   for (const chunk of entry.chunks ?? []) chunk.mesh.visible = chunk.near !== false && (!chunk.under || groundSeen < 0.5);
   // The street clears while anyone shown is below it (or the viewer asked), and the levels below brighten.
-  const below = xray || [...pawns.values()].some(({ pawn }) => pawn.parent && pawn.position.y < -1);
+  const below = xray || camera.position.y < -0.5 || [...pawns.values()].some(({ pawn }) => pawn.parent && pawn.position.y < -1);
   groundSeen += ((below ? 0.15 : 0.8) - groundSeen) * Math.min(1, dt * 3);
   groundMat.opacity = groundSeen;
   const seenBelow = Math.max(0, Math.min(1, (0.8 - groundSeen) / 0.65));
@@ -2320,7 +2356,7 @@ function frame(now) {
   decor(time); blinkProposal(now); blinkSampled(now); playSettle(now);
   if (seeing && !sheetView) seeThrough(entry, segment, now, dt, elapsed);
   if (focusGlide) { const u = Math.min(1, (performance.now() - focusGlide.start) / 600), e = u * u * (3 - 2 * u); controls.target.lerpVectors(focusGlide.fromTarget, focusGlide.toTarget, e); camera.position.lerpVectors(focusGlide.fromCamera, focusGlide.toCamera, e); if (u >= 1) focusGlide = null; }
-  if (sheetView) renderer.render(sheetView.scene, sheetView.camera); else { controls.update(); if (liveMode) showBorn(); capLabels(); orbitTick(); rippleTick(dt); ceilingTick(dt); renderer.render(world, camera); ceilingRestore(); } if (!shownNotice) { shownNotice = true; document.querySelector(".notice")?.remove(); } requestAnimationFrame(frame);
+  if (sheetView) renderer.render(sheetView.scene, sheetView.camera); else { controls.update(); if (liveMode) showBorn(); capLabels(); orbitTick(); rippleTick(dt); ceilingTick(dt); inkTick(); renderer.render(world, camera); ceilingRestore(); } if (!shownNotice) { shownNotice = true; document.querySelector(".notice")?.remove(); } requestAnimationFrame(frame);
 }
 
 /**
@@ -2418,7 +2454,7 @@ if (liveMode) {
     if (event.data?.type === "follow") { follow = !!event.data.on; return; }
     if (event.data?.type === "portraits") { portraitsArrived(event.data.portraits); return; }
     if (event.data?.type === "sky") { skyUnits = event.data.units ?? null; return; }
-    if (event.data?.type === "daylightMode") { daylight.on = !!event.data.on && !capture; if (!daylight.on) { world.background.set(0x060c12); world.fog?.color.set(0x060c12); defaultFog.color.set(0x060c12); ambient.color.set(0xffffff); ambient.intensity = 0.75; sun.color.set(0xffffff); sun.intensity = 0.75; sun.position.set(30, 70, 20); daylight.sky.set(0x060c12); daylight.day = 0; daylight.phase = null; daylight.said = null; for (const object of [snowFall.object, rainFall.object, snowSheet, wetSheet, cloudLayer, cloudShadow, sunPatch, ...shafts]) object.visible = false; for (const key of WX) wx[key] = 0; flash.level = 0; daylight.ambientI = 0.75; defaultFog.near = baseFog.near; defaultFog.far = baseFog.far; parent.postMessage({ type: "daylight", phase: "night", hour: null }, origin); } return; }
+    if (event.data?.type === "daylightMode") { daylight.on = !!event.data.on && !capture; if (!daylight.on) { world.background.set(0x060c12); world.fog?.color.set(0x060c12); defaultFog.color.set(0x060c12); ambient.color.set(0xffffff); ambient.intensity = 0.75; sun.color.set(0xffffff); sun.intensity = 0.75; sun.position.set(30, 70, 20); daylight.sky.set(0x060c12); daylight.day = 0; daylight.phase = null; daylight.said = null; for (const object of [snowFall.object, rainFall.object, snowSheet, wetSheet, cloudLayer, sunPatch, ...shafts]) object.visible = false; for (const key of WX) wx[key] = 0; flash.level = 0; daylight.ambientI = 0.75; defaultFog.near = baseFog.near; defaultFog.far = baseFog.far; parent.postMessage({ type: "daylight", phase: "night", hour: null }, origin); } return; }
     if (event.data?.type === "cuts") { cuts = !!event.data.on; cameraSegment = null; return; }
     // Reading along (the user, 2026-11-05: the bubbles ran ahead of the reader): the line the reader is on, so a card's
     // bubble shows that line for as long as it is being read, none otherwise.
@@ -2880,7 +2916,7 @@ if (capture) {
       if (free.length) { const entry = built.get(place), sheet = new THREE.InstancedMesh(new THREE.PlaneGeometry(1, 1).rotateX(-Math.PI / 2), new THREE.MeshBasicMaterial({ color: 0x7ce6ff, transparent: true, opacity: 0.12, depthWrite: false }), free.length); free.forEach(([x0, z0, x1, z1], n) => sheet.setMatrixAt(n, new THREE.Matrix4().compose(new THREE.Vector3((x0 + x1) / 2 - entry.cx, 0.3, (z0 + z1) / 2 - entry.cz), new THREE.Quaternion(), new THREE.Vector3(x1 - x0, 1, z1 - z0)))); extras.push(sheet); world.add(sheet); }
       for (const area of areas) { const group = terrainArea(place, area, labelScale * (area.tag ?? 1)); extras.push(group); world.add(group); }
       // A camera under a ceiling may look up at it (terrain-levels §8.3): the orbit's lowest look is lifted for such a still.
-      if (view) { const entry = built.get(place); camera.fov = view.fov ?? camera.fov; camera.updateProjectionMatrix(); camera.position.set(view.position[0] - entry.cx, view.position[1], view.position[2] - entry.cz); controls.target.set(view.target[0] - entry.cx, view.target[1], view.target[2] - entry.cz); camera.far = Math.max(camera.far, 20000); camera.updateProjectionMatrix(); controls.maxPolarAngle = view.position[1] < view.target[1] ? Math.PI * 0.9 : Math.PI * 0.47; controls.update(); }
+      if (view) { const entry = built.get(place); camera.fov = view.fov ?? camera.fov; camera.updateProjectionMatrix(); camera.position.set(view.position[0] - entry.cx, view.position[1], view.position[2] - entry.cz); controls.target.set(view.target[0] - entry.cx, view.target[1], view.target[2] - entry.cz); camera.far = Math.max(camera.far, 20000); camera.updateProjectionMatrix(); controls.maxPolarAngle = LOOK_UNDER; controls.update(); }
       if (solved) { const entry = built.get(place), box = new THREE.LineSegments(new THREE.EdgesGeometry(new THREE.BoxGeometry(1, 1, 1)), new THREE.LineBasicMaterial({ color: 0x5dff8a })); box.position.set((solved.x[0] + solved.x[1]) / 2 - entry.cx, (solved.y[0] + solved.y[1]) / 2, (solved.z[0] + solved.z[1]) / 2 - entry.cz); box.scale.set(solved.x[1] - solved.x[0], solved.y[1] - solved.y[0], solved.z[1] - solved.z[0]); extras.push(box); world.add(box); }
       outline(boxes);
       if (caption) { const ctx = overlay.getContext("2d"), w = overlay.width, h = overlay.height; overlay.hidden = false; ctx.font = "600 17px system-ui, 'PingFang SC', sans-serif"; const lines = []; let line = ""; for (const char of caption) { if (ctx.measureText(line + char).width > w - 40) { lines.push(line); line = ""; } line += char; } lines.push(line); const top = h - 14 - lines.length * 24; ctx.fillStyle = "rgba(6,12,18,.78)"; ctx.fillRect(0, top - 10, w, h - top + 10); ctx.fillStyle = "#e8f1f6"; lines.forEach((text, n) => ctx.fillText(text, 20, top + 14 + n * 24)); }
