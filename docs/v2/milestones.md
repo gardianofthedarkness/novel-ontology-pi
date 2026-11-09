@@ -25,7 +25,9 @@ call); a real Jev run only when the user asks.
 | M13 | All SCAD: quantised page meshes, vehicles and furniture from the kits, a building kit of our own, the baked packs retired, every remaining baked choice a layered setting (design §9) | items M13a–g listed 2026-11-09; M13g begun |
 | M15 | Interaction sheets: what a part does (solid, layer, seats, crash degree and radius, what it becomes when broken), defaults by kind, overrides per book; the engine's use of them (design §11) | M15a–d built 2026-11-09: sheets, standing vehicles in the walk graph, a text crash sized by the sheet, the wreck pinned where it fell |
 | M14 | The look pass: the world generator set from the text, top down the place tree, hooked after the reading and before the terrain loop (design §10) | built and proved with no hint 2026-11-09 (volume 1: 502 turbines from the text alone); M14d the pipeline hook and volume 2 end to end left |
+| M16 | Across books per strand: a strand registry (open, continued), shares and damage by strand, damage kept into the universe and replayed out of it (design §4.5) | items M16a–e listed 2026-11-09 after the review before volume 2 |
 | W15 | A paid volume 1 run with M8, M10 and M11 in, against W14 | done 2026-11-09 (about $0.34 with the models and a crashed attempt) |
+| W16 | A paid volume 2 run on the universe of volume 1, M16 in force | when the user asks |
 
 ## M0 — Design and configuration
 
@@ -810,6 +812,38 @@ write (about $0.1 for 60 modules). Steps, each with evidence and cost in design 
 - [ ] **M14d In the pipeline:** the hook runs after the reading and before `terrain` for every book; volume 2 read and
       passed end to end (a paid reading, when the user says so).
 
+## M16 — Across books, per strand (the user, 2026-11-09)
+
+The review before volume 2 (2026-11-09): the per-book clearing of the design's §4.5 was bookkeeping only. `Slot.damaged`
+is written by nothing (1,178 slots in the universe, none damaged), nothing carries damage out of a run (`applyEarlier`
+reads a file the director's runs never write), and the W15 run's 24 blasts include one on a nominated building's own lot
+(loc_000010's, scene 117, strength 0.9) that no later book would have seen; the other 17 struck lots are the landscape's
+own fill or non-nominated buildings inside nominated districts. The user's call: clear per strand, not per book ("what if
+the next book returned to a non finished strand?"); the policy as rewritten is design §4.5.
+
+- [ ] **M16a The strand registry** (`experiments/v2/strands.mjs --universe <dir>`): every fork of the book in
+      `universe/strands.json` (book, fork, scenes, people by name, the last scene's place and chapter); `open` read from
+      the last scenes' text by the work model for the forks that reach the last chapter (volume 1 has four: the main
+      strand of 229 scenes, an epilogue of 3 people, one that merges back, one with nobody), by position with no work
+      model; `continues` to an earlier book's open fork that shares a person, with the reason. `novel strands show|set`
+      for the main agent's override.
+- [ ] **M16b Shares and damage by strand**: `Share.strand` and `damaged[].strand`; `inForce(slot, book, carried)` in
+      place of `sharersIn(slot, book)` in the spawn, the tree and the tenants (carried: the forks this book continues,
+      through the chain); the spawn's `--from` reset lets go of this book's only, as now.
+- [ ] **M16c Damage into the universe** (`world-engine/world/keep-damage.mjs <novel-dir> --run <id>`): the run's damage
+      records to their slots, the sphere relative to the lot, with the lot's fingerprint (§4.5.1).
+- [ ] **M16d Damage out of the universe**: the export replays the damage in force on each lot as it stands, beside
+      `applyEarlier` (§4.5.2); volume 1's lot 370 (loc_000010) the first case.
+- [ ] **M16e Proof**: volume 1's forks registered and W15's damage kept; volume 2's world built after its terrain shows
+      loc_000010's lot broken and the station hall whole (a non-nominated building, struck by a strand the work model
+      reads as closed), or broken too if it reads volume 1's main strand as open.
+
+*Caches, from the same review.* Per book, and empty for a new book: `vol-N/cache-{faculties,in-use,rides,set-dresser,sky,
+stills,voices}`, `stage/director/cache`, `cache-work`, `stage/terrain/cache`. The universe's, carried on purpose:
+`cache-settei` and `cache-transport` at the library root, `universe/{terrain,pools,props,transport,settei-answers,
+abilities}.json`, `universe/models`, `universe/faces`, `universe/maps`. Every cache is keyed by its prompt, so a new
+book's prompts miss and are paid; a shared answer (a person's look, a part's binding, a kept place) is reused by design.
+
 ## W15 — Volume 1 again, with models and settings (a paid run, when the user asks)
 
 Against W14 (`d20261109020441`, $0.17): laws broken by kind, moves, held, speakers settled; models drawn and their
@@ -858,6 +892,24 @@ quarter, and a new `before` snapshot with the models and settings in.
   the shop (4 floors), floor 3" and to the 144-floor office's floor 3; after, those two moves are left unplayed and the
   car keeps to the street (77 → 75 moves, laws unchanged). A cached replay of W15 cannot check it: Jev's cache key holds
   the pictures, which render a little differently each run (the replay stopped at the first question, unpaid).
+
+## W16 — Volume 2 on the universe of volume 1 (a paid run, when the user asks)
+
+The first second book: everything volume 1 nominated stands (6 named slots, the city's manifold and highway, its look,
+its models), M16 in force, and nothing of volume 1 moves. Steps, each from a built checkout, library 16, `vol-2`
+(`inputs/book-2.txt` and the EPUB are in; `vol-2/novel` holds the snapshot's records; `job.json` lists both volumes):
+
+1. The reading (`experiments/v2/read.mjs <vol-2 novel> <out> --epub ...`; volume 1: 486 Jev requests, about $0.30) into
+   `vol-2/reading`; the workspace from it.
+2. Strands with `--universe` (M16a, the work model), terrain `sim terrain --spawn --from city --run` on the universe's
+   registry (volume 1: 142 Jev calls), transport, starts, the look pass hook (Pi), the pre-film casts (`--universe` where
+   they take it), models nominate, write and bind, stills.
+3. Volume 1's damage kept into the universe (M16c) before the world is built; a new `before` snapshot.
+4. The run with `--live --agent` on a fresh host; Pi's answers; the report by W15's fault classes, and what volume 2 found
+   standing from volume 1 (the broken lot, the highway, the names).
+
+Cost, by volume 1's numbers: the reading $0.30 and the run about $0.34 are measured; terrain, casts and models were not
+measured on their own in volume 1 (M10's models: $0.13). About $1 all in is the expectation.
 
 ## Evidence and cost, as they land
 

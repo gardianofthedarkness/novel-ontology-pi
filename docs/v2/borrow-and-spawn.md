@@ -184,21 +184,53 @@ The choice of slots is a quadratic assignment (hard in general), but small: a pa
 | A name forced into a bad slot | the only free slot is far from all its scenes | first book: settle moves the slot. Later books, where slots are fixed: measure, then decide whether a spawn cost σ may let a name spawn anyway |
 | A type Jev picks that the parent's configuration lacks | nothing to borrow | spawn one (§2.4); the configuration may list types a slot of another type can stand for, later |
 
-### 4.5 Across books
+### 4.5 Across books: per strand (the user, 2026-11-09)
 
 What a book kept never moves in a later book: its slots, borrowed or spare, stand where they are, and only the new
-book's new slots settle. What carries over differs (the user, 2026-11-01):
+book's new slots settle. What carries over is decided per **strand**, not per book (the user, 2026-11-09: "the cleaning
+should be per strand, not per book ... what if the next book returned to a non finished strand?"; the first design, of
+2026-11-01, cleared everything not nominated at the book's end):
 
 - **A nominated place is permanent.** Its slot is its own for good: never cleared, never given to another name; its name
-  returns to it in every later book, with what happened to it.
-- **What is not nominated is cleared for the next book.** An unnamed mention's share and any damage done to a slot that
-  only unnamed mentions used belong to their book. When the next book starts, those slots are free and whole again, spare
-  slots for that book's mentions to borrow (an earlier book's spare dwelling district is waiting for a later book's
-  dwelling district).
+  returns to it in every later book, with what happened to it: every book's damage to its own lot is kept, and stands
+  again when the world is built (§4.5.2).
+- **A strand's shares and damage live as long as the strand.** An unnamed mention's share, and the damage done to a slot
+  that only unnamed mentions used, belong to the strand they happened in (the timeline's fork, `stage/world/strands.json`).
+  A strand that is *resolved* when its book ends is closed: when the next book starts, its slots are free and whole
+  again, spare slots for that book's mentions to borrow (an earlier book's spare dwelling district is waiting for a later
+  book's dwelling district). A strand the book leaves *open* (its story breaks off: a cliffhanger, a side story left
+  hanging) stays in force: the next book's strand that continues it finds the same slots shared and the same buildings
+  broken.
+- **Open, and continued.** Whether a strand that reaches its book's last chapter is open or resolved is read from the
+  text of its last scenes by the work model when the book's strands are built (`experiments/v2/strands.mjs --universe`);
+  with no work model, a strand that holds the book's final scene, or ends in nothing (`to: []`) in the last chapter,
+  counts as open. A later book's strand continues an earlier open strand when the two share a person (by name; the one
+  sharing most people), recorded with its reason in the universe's strand registry (`universe/strands.json`). The main
+  agent may override either judgement (`novel strands`).
+- **In force in a book:** the book's own shares and damage, those of every earlier strand it continues (through the
+  chain), and every nominated slot's damage. Everything else of earlier books is history: kept in the registry by book
+  and strand, out of force.
 
-The universe's registry (`universe/terrain.json`) keeps every slot with its type, its owner name (permanent), its sharers
-and damage by book (history; only the current book's are in force), the configuration layer it came from, and its kept
-offset.
+The universe's registry (`universe/terrain.json`) keeps every slot with its type, its owner name (permanent), its
+sharers and damage by book and strand (history; only what is in force counts), the configuration layer it came from, and
+its kept offset. Within a book nothing changes: the world is one simulation, and a building broken in one strand is a
+ruin for every later scene (§2.8, option A).
+
+#### 4.5.1 What a run leaves: damage into the universe
+
+A run's world log (`stage/world/log/<run>.jsonl`, `kind: damage`: the lot, the sphere, the strength, the strand and the
+scene) is kept into the universe when the run is the book's (`node world-engine/world/keep-damage.mjs <novel-dir> --run
+<id>`). Each struck lot is traced to its slot: a slot's own building (`<city>:slot:...`) to that slot; a building of an
+unnamed share's area (`unnamed:<mention>:...`) to the slot the mention shares in that book; the landscape's own fill
+(`<city>:B...`) has no slot and is not kept. The slot's `damaged` gets `{ book, strand, scene, within, sphere (relative
+to the lot), strength, lot: { nx, nz, floors } }`.
+
+#### 4.5.2 What the next book finds: damage out of the universe
+
+When the engine builds the world for a book, the damage in force is replayed on each lot the moment it stands (beside
+`applyEarlier`, the export's hook for the other story lines' damage): the sphere at the same offset of the same lot, the
+same strength, through the machinery a blast uses. A lot whose size has changed since (another fingerprint) is not that
+building any more and is left whole, counted stale.
 
 ## 5. The configuration files
 
@@ -332,8 +364,8 @@ left; an unnamed one ("a convenience store") shares. The landscape fill then bui
 
 | | Proposed | The user (2026-11-01) |
 | --- | --- | --- |
-| 1 | Unnamed mentions share slots across scenes; spawn only when the parent has no slot of their type | Only while the place is not damaged between the scenes (§2.8): option A, terrain a book at once, the simulation splits damaged shares. Unnamed shares and damage are cleared for the next book (§4.5) |
-| 2 | A new name always gets a place of its own, spawning beyond the configuration | Yes (a new name: §2.4). A nominated place is permanent: never cleared or given to another name in a later book (§4.5) |
+| 1 | Unnamed mentions share slots across scenes; spawn only when the parent has no slot of their type | Only while the place is not damaged between the scenes (§2.8): option A, terrain a book at once, the simulation splits damaged shares. Unnamed shares and damage are cleared when their strand closes; an open strand carries them into the next book (§4.5) |
+| 2 | A new name always gets a place of its own, spawning beyond the configuration | Yes (a new name: §2.4). A nominated place is permanent: never cleared or given to another name in a later book, its damage kept (§4.5) |
 | 3 | Spare slots are built and shown | Yes; a slot occupied by a pin is shown and visible to Jev (§2.2) |
 | 4 | Ties under another parent at weight 0.3 | Yes, for now |
 | 5 | JSON configurations; a count may be a range | Yes; and users may override them per universe, per place, or by a function or a review by Jev or an agent: an option, not now (§5) |
