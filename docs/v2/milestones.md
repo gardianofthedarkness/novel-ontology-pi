@@ -640,6 +640,27 @@ both installed 2026-11-09. Tried first in a scratch test: 5 of volume 1's things
       bus from the warehouse kits, then save the overrides now in force as a profile named pine-city" took 33 s and
       11 commands, nothing refused: `use kit:dd_veh_bus for vehicle:"a bus"`, `profile save` (3 overrides). Pi's
       writes are now attributed `by: pi` in the settings log (`NOVEL_AGENT` in the runner's CLI environment).
+      *A third request with no hints at all* (the user: "in environment, it is said the city is full of wind turbines
+      everywhere ... without any hints, is pi agent enabled to an extend it can read and find out and modify the
+      configuration"): "the city is full of wind turbines, everywhere you look. Set the city up that way." 78 s,
+      11 commands, two refused writes that were Pi's own probes of a key's shape. Pi explained `fill.ops`, found
+      `kit:hc_prop_wind_turbine` (21.2 m), read `view.props` and understood that a kit part scales to the kind's height,
+      then, since no prop kind is a turbine, gave the street-light kind the turbine part, set that kind's height to
+      21.2 m so the part keeps its size, and laid 1,600 of them (a line every 30 m plus a scatter), saying so plainly
+      ("there is no turbine slot to fill"). Two gaps it showed: (1) it never saw volume 1's own turbine model
+      (`own:m1f47dec6`, 38 m, written by the work model), because that model is named only by its label in the book's
+      language and an English search cannot reach it: a model needs an English gloss at birth; (2) the six prop kinds
+      are fixed, so a new kind of thing has to borrow a slot: `fill.ops` and `fill.props` should take any kind that a
+      part is connected to. *Both fixed the same hour* (59912af: the code's first comment line, "<label> (wind turbine)",
+      is searched; a trailing book path after flags is read, which `find` had been dropping; a fill kind of one's own).
+      *The same request to a fresh Pi session* (a retest in the old session only re-applied its earlier answer from
+      memory, without searching): 132 s, 35 commands, 1 refused. Pi read the manifest, the skill and the help, `settings
+      show` and four `explain`s, probed two shapes, searched the warehouse, read the book's places (`timeplace show`),
+      found the turbine in the book's own text (`novel source`, `query`: two sentences), then connected volume 1's own
+      38 m turbine (`own:<label>`) to a new `wind-turbine` kind, scattered 60 a place and lined one every 180 m, kept
+      the three London places plain with place-level `fill.ops: []` and let the academy city inherit the book's, took
+      a `--before` snapshot, and said it was a look, not canon. Without a hint it read, found and modified the
+      configuration the way the design intends.
 - [x] **M10g The warehouse registry** (built 2026-11-09) (the user, 2026-11-09; design §8.3). One registry of sources outside any library
       (`~/claude-world-first/model-packs/warehouse.json`), each with its kind (a SCAD kit or a glTF folder), path,
       licence and URL; a catalogue per source in gkNextEngine's record shape, built by us: a SCAD kit's modules
