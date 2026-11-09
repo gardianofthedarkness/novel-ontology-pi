@@ -22,6 +22,7 @@ call); a real Jev run only when the user asks.
 | M10 | Models as code: nominate, brief, write or put, check; the warehouse (CC0 packs, our models, gkNextEngine's MIT kits) | built 2026-11-09 (23 of 23 pass; Pi skill); M10g–i the warehouse registry, its supply and its connections begun 2026-11-09; Codex/Claude Code left |
 | M11 | Landmark shells: named, described buildings as code, their footprint and height in the fill | built 2026-11-09 (2 in volume 1; height into the lot, footprint the lot's) |
 | M12 | People with bodies: a 7-bone standard, shared clips, parts by slot from the sheets | after M11 |
+| M13 | All SCAD: quantised page meshes, vehicles and furniture from the kits, a building kit of our own, the baked packs retired (design §9) | proposed 2026-11-09 (the user: "check if we can entirely switch to scad") |
 | W15 | A paid volume 1 run with M8, M10 and M11 in, against W14 | done 2026-11-09 (about $0.34 with the models and a crashed attempt) |
 
 ## M0 — Design and configuration
@@ -641,7 +642,8 @@ both installed 2026-11-09. Tried first in a scratch test: 5 of volume 1's things
       what never to take, the download rules. Pi's manifest and allowlist take `novel warehouse`. *Evidence:* `find`
       ranks the scratch kit's pine first for "pine tree" within its source and `kit:cw_nature_pine` first over 665 real
       parts; the skill loads through Pi's loader (`library-access.test.mjs`); the manifest names `novel warehouse`.
-      Embeddings ranking is wired for a running local server, not yet measured. *Cost:* none.
+      Embeddings were dropped the same day after the Ponytail review (design §9.6): an exact name first, then words,
+      kinds and size; nothing to run. *Cost:* none.
 - [x] **M10i The warehouse connected to the configuration** (built 2026-11-09) (design §8.4, §8.6). Slots as settings: `fill.props`
       (a part per prop kind, by place), `models.vehicles` (a part per vehicle kind), `models.parts` (a part per thing
       kind, taken by `bind` before the work model is asked), and parts in the `models.uses` table with a floors range;
@@ -676,6 +678,28 @@ unchanged in laws and moves (a model is a look). **Cost:** reported per model an
       shared clips (walk, run, sit, fall, fight) as keyframe data; a socket for what they hold. *Evidence:* unit 52's
       walk with steps beside the capsules; frame time on a phone. *Cost:* none or a little (slot choices by the work
       model).
+
+## M13 — All SCAD (proposed 2026-11-09; design §9)
+
+The user asked whether the whole project can be SCAD with one warehouse, for the least context and effort. Measured:
+the page pays 30 bytes a triangle for a SCAD model against 13 for a baked one (an encoding, ours to change); the MIT
+kits cover every vehicle and prop kind and most low-rise uses, none over 20 m; towers, stations and halls are ours to
+write (about $0.1 for 60 modules). Steps, each with evidence and cost in design §9.5:
+
+- [ ] **M13a Quantised SCAD meshes on the page** (int16 + step, a colour palette). *Evidence:* the first quarter's page
+      bytes before and after. *Cost:* none.
+- [ ] **M13b Vehicles from the kits:** `models.vehicles` filled for the 9 kinds as the universe's default; the player's
+      hand-built forms and `vehicleModels.json` retired. *Evidence:* every vehicle on a rehearsal page a `scad:` model.
+- [ ] **M13c A building kit of our own** (`kits/nv_kit.scad`, MIT): a module per use and style, named at birth, written
+      by the work model from a use brief; towers and podiums; `models.uses` filled from it. *Evidence:* the first quarter
+      drawn from the kit alone. *Cost:* about $0.1.
+- [ ] **M13d Furniture from the kits:** a `models.furniture` slot; `furnitureModels.json` retired.
+- [ ] **M13e The baked packs retired:** `architectureModels.json`, the bakers and the glTF path dropped from the
+      critical path (2.8 MB out of the repository; 525 MB off the Mac when the user empties the packs folder).
+- [ ] **M13f People as a rig** (M12).
+- [x] **Recall by name, free** (built 2026-11-09, with M10h): `find` matches a part's name, label or reference exactly
+      first; a written model is `own:<label's slug>`. *Evidence:* `test/warehouse.test.ts` (a model named at birth found
+      with `exact: true` by its label, by slug and by id). *Cost:* none.
 
 ## W15 — Volume 1 again, with models and settings (a paid run, when the user asks)
 

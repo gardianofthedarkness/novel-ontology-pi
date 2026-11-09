@@ -115,3 +115,28 @@ test("a profile is the overrides in force, saved by name and applied to another 
   assert.deepEqual((diff as { overrides: { key: string; place: string | null }[] }).overrides.map((row) => `${row.key}@${row.place ?? "book"}`).sort(), ["fill.props@loc_000001", "fill.streets@book"]);
   await assert.rejects(settingsProfileApply(other.novel, "no-such", { why: "x" }), /No profile no-such/);
 });
+
+test("a model named at birth is recalled exactly by its label, for nothing: own:<slug>, own:<id>, and find", async () => {
+  const { lib, novel } = library("lib-own");
+  const store = join(lib, "universe", "models"); mkdirSync(store, { recursive: true });
+  const mesh = { p: [0, 0, 0, 1, 0, 0, 0, 1, 0], t: [0, 1, 2], c: [200, 200, 200], size: [1, 1, 0] };
+  writeFileSync(join(store, "m0000abcd.mesh.json"), JSON.stringify(mesh));
+  writeFileSync(join(store, "catalog.json"), JSON.stringify({ version: 1, models: { m0000abcd: { id: "m0000abcd", label: "Advertising Van", kind: "a van or a truck", state: "ok", at: "2026-11-09T00:00:00Z", size: [5.9, 2.5, 2.5], triangles: 300 } }, names: { "Advertising Van": "m0000abcd" } }));
+  const found = await WH.findParts("Advertising Van", { novelDir: novel });
+  assert.equal(found.exact, true); assert.equal(found.parts[0].ref, "own:advertising_van"); assert.ok(found.parts[0].score >= 10);
+  const byWords = await WH.findParts("van", { novelDir: novel, kind: "a van or a truck" });
+  assert.ok(byWords.parts.some((part) => part.ref === "own:advertising_van"), "its words find it among the kits' vans too");
+  for (const ref of ["own:advertising_van", "own:m0000abcd", "own:Advertising_Van"]) { const part = await WH.partOf(ref, { novelDir: novel }); assert.equal(part?.id, "m0000abcd", ref); assert.deepEqual((await WH.meshOfPart(ref, { novelDir: novel }))?.size, [1, 1, 0], ref); }
+  const used = await WH.usePart(novel, "own:advertising_van", "vehicle:a van or a truck", { why: "the book's own van for every van" });
+  assert.equal(used.connected.part, "own:advertising_van");
+});
+
+test("a baked pack part decodes from its own bytes (a pooled Buffer once gave the whole pool): the sedan's size, bounds and indices hold", async () => {
+  const mesh = await WH.meshOfPart("pack:car-sedan");
+  assert.ok(mesh, "the baked vehicles are in the repository");
+  const verts = mesh!.p.length / 3, [sx, sy, sz] = mesh!.size;
+  assert.ok(verts > 8 && mesh!.t.length % 3 === 0 && Math.max(...mesh!.t) < verts, "every triangle points at a vertex");
+  for (let i = 0; i < mesh!.p.length; i += 3) assert.ok(Math.abs(mesh!.p[i]) <= sx / 2 + 0.01 && mesh!.p[i + 1] >= -0.01 && mesh!.p[i + 1] <= sy + 0.01 && Math.abs(mesh!.p[i + 2]) <= sz / 2 + 0.01, `vertex ${i / 3} inside the model's box`);
+  const found = await WH.findParts("sedan", { source: "pack" });
+  assert.equal(found.parts[0]?.ref, "pack:car-sedan");
+});

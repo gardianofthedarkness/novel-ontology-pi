@@ -8,7 +8,7 @@ import { repo } from './config.mjs';
 
 const load = path => import(pathToFileURL(resolve(repo, path)).href);
 const clip = (value, length) => (typeof value === 'string' ? value.slice(0, length) : null);
-const PLACE = /^[\w:-]{1,80}$/, KEY = /^[a-z][\w.]{1,60}$/i, REF = /^[a-z][a-z0-9_-]*:[\w.-]+$/, SLOT = /^(prop|vehicle|kind|use|role):[\w .-]{1,60}$/;
+const PLACE = /^[\w:-]{1,80}$/, KEY = /^[a-z][\w.]{1,60}$/i, REF = /^[a-z][a-z0-9_-]*:[\p{L}\p{N}._-]{1,120}$/u, SLOT = /^(prop|vehicle|kind|use|role):[\p{L}\p{N} .-]{1,60}$/u;
 
 /** The settings as they resolve for the book (or a place), by group, with each key's meaning, unit, range, kind, layers and when a change takes effect. */
 export async function settingsView(workspace, { place = null } = {}) {
@@ -44,7 +44,10 @@ export async function warehouseView(workspace, { find = '', kind = null, categor
   const found = words || source || category ? await W.warehouseFind(words || (category ?? source ?? ''), { kind: clip(kind, 60) || undefined, category: clip(category, 40) || undefined, source: clip(source, 40) || undefined, size: Number.isFinite(Number(size)) && Number(size) > 0 ? Number(size) : undefined, top: Math.min(200, Math.max(1, Number(top) || 40)), novelDir: workspace }) : null;
   const V = await load('dist/src/v2/settings.js'), at = { book: resolve(workspace) };
   const slots = { props: V.setting('fill.props', at), vehicles: V.setting('models.vehicles', at), parts: V.setting('models.parts', at) };
-  return { sources: sources.sources, allowedLicences: sources.allowedLicences, found, slots };
+  // The slots a part may go to, from the kinds the code knows and the uses the table has (one list, the panel's too).
+  const PR = await load('dist/src/v2/models/partRefs.js'), MD = await load('dist/src/v2/models/models.js'), uses = V.table('models.uses', at);
+  const slotChoices = [...PR.PROP_KINDS_FOR_PARTS.map(kind => `prop:${kind}`), ...PR.VEHICLE_KINDS.map(kind => `vehicle:${kind}`), ...[...MD.PART_KINDS].map(kind => `kind:${kind}`), ...Object.keys(uses.uses ?? {}).map(use => `use:${use}`), ...Object.keys(uses.roles ?? {}).map(role => `role:${role}`)];
+  return { sources: sources.sources, allowedLicences: sources.allowedLicences, found, slots, slotChoices };
 }
 
 /** A part connected to a slot from the panel: { part, slot, why, place?, before?, floors? } → novel warehouse use. */

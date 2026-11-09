@@ -4,7 +4,9 @@
  * `own:m1234abcd` (the universe's own models), or any source registered with `novel warehouse add`. The three slot
  * settings are maps from a kind to a part; `checkPartMap` is what the settings schema holds them to (settings.ts).
  */
-export const PART_REF = /^[a-z][a-z0-9_-]*:[\w.-]+$/;
+export const PART_REF = /^[a-z][a-z0-9_-]*:[\p{L}\p{N}._-]+$/u;
+/** A name the finder matches exactly: lower-cased, every run of spaces or punctuation one underscore (a label named at birth, a module's name). */
+export const slugOf = (text: string) => text.toLowerCase().replace(/[^\p{L}\p{N}]+/gu, "_").replace(/^_+|_+$/g, "");
 export const PROP_KINDS_FOR_PARTS = ["tree", "street-light", "bench", "bin", "car", "bollard"] as const;
 export const VEHICLE_KINDS = ["a car", "a van or a truck", "a bus", "a train or a carriage", "a motorbike or a bicycle", "a boat", "a helicopter", "an aircraft", "a drone"] as const;
 
@@ -22,7 +24,7 @@ export function checkPartMap(key: string, value: unknown): string[] {
 
 /** The source and part of a reference, or null. */
 export function splitRef(ref: string): { source: string; part: string } | null {
-  const m = PART_REF.test(ref) ? ref.match(/^([^:]+):(.+)$/) : null;
+  const m = PART_REF.test(ref) ? ref.match(/^([^:]+):(.+)$/u) : null;
   return m ? { source: m[1], part: m[2] } : null;
 }
 

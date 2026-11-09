@@ -203,8 +203,8 @@ use so the references already written keep working. A part is `<source>:<part>`.
 | `add <name> <path> --licence <SPDX> --why <text> [--from <url>] [--kind scad\|gltf] [--categories <json>]` | Registers a folder already on disk and builds its catalogue. Refused unless the licence is allowed (CC0-1.0, MIT, Apache-2.0, BSD-2-Clause, BSD-3-Clause, CC-BY-4.0 with its attribution kept); `--allowed-by "<the user's words>"` records the user's OK for another | none |
 | `fetch <name> <url> --licence <SPDX> --ok "<the user's words>" [--path <folder in the repository>] [--limit <MB>]` | Downloads a git repository (or one folder of it) or a zip into its own new folder under the packs root, keeps its LICENSE and writes SOURCE.txt (url, commit, date), then `add`. Never without `--ok`: a download needs the user's permission, asked with the name, licence and size. Default limit 200 MB (13 GB free on this Mac) | none |
 | `refresh <name>` | Rebuilds a source's catalogue | none |
-| `find "<words>" [--kind <thing kind>] [--category <c>] [--size <m>] [--source <name>] [--top N]` | Searches every catalogue: words against name and category (synonyms from the kinds' categories), a size filter near the reading's size, and, when the local embedding server is up, embeddings of "name, category, size" ranked by the words. Results as `<source>:<part>` with size and category | none (local) |
-| `show <source>:<part>` | Its record; `--still <file.png>` renders it with OpenSCAD for an agent that can look | none |
+| `find "<words>" [--kind <thing kind>] [--category <c>] [--size <m>] [--source <name>] [--top N]` | Searches every catalogue: an exact name first (a part's name, a model's label given at birth, or its reference), then the words against name and category (synonyms from the kinds' categories) and a size filter near the reading's size. Results as `<source>:<part>` with size and category. No embeddings (the user, 2026-11-09: names at birth recall for nothing) | none |
+| `show <source>:<part>` | Its record and its mesh's size | none |
 | `use <source>:<part> for <slot> <novel> --why <text> [--place <id>] [--before] [--floors a b]` | Connects a part to a configuration slot (8.4); sugar over `novel settings set` | none |
 
 ### 8.4 Connecting the warehouse to the configuration
@@ -245,3 +245,109 @@ the licence gate), `find` by words and size, `use` writing the setting and refus
 and apply, the host's settings and warehouse routes. Evidence: the first quarter's rehearsal identical with no
 override; with `prop:tree` bound to a kit tree, the page's `scadModels` holds it and the trees' instanced mesh is the
 part's geometry; a settings change from the panel lands in the layer's log. Cost: none.
+
+## 9. Could the whole project be SCAD? (the user, 2026-11-09)
+
+The user: "check if we can entirely switch to scad for our entire project and unified warehouse system that minimize
+context size and effort level for agent or work model", and "I support embedding word matching because we can have
+custom build models be recalled at 100% without cost, if the exact name is assigned at birth, or for this part we can
+do programmatic". Measured on this repository and the rehearsal copy, 2026-11-09.
+
+### 9.1 What is not SCAD today
+
+| Asset | Count | Where | Bytes |
+| --- | --- | --- | --- |
+| Baked building models (Kenney, KayKit, Quaternius, CC0) | 92 | `apps/playground/src/data/architectureModels.json` | 2.1 MB in the repository |
+| Baked vehicles | 22 | `vehicleModels.json` | 545 KB |
+| Baked furniture (KayKit) | 28 | `furnitureModels.json` | 129 KB |
+| The packs on disk | 5 folders | `~/claude-world-first/model-packs` | 525 MB (Quaternius alone 468 MB) |
+| Hand-built vehicle forms in the player | 9 kinds | `strand-demo.html vehicleForm`, 56 lines | |
+| Plain prop shapes in the player | 6 kinds | `PROP_LOOK` | |
+| Three baking tools | | `apps/playground/tools/*-models.mjs` | |
+
+Already SCAD: the universe's own models (25 in volume 1), the two landmark shells, gkNextEngine's kits (616 KB of
+SCAD for 668 modules: bldg 88, prop 218, veh 50, nature 54, furn 35, ground, roads, terrain, char parts), and the
+props slot (`fill.props`).
+
+### 9.2 What the page pays
+
+The rehearsal copy's world page is 2.8 MB: the walk grid 973 KB, the baked models 830 KB (74 models, 65,000
+triangles, **13 bytes a triangle**, int16 positions in base64), the SCAD models 133 KB (3 models, 4,500 triangles,
+**30 bytes a triangle**, plain JSON floats and a colour a triangle). An all-SCAD page in today's encoding would carry
+about 2.3× the model bytes; the same quantisation the baked models use (int16 positions and a step, a colour palette
+with an index a triangle) brings SCAD to the same 13 bytes a triangle. That is the first step, and it is ours to make.
+
+### 9.3 Coverage of our kinds by the MIT kits
+
+- **Vehicles (9 kinds):** all covered (car, taxi, van, bus, truck, pickup, helicopter, airliner, boat, tank, tractor).
+  The player's 56 lines of hand-built forms can go once `models.vehicles` names a part per kind.
+- **Props (6 kinds):** all covered (lamp_post, bench, bin, bollard_pair, tree/pine, car), plus 200 more (bus shelters,
+  traffic lights, hydrants, mailboxes, containers, cranes).
+- **Furniture:** 35 modules (cafe, shop, office, hospitality) against our 28 baked KayKit pieces; the architect's rooms
+  (`digest/rooms.mjs`) would take a `models.furniture` slot (kind → part) like the others.
+- **Buildings (28 uses):** 88 modules cover house, apartment, shop, cafe, hospital, hotel, school, office, warehouse,
+  factory, church, supermarket, police, gas station, market, barracks; **none is taller than 20 m** (8 over 15 m). A
+  megacity's towers, stations, banks, cinemas, department stores, labs and halls are ours to write: one module per use
+  and style, scaled to its lot as shells are now, by the work model from the use's brief (the two landmarks cost
+  $0.004 together; 60 modules would cost about $0.1).
+- **People:** gk's `kit_char` (M12). **Faces:** pictures (the album), never code (the articles' own boundary).
+- **The terrain and the walk grid:** ours and procedural; nothing to gain from SCAD there.
+
+### 9.4 The unified warehouse, and what it saves an agent
+
+One source kind (SCAD), one catalogue record a part, one contract, one way to name: the part's name is given at birth
+and never changes. For an agent that means: `novel warehouse find "<words>"` (20 lines back), `use <part> for <slot>`,
+or `novel model write` with a brief of about 1,200 tokens (the contract, at most six lines of the novel, the nearest
+parts named as examples) and an answer of 600–2,000 tokens; no glTF, no baking recipe, no per-pack licence, no table
+of categories to read. The work model's cost a model, measured: $0.0017 on average (62 requests, $0.108).
+
+**Recall by name, free:** `find` now matches the words as a slug against a part's name, its label and its reference
+first (+10, `exact: true`), before the words, the kinds' categories and the size; a model written by `novel model`
+is `own:<label's slug>` as well as `own:<id>`. Embeddings stay a last, optional ranking for fuzzy natural-language
+searches when the local server is up; they never decide an exact name.
+
+### 9.5 The steps (milestones M13)
+
+1. **Quantised SCAD meshes on the page** (int16 + step, a colour palette): the page at 13 bytes a triangle for any
+   model; the first-quarter page's bytes before and after as evidence.
+2. **Vehicles from the kits:** `models.vehicles` names a kit part for each of the 9 kinds as the universe's default;
+   the player's hand-built forms and the baked `vehicleModels.json` retired. Evidence: a rehearsal page with every
+   vehicle a `scad:` model; W15's unit 52 van and 154 car stills again.
+3. **A building kit of our own** (`kits/nv_kit.scad`, MIT, in the repository): one module per use and style, written
+   by the work model from a use brief and the contract, named `nv_bldg_<use>_<n>` at birth; towers and podiums
+   included; the `models.uses` table filled with them. Evidence: the first quarter drawn from the kit alone; page
+   bytes; cost per module.
+4. **Furniture from the kits:** a `models.furniture` slot; `rooms.mjs` and the player read it; `furnitureModels.json`
+   retired.
+5. **The baked packs retired:** `architectureModels.json`, the bakers and the glTF path in the warehouse dropped
+   (kept as a registered source kind for anyone who wants a glTF folder, but no longer needed); 2.8 MB out of the
+   repository, 525 MB off this Mac if the user empties the packs folder.
+6. **People as a rig** (M12, as planned).
+
+Cost: steps 1, 2, 4 and 5 none; step 3 about $0.1 of work-model calls. Risk: a look of its own against gk's cold-war
+and old-town styles (the contract says low-poly and stylised; our kit sets the city's style), and OpenSCAD's time per
+new module (seconds, cached).
+
+### 9.6 The Ponytail review of this change (the user: "check with ponytail skill")
+
+Ponytail ([DietrichGebert/ponytail](https://github.com/DietrichGebert/ponytail), MIT) is a Claude Code skill set: a
+"lazy senior dev" stance (the best code is code never written; reuse, then the standard library, then the least new
+code; delete before adding; every shortcut marked `shortcut: <limit>, <when to upgrade>`) and a review that lists
+findings only, each with a concrete wrong result, grouped as must fix, should fix and nice to have. Its rules applied to
+the warehouse change (6c8d4e1 and the exact-name commit), 2026-11-09:
+
+- **Must fix, fixed:** `meshOfPart` for a baked pack decoded int16 positions from `Buffer.buffer.slice(0)`: a Buffer
+  from base64 may sit in Node's shared pool, so a small part read the whole pool's bytes. A typed array over the
+  Buffer's own offset and length now; a test holds the sedan's vertices inside its box.
+- **Should fix, deleted:** the embeddings ranking (a third matcher, needing a server, never exercised) and `show
+  --still` (a picture nobody asked for): −36 lines. Exact name, words, kinds and size remain.
+- **Should fix, merged:** the panel's hard-coded list of 32 slot choices duplicated the kinds in `partRefs.ts` and
+  the uses in `config/models.json`; the host now serves one list built from them.
+- **Nice to have, fixed:** `propModelsFor` ran twice per landscape.
+- **Kept as shortcuts, marked:** `fetchSource` (git, zip, sparse, a size limit) tested only for its refusals, not
+  against a real download; the glTF reader copied from the playground's baker, both to go with the baked packs (M13e).
+- **Not checked:** a vehicle slot and a building-use part in a rehearsal; `fetch` end to end.
+
+At Ponytail's "ultra" level the all-SCAD request itself: justified where it deletes (the baked packs and their three
+bakers, the player's 56 lines of vehicle forms, two mesh encodings into one); not yet justified for furniture (129 KB
+that works) until the kit's furniture is seen to look right, so M13d goes last.

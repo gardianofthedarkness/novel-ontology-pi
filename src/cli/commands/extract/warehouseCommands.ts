@@ -4,11 +4,7 @@
  * with a catalogue of evaluated records; parts are `<source>:<part>`; `use` connects a part to a slot of the world's
  * configuration through the settings schema. JSON out; nothing here asks a model; a download needs the user's OK.
  */
-import { existsSync } from "node:fs";
-import { writeFile } from "node:fs/promises";
 import { addSource, fetchSource, findParts, listSources, meshOfPart, partOf, refreshSource, SLOTS, usePart, type AddOptions } from "../../../v2/models/warehouse.js";
-import { splitRef } from "../../../v2/models/partRefs.js";
-import { evaluate } from "../../../v2/models/scad.js";
 
 export async function warehouseList(options: { source?: string; novelDir?: string } = {}) {
   const out = await listSources(options);
@@ -28,25 +24,16 @@ export async function warehouseFetch(name: string, url: string, options: Omit<Ad
 
 export async function warehouseRefresh(name: string) { return refreshSource(name); }
 
-export async function warehouseFind(words: string, options: { kind?: string; category?: string; size?: number; source?: string; top?: number; novelDir?: string; embeddings?: boolean } = {}) {
+export async function warehouseFind(words: string, options: { kind?: string; category?: string; size?: number; source?: string; top?: number; novelDir?: string } = {}) {
   const out = await findParts(words, options);
   return { ...out, slots: SLOTS.map((slot) => `${slot}:<name>`), next: out.parts.length ? `novel warehouse show ${out.parts[0].ref}; novel warehouse use ${out.parts[0].ref} for <slot> <novel-dir> --why <text>` : "novel warehouse list (the sources); novel warehouse add|fetch (more of them)" };
 }
 
-export async function warehouseShow(ref: string, options: { novelDir?: string; still?: string } = {}) {
+export async function warehouseShow(ref: string, options: { novelDir?: string } = {}) {
   const part = await partOf(ref, { novelDir: options.novelDir });
   if (!part) throw new Error(`No part ${ref} (novel warehouse find "<words>").`);
-  let still: string | null = null;
-  if (options.still) {
-    // A picture of the part for an agent that can look: OpenSCAD renders the mesh's wrapper to a PNG.
-    const split = splitRef(ref), source = split ? (await listSources({ source: split.source })).sources[0] : null;
-    if (source && part.file && source.kind === "scad") {
-      const dir = `${options.still}.scad`; await writeFile(dir, `use <${source.path}/${part.file}>\n${part.name}();\n`);
-      const run = evaluate(dir, options.still, 120_000); still = run.ok && existsSync(options.still) ? options.still : null;
-    }
-  }
   const mesh = await meshOfPart(ref, { novelDir: options.novelDir });
-  return { ...part, size: [part.footprint[0], part.height, part.footprint[1]], mesh: mesh ? { triangles: mesh.t.length / 3, size: mesh.size } : null, still, next: `novel warehouse use ${ref} for <slot> <novel-dir> --why <text>` };
+  return { ...part, size: [part.footprint[0], part.height, part.footprint[1]], mesh: mesh ? { triangles: mesh.t.length / 3, size: mesh.size } : null, next: `novel warehouse use ${ref} for <slot> <novel-dir> --why <text>` };
 }
 
 export async function warehouseUse(novelDir: string, ref: string, slot: string, options: { why?: string; place?: string; before?: boolean; floors?: [number, number]; by?: string }) {

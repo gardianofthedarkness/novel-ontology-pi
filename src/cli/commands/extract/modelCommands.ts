@@ -8,6 +8,7 @@ import { join, resolve } from "node:path";
 import { workModelFromEnv } from "../../../ground/connectors/workModel.js";
 import { bindKit, bindPart, logUsage, nominateBuildings, recheckModel, briefOf, catalogOf, checkModel, idOf, kitModules, KIT_CATEGORIES, nominate, nominationsOf, pickParts, propsOf, putModel, readingOf, saveNominations, storeOf, writeModel, type Nomination } from "../../../v2/models/models.js";
 import { loadWorkspaceSentences } from "./timeplaceCommands.js";
+import { PART_REF } from "../../../v2/models/partRefs.js";
 
 async function sceneMap(novelDir: string, reading?: string) {
   const data = await readingOf(novelDir, reading), out = new Map<string, string>();
@@ -79,7 +80,7 @@ export async function modelCheck(novelDir: string, thing: string | null) {
 }
 
 export async function modelUse(novelDir: string, thing: string, part: string, options: { why?: string } = {}) {
-  if (!/^[a-z][a-z0-9_-]*:[\w.-]+$/.test(part)) throw new Error("A part is <source>:<part>: kit:<module> (gkNextEngine's SCAD kits), pack:<model> (the baked CC0 packs), own:<id>, or a source registered with novel warehouse add (novel warehouse find \"<words>\").");
+  if (!PART_REF.test(part)) throw new Error("A part is <source>:<part>: kit:<module> (gkNextEngine's SCAD kits), pack:<model> (the baked CC0 packs), own:<id>, or a source registered with novel warehouse add (novel warehouse find \"<words>\").");
   const row = await rowOf(novelDir, thing);
   const made = await bindPart(novelDir, row, part, process.env.NOVEL_AGENT ?? "agent", options.why);
   return { label: row.label, id: row.id, part, state: made.record.state, size: made.record.size ?? null, problems: made.record.problems, warnings: made.record.warnings };

@@ -15,7 +15,7 @@ import { fileURLToPath } from "node:url";
 import { spawnSync } from "node:child_process";
 import { evaluate, forPlayer, measure, readOff, solidOf } from "./scad.js";
 import { KIT_CATEGORIES, KITS, catalogOf, storeOf } from "./models.js";
-import { PART_REF, idOfRef, splitRef } from "./partRefs.js";
+import { PART_REF, idOfRef, slugOf, splitRef } from "./partRefs.js";
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..", "..", "..", "..");
 export const PACKS_ROOT = process.env.NOVEL_MODEL_PACKS ?? join(process.env.HOME ?? "", "claude-world-first", "model-packs");
@@ -27,7 +27,7 @@ const BAKED_DIR = join(ROOT, "apps", "playground", "src", "data");
 export type SourceKind = "scad" | "gltf" | "baked" | "own";
 export interface Source { kind: SourceKind; path: string; licence: string; url?: string | null; fetched?: string; by?: string; note?: string; categories?: Record<string, string>; unit?: "m" | "kit"; builtIn?: boolean }
 export interface Registry { version: 1; sources: Record<string, Source> }
-export interface Part { ref: string; source: string; name: string; category: string; footprint: [number, number]; height: number; triangles: number; ok: boolean; file?: string; params?: string; unit: "m" | "kit"; note?: string }
+export interface Part { ref: string; source: string; name: string; category: string; footprint: [number, number]; height: number; triangles: number; ok: boolean; file?: string; params?: string; unit: "m" | "kit"; note?: string; id?: string }
 export interface Mesh { p: number[]; t: number[]; c: number[]; size: [number, number, number] }
 interface OurCatalogue { version: 1; kind: SourceKind; at: string; parts: Omit<Part, "ref" | "source" | "unit">[] }
 interface GkCatalogue { kits?: { name: string; file: string; modules: { name: string; category: string; footprint: [number, number]; height: number; triangles: number; ok?: boolean; params?: string }[] }[] }
@@ -68,7 +68,9 @@ export function catalogueOf(name: string, source: Source): Part[] {
 /** Our own models of a universe, as a source (`own:<id>`), where a novel is given. */
 export async function ownParts(novelDir: string): Promise<Part[]> {
   const catalog = await catalogOf(novelDir);
-  return Object.values(catalog.models).filter((record) => record.state === "ok" && record.size).map((record) => ({ ref: `own:${record.id}`, source: "own", name: record.id, category: record.kind, footprint: [record.size![0], record.size![2]], height: record.size![1], triangles: record.triangles ?? 0, ok: true, note: record.label, unit: "m" as const }));
+  // A model is named at birth (the user, 2026-11-09): its label's slug is its name, so `find "<label>"` recalls it exactly
+  // and `own:<slug>` (or `own:<id>`) names it; the id stays as the page's and the store's key.
+  return Object.values(catalog.models).filter((record) => (record.state === "ok" || record.state === "part") && record.size).map((record) => ({ ref: `own:${slugOf(record.label) || record.id}`, source: "own", name: slugOf(record.label) || record.id, category: record.kind, footprint: [record.size![0], record.size![2]], height: record.size![1], triangles: record.triangles ?? 0, ok: true, note: record.label, id: record.id, unit: "m" as const }));
 }
 
 /** Every part of every source (and the universe's own, given a novel). */
@@ -145,6 +147,7 @@ async function catalogueScad(path: string, categories: Record<string, string> = 
 }
 
 // A glTF/GLB reader (apps/playground/tools/architecture-models-add.mjs, in TypeScript): positions and triangles of a file.
+// shortcut: a copy of the baker's reader; both go when the baked packs retire (milestones M13e), upgrade by deleting.
 type Gltf = { gltf: { nodes: { mesh?: number; children?: number[]; matrix?: number[]; rotation?: number[]; scale?: number[]; translation?: number[] }[]; meshes: { primitives: { attributes: { POSITION: number; COLOR_0?: number }; indices?: number; material?: number }[] }[]; materials?: { pbrMetallicRoughness?: { baseColorFactor?: number[] } }[]; accessors: { bufferView: number; byteOffset?: number; componentType: number; count: number; type: string; normalized?: boolean }[]; bufferViews: { buffer?: number; byteOffset?: number; byteStride?: number }[]; buffers?: { uri: string }[]; scenes: { nodes: number[] }[]; scene?: number }; buffers: Buffer[] };
 function readGltf(file: string): Gltf {
   const bytes = readFileSync(file);
@@ -241,6 +244,7 @@ export async function refreshSource(name: string, options: { onPart?: (part: str
 /**
  * Download a source into its own new folder under the packs root, with the user's OK (never without: a download needs
  * their permission): a git repository (one folder of it with `path`) or a zip; LICENSE kept, SOURCE.txt written; then added.
+ * shortcut: not yet run against a real download (tested only for its refusals), upgrade when the first pack is fetched.
  */
 export async function fetchSource(name: string, url: string, options: AddOptions & { ok: string; path?: string; limitMB?: number }) {
   if (!options.ok?.trim()) throw new Error("A download needs the user's permission: ask them (name, licence, size), then pass --ok \"<their words>\".");
@@ -282,44 +286,35 @@ export async function fetchSource(name: string, url: string, options: AddOptions
 
 // ---- finding parts -----------------------------------------------------------------------------------------------
 
-const tokens = (text: string) => text.toLowerCase().split(/[^a-z0-9]+/).filter((t) => t.length > 1);
+const tokens = (text: string) => text.toLowerCase().split(/[^\p{L}\p{N}]+/u).filter((t) => t.length > 1 || /\p{Script=Han}/u.test(t));
 const SYNONYMS: Record<string, string[]> = { tree: ["tree", "pine", "oak", "palm", "nature", "plant", "bush"], "street-light": ["lamp", "light", "streetlight", "lantern", "pole"], bench: ["bench", "seat"], bin: ["bin", "trash", "garbage", "can", "dumpster"], car: ["car", "sedan", "veh", "vehicle", "hatchback", "taxi"], bollard: ["bollard", "post", "barrier", "pillar"], lamp: ["light"], vehicle: ["veh", "car", "truck", "bus"], building: ["bldg", "house", "block", "office", "tower"], weapon: ["wpn", "gun", "rifle", "pistol", "knife", "sword"], gun: ["wpn", "rifle", "pistol", "ak"], furniture: ["furn", "chair", "table", "desk", "bed", "sofa"] };
-export interface FindOptions { kind?: string | null; category?: string | null; size?: number | null; source?: string | null; top?: number; novelDir?: string; embeddings?: boolean }
-/** Parts ranked for a few words: name and category matches, the kinds' categories, size closeness, and embeddings when a local server is up. */
+export interface FindOptions { kind?: string | null; category?: string | null; size?: number | null; source?: string | null; top?: number; novelDir?: string }
+/** Parts ranked for a few words: an exact name first, then name and category matches, the kinds' categories and size closeness (the user, 2026-11-09: names given at birth recall for nothing; no embeddings). */
 export async function findParts(words: string, options: FindOptions = {}) {
   const all = (await partsOf({ source: options.source ?? undefined, novelDir: options.novelDir })).filter((part) => part.ok);
   const asked = tokens(words), wanted = new Set(asked.flatMap((t) => [t, ...(SYNONYMS[t] ?? [])])), categories = options.kind ? new Set(KIT_CATEGORIES[options.kind] ?? []) : null;
+  // Exact recall first (the user, 2026-11-09: a model named at birth is found by its name, every time, for nothing): the
+  // words as a slug against a part's name, its label, or its full reference; then the words, the kinds, the size.
+  const exact = slugOf(words), exactRef = words.trim();
   const scored = all.filter((part) => !options.category || part.category === options.category).map((part) => {
-    const own = new Set([...tokens(part.name), ...tokens(part.category), ...tokens(part.note ?? "")]);
+    const own = new Set([...tokens(part.name), ...tokens(part.category), ...tokens(part.note ?? ""), ...tokens(part.name.replace(/_/g, " "))]);
     let score = 0;
+    if (exact && (part.name === exact || (part.note && slugOf(part.note) === exact) || part.ref === exactRef || part.name === exactRef)) score += 10;
     for (const t of asked) { if (own.has(t)) score += 2; else if ([...own].some((o) => o.includes(t) || t.includes(o))) score += 0.6; }
     for (const t of wanted) if (own.has(t) && !asked.includes(t)) score += 0.8;
     if (categories?.has(part.category)) score += 1.5;
     if (options.size && options.size > 0) { const longest = Math.max(part.footprint[0], part.footprint[1], part.height); if (longest > 0) score += 1 / (1 + Math.abs(Math.log(longest / options.size))); }
     return { part, score };
   });
-  let withEmbeddings = false;
-  if (options.embeddings ?? !!process.env.EMBEDDING_BASE_URL) {
-    try {
-      const { loadEmbedder, cosineSimilarity } = await import("../../ground/connectors/embeddings.js");
-      const embedder = loadEmbedder({ provider: process.env.EMBEDDING_PROVIDER, baseUrl: process.env.EMBEDDING_BASE_URL ?? "http://127.0.0.1:8194/v1", model: process.env.EMBEDDING_MODEL ?? "BAAI/bge-small-zh-v1.5", apiKey: null, dimension: null } as Parameters<typeof loadEmbedder>[0]);
-      if (embedder) {
-        const pool = scored.filter((row) => row.score > 0).sort((a, b) => b.score - a.score).slice(0, 200), texts = [words, ...pool.map((row) => `${row.part.name.replace(/_/g, " ")}, ${row.part.category}, ${row.part.footprint.join(" by ")} by ${row.part.height} m${row.part.note ? `, ${row.part.note}` : ""}`)];
-        const vectors = await embedder.embed(texts);
-        pool.forEach((row, n) => { row.score += 3 * Math.max(0, cosineSimilarity(vectors[0], vectors[n + 1])); });
-        withEmbeddings = true;
-      }
-    } catch { /* no embedding server: words alone */ }
-  }
   const top = scored.filter((row) => row.score > 0).sort((a, b) => b.score - a.score || a.part.name.localeCompare(b.part.name)).slice(0, options.top ?? 20);
-  return { words, kind: options.kind ?? null, searched: all.length, embeddings: withEmbeddings, parts: top.map(({ part, score }) => ({ ref: part.ref, category: part.category, size: [part.footprint[0], part.height, part.footprint[1]], unit: part.unit, triangles: part.triangles, score: Math.round(score * 100) / 100, ...(part.note ? { note: part.note } : {}) })) };
+  return { words, kind: options.kind ?? null, searched: all.length, exact: top.some(({ score }) => score >= 10), parts: top.map(({ part, score }) => ({ ref: part.ref, category: part.category, size: [part.footprint[0], part.height, part.footprint[1]], unit: part.unit, triangles: part.triangles, score: Math.round(score * 100) / 100, ...(part.note ? { note: part.note } : {}) })) };
 }
 
 /** One part's record, or null. */
 export async function partOf(ref: string, options: { novelDir?: string } = {}): Promise<Part | null> {
   const split = splitRef(ref);
   if (!split) return null;
-  if (split.source === "own") { if (!options.novelDir) return null; return (await ownParts(options.novelDir)).find((part) => part.name === split.part) ?? null; }
+  if (split.source === "own") { if (!options.novelDir) return null; const want = slugOf(split.part); return (await ownParts(options.novelDir)).find((part) => part.name === split.part || part.id === split.part || part.name === want) ?? null; }
   const source = readRegistry().sources[split.source];
   if (!source) return null;
   return catalogueOf(split.source, source).find((part) => part.name === split.part) ?? null;
@@ -329,7 +324,7 @@ export async function partOf(ref: string, options: { novelDir?: string } = {}): 
 export async function meshOfPart(ref: string, options: { novelDir?: string } = {}): Promise<Mesh | null> {
   const split = splitRef(ref);
   if (!split) return null;
-  if (split.source === "own") { if (!options.novelDir) return null; return readJson<Mesh | null>(join(storeOf(options.novelDir), `${split.part}.mesh.json`), null); }
+  if (split.source === "own") { if (!options.novelDir) return null; const part = await partOf(ref, options); return part?.id ? readJson<Mesh | null>(join(storeOf(options.novelDir), `${part.id}.mesh.json`), null) : null; }
   const source = readRegistry().sources[split.source];
   if (!source) return null;
   const path = absolute(source.path);
@@ -337,7 +332,9 @@ export async function meshOfPart(ref: string, options: { novelDir?: string } = {
     for (const file of ["architectureModels.json", "vehicleModels.json"]) {
       const library = readJson<{ models?: Record<string, { size: [number, number, number]; step: number; positions: string; indices: string }> }>(join(path, file), {}), model = library.models?.[split.part];
       if (!model) continue;
-      const positions = new Int16Array(Buffer.from(model.positions, "base64").buffer.slice(0)), indices = new Uint16Array(Buffer.from(model.indices, "base64").buffer.slice(0));
+      // A Buffer from base64 may sit in Node's shared pool: a typed array over its own bytes, never over the whole pool.
+      const pos = Buffer.from(model.positions, "base64"), idx = Buffer.from(model.indices, "base64");
+      const positions = new Int16Array(pos.buffer, pos.byteOffset, pos.length / 2), indices = new Uint16Array(idx.buffer, idx.byteOffset, idx.length / 2);
       const p = Array.from(positions, (v) => Math.round(v * model.step * 1000) / 1000), t = Array.from(indices), c: number[] = []; for (let i = 0; i < t.length / 3; i++) c.push(190, 196, 204);
       return { p, t, c, size: model.size };
     }
