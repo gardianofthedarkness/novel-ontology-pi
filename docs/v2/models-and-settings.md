@@ -383,4 +383,6 @@ id is a hash of the book and its reading, so a second send is a duplicate, not a
 reports the commands run and the settings written. In the pipeline it runs after the reading and before `terrain`.
 
 **Evidence.** `test/look.test.ts` (the tree top down, environment first, words counted, a model found by its label,
-`--place`); the pass run with no hint on a book with a reading (M14 in the milestones).
+`--place`); the pass run with no hint on volume 1 (M14c in the milestones): 240 s, 52 commands, the book's look, the
+city's fill and nine places' overrides from the sentences alone, 502 turbines in the world built after it. The context
+for volume 1 is 20 KB of JSON at `--top 4` (26 places); the agent narrows with `--place` where it wants more.

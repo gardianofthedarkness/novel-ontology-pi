@@ -23,7 +23,7 @@ call); a real Jev run only when the user asks.
 | M11 | Landmark shells: named, described buildings as code, their footprint and height in the fill | built 2026-11-09 (2 in volume 1; height into the lot, footprint the lot's) |
 | M12 | People with bodies: a 7-bone standard, shared clips, parts by slot from the sheets | after M11 |
 | M13 | All SCAD: quantised page meshes, vehicles and furniture from the kits, a building kit of our own, the baked packs retired, every remaining baked choice a layered setting (design §9) | items M13a–g listed 2026-11-09; M13g begun |
-| M14 | The look pass: the world generator set from the text, top down the place tree, hooked after the reading and before the terrain loop (design §10) | built 2026-11-09; the no-hint pass to prove |
+| M14 | The look pass: the world generator set from the text, top down the place tree, hooked after the reading and before the terrain loop (design §10) | built and proved with no hint 2026-11-09 (volume 1: 502 turbines from the text alone); M14d the pipeline hook and volume 2 end to end left |
 | W15 | A paid volume 1 run with M8, M10 and M11 in, against W14 | done 2026-11-09 (about $0.34 with the models and a crashed attempt) |
 
 ## M0 — Design and configuration
@@ -757,9 +757,18 @@ write (about $0.1 for 60 modules). Steps, each with evidence and cost in design 
       message (the same for every book, nothing of the book in it) to Pi's console as the review batches go, waits for
       Pi, reports its commands and the settings written. The skill's "The look pass" tells the agent the order: the book
       first, then each place where its own sentences differ, `--why` with sentence ids, `--before` last.
-- [ ] **M14c The pass proved with no hint** on a book with a reading: the agent finds what the text says about the city
-      (turbines everywhere, from the environment sentences alone), connects the universe's own model, sets the book
-      and its places top down. *Evidence:* the settings log after the pass; the terrain loop then builds with them.
+- [x] **M14c The pass proved with no hint** (2026-11-09, volume 1 on a copy of library 16, a fresh Pi session; the
+      workflow's message only, nothing of the book in it): 240 s, 52 commands, 3 refused, 33 writes (4 of them shape
+      probes). From the environment sentences alone Pi set the book's look: `fill.props` wind-turbine → the universe's
+      own 38 m turbine (b0000_s0003–4), car → its own car model, cleaner-robot → its own robot, street lights → a kit
+      lamp post, trees → a kit street tree; `models.vehicles` car, airship, helicopter and truck → the book's own
+      models; `fill.streets` arterials 24 m from the avenue sentences; `buildings.floorsOf` skyscraper 50 from the
+      fifty-floor towers; `tall.from` 60; `landscape.superTall` 150; the container bar in `models.uses`. Then the city's
+      own fill (lamps along arterials, 120 turbines, 240 trees, 300 cars, 18 robots, 60 benches), and the places where
+      the text differs: a rooftop with three VTOLs (its own model), the bar's display cases, a lamp-less road, a packed
+      station street, and `fill.ops: []` for a windowless room, a sealed stone room and a maze approach. Every write
+      carries the sentence ids; two `--before` snapshots. The world then built from them: 10,601 props, 502 wind
+      turbines among them, every part found (none missing), arterials 24–29 m; stills in the scratchpad.
 - [ ] **M14d In the pipeline:** the hook runs after the reading and before `terrain` for every book; volume 2 read and
       passed end to end (a paid reading, when the user says so).
 
