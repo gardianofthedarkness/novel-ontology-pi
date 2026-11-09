@@ -18,13 +18,14 @@
 // draws): the laws' walls are kept by what is there to stand on. Pure: the run's page, its world log and record in; no
 // world, no model call.
 
-const RANK_SIGMA = { pinned: 1.5, stated: 3, met: 3, answered: 8, ruled: 20 };
-const REACH = { live: 4, group: 6, public: 25 };
-const TALK_SIGMA = 2, STEP = 8, SCENE_GAP = 6, CLOUD = 48, KEEP = 8;
+import { setting } from '../../dist/src/v2/settings.js';
+const RANK_SIGMA = setting('smoother.rankSigma');
+const REACH = { live: setting('talk.live'), group: setting('talk.group'), public: setting('talk.earshot') };
+const { talkSigma: TALK_SIGMA, step: STEP, sceneGap: SCENE_GAP, cloud: CLOUD, keep: KEEP } = setting('smoother.walk');
 /** The most a scene start may move (m) before the revision goes to the review instead (§7b class R). */
-export const REVISION_LIMIT = 300;
+export const REVISION_LIMIT = setting('smoother.revisionLimit');
 /** A line whose kind no one gave (neither Jev nor the review): face to face this likely, else from afar, a mixture. */
-export const LIVE_PRIOR = 0.8;
+export const LIVE_PRIOR = setting('smoother.livePrior');
 
 const logSumExp = values => { const top = Math.max(...values); return top === -Infinity ? -Infinity : top + Math.log(values.reduce((sum, v) => sum + Math.exp(v - top), 0)); };
 export const metres = (a, b) => Math.hypot(a.x - b.x, a.z - b.z) + Math.abs(a.y - b.y);

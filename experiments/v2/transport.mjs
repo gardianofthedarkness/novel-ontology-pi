@@ -34,7 +34,8 @@ if (!values['stand-in']) {
   const live = jevFromEnv(process.env), jev = cachedDecisions({ modelId: live.modelId, decide: (...args) => { paid++; return live.decide(...args); } }, resolve(values.cache ?? join(universe, '..', 'cache-transport')));
   model = live.modelId;
   const decide = Object.assign((state, questions) => jev.decide(state, questions), { record: () => {} });
-  const mode = { name: 'transport', task: 'A light novel being staged in a 3D city. For each vehicle, weapon or machine (its name as the book has it, its kind, the lines it is named in, the people in them): which of the listed 3D models a vehicle is, and whose it is.', sources: [] };
+  // A mode of the context engine (as in-use.mjs): the things are the focus, kept whole; the questions are the batch's own.
+  const mode = { name: 'transport', task: 'A light novel being staged in a 3D city. For each vehicle, weapon or machine (its name as the book has it, its kind, the lines it is named in, the people in them): which of the listed 3D models a vehicle is, and whose it is.', sources: [{ name: 'things', key: 'things', quota: 0, keep: true, collect: focus => focus.items.map(([id, fields]) => ({ id, score: 1, fields })) }], cutOrder: [], questions: focus => focus.questions, budget: 120_000 };
   for (let n = 0; n < rows.length; n += 8) {
     const batch = rows.slice(n, n + 8), key = k => `thing_${n + k + 1}`;
     const items = batch.map((row, k) => [key(k), { name: row.label, kind: row.kind, lines: row.evidence.slice(0, 3).map(id => clip(line(id), 220)), people: row.people.map(id => names.get(id) ?? id) }]);

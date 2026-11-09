@@ -145,3 +145,33 @@ same both times that a reader would not call moves ("这条路既容易迷路").
    a fixed screen size.
 3. Sample shots of one card with no Jev, for the user to look at (a, b, c1, c2).
 4. The text `move` mode, then the loop on one storyline with Jev.
+
+## 9. The viewer's camera: the group orbit (the user, 2026-11-08)
+
+The user: *"We need to revolutionize the camera system from places orbit to group of character center orbit native
+system. Try it out."* The player's Follow camera (`world-engine/view/strand-demo.html`, `groupCamTick`) is now the group
+orbit; the pinned camera of 2026-11-05 (the centre locked to the smallest building, street or district round the card's
+people, moving only when they leave it, and stopped by any touch) stays behind `?pin` to compare.
+
+- **The centre is the people.** The card's group: the director's camera group for the beat or cut (`event.camera.group`:
+  everyone who has acted, spoken or moved in it so far; the director writes it on every card's camera), else the card's
+  actors, movers and speakers with the card before's; the one speaking counted twice; of groups more than 90 m apart, the
+  one nearest where the camera looks. The centre is their middle 1.2 m up (underground and up a tower alike).
+- **It moves with them.** Each frame the centre and the camera move by the group's own step (same people, under 6 m a
+  frame), then ease off what is left, so a steady walk is held without lag; a jump of over 250 m (another place, a seek, a
+  cut to a group far off) glides over, the viewer's angle kept.
+- **The viewer owns the angle and the zoom; the group owns where.** Turning and zooming orbit the moving centre and keep
+  following (World · Live's touch no longer stops Follow in this mode); the distance eases to one that fits the group
+  (16 m plus 2.4 times its spread, 14 to 700 m) times the viewer's zoom, which a zoom sets. No panning while following.
+- **Cuts** (the photographer's shots) are unchanged; turning Follow off frees the camera as before.
+
+**Tried** (headless, unit 52's stroll from the first-quarter rehearsal, 60 samples over 30 s of play, a drag turning the
+camera 90° and zooming 40% in partway): the centre's distance from Kamijou and Index, median 0.5 m (the pinned camera:
+30.4 m, up to 87.5 m, the pair at the edge of the frame while it held the station); camera distance 22 m against 60; after
+the drag the angle and the zoom were kept and it went on following. Its 90th percentile, 32 m, is a card whose beat group
+holds a third person 35 m off: the camera frames all three, as the group says.
+
+**With it, the walking group's formation was fixed** (on-the-move.mjs): a way beside the leader's is now an offset across
+the smoothed heading that keeps its side, and every re-timed move carries `at`, each node's time, so a member reaches each
+node when the leader reaches its own; Kamijou and Index walk the stroll 2 to 2.8 m apart throughout (before: drifting up to
+21 m apart mid-card on the 217 m piece, Index's way 11% longer).

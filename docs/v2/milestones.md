@@ -17,8 +17,12 @@ call); a real Jev run only when the user asks.
 | M5 | Building level on vol 1 | |
 | M6 | Growth across books | |
 | M7 | A real run; pools removed | |
-| M8 | Option: configurations per universe, per place, or by a function or review | not now |
+| M8 | One settings registry: every knob in a schema, layered universe < book < place, `novel settings`, fill operators | M8a done 2026-11-09 (69 keys, 8 tables; rehearsal identical); M8b next |
 | M9 | With the simulation: shared slots split where they are damaged | with the simulation stage |
+| M10 | Models as code: nominate, brief, write or put, check; the warehouse (CC0 packs, our models, gkNextEngine's MIT kits) | after M8a |
+| M11 | Landmark shells: named, described buildings as code, their footprint and height in the fill | after M10 |
+| M12 | People with bodies: a 7-bone standard, shared clips, parts by slot from the sheets | after M11 |
+| W15 | A paid volume 1 run with M8, M10 and M11 in, against W14 | when the user asks |
 
 ## M0 — Design and configuration
 
@@ -504,12 +508,118 @@ its type's quota; every name stands on its first book's slot; unnamed shares sta
 - [ ] Pools removed (`src/v2/extraction/pools.ts` pools, `poolOf`, pool parts in terrain spawning); `--spawn` the default
 - [ ] Concept map, guide, status and the terrain io updated
 
-## M8 — Configurations of one's own (an option, not now)
+## M8 — One settings registry (the user, 2026-11-09: "unify all the configuration files we have")
 
-- [ ] A universe's own files (`<library>/universe/spawning/`), a place's own under `places`, a function or a review by Jev or an agent (design §5)
+Design: [models-and-settings.md](models-and-settings.md) §4; journal [world-engine-v2.md](world-engine-v2.md) §2.0.23.
+Was "configurations of one's own, not now"; the user brought it forward so the main agent can change building generation
+"in a quick and context aware way". No model calls in any step.
+
+- [x] **M8a The schema and the resolver** (built 2026-11-09, the user: "dig out the hard rules and make them into our
+      universal world generator schema"). `config/world.schema.json`: 69 keys and 8 tables. Each key has its default
+      (today's value), unit, range, meaning, where it is used, the layers that may override it, and its kind: hard (a gate
+      or limit), knob, physics (a measured constant), structure (the grid itself) or presentation. Groups: grid and body,
+      the fill, landscape, layers, tall buildings, underground, places and spawning, Jev's views, named buildings,
+      walking, roads, the highway, the laws and talk distances, the smoother and occupation, crowds, the director, the
+      replay clock. Tables: `config/terrain/*.json`, `config/models.json`, and the landscape kinds, moved out of
+      `landscape.ts` into `config/terrain/landscapes.json` (their building rule, a function in code, is now data: steps
+      [from floors, type]). `src/v2/settings.ts`: `setting(key, scope)`, `table(name, scope)`, `resolveSetting` (value
+      and where it came from), `problemsOf`; layers defaults < `<universe>/settings.json` < `<novel>/stage/settings.json`
+      < a place's own (`places.<id>`), objects merging key by key. Read by 26 modules instead of their literals (cityFill,
+      landscape, tall, underground, placeCanvas, topology, heights, inventory, slots, holoNav, positions, highways,
+      roads, laws, attacks, smoother, occupation, crowd, director, on-the-move, float, terrain, terrain-spawn,
+      impact-choices, export-strand-demo). Rules written more than once are one key now: earshot (laws, director,
+      smoother), face-to-face talk (laws, smoother), the cell and the floor (four files each). Not wired yet: the
+      player's own copies of the replay clock and smooth mode (`wired: false`); the code passes no scope yet, so layers
+      take effect from M8b/c.
+      *Tests:* `test/world-schema.test.ts`, 6 of 6: every key documented and its default in range, every file it names
+      exists; the code reads only keys the schema has and reads every wired key (a scan of `setting(` and `table(`
+      calls); the landscape steps; layers in order with objects merged; a layer setting what it may not, an unknown
+      part, a wrong shape and a value out of range refused; Infinity kept. Engine tests 184 of 184; the TypeScript suite
+      829 of 830 (`init.test.js` expects `/var/...` where macOS gives `/private/var/...`; it fails the same on the W14
+      checkout without this change). *Evidence:* the first quarter's rehearsal (units 1–84 on `rehearsal-novel-w13j`)
+      before (`d20261109064146`) and after (`d20261109064813`): the page identical but its export time, the report
+      identical but its timing (236 moves, the same laws). *Cost:* none.
+- [ ] **M8b The commands.** `novel settings show|explain|set|diff`: JSON out, bounded; `explain` names what a key
+      changes downstream; `set` validates, writes the right layer, logs who and why, and a pre-film change takes a new
+      `before` snapshot. *Tests:* one per command, set refused out of range, a set on a book after its run refused
+      without `--before`. *Evidence:* an agent session (Pi) changes `fill.arterial` and one district's tower share on a
+      rehearsal copy from a one-line request; the rebuilt terrain shows it; `diff` lists both.
+- [ ] **M8c Fill operators.** A place's fill as a list (`streets`, `lots`, `heights`, `scatter`, `line`, `ring`) with
+      seeds; the default list reproduces today's fill; named buildings never scattered. *Tests:* default operators
+      byte-equal to today's fill on Academy City; each operator alone on a fixture. *Evidence:* stills of one district
+      before and after a one-line change (more trees along arterials, a taller core).
+- [ ] **M8d Handles in World · Live.** The Buildings and Spawn panels show each operator's area and numbers; dragging
+      writes the setting through `novel settings set`. *Evidence:* a drag and the logged change.
 - [ ] A region's living areas as a choice (the user, 2026-11-01): East Asian megacity now ([living-areas.md](living-areas.md));
-      a European city, an American suburb as other profiles of the same heights, lots and model mixes
+      a European city, an American suburb as other profiles: a profile is a named set of overrides in the registry.
+
+**Pass:** no knob left outside the schema; today's world rebuilt identically with no override; the agent changes a
+place's generation in one command and sees it after a terrain rebuild. **Cost:** none (no model calls).
 
 ## M9 — Damage splits shares (with the simulation stage)
 
 - [ ] When the simulation damages a shared slot, the sharers after that scene borrow again (design §2.8, option A); the text's own damage from a later extraction step (option B)
+
+## M10 — Models as code (the user, 2026-11-09)
+
+Design: [models-and-settings.md](models-and-settings.md) §2–3, §5; journal §2.0.23. Runs after the reading, before the
+terrain loop. Tools: OpenSCAD 2026.10.11 (`--backend=manifold`, coloured OFF), manifold-3d 3.2.1 (closed-solid check),
+both installed 2026-11-09. Tried first in a scratch test: 5 of volume 1's things, 5 closed solids, about 10,500 tokens.
+
+- [ ] **M10a Toolchain and contract.** `world-engine/models/` evaluate (OpenSCAD), measure (size, bottom, centre,
+      triangles), check (on the ground within 5 cm, front toward +x, size within a factor of the text's or the reading's
+      size, one piece or a reason, closed solid, at most 20,000 triangles), catalogue record, mesh JSON for the player.
+      *Tests:* fixtures that pass and that fail each check (blades under the ground, floating rotor, a 30 m knife).
+      *Cost:* none.
+- [ ] **M10b Nominate.** `novel model nominate`: importance (scenes, acting cards, damage, carried or ridden, named by
+      several) × description (describing sentences, size, colours, parts) for things and named buildings; a model when
+      both pass, a warehouse part otherwise. *Tests:* ranking on a fixture reading. *Evidence:* volume 1's list with the
+      top 20 read against their lines; how many own models, how many parts. *Cost:* none.
+- [ ] **M10c Brief, write, put, check.** The commands; `write` with the work model and the check's failures fed back
+      (at most 3 tries); `put` takes an agent's file; usage per model in `universe/models/usage.json`. *Tests:* the
+      commands on a stand-in work model; `put` of a failing file reports the failures. *Evidence:* volume 1's nominated
+      models: first-try pass rate, pass rate after retries, failures by class, stills; one model written by Pi from
+      `brief` alone. *Cost:* work-model tokens per model and in all, priced by the cost script (`rehearsals/w10-cost.mjs`
+      gains a `models` line).
+- [ ] **M10d The warehouse.** Our CC0 packs and gkNextEngine's kits (MIT: vendored with its licence notice and catalogue,
+      attribution in the repository's notices) searched together; `novel model use` binds a thing to a part; local
+      embeddings (bge) match a thing's description to a part. *Tests:* the catalogue loads, every kit module evaluates or
+      is listed as failing. *Evidence:* 20 small things bound and checked by hand (right part / acceptable / wrong).
+      *Cost:* none (local embeddings).
+- [ ] **M10e In the replay.** The player draws a thing with a model from its mesh, behind a Models button (as Smooth);
+      vehicles turned by their front. *Evidence:* World · Live stills of units 154 (the Hammerhead), 158 (the
+      window-cleaning robot and the observation helicopter), 197 (the subway carriage) before and after.
+- [ ] **M10f Every agent host.** `skills/novel-models/SKILL.md`, published by the adaptor; one acceptance test per host
+      (Pi, Codex, Claude Code) that runs `nominate`, `brief` and `check`.
+
+**Pass:** every nominated thing has a model or a part; every model passes its checks; the first quarter's rehearsal
+unchanged in laws and moves (a model is a look). **Cost:** reported per model and per book.
+
+## M11 — Landmark shells
+
+- [ ] Named buildings the text describes (look, floors, parts) nominated with the things; a shell as code (walls, roof,
+      the named parts), its footprint and height into the fill's lot for it. *Tests:* the fill keeps a landmark's lot at
+      its shell's footprint; the walk grid enters only at its doors. *Evidence:* the first quarter's rehearsal: laws,
+      moves and held against W14's numbers; stills of each landmark. *Cost:* work-model tokens per shell.
+
+## M12 — People with bodies (later)
+
+- [ ] A character kit after gkNextEngine's `kit_char` (MIT): a 7-bone standard (root, torso, head, arms, legs), parts by
+      slot (head, hair, hat, torso, arms, legs, accessories) chosen from each person's sheet and the stills cast's looks;
+      shared clips (walk, run, sit, fall, fight) as keyframe data; a socket for what they hold. *Evidence:* unit 52's
+      walk with steps beside the capsules; frame time on a phone. *Cost:* none or a little (slot choices by the work
+      model).
+
+## W15 — Volume 1 again, with models and settings (a paid run, when the user asks)
+
+Against W14 (`d20261109020441`, $0.17): laws broken by kind, moves, held, speakers settled; models drawn and their
+checks; the run's cost with the models' share on its own line. Before it: M8a–c, M10a–e and M11 rehearsed on the first
+quarter, and a new `before` snapshot with the models and settings in.
+
+## Evidence and cost, as they land
+
+| Step | Date | Tests | Evidence | Model calls | Cost |
+| --- | --- | --- | --- | --- | --- |
+| Scratch test of models as code | 2026-11-09 | none (scratch) | 5 of 5 closed solids; the turbine failed the ground check twice, then passed; 4 of 5 in several pieces | 6 work-model requests | about 10,500 tokens |
+| M8a world generator schema | 2026-11-09 | world-schema 6/6, engine 184/184, TS 829/830 (1 old) | first-quarter rehearsal identical before and after (page and report) | none | none |
+

@@ -21,9 +21,10 @@ import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { parseArgs } from 'node:util';
 import { browser, serve } from '../view/two-view-things.mjs';
+import { setting } from '../../dist/src/v2/settings.js';
 
 const repository = resolve(dirname(fileURLToPath(import.meta.url)), '..', '..');
-export const SIZES = [4, 8, 16, 32];
+export const SIZES = setting('view.impactSizes');
 
 /** Every fight on a strand's stage (the page's window.__stage.fights, or the same made from its data), keyed as its answer is kept. */
 export const fightWork = stage => stage.fights.map(fight => ({ fight, key: `${fight.scene}|${fight.event}` }));

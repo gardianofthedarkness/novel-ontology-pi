@@ -1,4 +1,5 @@
 import { stageStream as skeletonStream } from "./stream.js";
+import { setting } from "../settings.js";
 
 /**
  * Auto-filling a city: its whole circle covered with roads, blocks, lots and buildings from a recipe, the same every
@@ -28,7 +29,7 @@ export type Point = [number, number];
 interface Poly { pts: Point[]; tags: string[] }
 export interface Circle { x: number; z: number; r: number }
 export interface FillParams { cell: number; arterial: number; collector: number; local: number; blockArea: number; blockMin: number; lotSmall: number; lotLarge: number }
-export const FILL: FillParams = { cell: 180, arterial: 18, collector: 12, local: 8, blockArea: 5200, blockMin: 36, lotSmall: 260, lotLarge: 1600 };
+export const FILL: FillParams = setting<FillParams>("fill.streets");
 /** A city as a run keeps it: its seed (the place id), the radius it was born with and the radius it has grown to. */
 export interface City { seed: string; r0: number; r: number }
 export interface Road { id: string; a: Point; b: Point; width: number; level: "arterial" | "collector" | "local" | "boulevard" }
@@ -230,7 +231,7 @@ export function placeChild(parent: Circle, siblings: Circle[], r: number, seed: 
 }
 
 /** The ground a building of each kind needs, in m² (a range). */
-export const BUILDING_AREA: Record<string, [number, number]> = { house: [80, 400], home: [80, 400], shop: [150, 800], office: [500, 3000], tower: [400, 2000], skyscraper: [1000, 4000], market: [800, 4000], church: [400, 2500], station: [2000, 9000], school: [4000, 16000], hospital: [3000, 14000], castle: [3000, 20000] };
+export const BUILDING_AREA: Record<string, [number, number]> = setting<Record<string, [number, number]>>("fill.buildingArea");
 const inCircle = (q: Point, c: Circle) => Math.hypot(q[0] - c.x, q[1] - c.z) <= c.r;
 const tieBreak = (seed: string, id: string) => skeletonStream(seed, id)() * 1e-3;
 /**

@@ -13,6 +13,7 @@ import { fileURLToPath, pathToFileURL } from 'node:url';
 import { parseArgs } from 'node:util';
 import { mapPicture } from './world-map.mjs';
 import { partsIn, snapMarkers } from './composite.mjs';
+import { setting } from '../../dist/src/v2/settings.js';
 
 const repository = resolve(dirname(fileURLToPath(import.meta.url)), '..', '..');
 const load = path => import(pathToFileURL(`${repository}/${path}`));
@@ -40,13 +41,13 @@ export function fitInCast(form, cast, natural) {
   const [nw, nh, nd] = SHAPES[form] ?? SHAPES.box;
   return { sx: cast.w / nw, sy: cast.h / nh, sz: cast.d / nd, turn: 0, stand: false, w: cast.w, h: cast.h, d: cast.d, y0: cast.y0 };
 }
-const ROLE_OF = { hospital: 'hospital', station: 'station', office: 'office', skyscraper: 'office', school: 'school', home: 'home', market: 'shop', church: 'station' };
+const ROLE_OF = setting('buildings.roleOf');
 /** Floors of a named building by its kind (novel stage architecture). */
-const FLOORS_OF = { skyscraper: 16, office: 10, school: 4, home: 8, hospital: 6, market: 2, station: 2, church: 2 };
+const FLOORS_OF = setting('buildings.floorsOf');
 /** A world-first spot's building (the world loop's choice when it made the spot): its role in the world and its floors. */
-const BUILDING_OF = { school: ['school', 4], dormitory: ['home', 8], house: ['home', 2], hospital: ['hospital', 6], office: ['office', 10], mall: ['mall', 5], shop: ['shop', 2], station: ['station', 2], church: ['station', 2], skyscraper: ['office', 16], warehouse: ['station', 2] };
+const BUILDING_OF = setting('buildings.worldFirst');
 /** Edge-cost factors by kind [walk, climb, descend, jump, fall, sky arc]: a fall is cheap only for someone falling; jumps and arcs for someone running or falling. */
-const FACTORS = { walk: [1, 1, 1, 3, 6, 3], run: [1, 1, 1, 1, 4, 1], fall: [1, 1, 1, 1, 0.15, 1] };
+const FACTORS = setting('walk.factors');
 const classOf = how => how === 'fall' ? 'fall' : how === 'run' ? 'run' : 'walk';
 /**
  * A way of moving as the path integral weighs it (the user, 2026-11-05: abilities): the edge factors and the temperature.
@@ -83,7 +84,7 @@ export async function strandDemo(novelDir, options) {
   const { composePlace, placeGraph, placeSpot, nodePosition, nodeOf, degrade, semanticAxis, cellAt, cutOffOf } = await load('dist/apps/playground/src/data/skeletonPlace.js');
   const { macroLattice, latticeNode, latticeWithin, crossings, smoothPath } = await load('dist/apps/playground/src/data/macroPath.js');
   const { structureOf, intact, blast, settle, skeletonStanding, unitAt, BLAST_ENERGY } = await load('dist/apps/playground/src/data/structure.js');
-  const { tallAndWide, clearOverlaps } = await load('dist/src/v2/world/tall.js');
+  const { tallAndWide, clearOverlaps } = await load('dist/src/v2/world/tall.js'), HW = await import('./highways.mjs');
   const C = await load('dist/src/v2/world/placeCanvas.js'), { fillLandscape, formsFor, groundFor, insideBy, reachOf, LANDSCAPES, patchFromBox, samplePatch, withManifold, SKIN } = await load('dist/src/v2/world/landscape.js'), U = await load('dist/src/v2/world/underground.js'), W = await load('dist/apps/playground/src/data/world.js');
   // Model themes (modelThemes.json): a thing is drawn in the theme of the manifold under it, unless Jev switched theme.
   const { themedModel } = await load('dist/apps/playground/src/data/modelThemes.js'), modelThemes = JSON.parse(await readFile(`${repository}/apps/playground/src/data/modelThemes.json`, 'utf8'));
@@ -943,9 +944,17 @@ export async function strandDemo(novelDir, options) {
     // from the place's own landscape (W12's stretch: two streets, 30 m down on one spot at two angles).
     const borrowsSlot = !!terrain?.sites?.[place.id]?.slot;
     const sunk = (borrowsSlot ? [] : filled.landmarks.filter(sunken)).map(asDecided).map(b => { const most = b.plane ? Infinity : Math.max(1, Math.floor((-b.y0 - SKIN) / 3) - 1); return b.floors > most ? { ...b, floors: most } : b; });
-    const placed = [...[...filled.fabric.buildings, ...filled.landmarks.filter(b => !sunken(b)), ...filled.keeps].map(pushed), ...standing].filter(b => clear(b.x, b.z, Math.max(b.w, b.d) / 2)).map(asDecided);
+    let placed = [...[...filled.fabric.buildings, ...filled.landmarks.filter(b => !sunken(b)), ...filled.keeps].map(pushed), ...standing].filter(b => clear(b.x, b.z, Math.max(b.w, b.d) / 2)).map(asDecided);
     const localRoads = filled.fabric.roads.filter(road => clear((road.a[0] + road.b[0]) / 2, (road.a[1] + road.b[1]) / 2, 0)), held = new Set([...filled.keeps, ...standing].map(b => b.lot));
     const fixedOf = b => held.has(b.lot) || decided.has(b.lot) || /:(landmark|bowl|fountain)$/.test(String(b.lot));
+    // The city's kept expressway (world-engine/terrain/transport.mjs, highways.mjs groundEffect), read one way: no building
+    // where a deck or a ramp stands; the rest taller the nearer a ramp, the city's floor area kept; the text's own as they are.
+    const highway = terrain?.highways?.[place.id] ?? null;
+    if (highway?.lines?.length) {
+      const effect = HW.groundEffect(highway, placed.map(b => ({ x: b.x + wx, z: b.z + wz, w: b.w, d: b.d, angle: b.angle ?? 0, floors: b.floors, fixed: fixedOf(b) })));
+      notes.highway = { city: place.id, taken: effect.filter(entry => entry.taken).length, raised: effect.filter((entry, n) => !entry.taken && entry.floors > placed[n].floors).length, lowered: effect.filter((entry, n) => !entry.taken && entry.floors < placed[n].floors).length };
+      placed = placed.map((b, n) => (effect[n].taken ? null : effect[n].floors === b.floors ? b : { ...b, floors: effect[n].floors })).filter(Boolean);
+    }
     // A shopping centre or a department store the text names is a podium, wide and low (the user, 2026-11-01, a photograph
     // of one: towers over a mall a block wide): about 70 m a side, a department store 50, grown as a tower is.
     const podium = b => (decided.has(b.lot) ? (b.use === 'mall' ? 70 : b.use === 'department' ? 50 : 0) : 0);
@@ -1592,7 +1601,7 @@ export async function strandDemo(novelDir, options) {
         struct: entity.struct ? { nx: entity.struct.nx, nz: entity.struct.nz, floors: entity.struct.floors, cells: [...entity.struct.cells].join('') } : null })),
       title: options.title ?? `${name(chosen[0].placeId)} …`, exportedAt: new Date().toISOString(), T: Math.round(T * 1000) / 1000, kappa, lambda, notes,
       migrations: migrations.map(migration => { const route = routes.get(`${migration.scene}|${migration.person}`); return { ...migration, route: route ? { ...route, exit: route.exit?.map(dense) ?? null, entry: route.entry?.map(dense) ?? null } : null }; }),
-      macro, terrainShapes, landscapes: landscapes.map(({ source, ...entry }) => ({ ...entry, ids: source.buildings.map(b => b.id), uses: source.buildings.map(b => b.use ?? UM.useOf(b) ?? null), owners: source.buildings.map(b => b.patch ?? null) })), travel: { T: Math.round(macroT * 1000) / 1000, kappa: macroKappa, cell: lattice.cell, crossing: { mu: 24, nu: 3 } },
+      macro, terrainShapes, highways: Object.values(terrain?.highways ?? {}).filter(highway => highway.lines?.length && landscapes.some(entry => entry.place === highway.city?.id)), landscapes: landscapes.map(({ source, ...entry }) => ({ ...entry, ids: source.buildings.map(b => b.id), uses: source.buildings.map(b => b.use ?? UM.useOf(b) ?? null), owners: source.buildings.map(b => b.patch ?? null) })), travel: { T: Math.round(macroT * 1000) / 1000, kappa: macroKappa, cell: lattice.cell, crossing: { mu: 24, nu: 3 } },
       people: Object.fromEntries(people.map(id => [id, id.startsWith('crowd:') ? { name: '', color: '#9aa3ad', crowd: true } : { name: name(id), color: color.get(id) }])),
       // Every staged place is the one world (its lots shared), with its own name, path, kind and anchor.
       world: { NX, NZ, K, oi, oj, ok, lots: worldLots, shells: worldShells, loose: looseNow(worn), earlier, underground: undergroundView(),
@@ -1632,7 +1641,7 @@ export async function strandDemo(novelDir, options) {
   // line's starts, handed on so the loop plays forward card by card on the same world (no export again, no replay): it adds
   // its cards to the chosen scenes, its moves to `moves` and its positions to `runs`, streams the world in with `reach`, and
   // calls `assemble` for the page as far as it has played.
-  if (options.engine) await options.engine({ world, W, graphOf, cost, reach, solve, onFoot, portalsNear, DEEP, deepAt, beamCeiling, sampleWalk, T, kappa, lambda, runs, moves, chosen, assemble, snapshot, names: inputs.names, hits, hitSphere, wake });
+  if (options.engine) await options.engine({ roadInputs: { roads: landscapes.flatMap(entry => entry.roads ?? []), highways: Object.values(terrain?.highways ?? {}).filter(highway => highway.lines?.length) }, world, W, graphOf, cost, reach, solve, onFoot, portalsNear, DEEP, deepAt, beamCeiling, sampleWalk, T, kappa, lambda, runs, moves, chosen, assemble, snapshot, names: inputs.names, hits, hitSphere, wake });
   return data;
 }
 

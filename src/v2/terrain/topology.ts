@@ -13,6 +13,7 @@
  * when that costs more than the ring charges for going out. Plain data and arithmetic, tested on its own.
  */
 import { seeded, type Topology } from "./config.js";
+import { setting } from "../settings.js";
 
 export type Point = [number, number];
 /** A manifold of a parent's ground: its kind, its vector from the parent's centre, its radius (metres). */
@@ -20,15 +21,7 @@ export interface Manifold { id: string; kind: string; at: Point; r: number }
 /** One that stood before this spawn: it may move only a share of its radius (0: it may not move). */
 export interface Standing extends Manifold { give: number }
 
-export const LAYOUT = {
-  /** How much of a parent's disc its manifolds cover: its radius is what holds their area at this cover. */
-  cover: 0.55,
-  /** How much two manifolds may overlap at their fading edges, as a share of the smaller radius. */
-  blend: 0.2,
-  /** How far a standing manifold may move at one spawn, as a share of its radius (the user: a little). */
-  give: 0.15,
-  weights: { ring: 4, pairs: 1, pressure: 6, squeeze: 2 },
-};
+export const LAYOUT = setting<{ cover: number; blend: number; give: number; weights: { ring: number; pairs: number; pressure: number; squeeze: number } }>("spawn.layout");
 
 const distance = (a: Point, b: Point) => Math.hypot(a[0] - b[0], a[1] - b[1]);
 /** A parent's radius: what holds its manifolds' area at the layout's cover (it grows as they are added). */

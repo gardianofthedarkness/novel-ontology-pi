@@ -14,7 +14,8 @@
 // Relaxed by sweeps of gradient steps; each sweep lowers the energy. Pure: places, tracks and pulls in; moves and the
 // energy before and after out.
 
-export const MASS = { unnamed: 1, slot: 4, named: 30 };
+import { setting } from '../../dist/src/v2/settings.js';
+export const MASS = setting('spawn.floatMass');
 export const MOVABLE = new Set(['street', 'building', 'room']);
 
 /** The energy of a layout and its gradient: tracks beyond reach (squared excess), setting pulls, mass × displacement². */

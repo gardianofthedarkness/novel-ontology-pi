@@ -30,12 +30,13 @@ import { fileURLToPath, pathToFileURL } from 'node:url';
 import { parseArgs } from 'node:util';
 import { browser, serve } from '../view/two-view-things.mjs';
 import { createLive, PICKER_MODEL, VENDOR_FILES } from '../live/sim-jev.mjs';
+import { setting } from '../../dist/src/v2/settings.js';
 
 const repository = resolve(dirname(fileURLToPath(import.meta.url)), '..', '..'), load = path => import(pathToFileURL(`${repository}/${path}`).href);
 const round = value => Math.round(value * 10) / 10;
 const clip = (text, size) => (text.length > size ? `${text.slice(0, size - 1)}…` : text);
 /** How far a parent's picture reaches (metres from the middle to the top), at least, by the parent's scale. */
-const HALF = { region: 1600, city: 760, district: 320, street: 140, building: 60 };
+const HALF = setting('view.half');
 /** The sides of the eight boxes round the edge, A north and then clockwise. */
 const SIDES = ['north', 'north-east', 'east', 'south-east', 'south', 'south-west', 'west', 'north-west'];
 const OPEN = new Set(['region', 'city', 'district', 'street']);

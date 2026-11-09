@@ -16,30 +16,25 @@
 // world, no model call; deterministic by its seed.
 
 import { SPEED } from '../laws/laws.mjs';
+import { setting } from '../../dist/src/v2/settings.js';
 
 /** Where a gathering crowd holds from its focus: Hall's public distance, 3.6 m (proxemics; closer is social space). */
-export const RING = 3.6;
+export const RING = setting('crowd.ring');
 
 /** Weidmann's fundamental diagram: speed (m/s) at a density (people a square metre). */
-export const FREE = 1.34, JAM = 5.4, GAMMA = 1.913;
+export const { free: FREE, jam: JAM, gamma: GAMMA } = setting('crowd.weidmann');
 export const speedAt = density => (density <= 0 ? FREE : density >= JAM ? 0 : Math.max(0, FREE * (1 - Math.exp(-GAMMA * (1 / density - 1 / JAM)))));
 
 /**
  * People a square metre for a crowd's size, at Fruin's levels of service (walkways: A under 0.31, C 0.43–0.72,
  * E 1.08–2.17, F over 2.17): a few is free walking, some is constrained, many is crowded, packed is a crush.
  */
-export const DENSITY = { none: 0, few: 0.2, some: 0.6, many: 1.5, packed: 3 };
+export const DENSITY = setting('crowd.density');
 export const STATES = ['milling', 'flowing', 'gathering', 'alarmed', 'gone'];
 /** Each state's pace against walking (L17's speeds: a stroll, a walk, a run), how much people follow, and noise. */
-export const MOTION = {
-  milling: { pace: 0.6, follow: 0.1, noise: 0.9 },
-  flowing: { pace: 1, follow: 0.5, noise: 0.2 },
-  gathering: { pace: 1, follow: 0.5, noise: 0.2 },
-  alarmed: { pace: 2.5, follow: 0.8, noise: 0.4 },
-  gone: { pace: 1.5, follow: 0.6, noise: 0.2 },
-};
+export const MOTION = setting('crowd.motion');
 /** The samples a crowd is drawn with at most (a drawing budget, not a number of people). */
-export const SAMPLES = 48;
+export const SAMPLES = setting('crowd.samples');
 /** A node's ground (m²): the walk grid's cell, 2 m by 2 m. */
 const CELL_AREA = 4;
 

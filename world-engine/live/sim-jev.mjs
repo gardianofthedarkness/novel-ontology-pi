@@ -34,6 +34,25 @@ export const VENDOR_FILES = {
 /** How many pictures of one question the live page shows. */
 export const LIVE_PICTURES = 4;
 
+/** No answer at all (the name not found, a dropped connection, a time-out) or the service busy: worth waiting out. */
+const TRANSIENT = /fetch failed|ENOTFOUND|EAI_AGAIN|ECONNRESET|ECONNREFUSED|ETIMEDOUT|UND_ERR|TimeoutError|due to timeout|Jev request failed: (5\d\d|429)|after 3 attempts/;
+/**
+ * How long a run waits out a network failure before it gives up (W13's third pass died at scene 19 of a DNS blip the
+ * client's own three tries, under a second in all, could not outlast): 5 s, 15 s, 45 s, 2 min, 5 min.
+ */
+export const PATIENCE = [5000, 15000, 45000, 120000, 300000];
+/** `call()` again after each wait while it fails for a transient reason; any other failure, or an abort, at once. */
+export async function patiently(call, { waits = PATIENCE, signal = null, onWait = () => {} } = {}) {
+  for (let attempt = 0; ; attempt++) {
+    try { return await call(); } catch (error) {
+      const text = `${error?.message ?? error} ${error?.cause?.code ?? ''} ${error?.cause?.message ?? ''} ${error?.name ?? ''}`;
+      if (attempt >= waits.length || signal?.aborted || !TRANSIENT.test(text)) throw error;
+      onWait(waits[attempt], text.trim().slice(0, 160));
+      await new Promise(done => setTimeout(done, waits[attempt]));
+    }
+  }
+}
+
 /** A file replaced whole, so a reader never sees half of it. */
 async function replace(file, body) {
   const temporary = `${file}.${process.pid}.tmp`;
@@ -311,7 +330,7 @@ export async function createLive(novelDir, { command, lines, budget = null, mode
           state.ask = { f, at: at(), call: state.calls, line: state.line, phase: state.phase, ...(state.card ? { card: state.card } : {}), subject: subjectOf(context), context, pictures: files, questions: questions.map(question => ({ key: question.key, primitive: question.primitive, ...(question.label ? { label: question.label } : {}), instructions: String(question.instructions).slice(0, 300), ...(question.options ? { options: question.options.length } : {}) })), answers: null , prompt: text };
           await write();
           try {
-            const answers = await jev.decide(input, questions, options);
+            const answers = await patiently(() => jev.decide(input, questions, options), { signal: options.signal, onWait: (ms, why) => console.error(`Jev call ${state.calls}: ${why}; asking again in ${ms / 1000} s`) });
             state.ask.answers = answers.map(answer => ({ key: answer.key, value: typeof answer.value === 'number' ? Math.round(answer.value * 100) / 100 : answer.value, confidence: answer.confidence ?? null,
               ...(answer.box ? { box: answer.box } : {}), ...(answer.distribution ? { top: Object.entries(answer.distribution).sort((a, b) => b[1] - a[1]).slice(0, 3).map(([option, p]) => [option, Math.round(p * 100) / 100]) } : {}) }));
             state.ask.ms = Date.now() - started;

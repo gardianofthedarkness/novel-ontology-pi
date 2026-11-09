@@ -331,6 +331,153 @@ observable is active.
   three or six walkers (`extra:` ids) is scenery, never in the laws, the log, the smoothing or canon.
 - System 2 may not take motion away: where Jev saw a move or an act and the work model none, Jev's stands.
 
+### Back and forth in a second pass (the user, 2026-11-07, watching W13)
+
+The user: *"there's often cases where a character walk to a place for some reason but quickly went back because of
+conversation"*, and one who went to another for a conversation, then back to the bigger group: *"check if it's actually
+what it is or because the later character is not counted as the group"*.
+
+**What it was.** Not the text: the conversation's walks are the talk rule's, never a line's. In W13's second pass
+(`d20261107091352`) conversation walking was 9,707 m against 2,505 m in the first; 20 round trips, 8 through talk.
+Scene 64: Kamijou and Misaka stand 2 m apart; Index walks in and stops 62 m off; she speaks to Kamijou and he walks 97 m
+to her, then Misaka speaks and he walks 89 m back. The text has Index standing beside them. Three causes, all in how a
+second pass used the first one's least-action history, and one in the talk rule:
+
+1. A start the smoothing moved was played at the first pass's own spot, for the moved person only; the people round them
+   started where the second pass had drifted them (66 m off in scene 64). 52 such starts left someone apart from a group
+   they had stood with, in 46 scenes.
+2. For someone who walked in, the smoothing's start is where they came from, and the second pass put them there
+   (rehearsal, scene 24: 600 m from the scene, and a 762 m walk to talk to her).
+3. The talk rule brought whoever was spoken to to whoever spoke, card by card, so a listener between two speakers
+   shuttled.
+4. Found on the way: a pass found the last run's record in `stage/director/run.json`, which a stopped or crashed run
+   overwrites; the restarted third pass played with no smoothing, without a word.
+
+**Built.** In `world-engine/director/director.mjs`: a moved start keeps its place beside those it stood with in the last
+pass (within earshot, 25 m, on its floor) where they start in this one, everyone else placed first (`sceneRecord.regrouped`);
+alone there, the spot itself. Someone who walked in last pass walks in again, as the scene gathers (the revision kept,
+not applied). A conversation meets at the member the least walking reaches, for the card's people and everyone who has
+talked face to face in the scene (a floor counts as 30 m), unless a fact of the text placed one of them. The last run's
+record from `runs/<run>/run.json`. Measured by `world-engine/log/back-and-forth.mjs` (any run, and each rehearsal pass).
+
+**Rehearsal** (stand-in, units 1–84 of library 16, two passes): conversation walking 925 → 340 m in the first pass and
+2,736 → 1,488 m in the second; round trips in the second 7 → 4 (through talk 2 → 1); earshot breaks 0. **Still open:**
+people the first pass already started apart and then pulled together to talk (rehearsal scenes 58, 59, 62): the
+smoothing would bring conversation partners together at the scene's start, a term at the start moment, not a rule.
+
+**The third pass** (`d20261108025604`, paid, with the above, 2026-11-08): conversation walking 9,707 → 6,025 m (the
+first pass: 2,505 m), round trips 20 → 15 (through talk 8 → 6), earshot breaks (L6) 14 → 4, $0.18. Most of what was
+left came from the regrouping itself:
+
+1. It regrouped by someone who walked in last pass but waits outside this one (59 of 206 regroupings): their spot then
+   is where they walked in to, now where they come from. Scene 66: Kamijou and Misaka were put beside Yomikawa's starting
+   point, 570 m off; Shokuhou and Index were then pulled 724 m and 698 m to talk.
+2. The frame took that walker-in as already in the scene by the last pass's smoothed start for her, then carried her from
+   where she stood, 480 m off.
+3. One with nobody unmoved within earshot in the last pass took that pass's spot alone while the scene had drifted
+   (scene 182: Kamijou 330 m from the two carried in with him; one who walked in was pulled 590 m to him).
+
+**Built.** A walker-in is a spot to regroup by only where they walk in this pass too. The frame says where the scene is
+from the smoothed starts, but whether a walker-in is in it from where they stand now (measured round where people stood
+now, the rehearsal's scene 26 framed Misaka's floor 40 storeys up, not the street: L6 5). A lone smoothed start moves by
+the scene's drift, the median of the others' shifts, where that is beyond earshot (`regrouped` entries with
+`by: 'scene'`).
+
+**Rehearsal** (stand-in, units 1–84, three passes, before → after): conversation walking 1,488 → 400 m in the second
+pass and 781 → 242 m in the third (the first: 340 m); earshot breaks 0; round trips 4 → 6 and 4 → 5, through talk 1 and
+2 → 1. The new ones: an extra who walks in and whom the background cast walks back (scenes 60, 62).
+
+### Moving conversations (experiment, the user, 2026-11-08)
+
+The user: *"can movement and dialogue/action happen at the same time in the animation"*, two people talking mid walk
+down a mall or a street, or while driving somewhere; *"give me a sample text from any volume epub and just build your
+experimental build around those experimental clips"*.
+
+**What the player does.** It already plays a card's moves and its lines at once: a move starts with its card at its
+pace, and the lines share the card's length. **What the director does.** It lays a walk and the talk on it out as
+separate cards, so people walk, stop, then talk; only where a dialogue card happens to carry a move do they move
+while talking. Under 3× play, a line of 30 characters lasts about 5 s, a walk covers about 20 m in it, so a
+conversation outlasts the short ways the text gives (rooftop, 30 m in 3 s against 16 s of lines).
+
+**The build** (`experiments/v2/moving-talk.mjs`, stills by `moving-talk-stills.mjs`; private clips, the pages carry the
+book's lines): a unit cut from the run's page and restaged under options. A, as played. B, on the move: each mover's
+whole way laid over the cards by their reading time. C, together: the leader's way, the others a cell beside, in step
+(each piece in the leader's time), the carried on the carrier. P, paced: C with each piece slowed to last its card's
+lines (not below 0.3 m/s). D, riding: everyone in the vehicle, paced to the talk. The player takes a move's own `pace`
+(m/s) for this. Samples from volume 1's third pass (W13 `d20261108025604`): unit 52 (a stroll to the station), 123
+(running through a flooding tunnel carrying Last Order), 19 (an alley chase), 227 (running to a helicopter); and from
+volume 3, the 4WD drive with Yomikawa at the wheel, staged on a 1.4 km street route of volume 1's city.
+
+**Measured** (share of spoken time with the speaker moving / with a partner moving too / partners apart, median):
+
+| Sample | A | Best option |
+| --- | --- | --- |
+| 52 stroll | 21% / 0% / 4 m (63% everyone still) | C, P: 100% / 100% / 2 m (B: 91% / 73% but 47 m apart) |
+| 123 tunnel | 70% / 45% / 40 m apart while "carried" | C, P: 87% / 84% / 0 m |
+| 19 chase | 23% / 23% | P: 100% / 71% |
+| 227 rooftop | 0% | P: 72% / 72% |
+| vol 3 drive | 26% (74% still) | D: 65% (the rest: lines in the car park before they board, three unattributed) |
+
+A paid work-model read of each passage (one question a card: standing, walking, running, driving, riding, carried, and
+with whom) named the right state for all five (a stroll side by side, running while carrying, a chase, arriving on the
+run, a walk then a drive): the director could choose the option from the text.
+
+**The rule, built (the user, 2026-11-08: "Yes that order, then highway/subway system").** Walking talk now, riding
+after the terrain's road system ([roads-and-transit.md](roads-and-transit.md)). `world-engine/director/on-the-move.mjs`,
+a step at the end of each unit (`direct({ onTheMove })`, on by default; the rehearsal's `--still-talk` turns it off):
+
+- **Who is on the move** comes from the reading's casts, card by card, with no new question: the script supervisor's
+  moves (going elsewhere or nearby on foot, running, carried, each "with" whom), the background's activity (strolling,
+  walking, running; standing, sitting or working stops it) and the dialogue coverage's formations ("side by side
+  walking"; facing, across a table, a ring, a door between stop it), from the unit digest's routine at its start.
+- **Groups** are those the reading ties together (one goes with another, one carries another, side by side); a group
+  of one is one too. A stretch is two or more cards in a row with the same group on the move and one of them talking. A
+  card where one of them talks face to face with someone outside the group ends it (they stop there for that talk, the
+  talk rule's place); a phone call does not.
+- **Layout** (C): the leader (a carrier, else whoever went furthest) keeps its own way, the others walk a cell beside it,
+  the carried on their carrier, each with a walk of their own onto the way and off it. **Timing** (P, the key
+  animator's): the way is cut by the cards' reading times, each piece walked at the pace that lasts its card's lines
+  (never faster than their own pace, never slower than 0.3 m/s walking or 1.8 m/s running), everyone in the leader's time.
+- **Nothing else moves**: the way is the path integral's, only spread over more time, and where each of them ends the
+  stretch is kept, so the cards after it, the departures and the next units play as before. A ride, a flight or a leap,
+  a climb or a review's pin keeps a stretch as the director played it (`kept` on the unit's record). The page's move
+  carries its `pace` and `at` (each node's time, so a member reaches each node when the leader reaches its own); the unit's record has `onTheMove` (each stretch: members, cards, leader, metres, seconds) and each
+  card `onTheMove` (group, leader, pace).
+
+**Rehearsed** (first quarter, units 1–84, stand-in answers, library 16's reading; private before/after clips):
+
+| | Before | After |
+| --- | --- | --- |
+| Stretches / cards re-timed | – | 5 / 21 (units 44, 45, 48, 52, 62) |
+| Spoken time with the speaker moving / a partner moving too / everyone still | 25% / 9% / 70% | 30% / 14% / 66% |
+| Unit 52, the stroll to the station | 34%, 4 m apart | 100%, side by side 2 m |
+| Moves outside the stretches, units' ends, Jev calls, laws (L6 0), talk back and forth (340 m) | | all the same |
+
+The first try had no outside-talk break: 14 stretches, and L6 rose 0 → 3 in unit 14 (someone spoke to a runner still
+on his way, once from 40 floors below); the break brought it back to 0. **Left over:** a way the text gives too short
+for its talk ends early (unit 45: 15 m over 56 s of lines, 27%): the strollers' own drift (the background's routine)
+could carry a group on past it, not built. (The camera follows them now: the player's group orbit,
+[director-camera.md](director-camera.md) §9.)
+
+**Talk while driving (built 2026-11-08; the user: "work on the dialogue/action while driving").** Riding (option D) now
+goes by the road network ([roads-and-transit.md](roads-and-transit.md), [highway-research.md](highway-research.md) §8):
+- **The drive:** a road vehicle's ride (`ride:<x>:road`, mounts.mjs) is laid by the road graph
+  (`world-engine/world/roads.mjs`): from the kerb outside where it starts to the kerb outside where it goes, keeping
+  left, waiting at junctions (12 s at a crossing with lights, 4 s at a T), up a ramp onto the highway where that is
+  quicker. Each node carries the second it is reached (`at`).
+- **The talk on it** (`on-the-move.mjs cutDrive`, the director's talk-on-the-move step): where a group rides with talk,
+  the car keeps its own speed. The clock runs at life's own speed while they talk (the move's `real`: the player does
+  not hurry it as it does a silent move), and the drive is cut across the cards by their reading. Talk longer than the
+  drive goes on with the car stopped where it arrived.
+- **Tried on volume 3's drive** (`experiments/v2/drive-talk.mjs`, staged on library 16's Academy City from district 3's
+  ramp to district 1's):
+  - the drive: 1,097 m, 735 m on the highway (deck, then tunnel), 5 junctions with 52 s waiting, 140 s in all;
+  - the car talk: 135 s of reading over 21 cards;
+  - the car moves on 15 of the 21 cards (as played before: 1);
+  - the speaker is moving for 62% of the spoken time (as played before: 29%).
+- **Left over:** volume 1's first quarter has no drive with talk, so no rehearsal plays one; the book's own destination
+  is not read for the drive yet (the staged one is laid between two ramps); traffic is the waits alone (stage 4).
+
 ## 6. The world back into the ontology
 
 What each specialist director keeps (positions, feelings, exchanges, holdings, buildings) and the path each takes into
@@ -440,6 +587,9 @@ person, because of how long its context is), and there is no tier above the main
 or another) has all the rights.** The user reads what was decided and can reverse any of it.
 
 ### The two gates
+
+Design (2026-11-06, not built): a Jev review in front of G1, with Pi behind it for what it cannot settle and for audits;
+see [jev-review.md](jev-review.md).
 
 | Gate | Who | Sees | Volume on volume 1 (estimate) |
 |---|---|---|---|

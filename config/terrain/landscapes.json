@@ -1,0 +1,802 @@
+{
+ "about": "Each landscape and street kind the terrain fills a place with (moved out of src/v2/world/landscape.ts LANDSCAPES, 2026-11-09, the user: \"dig out the hard rules and make them into our universal world generator schema\"): its hint for Jev, era, soft edge (m), radius and height ranges (m), height cap (m), lot area range (m²), block area (m²), coverage, setback (m), shape family, height profile, and `building`: which building type a lot of so many floors is, as steps [from floors, type], the last step whose floors are reached. Street kinds also give their axis, rows and uses. Registered in config/world.schema.json as the table terrain.landscapes.",
+ "types": {
+  "skyscrapers": {
+   "soft": 25,
+   "era": "modern",
+   "cap": 600,
+   "hint": "modern skyscrapers: a dense core of high-rise towers",
+   "radius": [
+    110,
+    200
+   ],
+   "height": [
+    80,
+    600
+   ],
+   "lot": [
+    1400,
+    2600
+   ],
+   "block": 6000,
+   "coverage": 0.95,
+   "back": 4,
+   "family": "blob",
+   "profile": "core",
+   "building": [
+    [
+     0,
+     "tower"
+    ],
+    [
+     20,
+     "skyscraper"
+    ]
+   ]
+  },
+  "commercial": {
+   "soft": 20,
+   "era": "modern",
+   "cap": 60,
+   "hint": "a commercial quarter: shops, malls and offices of a few storeys along busy streets, with a plaza and a boulevard",
+   "radius": [
+    90,
+    170
+   ],
+   "height": [
+    12,
+    36
+   ],
+   "lot": [
+    500,
+    1300
+   ],
+   "block": 4500,
+   "coverage": 0.95,
+   "back": 2,
+   "family": "blob",
+   "profile": "flat",
+   "building": [
+    [
+     0,
+     "shop"
+    ],
+    [
+     6,
+     "office"
+    ]
+   ]
+  },
+  "residential": {
+   "soft": 30,
+   "era": "modern",
+   "cap": 45,
+   "hint": "a living area of an East Asian city: blocks of flats and residential towers, low houses between them",
+   "radius": [
+    130,
+    250
+   ],
+   "height": [
+    7,
+    22
+   ],
+   "lot": [
+    400,
+    1200
+   ],
+   "block": 4000,
+   "coverage": 0.9,
+   "back": 3,
+   "family": "blob",
+   "profile": "flat",
+   "building": [
+    [
+     0,
+     "house"
+    ],
+    [
+     4,
+     "apartment"
+    ]
+   ]
+  },
+  "industrial": {
+   "soft": 12,
+   "era": "modern",
+   "cap": 30,
+   "hint": "an industrial area: factories, warehouses and yards on large plots",
+   "radius": [
+    130,
+    230
+   ],
+   "height": [
+    8,
+    15
+   ],
+   "lot": [
+    2500,
+    6500
+   ],
+   "block": 14000,
+   "coverage": 0.85,
+   "back": 3,
+   "family": "box",
+   "profile": "flat",
+   "building": [
+    [
+     0,
+     "factory"
+    ]
+   ]
+  },
+  "harbour": {
+   "soft": 12,
+   "era": "modern",
+   "cap": 30,
+   "hint": "a harbour or waterfront: docks, piers, marinas and warehouses by the water",
+   "radius": [
+    100,
+    200
+   ],
+   "height": [
+    6,
+    15
+   ],
+   "lot": [
+    1500,
+    4000
+   ],
+   "block": 9000,
+   "coverage": 0.7,
+   "back": 2,
+   "family": "box",
+   "profile": "flat",
+   "building": [
+    [
+     0,
+     "warehouse"
+    ]
+   ]
+  },
+  "park": {
+   "soft": 25,
+   "era": "modern",
+   "cap": 20,
+   "hint": "a park or leisure ground: lawns, gardens, an amusement park, with a few pavilions",
+   "radius": [
+    80,
+    200
+   ],
+   "height": [
+    4,
+    14
+   ],
+   "lot": [
+    1500,
+    4000
+   ],
+   "block": 8000,
+   "coverage": 0.25,
+   "back": 8,
+   "family": "blob",
+   "profile": "low",
+   "building": [
+    [
+     0,
+     "pavilion"
+    ]
+   ]
+  },
+  "stadium": {
+   "soft": 15,
+   "era": "modern",
+   "cap": 60,
+   "hint": "a stadium or sports ground: an oval bowl with parking and a few halls around it",
+   "radius": [
+    120,
+    220
+   ],
+   "height": [
+    25,
+    50
+   ],
+   "lot": [
+    3000,
+    8000
+   ],
+   "block": 20000,
+   "coverage": 0.15,
+   "back": 4,
+   "family": "blob",
+   "profile": "low",
+   "building": [
+    [
+     0,
+     "hall"
+    ]
+   ]
+  },
+  "village": {
+   "soft": 30,
+   "era": "ancient",
+   "cap": 12,
+   "hint": "a village: scattered low houses with gardens",
+   "radius": [
+    70,
+    130
+   ],
+   "height": [
+    4,
+    9
+   ],
+   "lot": [
+    350,
+    900
+   ],
+   "block": 7000,
+   "coverage": 0.5,
+   "back": 3,
+   "family": "lobes",
+   "profile": "low",
+   "building": [
+    [
+     0,
+     "cottage"
+    ]
+   ]
+  },
+  "castle": {
+   "soft": 4,
+   "era": "ancient",
+   "cap": 60,
+   "hint": "an ancient castle: a keep within walls and a crowded old town",
+   "radius": [
+    70,
+    120
+   ],
+   "height": [
+    30,
+    55
+   ],
+   "lot": [
+    200,
+    600
+   ],
+   "block": 2500,
+   "coverage": 0.85,
+   "back": 1,
+   "family": "fort",
+   "profile": "keep",
+   "building": [
+    [
+     0,
+     "townhouse"
+    ]
+   ]
+  },
+  "shopping": {
+   "soft": 10,
+   "era": "modern",
+   "cap": 60,
+   "hint": "a shopping street: a pedestrian street lined tight with shops of a few storeys",
+   "radius": [
+    60,
+    140
+   ],
+   "height": [
+    6,
+    25
+   ],
+   "lot": [
+    100,
+    300
+   ],
+   "block": 1500,
+   "coverage": 0.98,
+   "back": 0,
+   "family": "box",
+   "aspect": [
+    0.32,
+    0.5
+   ],
+   "axis": {
+    "width": 12,
+    "level": "local"
+   },
+   "row": {
+    "frontage": [
+     8,
+     16
+    ],
+    "depth": [
+     16,
+     26
+    ],
+    "gap": 0.5
+   },
+   "into": true,
+   "profile": "flat",
+   "building": [
+    [
+     0,
+     "shop"
+    ],
+    [
+     6,
+     "office"
+    ]
+   ],
+   "uses": [
+    "shop",
+    "shop",
+    "convenience",
+    "cafe",
+    "restaurant",
+    "bar",
+    "arcade",
+    "bank"
+   ]
+  },
+  "centre": {
+   "soft": 15,
+   "era": "modern",
+   "cap": 300,
+   "hint": "a modern commercial centre: a mall podium with towers rising from it, a plaza with a screen in front",
+   "radius": [
+    70,
+    150
+   ],
+   "height": [
+    12,
+    100
+   ],
+   "lot": [
+    400,
+    1200
+   ],
+   "block": 4000,
+   "coverage": 0.95,
+   "back": 2,
+   "family": "blob",
+   "into": true,
+   "profile": "flat",
+   "building": [
+    [
+     0,
+     "shop"
+    ],
+    [
+     4,
+     "mall"
+    ],
+    [
+     12,
+     "tower"
+    ]
+   ],
+   "uses": [
+    "mall",
+    "cinema",
+    "restaurant",
+    "cafe",
+    "hotel",
+    "office"
+   ]
+  },
+  "avenue": {
+   "soft": 15,
+   "era": "modern",
+   "cap": 400,
+   "hint": "an avenue: a boulevard down its middle, offices and towers facing it",
+   "radius": [
+    80,
+    160
+   ],
+   "height": [
+    20,
+    120
+   ],
+   "lot": [
+    800,
+    2400
+   ],
+   "block": 5000,
+   "coverage": 0.95,
+   "back": 3,
+   "family": "box",
+   "aspect": [
+    0.34,
+    0.5
+   ],
+   "axis": {
+    "width": 36,
+    "level": "boulevard"
+   },
+   "row": {
+    "frontage": [
+     30,
+     60
+    ],
+    "depth": [
+     35,
+     55
+    ],
+    "gap": 8
+   },
+   "into": true,
+   "profile": "flat",
+   "building": [
+    [
+     0,
+     "office"
+    ],
+    [
+     8,
+     "tower"
+    ],
+    [
+     20,
+     "skyscraper"
+    ]
+   ],
+   "uses": [
+    "office",
+    "office",
+    "hotel",
+    "department",
+    "bank",
+    "restaurant",
+    "government",
+    "hospital"
+   ]
+  },
+  "square": {
+   "soft": 12,
+   "era": "modern",
+   "cap": 80,
+   "hint": "a square: open ground with a monument, buildings ringing it",
+   "radius": [
+    50,
+    120
+   ],
+   "height": [
+    6,
+    40
+   ],
+   "lot": [
+    300,
+    900
+   ],
+   "block": 3000,
+   "coverage": 0.95,
+   "back": 1,
+   "family": "blob",
+   "row": {
+    "frontage": [
+     14,
+     26
+    ],
+    "depth": [
+     14,
+     22
+    ],
+    "gap": 2
+   },
+   "into": true,
+   "profile": "flat",
+   "building": [
+    [
+     0,
+     "shop"
+    ],
+    [
+     6,
+     "office"
+    ]
+   ],
+   "uses": [
+    "cafe",
+    "restaurant",
+    "shop",
+    "bank",
+    "government",
+    "hotel",
+    "church"
+   ]
+  },
+  "crossing": {
+   "soft": 10,
+   "era": "modern",
+   "cap": 80,
+   "hint": "a crossing: two wide roads of the city meeting, the buildings on its corners facing it",
+   "radius": [
+    40,
+    90
+   ],
+   "height": [
+    6,
+    40
+   ],
+   "lot": [
+    300,
+    900
+   ],
+   "block": 3000,
+   "coverage": 0.95,
+   "back": 1,
+   "family": "blob",
+   "into": true,
+   "profile": "flat",
+   "building": [
+    [
+     0,
+     "shop"
+    ],
+    [
+     6,
+     "office"
+    ]
+   ],
+   "uses": [
+    "shop",
+    "convenience",
+    "bank",
+    "cafe",
+    "restaurant",
+    "office"
+   ]
+  },
+  "station": {
+   "soft": 12,
+   "era": "modern",
+   "cap": 120,
+   "hint": "a station front: the station hall, a plaza and bus bays before it, shops round it",
+   "radius": [
+    70,
+    140
+   ],
+   "height": [
+    10,
+    60
+   ],
+   "lot": [
+    400,
+    1000
+   ],
+   "block": 3500,
+   "coverage": 0.95,
+   "back": 2,
+   "family": "box",
+   "aspect": [
+    0.5,
+    0.8
+   ],
+   "into": true,
+   "profile": "flat",
+   "building": [
+    [
+     0,
+     "shop"
+    ],
+    [
+     6,
+     "office"
+    ]
+   ],
+   "uses": [
+    "station",
+    "shop",
+    "convenience",
+    "cafe",
+    "restaurant",
+    "hotel",
+    "office"
+   ]
+  },
+  "alley": {
+   "soft": 6,
+   "era": "modern",
+   "cap": 30,
+   "hint": "an alley: a lane a few metres wide, tiny lots, low and dense",
+   "radius": [
+    40,
+    100
+   ],
+   "height": [
+    3,
+    12
+   ],
+   "lot": [
+    40,
+    120
+   ],
+   "block": 600,
+   "coverage": 0.99,
+   "back": 0,
+   "family": "box",
+   "aspect": [
+    0.32,
+    0.45
+   ],
+   "axis": {
+    "width": 4,
+    "level": "local"
+   },
+   "narrow": 0.5,
+   "row": {
+    "frontage": [
+     4,
+     9
+    ],
+    "depth": [
+     6,
+     12
+    ],
+    "gap": 0
+   },
+   "profile": "flat",
+   "building": [
+    [
+     0,
+     "shop"
+    ],
+    [
+     3,
+     "house"
+    ]
+   ],
+   "uses": [
+    "house",
+    "house",
+    "shop",
+    "bar",
+    "restaurant",
+    "workshop",
+    "cafe"
+   ]
+  },
+  "terrace": {
+   "soft": 15,
+   "era": "modern",
+   "cap": 60,
+   "hint": "a residential street: flats and houses on both sides of it",
+   "radius": [
+    60,
+    140
+   ],
+   "height": [
+    6,
+    25
+   ],
+   "lot": [
+    200,
+    500
+   ],
+   "block": 3000,
+   "coverage": 0.9,
+   "back": 3,
+   "family": "box",
+   "aspect": [
+    0.34,
+    0.5
+   ],
+   "axis": {
+    "width": 8,
+    "level": "local"
+   },
+   "row": {
+    "frontage": [
+     10,
+     20
+    ],
+    "depth": [
+     12,
+     20
+    ],
+    "gap": 4
+   },
+   "profile": "flat",
+   "building": [
+    [
+     0,
+     "house"
+    ],
+    [
+     4,
+     "apartment"
+    ]
+   ],
+   "uses": [
+    "apartment",
+    "apartment",
+    "house",
+    "dormitory",
+    "convenience",
+    "clinic",
+    "school"
+   ]
+  },
+  "waterfront": {
+   "soft": 10,
+   "era": "modern",
+   "cap": 40,
+   "hint": "a waterfront: water down its length, a bridge across, warehouses and walks on the banks",
+   "radius": [
+    60,
+    150
+   ],
+   "height": [
+    4,
+    15
+   ],
+   "lot": [
+    400,
+    1500
+   ],
+   "block": 6000,
+   "coverage": 0.6,
+   "back": 8,
+   "family": "box",
+   "aspect": [
+    0.4,
+    0.6
+   ],
+   "band": 0.32,
+   "row": {
+    "frontage": [
+     24,
+     50
+    ],
+    "depth": [
+     18,
+     30
+    ],
+    "gap": 10
+   },
+   "into": true,
+   "profile": "low",
+   "building": [
+    [
+     0,
+     "warehouse"
+    ]
+   ],
+   "uses": [
+    "warehouse",
+    "warehouse",
+    "restaurant",
+    "cafe",
+    "workshop"
+   ]
+  },
+  "farm": {
+   "soft": 15,
+   "era": "ancient",
+   "cap": 10,
+   "hint": "farmland: wide fields with a few farmhouses",
+   "radius": [
+    180,
+    320
+   ],
+   "height": [
+    3,
+    6
+   ],
+   "lot": [
+    7000,
+    16000
+   ],
+   "block": 60000,
+   "coverage": 0.12,
+   "back": 6,
+   "family": "box",
+   "profile": "low",
+   "building": [
+    [
+     0,
+     "farmhouse"
+    ]
+   ]
+  }
+ }
+}

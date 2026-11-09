@@ -172,6 +172,10 @@ export async function directorSky(workspace) {
   const at = await readFile(resolve(workspace, 'stage', 'director', 'reading-path.json'), 'utf8').then(JSON.parse, () => null);
   const read = path => readFile(path, 'utf8').then(JSON.parse, () => null);
   const sky = (at?.path ? await read(resolve(at.path, '..', 'sky.json')) : null) ?? await read(resolve(workspace, '..', 'reading', 'sky.json'));
+  return skyView(sky);
+}
+/** A sky.json as World · Live reads it (also the replay io's, experiments/v2/replay-io.mjs), or null. */
+export function skyView(sky) {
   return sky ? { units: Object.fromEntries(Object.entries(sky.units ?? {}).map(([id, unit]) => [id, { daypart: unit.daypart?.value ?? null, hour: unit.hour ?? null, weather: unit.weather?.value ?? null, strength: unit.weather?.strength ?? null, wind: unit.weather?.wind ?? null, sure: unit.weather?.sure ?? 0, lying: !!unit.lying, ...(unit.cloudCut ? { cloudCut: unit.cloudCut } : {}) }])) } : null;
 }
 
@@ -210,7 +214,7 @@ export async function directorReview(workspace) {
   const cloudsAt = new Map();
   for (const [who, list] of Object.entries(smoothed?.people ?? {})) for (const moment of list) { const key = `${moment.scene}|${moment.card ?? 'start'}`; (cloudsAt.get(key) ?? cloudsAt.set(key, []).get(key)).push({ who, rank: moment.rank, spread: moment.spread, shift: moment.shift, cloud: moment.cloud.length, points: moment.cloud.map(spot => ({ x: spot.x, y: spot.y, z: spot.z, w: spot.w })), played: { x: moment.played.x, y: moment.played.y, z: moment.played.z }, map: { x: moment.map.x, y: moment.map.y, z: moment.map.z } }); }
   const items = [...new Map(pool.map(item => [item.id, item])).values()], answerOf = new Map(answers.map(answer => [answer.item, answer]));
-  const reviewOf = item => ({ kind: item.kind, question: item.question, options: item.options, status: item.status, ...(item.note ? { note: item.note } : {}), ...(answerOf.get(item.id) ? { answer: answerOf.get(item.id).verdict, reason: answerOf.get(item.id).reason, at: answerOf.get(item.id).at } : {}) });
+  const reviewOf = item => ({ kind: item.kind, question: item.question, options: item.options, status: item.status, ...(item.note ? { note: item.note } : {}), ...(answerOf.get(item.id) ? { answer: answerOf.get(item.id).verdict, reason: answerOf.get(item.id).reason, at: answerOf.get(item.id).at, by: answerOf.get(item.id).by ?? 'pi', ...(typeof answerOf.get(item.id).confidence === 'number' ? { confidence: answerOf.get(item.id).confidence } : {}) } : {}) });
   const cards = {};
   for (const scene of record.scenes) for (const card of scene.cards) {
     const ids = new Set(card.lines?.map(line => line.id) ?? []);

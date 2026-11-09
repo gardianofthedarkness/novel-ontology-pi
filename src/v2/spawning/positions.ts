@@ -17,6 +17,7 @@ import { numberOf } from "../context/measures.js";
 import type { ScriptScene } from "../extraction/script.js";
 import { seeded } from "../terrain/config.js";
 import { closeInTime } from "../rules/time.js";
+import { setting } from "../settings.js";
 
 /** A footprint: its centre, its width and depth, its turn (world metres). */
 export type Box = [number, number, number, number, number];
@@ -28,7 +29,7 @@ export type By = "carried" | "stays" | "holder" | "spatial" | "group" | "speakin
 /** A start position: who, the place and floor, the point (x, z) and its height, how it was decided, the scene it came from. */
 export interface Start { who: string; kind: "person" | "thing"; scene: string; place: string | null; floor: number | null; at: [number, number]; y: number; by: By; from: string | null }
 
-const FLOOR = 3;
+const FLOOR = setting<number>("grid.floor");
 export { closeInTime };
 
 /** A floor of a building by a spatial word: the roof its top, under the street −1, a numbered floor its number, the street 0 (in front). */

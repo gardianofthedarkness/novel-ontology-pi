@@ -44,6 +44,7 @@ import { createLive, PICKER_MODEL, retried, VENDOR_FILES } from '../live/sim-jev
 import { inlineStrand, strandDemo } from '../world/export-strand-demo.mjs';
 import { buildingList as listBuildings } from '../view/building-list.mjs';
 import { tenantPlacer } from './tenants.mjs';
+import { setting } from '../../dist/src/v2/settings.js';
 
 const repository = resolve(dirname(fileURLToPath(import.meta.url)), '..', '..'), load = path => import(pathToFileURL(`${repository}/${path}`).href);
 const round = value => Math.round(value * 10) / 10;
@@ -55,9 +56,9 @@ export const SHAPES = {
   platform: 'a platform: a flat deck raised above the ground', cut: 'a cut: a trench or a pit dug into the ground', ramp: 'a ramp: ground sloping up from one side to the other',
   rectangle: 'a rectangle: a plain block of ground', sphere: 'a sphere', donut: 'a donut: a ring, as a torus',
 };
-const OVERVIEW = [1440, 900], MAP = [1024, 1024], ZOOMS = 2, CELL = 2, FLOOR = 3, OPEN = new Set(['district', 'street']);
+const OVERVIEW = [1440, 900], MAP = [1024, 1024], ZOOMS = 2, CELL = setting('grid.cell'), FLOOR = setting('grid.floor'), OPEN = new Set(['district', 'street']);
 /** The core the terrain-height question looks through, half its width over its highest slice (at least 40 m): the slices stand apart, the core reads beside them. */
-const CORE = 0.4, CORE_MIN = 40;
+const { share: CORE, least: CORE_MIN } = setting('view.core');
 /** What the terrain view shows (docs/v2/world-engine-v2.md §2.0.16), said with every overview Jev is shown. */
 const SEEN = 'The buildings are cyan holograms of their kinds (towers, office blocks, malls, apartments, schools, shops), as tall as they are; rooms and stairs show only where people are. The volumes below the street are underground halls and passages.';
 /** No fog: a map straight down reads every metre of its ground alike. */

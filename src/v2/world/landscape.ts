@@ -1,4 +1,5 @@
 import { stageStream as skeletonStream } from "./stream.js";
+import { setting, table } from "../settings.js";
 import { centroid, materialize, type Building, type Fabric, type FillStyle, type Lot, type Point, type Road } from "./cityFill.js";
 
 /**
@@ -46,39 +47,25 @@ type Family = "blob" | "lobes" | "box" | "fort";
  */
 interface Kind { hint: string; era: "modern" | "ancient"; soft: number; radius: [number, number]; height: [number, number]; cap: number; lot: [number, number]; block: number; coverage: number; back: number; family: Family; profile: "core" | "flat" | "low" | "keep"; building: (floors: number) => string; uses?: string[]; aspect?: [number, number]; axis?: { width: number; level: Road["level"] }; band?: number; narrow?: number; row?: { frontage: [number, number]; depth: [number, number]; gap: number }; into?: boolean }
 /** The tallest any building may be (a skyscraper core's peak): a modern merge may lift a building past its own type's cap, never past this. */
-export const PEAK = 600;
+export const PEAK = setting<number>("landscape.peak");
 /** How many times its footprint's width a building may be tall: a 600 m tower stands on a lot about 80 m across. */
-export const SLENDER = 8;
+export const SLENDER = setting<number>("landscape.slender");
 /**
  * Super-tall ground: only where a skyscraper core's mean height (its manifold, H × depth) is at least SUPER_TALL and
  * within its top 30% do plots and streets widen for the towers; everywhere else, a core is cut like any district, with
  * its type's own plots and streets (regular buildings keep the density they had before the rule).
  */
-export const SUPER_TALL = 250;
+export const SUPER_TALL = setting<number>("landscape.superTall");
 export const superTallAt = (patch: Patch, p: Point) => { if ((patch.type !== "skyscrapers" && !patch.manifold) || patch.H < SUPER_TALL) return 0; const mean = patch.manifold ? localMedian(patch, depthOf(patch, p)) : patch.H * depthOf(patch, p); return mean >= Math.max(SUPER_TALL, 0.7 * patch.H) ? mean : 0; };
 /** How much wider streets are at a point: 1 + h/400 on super-tall ground (h the mean height there; 2.5 times at a 600 m peak), else 1. */
 export const streetsFor = (patch: Patch, p: Point = [patch.x, patch.z]) => { const tall = superTallAt(patch, p); return tall ? 1 + tall / 400 : 1; };
-export const LANDSCAPES: Record<LandscapeType, Kind> = {
-  skyscrapers: { soft: 25, era: "modern", cap: 600, hint: "modern skyscrapers: a dense core of high-rise towers", radius: [110, 200], height: [80, 600], lot: [1400, 2600], block: 6000, coverage: 0.95, back: 4, family: "blob", profile: "core", building: (f) => (f >= 20 ? "skyscraper" : "tower") },
-  commercial: { soft: 20, era: "modern", cap: 60, hint: "a commercial quarter: shops, malls and offices of a few storeys along busy streets, with a plaza and a boulevard", radius: [90, 170], height: [12, 36], lot: [500, 1300], block: 4500, coverage: 0.95, back: 2, family: "blob", profile: "flat", building: (f) => (f >= 6 ? "office" : "shop") },
-  residential: { soft: 30, era: "modern", cap: 45, hint: "a living area of an East Asian city: blocks of flats and residential towers, low houses between them", radius: [130, 250], height: [7, 22], lot: [400, 1200], block: 4000, coverage: 0.9, back: 3, family: "blob", profile: "flat", building: (f) => (f >= 4 ? "apartment" : "house") },
-  industrial: { soft: 12, era: "modern", cap: 30, hint: "an industrial area: factories, warehouses and yards on large plots", radius: [130, 230], height: [8, 15], lot: [2500, 6500], block: 14000, coverage: 0.85, back: 3, family: "box", profile: "flat", building: () => "factory" },
-  harbour: { soft: 12, era: "modern", cap: 30, hint: "a harbour or waterfront: docks, piers, marinas and warehouses by the water", radius: [100, 200], height: [6, 15], lot: [1500, 4000], block: 9000, coverage: 0.7, back: 2, family: "box", profile: "flat", building: () => "warehouse" },
-  park: { soft: 25, era: "modern", cap: 20, hint: "a park or leisure ground: lawns, gardens, an amusement park, with a few pavilions", radius: [80, 200], height: [4, 14], lot: [1500, 4000], block: 8000, coverage: 0.25, back: 8, family: "blob", profile: "low", building: () => "pavilion" },
-  stadium: { soft: 15, era: "modern", cap: 60, hint: "a stadium or sports ground: an oval bowl with parking and a few halls around it", radius: [120, 220], height: [25, 50], lot: [3000, 8000], block: 20000, coverage: 0.15, back: 4, family: "blob", profile: "low", building: () => "hall" },
-  village: { soft: 30, era: "ancient", cap: 12, hint: "a village: scattered low houses with gardens", radius: [70, 130], height: [4, 9], lot: [350, 900], block: 7000, coverage: 0.5, back: 3, family: "lobes", profile: "low", building: () => "cottage" },
-  castle: { soft: 4, era: "ancient", cap: 60, hint: "an ancient castle: a keep within walls and a crowded old town", radius: [70, 120], height: [30, 55], lot: [200, 600], block: 2500, coverage: 0.85, back: 1, family: "fort", profile: "keep", building: () => "townhouse" },
-  shopping: { soft: 10, era: "modern", cap: 60, hint: "a shopping street: a pedestrian street lined tight with shops of a few storeys", radius: [60, 140], height: [6, 25], lot: [100, 300], block: 1500, coverage: 0.98, back: 0, family: "box", aspect: [0.32, 0.5], axis: { width: 12, level: "local" }, row: { frontage: [8, 16], depth: [16, 26], gap: 0.5 }, into: true, profile: "flat", building: (f) => (f >= 6 ? "office" : "shop"), uses: ["shop", "shop", "convenience", "cafe", "restaurant", "bar", "arcade", "bank"] },
-  centre: { soft: 15, era: "modern", cap: 300, hint: "a modern commercial centre: a mall podium with towers rising from it, a plaza with a screen in front", radius: [70, 150], height: [12, 100], lot: [400, 1200], block: 4000, coverage: 0.95, back: 2, family: "blob", into: true, profile: "flat", building: (f) => (f >= 12 ? "tower" : f >= 4 ? "mall" : "shop"), uses: ["mall", "cinema", "restaurant", "cafe", "hotel", "office"] },
-  avenue: { soft: 15, era: "modern", cap: 400, hint: "an avenue: a boulevard down its middle, offices and towers facing it", radius: [80, 160], height: [20, 120], lot: [800, 2400], block: 5000, coverage: 0.95, back: 3, family: "box", aspect: [0.34, 0.5], axis: { width: 36, level: "boulevard" }, row: { frontage: [30, 60], depth: [35, 55], gap: 8 }, into: true, profile: "flat", building: (f) => (f >= 20 ? "skyscraper" : f >= 8 ? "tower" : "office"), uses: ["office", "office", "hotel", "department", "bank", "restaurant", "government", "hospital"] },
-  square: { soft: 12, era: "modern", cap: 80, hint: "a square: open ground with a monument, buildings ringing it", radius: [50, 120], height: [6, 40], lot: [300, 900], block: 3000, coverage: 0.95, back: 1, family: "blob", row: { frontage: [14, 26], depth: [14, 22], gap: 2 }, into: true, profile: "flat", building: (f) => (f >= 6 ? "office" : "shop"), uses: ["cafe", "restaurant", "shop", "bank", "government", "hotel", "church"] },
-  crossing: { soft: 10, era: "modern", cap: 80, hint: "a crossing: two wide roads of the city meeting, the buildings on its corners facing it", radius: [40, 90], height: [6, 40], lot: [300, 900], block: 3000, coverage: 0.95, back: 1, family: "blob", into: true, profile: "flat", building: (f) => (f >= 6 ? "office" : "shop"), uses: ["shop", "convenience", "bank", "cafe", "restaurant", "office"] },
-  station: { soft: 12, era: "modern", cap: 120, hint: "a station front: the station hall, a plaza and bus bays before it, shops round it", radius: [70, 140], height: [10, 60], lot: [400, 1000], block: 3500, coverage: 0.95, back: 2, family: "box", aspect: [0.5, 0.8], into: true, profile: "flat", building: (f) => (f >= 6 ? "office" : "shop"), uses: ["station", "shop", "convenience", "cafe", "restaurant", "hotel", "office"] },
-  alley: { soft: 6, era: "modern", cap: 30, hint: "an alley: a lane a few metres wide, tiny lots, low and dense", radius: [40, 100], height: [3, 12], lot: [40, 120], block: 600, coverage: 0.99, back: 0, family: "box", aspect: [0.32, 0.45], axis: { width: 4, level: "local" }, narrow: 0.5, row: { frontage: [4, 9], depth: [6, 12], gap: 0 }, profile: "flat", building: (f) => (f >= 3 ? "house" : "shop"), uses: ["house", "house", "shop", "bar", "restaurant", "workshop", "cafe"] },
-  terrace: { soft: 15, era: "modern", cap: 60, hint: "a residential street: flats and houses on both sides of it", radius: [60, 140], height: [6, 25], lot: [200, 500], block: 3000, coverage: 0.9, back: 3, family: "box", aspect: [0.34, 0.5], axis: { width: 8, level: "local" }, row: { frontage: [10, 20], depth: [12, 20], gap: 4 }, profile: "flat", building: (f) => (f >= 4 ? "apartment" : "house"), uses: ["apartment", "apartment", "house", "dormitory", "convenience", "clinic", "school"] },
-  waterfront: { soft: 10, era: "modern", cap: 40, hint: "a waterfront: water down its length, a bridge across, warehouses and walks on the banks", radius: [60, 150], height: [4, 15], lot: [400, 1500], block: 6000, coverage: 0.6, back: 8, family: "box", aspect: [0.4, 0.6], band: 0.32, row: { frontage: [24, 50], depth: [18, 30], gap: 10 }, into: true, profile: "low", building: () => "warehouse", uses: ["warehouse", "warehouse", "restaurant", "cafe", "workshop"] },
-  farm: { soft: 15, era: "ancient", cap: 10, hint: "farmland: wide fields with a few farmhouses", radius: [180, 320], height: [3, 6], lot: [7000, 16000], block: 60000, coverage: 0.12, back: 6, family: "box", profile: "low", building: () => "farmhouse" },
-};
+/**
+ * The kinds, from the schema's table terrain.landscapes (config/terrain/landscapes.json; moved out of this file 2026-11-09):
+ * each kind's `building` rule is steps [from floors, type] there, turned back into a function here.
+ */
+const LANDSCAPE_TABLE = table<{ types: Record<LandscapeType, Omit<Kind, "building"> & { building: [number, string][] } > }>("terrain.landscapes").types;
+const stepsRule = (steps: [number, string][]) => (floors: number) => { let type = steps[0][1]; for (const [from, kind] of steps) if (floors >= from) type = kind; return type; };
+export const LANDSCAPES: Record<LandscapeType, Kind> = Object.fromEntries(Object.entries(LANDSCAPE_TABLE).map(([type, kind]) => [type, { ...kind, building: stepsRule(kind.building) }])) as Record<LandscapeType, Kind>;
 
 /**
  * A manifold: how a part's heights spread over its ground round the median Jev gives it (the user's calls, 2026-10-31:
@@ -199,7 +186,7 @@ export function overlaps(a: Patch, b: Patch, gap = 6): boolean {
 }
 
 /** The ground a scale suggests when nothing larger has a landscape: a street of shops, a district or a city of homes (a region is too varied for one). */
-export const GROUND_BY_SCALE: Record<string, LandscapeType> = { street: "commercial", district: "residential", city: "residential" };
+export const GROUND_BY_SCALE: Record<string, LandscapeType> = setting<Record<string, LandscapeType>>("landscape.groundByScale");
 /**
  * The manifold a place stands on, and who set it: its own landscape (`by` "jev", or "agent" when the main agent answered
  * over Jev's pick); without one, the terrain rules build it as the ground of the nearest larger place that has one (a spot
@@ -279,15 +266,15 @@ export const underground = (patch: Patch) => !patch.plane && (patch.median ?? 0)
  */
 export type Layer = "deep" | "air" | "space";
 export const LAYERS: Layer[] = ["deep", "air", "space"];
-export const LAYER_FLOOR: Record<Layer, number> = { deep: -180, air: 150, space: 1200 };
-export const LAYER_ROOM = 60;
+export const LAYER_FLOOR: Record<Layer, number> = setting<Record<Layer, number>>("layers.floor");
+export const LAYER_ROOM = setting<number>("layers.room");
 /** A layer's floor under these patches (metres above the street): a deck as high as the highest asked of it. */
 export const floorOf = (patches: Patch[], plane: Layer) => plane === "air" ? Math.max(LAYER_FLOOR.air, ...patches.map((patch) => patch.deck ?? 0)) : LAYER_FLOOR[plane];
 /**
  * The ground skin over a street laid underground (docs/v2/terrain-levels.md §8.4), metres: the street's slab and the soil
  * between it and the underground street's open air. Its buildings' roofs stay under it.
  */
-export const SKIN = 3;
+export const SKIN = setting<number>("layers.skin");
 /** A street laid underground (terrain spawning answered its height below 0): its floor, and the room up to the skin. */
 export const sunkStreet = (patch: Patch) => underground(patch) && (STREET_TYPES as readonly string[]).includes(patch.type);
 export const roomUnder = (patch: Patch) => Math.max(0, -(patch.median ?? 0) - SKIN);
@@ -374,11 +361,12 @@ function podiumWithTowers(patch: Patch, w: number, d: number, podium: number, to
 const axisDepth = (patch: Patch, p: Point) => Math.max(0, Math.min(1, 1 - Math.abs(frameOf(patch, p).across) / Math.max(1, acrossReach(patch))));
 /** Where a street's buildings start across its axis: its road's (or its water's) edge, then its setback or promenade. */
 const frontOf = (patch: Patch) => { const kind = LANDSCAPES[patch.type]; return (kind.band ? Math.max(8, kind.band * acrossReach(patch)) : (kind.axis?.width ?? 0) / 2) + kind.back; };
-const SQUARE = (patch: Patch) => clamp(0.5 * patch.R, 20, 80);
+const SQUARED = setting<{ share: number; least: number; most: number }>("landscape.square");
+const SQUARE = (patch: Patch) => clamp(SQUARED.share * patch.R, SQUARED.least, SQUARED.most);
 /** How far the city's lots keep from a compound (a centre's podium and plaza, a station's hall): about half a lot. */
-const CLEAR = 20;
+const CLEAR = setting<number>("landscape.clear");
 /** The lane between a street's rows behind its frontage (and a square's rings): a back lane's width. */
-const LANE = 4;
+const LANE = setting<number>("landscape.lane");
 /**
  * A street laid underground, built out (terrain-levels §8): its form as a street of its kind lays it, its heights half the
  * room up to the skin on average, each building's roof under the skin (a floor of 3 m, its roof a floor more), standing on

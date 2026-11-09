@@ -32,6 +32,24 @@ export const OPTIONS = {
   audit: ['right', 'wrong'],
 };
 
+/**
+ * Who says a line, as asked (docs/v2/jev-review.md §5, R1): the people there and whom the line is said to (W12: 12 of Pi's
+ * 37 "none of them" were the one spoken to, left off the list), a crowd as one option rather than one per member (up to 56
+ * in W12), and the three ways it is no one listed, so "none of them" no longer erases who it was.
+ */
+export const SPEAKER_OTHER = {
+  'someone in the crowd': 'one of the crowd there, not named',
+  'a voice from elsewhere': 'someone not in the scene: a phone, a broadcast, a recording, a voice off',
+  'someone unnamed': 'a person there the text does not name, not one of those listed',
+};
+export function whoSpeaksOptions(value, more = []) {
+  // The world's "unnamed" (a speaker it has no id for) is "someone unnamed" here.
+  const isCrowd = id => String(id).startsWith('crowd:'), noOne = id => ['unnamed', 'none', 'none of them'].includes(String(id));
+  const people = [...new Set([...(value.candidates ?? []), ...(value.to ? [value.to] : []), ...more])].filter(id => id && !isCrowd(id) && !noOne(id));
+  const crowd = (value.candidates ?? []).find(isCrowd) ?? null;
+  return { people, crowd, options: [...people, ...(crowd ? ['someone in the crowd'] : []), 'a voice from elsewhere', 'someone unnamed'] };
+}
+
 /** A ledger entry's scene, card and line, from its value (a play-time verdict) or its `what` ("scene · card · who"). */
 const whereOf = entry => {
   if (entry.value?.scene) return { scene: entry.value.scene, card: entry.value.card ?? null, line: null };
@@ -60,8 +78,8 @@ export function heldItems({ ledger, notes = [], name = id => id, at = new Date()
   for (const entry of ledger.filter(row => row.state === 'held' && row.kind === 'revision' && row.value?.metres !== null && row.value?.metres !== undefined)) item(`revision|${entry.value.scene}|${entry.subject}`, { scene: entry.value.scene, card: null, law: null, ledger: entry.id, kind: 'revision', subjects: [entry.subject], names: [name(entry.subject)], question: `Smoothing the run with everything it observed moves ${name(entry.subject)} ${entry.value.metres} m at the start of ${entry.value.scene} (from where the run had them, ${entry.value.rank ?? 'by rule'}). Should the history change that much?`, options: OPTIONS.revision, evidence: [`revision ${entry.id}`] });
   // A line the world could not settle (W6, speakers.mjs): who says it, of those there (and Jev's guess from elsewhere).
   for (const entry of ledger.filter(row => row.state === 'held' && row.kind === 'speaker')) {
-    const v = entry.value, options = [...new Set(v.candidates ?? [])].filter(id => id !== v.to);
-    item(`who-speaks|${v.line}`, { scene: v.scene, card: v.card, line: v.line, law: null, ledger: entry.id, kind: 'who-speaks', subjects: options, names: options.map(name), question: `In ${v.scene}, who says line ${v.line}${v.to ? ` (to ${name(v.to)})` : ''}? The reading was unsure; the world could not settle it: ${v.why}. Those there: ${options.map(id => `${id} = ${name(id)}`).join(', ')}.`, options: [...options, 'none of them'], evidence: [`line ${v.line}`, `card ${v.card}`, `ledger ${entry.id}`] });
+    const v = entry.value, { people, crowd, options } = whoSpeaksOptions(v);
+    item(`who-speaks|${v.line}`, { scene: v.scene, card: v.card, line: v.line, law: null, ledger: entry.id, kind: 'who-speaks', subjects: people, names: people.map(name), ...(v.to ? { to: v.to } : {}), ...(crowd ? { crowd } : {}), question: `In ${v.scene}, who says line ${v.line}${v.to ? ` (the reading has it said to ${name(v.to)}, who may be its speaker)` : ''}? The reading was unsure; the world could not settle it: ${v.why}. Those there: ${people.map(id => `${id} = ${name(id)}`).join(', ')}${crowd ? ', and a crowd' : ''}.`, options, optionHints: SPEAKER_OTHER, evidence: [`line ${v.line}`, `card ${v.card}`, `ledger ${entry.id}`] });
   }
   // What canon could not take from the world on its own (W6, canon.mjs): a named building in several lots, a named room on
   // several floors, a place inside a building canon puts elsewhere, someone twice in two places at once.
@@ -194,7 +212,8 @@ export function pinsFrom(pins, settled, { script }) {
     if (item.kind === 'continuity' && answer.verdict === 'as played') pins.strands.push({ scene: item.scene, who, reason: answer.reason });
     if (item.kind === 'two-places' && answer.verdict !== 'both') pins.present[`${item.scenes[answer.verdict === 'not in the first' ? 0 : 1]}|${who}`] = false;
     if (item.kind === 'travel') { if (answer.verdict === 'not in the later scene') pins.present[key] = false; else if (answer.verdict === 'more time passes') pins.time.push({ scene: item.scene, reason: answer.reason }); else pins.abilities.push({ who, scene: item.scene, reason: answer.reason }); }
-    if (item.kind === 'who-speaks') for (const line of item.lines ?? []) pins.speaker[line] = answer.verdict === 'none of them' ? null : answer.verdict;
+    // A person is pinned as the speaker; the crowd as its first member; no one listed (and the old "none of them") as null.
+    if (item.kind === 'who-speaks') for (const line of item.lines ?? []) pins.speaker[line] = answer.verdict === 'someone in the crowd' ? item.crowd ?? null : SPEAKER_OTHER[answer.verdict] || answer.verdict === 'none of them' ? null : answer.verdict;
     if (item.kind === 'audit') {
       const audit = (pins.audits[item.audits] ??= { right: 0, wrong: 0 });
       audit[answer.verdict === 'right' ? 'right' : 'wrong']++;

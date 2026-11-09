@@ -3,10 +3,11 @@
 // the line as played (`played`, below), the strands, the script, the reading's speakers and the abilities config in;
 // verdicts out. Nothing here changes a run; W4 makes the verdicts act.
 
+import { setting } from '../../dist/src/v2/settings.js';
 /** Ways everyone has; anything else needs the abilities config (`<library>/universe/abilities.json`). */
 export const HUMAN = new Set(['step', 'walk', 'run', 'fall']);
 /** Speeds (m/s) by way, for L5; a way the abilities config gives may say its own. */
-export const SPEED = { step: 1.4, walk: 1.4, run: 4, leap: 6, flight: 15, teleport: Infinity, ride: 12 };
+export const SPEED = setting('laws.speed');
 /**
  * A virtual public transport (the user, 2026-11-03: "they just run. Set a virtual subway system: if a character needs to
  * go across a country its time increase isn't linear, but a public transport time. We don't need a real transportation
@@ -16,10 +17,7 @@ export const SPEED = { step: 1.4, walk: 1.4, run: 4, leap: 6, flight: 15, telepo
  * a metro's scheduled speed, stops included, about 32 km/h) and a typical intercity rapid rail (a train every twenty
  * minutes; about 150 km/h); a virtual system, to be replaced by a real one.
  */
-export const TRANSIT = {
-  metro: { access: 500, wait: 120, speed: 32 / 3.6, upTo: 60000 },
-  rail: { access: 2000, wait: 600, speed: 150 / 3.6 },
-};
+export const TRANSIT = setting('laws.transit');
 /**
  * How long a trip of `metres` takes and how (seconds): running (L17, everyone runs), or the virtual transit (access and
  * egress run, the wait, the ride at its speed), whichever is sooner. Not linear: a long trip costs a ride, not a run.
@@ -30,9 +28,9 @@ export function tripTime(metres) {
   return ride < run ? { seconds: Math.round(ride), by: metres <= TRANSIT.metro.upTo ? 'metro' : 'rail', access: line.access } : { seconds: Math.round(run), by: 'run', access: 0 };
 }
 /** Talk distances (m): face to face, and a voice everyone around hears (L6). */
-export const LIVE = 4, EARSHOT = 25;
+export const LIVE = setting('talk.live'), EARSHOT = setting('talk.earshot');
 /** People who may share a 2 m cell before it is a crowd (L11). */
-export const PER_CELL = 3;
+export const PER_CELL = setting('laws.perCell');
 
 const violation = (law, what, why, extra = {}) => ({ law, what, why, ...extra });
 const distance = (a, b) => Math.hypot(a.x - b.x, a.z - b.z);

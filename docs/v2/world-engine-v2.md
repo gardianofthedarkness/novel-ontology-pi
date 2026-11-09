@@ -932,6 +932,40 @@ shows the optimization at each spawn, sweep by sweep.
 - Pins on the terrain stage say whether they are settled (`status`): green once an area is kept or a building stands or
   dwells in a building of its use; yellow and blinking while open. A building of a use its ground does not have stays
   yellow ("open, for Jev"): no step settles those yet.
+### 2.0.23 Things and landmarks as code, and one place for settings (the user's design, 2026-11-09)
+
+The user: "construct a set of bash CLI universal concise and context aware. Pi agent or any of our adapters list can do
+so. A work model is baked into one of the commands, or the agent can go and make the model itself. This stage needs to
+be done at the last stage of reading or during, before terrain loop. Nominated and ranked important objects, buildings
+can get their own modeling if they have enough description and important enough to the story. Also, the main agent
+should have quick and context aware way to modify the building generative configurations in a elegant way. We need to
+unify all the configuration files we have, and maybe utilize the model warehouse." Then: "Yes you can use mit."
+Full design: [models-and-settings.md](models-and-settings.md); milestones M8, M10–M12 in [milestones.md](milestones.md).
+
+- **Models are code, never meshes.** A thing or a landmark building that matters to the story and is described well
+  enough gets an OpenSCAD file of its own, written by the work model (`novel model write`) or by the agent itself
+  (`novel model put`); the mesh is derived from it and checked against a contract: standing at z = 0, front toward +x,
+  metres, its size against the text's, one piece, a closed solid (manifold-3d), a triangle budget. Every failure class
+  found once becomes a check and a line in the brief (the first: the wind turbine's blades under the ground, 2026-11-09).
+  Tried on 2026-11-09: five of volume 1's things, all closed solids, about 2,100 work-model tokens a thing.
+- **Where it sits:** after the reading (it reads the reading's things, kinds, sizes and lines) and before the terrain
+  loop (a landmark's footprint and height go into the fill). A model is a look, never canon, kept per universe in
+  `universe/models/` and in its snapshots: a thing seen in two books is one model.
+- **Which get one:** `novel model nominate` ranks things and named buildings by importance (scenes, acting cards,
+  damage, carried or ridden, named by several) and by description (describing sentences, size, colours, parts), with no
+  model call; the rest bind to a part of the warehouse (`novel model use`) or keep today's shapes.
+- **The warehouse:** our CC0 packs, the models we write, and gkNextEngine's SCAD kits (576 modules with a catalogue;
+  MIT, allowed by the user 2026-11-09, its licence notice kept with the files).
+- **One place for settings:** every knob in one schema (default, unit, range, meaning, where used, which layers may
+  override it), resolved defaults < universe < book < place, read through one function; `novel settings
+  show|explain|set|diff` for the agent; a pre-film change becomes a new `before` snapshot. A place's fill becomes a short
+  list of operators (streets, lots, heights, scatter, line) with parameters, as gkNextEngine's layout kit does; buildings
+  the text names are never scattered.
+- **Every agent host:** the commands are `novel` commands with JSON out and bounded pages, with a skill
+  (`skills/novel-models`) the adaptor publishes to Pi, Codex and Claude Code.
+- **Later:** people as rigid-bone bodies (a 7-bone standard, shared walk, run, sit, fall clips, parts by slot from their
+  sheets), after the models (M12).
+
 ### 2.1 Sentence kinds — built
 Every sentence is spoken, thought, fact, action or narration, and for each, whether the people in a conversation change
 there (`dlg_kind`, `dlg_turn`). One structured document per 100 sentences (the kinds defined once, the sentences keyed by
@@ -1051,6 +1085,9 @@ below are the order as it was decided.
 5. The world loop's context as a document; presence and time in one request; building EM per scene.
 6. Scene tiling test with a stitch rule.
 7. The engine playing forward without replays.
+8. **Decided 2026-11-09 (§2.0.23):** one settings registry first (M8), then models as code after the reading and before
+   the terrain (M10), landmark shells in the fill (M11), people with bodies (M12); each proved on a rehearsal of the first
+   quarter, then on a paid volume run (W15), with its evidence and cost in [milestones.md](milestones.md).
 
 ## 8. Open questions
 - When a destination is a spot choice and when a box: by the unit's way (a floor, a roof, underground → box), or always

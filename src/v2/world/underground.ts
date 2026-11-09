@@ -1,5 +1,6 @@
 import { LANDSCAPES, LAYERS, LAYER_ROOM, floorOf, formOf, layerBuildings, roomUnder, sunkStreet, underground, type Landscape, type Layer, type Patch } from "./landscape.js";
 import { stageStream } from "./stream.js";
+import { setting } from "../settings.js";
 
 /**
  * The underground as halls in the ground (docs/underground-design.md): voids carved in soil or rock that the ground around
@@ -31,14 +32,11 @@ export interface Hall { id: string; kind: HallKind; depth: number; height: numbe
 
 /** The ground in three bands by depth (metres): how wide an opening stands unsupported, what breaks it, how it arches and bulks when it falls. */
 export interface Band { name: "soil" | "weathered" | "hard"; to: number; span: number; bond: number; arch: number; bulk: number }
-export const BANDS: Band[] = [
-  { name: "soil", to: 12, span: 0, bond: 3, arch: 0.5, bulk: 1.3 },
-  { name: "weathered", to: 40, span: 8, bond: 6, arch: 1, bulk: 1.5 },
-  { name: "hard", to: Infinity, span: 20, bond: 12, arch: 1, bulk: 1.5 },
-];
+export const BANDS: Band[] = setting<Band[]>("underground.bands");
 export const bandAt = (depth: number) => BANDS.find((band) => depth < band.to) ?? BANDS[BANDS.length - 1];
 /** A reinforced lining: the span it adds while unbroken, and what breaks it; a pillar's bond. */
-export const LINING = { span: 12, bond: 4 }, PILLAR_BOND = 5;
+const LINED = setting<{ span: number; bond: number; pillarBond: number }>("underground.lining");
+export const LINING = { span: LINED.span, bond: LINED.bond }, PILLAR_BOND = LINED.pillarBond;
 
 /**
  * What Jev picks underground (docs/underground-design.md §6.1): just under the street and deep underground, two depth
@@ -46,7 +44,7 @@ export const LINING = { span: 12, bond: 4 }, PILLAR_BOND = 5;
  * The subway runs on its own logic, under buildings, so as part of the shallow interval it made a box find one hall only
  * 87–92% of the time (six generated cities); on its own, 99%, and the shallow interval without it 94–96%.
  */
-export const INTERVALS = { shallow: [0, 25], subway: [5, 20], deep: [20, 110] } as const;
+export const INTERVALS = setting<{ readonly shallow: readonly [number, number]; readonly subway: readonly [number, number]; readonly deep: readonly [number, number] }>("underground.intervals");
 export type Interval = keyof typeof INTERVALS;
 const SUBWAY_KINDS = new Set(["station", "tunnel", "corridor"]);
 // A floor of another layer (§3.5) is in neither interval: what Jev picks underground is the shallow layer's.
@@ -69,7 +67,7 @@ export const LIES_UNDER: Record<HallKind, string[]> = {
   deep: [], deck: [], orbit: [],
 };
 /** How tall each kind of hall is made for a part below the street (metres from its floor). */
-const HALL_HEIGHT: Partial<Record<HallKind, number>> = { corridor: 4, mall: 5, station: 7, tunnel: 6, parking: 3, utility: 3, shelter: 4, basement: 4, channel: 6, tank: 12, lab: 6, military: 6, quantum: 8 };
+const HALL_HEIGHT: Partial<Record<HallKind, number>> = setting<Partial<Record<HallKind, number>>>("underground.hallHeight");
 
 const round = (value: number) => Math.round(value * 10) / 10;
 const turn = (angle: number, [u, v]: Point): Point => [u * Math.cos(angle) - v * Math.sin(angle), u * Math.sin(angle) + v * Math.cos(angle)];
@@ -334,7 +332,7 @@ export function ceilingOf(hall: Pick<Hall, "depth" | "height" | "lined"> & { lay
   return { kind: "skin", at: -cover, cover, bond: bandAt(cover).bond + (hall.lined ? LINING.bond : 0) };
 }
 /** A beam bores through the ground of the shallow layer's near band (§8.1's table, 25 m), no deeper: past it the rock stops it. */
-export const BEAM_BORE = 25;
+export const BEAM_BORE = setting<number>("underground.beamBore");
 /**
  * The skin a blast breaks (§8.4; the user, 2026-11-05: "yes it can break through"): a cell of a hall's ceiling opens where the
  * blast's sphere takes in the whole of its cover there (its underside and the street over it, metres from the centre) and the

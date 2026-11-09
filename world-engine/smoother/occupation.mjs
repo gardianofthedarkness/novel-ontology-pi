@@ -11,8 +11,9 @@
 // A missed detection is not absence: someone who acts but whom the script left out is likely there, and the chain says how
 // likely. Staying on from one scene to the next of a strand is its transition. Pure.
 
-export const ETA = 0.9, FALSE_ALARM = 0.02, STAY = 0.7, ENTER = 0.15, FIRST = 0.3;
-const LR = { acts: 20, speaks: 20, addressed: 5, named: 1.2, described: 1.2 };
+import { setting } from '../../dist/src/v2/settings.js';
+export const { eta: ETA, falseAlarm: FALSE_ALARM, stay: STAY, enter: ENTER, first: FIRST } = setting('occupation.hmm');
+const LR = setting('occupation.likelihood');
 
 /**
  * P(on the stage) for each person at each scene of each strand they are read in: `{ [who]: { [scene]: p } }`, and the

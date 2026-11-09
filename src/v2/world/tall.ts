@@ -4,6 +4,7 @@
  */
 import type { Building, Point, Road } from "./cityFill.js";
 import { segmentDistance, SLENDER } from "./landscape.js";
+import { setting } from "../settings.js";
 
 /**
  * Tall buildings and the streets round them (the user, 2026-11-01), worked after the fill, so its lots (and the slots that
@@ -15,8 +16,8 @@ import { segmentDistance, SLENDER } from "./landscape.js";
  *    the tallest first, each grown as far as no street and no building kept before it stops it, the lower buildings it
  *    then covers cleared. A `fixed` building (one the text placed, a landmark) is never cleared or cut.
  */
-export const TALL = 100;
-export const AROUND = { reach: 120, per: 400, most: 2.5 };
+export const TALL = setting<number>("tall.from");
+export const AROUND = setting<{ reach: number; per: number; most: number }>("tall.around");
 const topOf = (b: Building) => b.floors * 3;
 /** A building's half-extent toward a road's normal (as `onRoad` measures it). */
 const reachToward = (b: Building, road: Road) => {

@@ -15,11 +15,11 @@
 
 /** How each kind of vehicle carries (world-engine/digest/settei.mjs KINDS): a ride's factor against a run (4 m/s), a flight's height; seats. */
 export const CARRIERS = {
-  'a car': { move: { ride: { factor: 3 } }, seats: 5 },
-  'a van or a truck': { move: { ride: { factor: 2.5 } }, seats: 3 },
-  'a bus': { move: { ride: { factor: 2.5 } }, seats: 40 },
+  'a car': { move: { ride: { factor: 3, road: true } }, seats: 5 },
+  'a van or a truck': { move: { ride: { factor: 2.5, road: true } }, seats: 3 },
+  'a bus': { move: { ride: { factor: 2.5, road: true } }, seats: 40 },
   'a train or a carriage': { move: { ride: { factor: 6 } }, seats: 200 },
-  'a motorbike or a bicycle': { move: { ride: { factor: 2 } }, seats: 2 },
+  'a motorbike or a bicycle': { move: { ride: { factor: 2, road: true } }, seats: 2 },
   'a boat': { move: { ride: { factor: 2 } }, seats: 10 },
   'a helicopter': { move: { flight: { height: 40 } }, seats: 6 },
   'an aircraft': { move: { flight: { height: 150 } }, seats: 200 },
@@ -66,7 +66,9 @@ const RIDDEN = ['flight', 'appear', 'ride', 'climb', 'agility'];
 export function wayName(kind, limits) {
   if (kind === 'flight') return 'flight';
   if (kind === 'appear') return `teleport:${limits.reach ?? 30}`;
-  if (kind === 'ride') return `ride:${limits.factor ?? 3}`;
+  // A road vehicle (`road`) drives the road graph (world-engine/world/roads.mjs; the director's walk) where one joins the
+  // two ends; a train, a boat or a ride with no road under it goes the walk grid's level ground.
+  if (kind === 'ride') return `ride:${limits.factor ?? 3}${limits.road ? ':road' : ''}`;
   if (kind === 'climb') return `climb:${limits.height ?? 25}`;
   if (kind === 'agility') return `agile:${limits.factor ?? 2}`;
   return null;

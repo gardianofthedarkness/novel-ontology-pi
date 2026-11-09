@@ -1,0 +1,1503 @@
+{
+ "about": "The universal world generator schema (docs/v2/models-and-settings.md §4; milestones M8a). Every number and rule the world generator, the laws, the smoother, crowds and the director used to keep in code, with its default (today's value), unit, range, meaning, where it is used and which layers may override it: defaults < a universe's universe/settings.json < a book's stage/settings.json < a place's own (places.<id> in either). kind: hard (a gate or limit), knob (a choice of taste or calibration), physics (a measured constant), structure (the grid itself; changing it changes everything), presentation (what Jev or the viewer is shown). Tables are whole files, merged key by key over their defaults. Read through src/v2/settings.ts setting(key, scope). Infinity is written \"Infinity\".",
+ "version": 1,
+ "layers": [
+  "defaults",
+  "universe",
+  "book",
+  "place"
+ ],
+ "keys": {
+  "grid.cell": {
+   "default": 2,
+   "unit": "m",
+   "meaning": "The walk grid's cell: every place is built and walked on 2 m squares.",
+   "used": [
+    "world-engine/director/director.mjs CELL",
+    "world-engine/laws/attacks.mjs CELL",
+    "world-engine/terrain/terrain-spawn.mjs CELL"
+   ],
+   "layers": [],
+   "kind": "structure",
+   "range": [
+    1,
+    4
+   ]
+  },
+  "grid.floor": {
+   "default": 3,
+   "unit": "m",
+   "meaning": "One storey: a floor's height and the walk grid's vertical step.",
+   "used": [
+    "world-engine/director/director.mjs FLOOR",
+    "world-engine/laws/attacks.mjs FLOOR",
+    "world-engine/terrain/terrain-spawn.mjs FLOOR",
+    "src/v2/spawning/positions.ts FLOOR"
+   ],
+   "layers": [],
+   "kind": "structure",
+   "range": [
+    2.5,
+    4.5
+   ]
+  },
+  "body.height": {
+   "default": 1.7,
+   "unit": "m",
+   "meaning": "A person's height, the one human scale kept (physics-laws.md §9).",
+   "used": [
+    "world-engine/director/director.mjs BODY"
+   ],
+   "layers": [
+    "universe"
+   ],
+   "kind": "physics",
+   "range": [
+    1,
+    2.5
+   ]
+  },
+  "fill.streets": {
+   "default": {
+    "cell": 180,
+    "arterial": 18,
+    "collector": 12,
+    "local": 8,
+    "blockArea": 5200,
+    "blockMin": 36,
+    "lotSmall": 260,
+    "lotLarge": 1600
+   },
+   "unit": "m, m²",
+   "meaning": "The city fill's street net and lots: super-block cell, arterial, collector and local road widths, block area and least block side, small and large lot areas.",
+   "used": [
+    "src/v2/world/cityFill.ts FILL"
+   ],
+   "layers": [
+    "universe",
+    "book",
+    "place"
+   ],
+   "kind": "knob"
+  },
+  "fill.buildingArea": {
+   "default": {
+    "house": [
+     80,
+     400
+    ],
+    "home": [
+     80,
+     400
+    ],
+    "shop": [
+     150,
+     800
+    ],
+    "office": [
+     500,
+     3000
+    ],
+    "tower": [
+     400,
+     2000
+    ],
+    "skyscraper": [
+     1000,
+     4000
+    ],
+    "market": [
+     800,
+     4000
+    ],
+    "church": [
+     400,
+     2500
+    ],
+    "station": [
+     2000,
+     9000
+    ],
+    "school": [
+     4000,
+     16000
+    ],
+    "hospital": [
+     3000,
+     14000
+    ],
+    "castle": [
+     3000,
+     20000
+    ]
+   },
+   "unit": "m² [least, most]",
+   "meaning": "A building's footprint range by its type.",
+   "used": [
+    "src/v2/world/cityFill.ts BUILDING_AREA"
+   ],
+   "layers": [
+    "universe",
+    "book",
+    "place"
+   ],
+   "kind": "knob"
+  },
+  "landscape.peak": {
+   "default": 600,
+   "unit": "m",
+   "meaning": "The tallest any building may be: a merge may lift a building past its type's cap, never past this.",
+   "used": [
+    "src/v2/world/landscape.ts PEAK"
+   ],
+   "layers": [
+    "universe"
+   ],
+   "kind": "hard",
+   "range": [
+    50,
+    1500
+   ]
+  },
+  "landscape.slender": {
+   "default": 8,
+   "unit": "height / width",
+   "meaning": "How many times its footprint's width a building may be tall.",
+   "used": [
+    "src/v2/world/landscape.ts SLENDER"
+   ],
+   "layers": [
+    "universe"
+   ],
+   "kind": "hard",
+   "range": [
+    2,
+    20
+   ]
+  },
+  "landscape.superTall": {
+   "default": 250,
+   "unit": "m",
+   "meaning": "A skyscraper core whose mean height reaches this widens its plots and streets for the towers.",
+   "used": [
+    "src/v2/world/landscape.ts SUPER_TALL"
+   ],
+   "layers": [
+    "universe",
+    "book",
+    "place"
+   ],
+   "kind": "knob",
+   "range": [
+    100,
+    600
+   ]
+  },
+  "landscape.square": {
+   "default": {
+    "share": 0.5,
+    "least": 20,
+    "most": 80
+   },
+   "unit": "share of R, m",
+   "meaning": "A square's open middle: a share of its radius, kept between least and most.",
+   "used": [
+    "src/v2/world/landscape.ts SQUARE"
+   ],
+   "layers": [
+    "universe",
+    "book",
+    "place"
+   ],
+   "kind": "knob"
+  },
+  "landscape.clear": {
+   "default": 20,
+   "unit": "m",
+   "meaning": "How far the city's lots keep from a compound (a centre's podium and plaza, a station's hall).",
+   "used": [
+    "src/v2/world/landscape.ts CLEAR"
+   ],
+   "layers": [
+    "universe",
+    "book",
+    "place"
+   ],
+   "kind": "knob",
+   "range": [
+    0,
+    80
+   ]
+  },
+  "landscape.lane": {
+   "default": 4,
+   "unit": "m",
+   "meaning": "The back lane between a street's rows behind its frontage.",
+   "used": [
+    "src/v2/world/landscape.ts LANE"
+   ],
+   "layers": [
+    "universe",
+    "book",
+    "place"
+   ],
+   "kind": "knob",
+   "range": [
+    2,
+    12
+   ]
+  },
+  "landscape.groundByScale": {
+   "default": {
+    "street": "commercial",
+    "district": "residential",
+    "city": "residential"
+   },
+   "unit": "landscape kind",
+   "meaning": "The ground a scale suggests when nothing larger has a landscape.",
+   "used": [
+    "src/v2/world/landscape.ts GROUND_BY_SCALE"
+   ],
+   "layers": [
+    "universe",
+    "book"
+   ],
+   "kind": "knob"
+  },
+  "layers.floor": {
+   "default": {
+    "deep": -180,
+    "air": 150,
+    "space": 1200
+   },
+   "unit": "m above the street",
+   "meaning": "Where the deep underground, the air layer and space begin.",
+   "used": [
+    "src/v2/world/landscape.ts LAYER_FLOOR"
+   ],
+   "layers": [
+    "universe"
+   ],
+   "kind": "knob"
+  },
+  "layers.room": {
+   "default": 60,
+   "unit": "m",
+   "meaning": "The room a virtual layer gives a place.",
+   "used": [
+    "src/v2/world/landscape.ts LAYER_ROOM"
+   ],
+   "layers": [
+    "universe"
+   ],
+   "kind": "knob",
+   "range": [
+    10,
+    300
+   ]
+  },
+  "layers.skin": {
+   "default": 3,
+   "unit": "m",
+   "meaning": "The ground skin over a street laid underground.",
+   "used": [
+    "src/v2/world/landscape.ts SKIN"
+   ],
+   "layers": [
+    "universe"
+   ],
+   "kind": "knob",
+   "range": [
+    1,
+    10
+   ]
+  },
+  "tall.from": {
+   "default": 100,
+   "unit": "m",
+   "meaning": "Above this a building is as thick as its height needs (no side under height / slender); the tallest grown first.",
+   "used": [
+    "src/v2/world/tall.ts TALL"
+   ],
+   "layers": [
+    "universe",
+    "book",
+    "place"
+   ],
+   "kind": "knob",
+   "range": [
+    30,
+    400
+   ]
+  },
+  "tall.around": {
+   "default": {
+    "reach": 120,
+    "per": 400,
+    "most": 2.5
+   },
+   "unit": "m, m, ratio",
+   "meaning": "How tall buildings press the ones around them: reach, per, most.",
+   "used": [
+    "src/v2/world/tall.ts AROUND"
+   ],
+   "layers": [
+    "universe",
+    "book",
+    "place"
+   ],
+   "kind": "knob"
+  },
+  "underground.bands": {
+   "default": [
+    {
+     "name": "soil",
+     "to": 12,
+     "span": 0,
+     "bond": 3,
+     "arch": 0.5,
+     "bulk": 1.3
+    },
+    {
+     "name": "weathered",
+     "to": 40,
+     "span": 8,
+     "bond": 6,
+     "arch": 1,
+     "bulk": 1.5
+    },
+    {
+     "name": "hard",
+     "to": "Infinity",
+     "span": 20,
+     "bond": 12,
+     "arch": 1,
+     "bulk": 1.5
+    }
+   ],
+   "unit": "m",
+   "meaning": "The ground in three bands by depth: unsupported span, what breaks it, its arch and bulk when it falls.",
+   "used": [
+    "src/v2/world/underground.ts BANDS"
+   ],
+   "layers": [
+    "universe"
+   ],
+   "kind": "physics"
+  },
+  "underground.lining": {
+   "default": {
+    "span": 12,
+    "bond": 4,
+    "pillarBond": 5
+   },
+   "unit": "m, bond",
+   "meaning": "A reinforced lining's added span and bond; a pillar's bond.",
+   "used": [
+    "src/v2/world/underground.ts LINING PILLAR_BOND"
+   ],
+   "layers": [
+    "universe"
+   ],
+   "kind": "physics"
+  },
+  "underground.intervals": {
+   "default": {
+    "shallow": [
+     0,
+     25
+    ],
+    "subway": [
+     5,
+     20
+    ],
+    "deep": [
+     20,
+     110
+    ]
+   },
+   "unit": "m [from, to]",
+   "meaning": "The depth intervals Jev picks underground from: just under the street, the subway, deep.",
+   "used": [
+    "src/v2/world/underground.ts INTERVALS"
+   ],
+   "layers": [
+    "universe"
+   ],
+   "kind": "knob"
+  },
+  "underground.hallHeight": {
+   "default": {
+    "corridor": 4,
+    "mall": 5,
+    "station": 7,
+    "tunnel": 6,
+    "parking": 3,
+    "utility": 3,
+    "shelter": 4,
+    "basement": 4,
+    "channel": 6,
+    "tank": 12,
+    "lab": 6,
+    "military": 6,
+    "quantum": 8
+   },
+   "unit": "m",
+   "meaning": "A hall's height by its kind.",
+   "used": [
+    "src/v2/world/underground.ts HALL_HEIGHT"
+   ],
+   "layers": [
+    "universe",
+    "book"
+   ],
+   "kind": "knob"
+  },
+  "underground.beamBore": {
+   "default": 25,
+   "unit": "m",
+   "meaning": "How deep a beam bores through the ground before the rock stops it.",
+   "used": [
+    "src/v2/world/underground.ts BEAM_BORE"
+   ],
+   "layers": [
+    "universe"
+   ],
+   "kind": "physics",
+   "range": [
+    0,
+    200
+   ]
+  },
+  "place.least": {
+   "default": {
+    "region": 300,
+    "city": 120,
+    "district": 60,
+    "street": 30,
+    "building": 12,
+    "room": 4
+   },
+   "unit": "m",
+   "meaning": "The least radius of a place of each scale before anything is built in it.",
+   "used": [
+    "src/v2/world/placeCanvas.ts LEAST"
+   ],
+   "layers": [
+    "universe",
+    "book"
+   ],
+   "kind": "hard"
+  },
+  "place.gap": {
+   "default": 10,
+   "unit": "m",
+   "meaning": "The gap kept between sibling places on the canvas.",
+   "used": [
+    "src/v2/world/placeCanvas.ts GAP"
+   ],
+   "layers": [
+    "universe",
+    "book"
+   ],
+   "kind": "knob",
+   "range": [
+    0,
+    100
+   ]
+  },
+  "place.poolSpacing": {
+   "default": {
+    "street": 40,
+    "building": 20,
+    "room": 8
+   },
+   "unit": "m",
+   "meaning": "How far apart a pool keeps its members, by their kind.",
+   "used": [
+    "src/v2/world/placeCanvas.ts POOL_SPACING"
+   ],
+   "layers": [
+    "universe",
+    "book"
+   ],
+   "kind": "knob"
+  },
+  "spawn.layout": {
+   "default": {
+    "cover": 0.55,
+    "blend": 0.2,
+    "give": 0.15,
+    "weights": {
+     "ring": 4,
+     "pairs": 1,
+     "pressure": 6,
+     "squeeze": 2
+    }
+   },
+   "unit": "share, weights",
+   "meaning": "How a parent's manifolds lie: cover, blend at fading edges, how far a standing one may move, the objective's weights.",
+   "used": [
+    "src/v2/terrain/topology.ts LAYOUT"
+   ],
+   "layers": [
+    "universe",
+    "book",
+    "place"
+   ],
+   "kind": "knob"
+  },
+  "spawn.heightLimit": {
+   "default": {
+    "lower": 0.15,
+    "damaged": 0.3
+   },
+   "unit": "share",
+   "meaning": "How far one spawn may lower a part (and a damaged part), as a share of its average.",
+   "used": [
+    "src/v2/terrain/heights.ts LIMIT"
+   ],
+   "layers": [
+    "universe",
+    "book",
+    "place"
+   ],
+   "kind": "hard"
+  },
+  "spawn.typeSure": {
+   "default": {
+    "lead": 0.5,
+    "wordsLead": 2
+   },
+   "unit": "lead",
+   "meaning": "When a building's type is sure from the inventory: Jev's lead, or words with a lead.",
+   "used": [
+    "src/v2/terrain/inventory.ts SURE"
+   ],
+   "layers": [
+    "universe"
+   ],
+   "kind": "knob"
+  },
+  "spawn.slots": {
+   "default": {
+    "crossWeight": 0.3,
+    "lambda": 1.5
+   },
+   "unit": "weight",
+   "meaning": "Borrowing's objective: ties across parents, and the pull toward a pin.",
+   "used": [
+    "src/v2/terrain/slots.ts CROSS_WEIGHT LAMBDA"
+   ],
+   "layers": [
+    "universe"
+   ],
+   "kind": "knob"
+  },
+  "spawn.floatMass": {
+   "default": {
+    "unnamed": 1,
+    "slot": 4,
+    "named": 30
+   },
+   "unit": "mass",
+   "meaning": "How hard a place holds still when the float relaxes: unnamed, a slot, named.",
+   "used": [
+    "world-engine/terrain/float.mjs MASS"
+   ],
+   "layers": [
+    "universe"
+   ],
+   "kind": "knob"
+  },
+  "view.half": {
+   "default": {
+    "region": 1600,
+    "city": 760,
+    "district": 320,
+    "street": 140,
+    "building": 60
+   },
+   "unit": "m",
+   "meaning": "How far a parent's picture for Jev reaches, by its scale.",
+   "used": [
+    "world-engine/terrain/terrain.mjs HALF"
+   ],
+   "layers": [
+    "universe"
+   ],
+   "kind": "presentation"
+  },
+  "view.core": {
+   "default": {
+    "share": 0.4,
+    "least": 40
+   },
+   "unit": "share, m",
+   "meaning": "The core the terrain-height question looks through: a share of the highest slice, at least least.",
+   "used": [
+    "world-engine/terrain/terrain-spawn.mjs CORE CORE_MIN"
+   ],
+   "layers": [
+    "universe"
+   ],
+   "kind": "presentation"
+  },
+  "view.impactSizes": {
+   "default": [
+    4,
+    8,
+    16,
+    32
+   ],
+   "unit": "m",
+   "meaning": "The sizes Jev picks an impact from.",
+   "used": [
+    "world-engine/world/impact-choices.mjs SIZES"
+   ],
+   "layers": [
+    "universe"
+   ],
+   "kind": "presentation"
+  },
+  "buildings.roleOf": {
+   "default": {
+    "hospital": "hospital",
+    "station": "station",
+    "office": "office",
+    "skyscraper": "office",
+    "school": "school",
+    "home": "home",
+    "market": "shop",
+    "church": "station"
+   },
+   "unit": "role",
+   "meaning": "A named building kind's role in the world.",
+   "used": [
+    "world-engine/world/export-strand-demo.mjs ROLE_OF"
+   ],
+   "layers": [
+    "universe",
+    "book"
+   ],
+   "kind": "knob"
+  },
+  "buildings.floorsOf": {
+   "default": {
+    "skyscraper": 16,
+    "office": 10,
+    "school": 4,
+    "home": 8,
+    "hospital": 6,
+    "market": 2,
+    "station": 2,
+    "church": 2
+   },
+   "unit": "floors",
+   "meaning": "Floors of a named building by its kind (stage architecture).",
+   "used": [
+    "world-engine/world/export-strand-demo.mjs FLOORS_OF"
+   ],
+   "layers": [
+    "universe",
+    "book",
+    "place"
+   ],
+   "kind": "knob"
+  },
+  "buildings.worldFirst": {
+   "default": {
+    "school": [
+     "school",
+     4
+    ],
+    "dormitory": [
+     "home",
+     8
+    ],
+    "house": [
+     "home",
+     2
+    ],
+    "hospital": [
+     "hospital",
+     6
+    ],
+    "office": [
+     "office",
+     10
+    ],
+    "mall": [
+     "mall",
+     5
+    ],
+    "shop": [
+     "shop",
+     2
+    ],
+    "station": [
+     "station",
+     2
+    ],
+    "church": [
+     "station",
+     2
+    ],
+    "skyscraper": [
+     "office",
+     16
+    ],
+    "warehouse": [
+     "station",
+     2
+    ]
+   },
+   "unit": "[role, floors]",
+   "meaning": "A world-first spot's building: its role and floors.",
+   "used": [
+    "world-engine/world/export-strand-demo.mjs BUILDING_OF"
+   ],
+   "layers": [
+    "universe",
+    "book",
+    "place"
+   ],
+   "kind": "knob"
+  },
+  "walk.factors": {
+   "default": {
+    "walk": [
+     1,
+     1,
+     1,
+     3,
+     6,
+     3
+    ],
+    "run": [
+     1,
+     1,
+     1,
+     1,
+     4,
+     1
+    ],
+    "fall": [
+     1,
+     1,
+     1,
+     1,
+     0.15,
+     1
+    ]
+   },
+   "unit": "cost factor",
+   "meaning": "Edge-cost factors by way [walk, climb, descend, jump, fall, sky arc]: a fall is cheap only for someone falling.",
+   "used": [
+    "world-engine/world/export-strand-demo.mjs FACTORS"
+   ],
+   "layers": [
+    "universe"
+   ],
+   "kind": "knob"
+  },
+  "walk.mannerSpeed": {
+   "default": {
+    "walk": 120,
+    "run": 260,
+    "sneak": 60,
+    "climb up": 80,
+    "go down": 120,
+    "fall": 420,
+    "teleport": 1000000,
+    "dragged": 90
+   },
+   "unit": "m/min",
+   "meaning": "The hologram navigator's speed by manner.",
+   "used": [
+    "src/v2/world/holoNav.ts MANNER_SPEED"
+   ],
+   "layers": [
+    "universe"
+   ],
+   "kind": "knob"
+  },
+  "roads.speeds": {
+   "default": {
+    "local": 30,
+    "collector": 40,
+    "arterial": 50,
+    "boulevard": 40,
+    "avenue": 40,
+    "kerb": 12,
+    "ramp": 30,
+    "deck": 60,
+    "tunnel": 60
+   },
+   "unit": "km/h",
+   "meaning": "Driving speed by road class.",
+   "used": [
+    "world-engine/world/roads.mjs SPEEDS"
+   ],
+   "layers": [
+    "universe",
+    "book",
+    "place"
+   ],
+   "kind": "knob"
+  },
+  "roads.waits": {
+   "default": {
+    "signal": 12,
+    "give": 4
+   },
+   "unit": "s",
+   "meaning": "The wait at a crossing with lights (signal) and at a T (give way).",
+   "used": [
+    "world-engine/world/roads.mjs WAITS"
+   ],
+   "layers": [
+    "universe",
+    "book",
+    "place"
+   ],
+   "kind": "knob"
+  },
+  "roads.junction": {
+   "default": 4,
+   "unit": "m",
+   "meaning": "Road ends closer than this are one junction.",
+   "used": [
+    "world-engine/world/roads.mjs KEY"
+   ],
+   "layers": [
+    "universe"
+   ],
+   "kind": "structure",
+   "range": [
+    1,
+    12
+   ]
+  },
+  "highway.knobs": {
+   "default": {
+    "radius": 80,
+    "deckHalf": 8.5,
+    "deckHeight": 12,
+    "tunnelDepth": 12,
+    "ramp": 120,
+    "rampHalf": 3.5,
+    "rampOffset": 12,
+    "rampSpacing": 400,
+    "betaRatio": 0.5,
+    "storyShare": 0.4,
+    "gateFloor": 0.08,
+    "pull": 0.6,
+    "reach": 150
+   },
+   "unit": "m, ratio",
+   "meaning": "The expressway: curve radius, deck half width and height, tunnel depth, ramp length, half width, offset and spacing, growth beta ratio, story share of a hub's mass, a gate's least mass, the ramps' pull on buildings and its reach.",
+   "used": [
+    "world-engine/world/highways.mjs KNOBS"
+   ],
+   "layers": [
+    "universe",
+    "book",
+    "place"
+   ],
+   "kind": "knob"
+  },
+  "highway.cost": {
+   "default": {
+    "lot": {
+     "base": 1,
+     "steep": 5,
+     "height": 150
+    },
+    "protected": 400,
+    "arterial": 0.3,
+    "collector": 0.6,
+    "local": 1.5,
+    "water": 0.35,
+    "outside": 1.2,
+    "travel": 2,
+    "tunnel": 15,
+    "portal": 400
+   },
+   "unit": "per m",
+   "meaning": "Building the expressway, per metre, by what lies under it (a lot: base + steep × √(min(1, H / height))), plus travel; a tunnel per metre and a portal at each end.",
+   "used": [
+    "world-engine/world/highways.mjs COST"
+   ],
+   "layers": [
+    "universe",
+    "book",
+    "place"
+   ],
+   "kind": "knob"
+  },
+  "laws.speed": {
+   "default": {
+    "step": 1.4,
+    "walk": 1.4,
+    "run": 4,
+    "leap": 6,
+    "flight": 15,
+    "teleport": "Infinity",
+    "ride": 12
+   },
+   "unit": "m/s",
+   "meaning": "Speeds by way for the travel-time law (L5).",
+   "used": [
+    "world-engine/laws/laws.mjs SPEED"
+   ],
+   "layers": [
+    "universe"
+   ],
+   "kind": "physics"
+  },
+  "laws.transit": {
+   "default": {
+    "metro": {
+     "access": 500,
+     "wait": 120,
+     "speed": 8.88888888888889,
+     "upTo": 60000
+    },
+    "rail": {
+     "access": 2000,
+     "wait": 600,
+     "speed": 41.666666666666664
+    }
+   },
+   "unit": "m, s, m/s",
+   "meaning": "The virtual public transport: access run, wait, ride speed; a metro within a city, rail beyond.",
+   "used": [
+    "world-engine/laws/laws.mjs TRANSIT"
+   ],
+   "layers": [
+    "universe",
+    "book"
+   ],
+   "kind": "knob"
+  },
+  "talk.live": {
+   "default": 4,
+   "unit": "m",
+   "meaning": "Face to face: the distance of a live talk (L6).",
+   "used": [
+    "world-engine/laws/laws.mjs LIVE",
+    "world-engine/smoother/smoother.mjs REACH.live"
+   ],
+   "layers": [
+    "universe"
+   ],
+   "kind": "hard",
+   "range": [
+    1,
+    10
+   ]
+  },
+  "talk.group": {
+   "default": 6,
+   "unit": "m",
+   "meaning": "A group's talk reach (the smoother).",
+   "used": [
+    "world-engine/smoother/smoother.mjs REACH.group"
+   ],
+   "layers": [
+    "universe"
+   ],
+   "kind": "hard",
+   "range": [
+    2,
+    20
+   ]
+  },
+  "talk.earshot": {
+   "default": 25,
+   "unit": "m",
+   "meaning": "A voice everyone around hears: public talk (L6); those within it at a scene start stand together.",
+   "used": [
+    "world-engine/laws/laws.mjs EARSHOT",
+    "world-engine/director/director.mjs EARSHOT",
+    "world-engine/smoother/smoother.mjs REACH.public"
+   ],
+   "layers": [
+    "universe"
+   ],
+   "kind": "hard",
+   "range": [
+    5,
+    100
+   ]
+  },
+  "laws.perCell": {
+   "default": 3,
+   "unit": "people",
+   "meaning": "People who may share a 2 m cell before it is a crowd (L11).",
+   "used": [
+    "world-engine/laws/laws.mjs PER_CELL"
+   ],
+   "layers": [
+    "universe"
+   ],
+   "kind": "hard",
+   "range": [
+    1,
+    12
+   ]
+  },
+  "laws.person": {
+   "default": {
+    "close": {
+     "reach": 3
+    },
+    "line": {
+     "range": 30
+    }
+   },
+   "unit": "m",
+   "meaning": "What a person can do without an ability or a weapon: a fist's reach, a throw's range.",
+   "used": [
+    "world-engine/laws/attacks.mjs PERSON"
+   ],
+   "layers": [
+    "universe"
+   ],
+   "kind": "physics"
+  },
+  "smoother.rankSigma": {
+   "default": {
+    "pinned": 1.5,
+    "stated": 3,
+    "met": 3,
+    "answered": 8,
+    "ruled": 20
+   },
+   "unit": "m",
+   "meaning": "How sure a position is by its rank (σ).",
+   "used": [
+    "world-engine/smoother/smoother.mjs RANK_SIGMA"
+   ],
+   "layers": [
+    "universe"
+   ],
+   "kind": "knob"
+  },
+  "smoother.walk": {
+   "default": {
+    "talkSigma": 2,
+    "step": 8,
+    "sceneGap": 6,
+    "cloud": 48,
+    "keep": 8
+   },
+   "unit": "m, count",
+   "meaning": "The smoother's talk σ, step, scene gap, cloud size and kept spots.",
+   "used": [
+    "world-engine/smoother/smoother.mjs TALK_SIGMA STEP SCENE_GAP CLOUD KEEP"
+   ],
+   "layers": [
+    "universe"
+   ],
+   "kind": "knob"
+  },
+  "smoother.revisionLimit": {
+   "default": 300,
+   "unit": "m",
+   "meaning": "The most a scene start may move before the revision goes to the review.",
+   "used": [
+    "world-engine/smoother/smoother.mjs REVISION_LIMIT"
+   ],
+   "layers": [
+    "universe"
+   ],
+   "kind": "hard",
+   "range": [
+    20,
+    2000
+   ]
+  },
+  "smoother.livePrior": {
+   "default": 0.8,
+   "unit": "probability",
+   "meaning": "A line whose kind no one gave: face to face this likely.",
+   "used": [
+    "world-engine/smoother/smoother.mjs LIVE_PRIOR"
+   ],
+   "layers": [
+    "universe"
+   ],
+   "kind": "knob",
+   "range": [
+    0,
+    1
+   ]
+  },
+  "occupation.hmm": {
+   "default": {
+    "eta": 0.9,
+    "falseAlarm": 0.02,
+    "stay": 0.7,
+    "enter": 0.15,
+    "first": 0.3
+   },
+   "unit": "probability",
+   "meaning": "Who is on the stage: detection, false alarm, staying on, entering, first appearance.",
+   "used": [
+    "world-engine/smoother/occupation.mjs ETA FALSE_ALARM STAY ENTER FIRST"
+   ],
+   "layers": [
+    "universe"
+   ],
+   "kind": "knob"
+  },
+  "occupation.likelihood": {
+   "default": {
+    "acts": 20,
+    "speaks": 20,
+    "addressed": 5,
+    "named": 1.2,
+    "described": 1.2
+   },
+   "unit": "ratio",
+   "meaning": "How much each kind of mention says someone is there.",
+   "used": [
+    "world-engine/smoother/occupation.mjs LR"
+   ],
+   "layers": [
+    "universe"
+   ],
+   "kind": "knob"
+  },
+  "crowd.ring": {
+   "default": 3.6,
+   "unit": "m",
+   "meaning": "Where a gathering crowd holds from its focus (Hall's public distance).",
+   "used": [
+    "world-engine/crowd/field.mjs RING"
+   ],
+   "layers": [
+    "universe"
+   ],
+   "kind": "physics"
+  },
+  "crowd.weidmann": {
+   "default": {
+    "free": 1.34,
+    "jam": 5.4,
+    "gamma": 1.913
+   },
+   "unit": "m/s, people/m²",
+   "meaning": "Weidmann's fundamental diagram: free speed, jam density, gamma.",
+   "used": [
+    "world-engine/crowd/field.mjs FREE JAM GAMMA"
+   ],
+   "layers": [],
+   "kind": "physics"
+  },
+  "crowd.density": {
+   "default": {
+    "none": 0,
+    "few": 0.2,
+    "some": 0.6,
+    "many": 1.5,
+    "packed": 3
+   },
+   "unit": "people/m²",
+   "meaning": "People a square metre for a crowd's size (Fruin's levels of service).",
+   "used": [
+    "world-engine/crowd/field.mjs DENSITY"
+   ],
+   "layers": [
+    "universe",
+    "book"
+   ],
+   "kind": "knob"
+  },
+  "crowd.motion": {
+   "default": {
+    "milling": {
+     "pace": 0.6,
+     "follow": 0.1,
+     "noise": 0.9
+    },
+    "flowing": {
+     "pace": 1,
+     "follow": 0.5,
+     "noise": 0.2
+    },
+    "gathering": {
+     "pace": 1,
+     "follow": 0.5,
+     "noise": 0.2
+    },
+    "alarmed": {
+     "pace": 2.5,
+     "follow": 0.8,
+     "noise": 0.4
+    },
+    "gone": {
+     "pace": 1.5,
+     "follow": 0.6,
+     "noise": 0.2
+    }
+   },
+   "unit": "ratio",
+   "meaning": "Each crowd state's pace against walking, how much people follow, and noise.",
+   "used": [
+    "world-engine/crowd/field.mjs MOTION"
+   ],
+   "layers": [
+    "universe"
+   ],
+   "kind": "knob"
+  },
+  "crowd.samples": {
+   "default": 48,
+   "unit": "count",
+   "meaning": "The most samples a crowd is drawn with (a drawing budget).",
+   "used": [
+    "world-engine/crowd/field.mjs SAMPLES"
+   ],
+   "layers": [
+    "universe"
+   ],
+   "kind": "presentation",
+   "range": [
+    8,
+    400
+   ]
+  },
+  "director.moveSure": {
+   "default": 0.5,
+   "unit": "probability",
+   "meaning": "The digest's moves played when at least this sure.",
+   "used": [
+    "world-engine/director/director.mjs MOVE_SURE"
+   ],
+   "layers": [
+    "universe"
+   ],
+   "kind": "knob",
+   "range": [
+    0,
+    1
+   ]
+  },
+  "director.factSearch": {
+   "default": 25,
+   "unit": "m",
+   "meaning": "How far the layout artist and the checks look for a spot that agrees with the notes.",
+   "used": [
+    "world-engine/director/director.mjs FACT_SEARCH"
+   ],
+   "layers": [
+    "universe"
+   ],
+   "kind": "knob",
+   "range": [
+    5,
+    200
+   ]
+  },
+  "director.underSearch": {
+   "default": 120,
+   "unit": "m",
+   "meaning": "How far round a unit's start a spot under the street is looked for.",
+   "used": [
+    "world-engine/director/director.mjs UNDER_SEARCH"
+   ],
+   "layers": [
+    "universe"
+   ],
+   "kind": "knob",
+   "range": [
+    20,
+    500
+   ]
+  },
+  "director.crowdReach": {
+   "default": 160,
+   "unit": "m",
+   "meaning": "The widest a crowd's field reaches round its anchor (W13's scene 249 crash).",
+   "used": [
+    "world-engine/director/director.mjs CROWD_REACH"
+   ],
+   "layers": [
+    "universe"
+   ],
+   "kind": "hard",
+   "range": [
+    40,
+    400
+   ]
+  },
+  "director.aroundMost": {
+   "default": 400,
+   "unit": "m",
+   "meaning": "The widest window a look round a point builds (W13's crash).",
+   "used": [
+    "world-engine/director/director.mjs AROUND_MOST"
+   ],
+   "layers": [
+    "universe"
+   ],
+   "kind": "hard",
+   "range": [
+    100,
+    1000
+   ]
+  },
+  "replay.clock": {
+   "default": {
+    "say": 0.16,
+    "read": 2.1,
+    "demo": 3
+   },
+   "unit": "s, ×",
+   "meaning": "A card lasts long enough to read its lines (say seconds a character, read at least); moves play demo× life.",
+   "used": [
+    "world-engine/director/on-the-move.mjs SAY READ DEMO",
+    "world-engine/view/strand-demo.html SAY READ DEMO (own copy)"
+   ],
+   "layers": [
+    "universe"
+   ],
+   "kind": "presentation"
+  },
+  "replay.pace": {
+   "default": {
+    "pace": {
+     "walk": 1.4,
+     "run": 3.6
+    },
+    "slowest": {
+     "walk": 0.3,
+     "run": 1.8
+    }
+   },
+   "unit": "m/s",
+   "meaning": "The player's walking and running paces, and the slowest a paced piece goes.",
+   "used": [
+    "world-engine/director/on-the-move.mjs PACE SLOWEST",
+    "world-engine/view/strand-demo.html SPEED (own copy)"
+   ],
+   "layers": [
+    "universe"
+   ],
+   "kind": "presentation"
+  },
+  "replay.smooth": {
+   "default": {
+    "window": 1.4,
+    "hand": 1.2,
+    "ramp": 0.45
+   },
+   "unit": "s",
+   "meaning": "Smooth mode: the camera's averaging window either side, the handover between groups, a walk's speed ramp.",
+   "used": [
+    "world-engine/view/strand-demo.html SMOOTH_W SMOOTH_HAND wayAt (own copy)"
+   ],
+   "layers": [
+    "universe"
+   ],
+   "kind": "presentation",
+   "wired": false
+  }
+ },
+ "tables": {
+  "terrain.landscapes": {
+   "file": "config/terrain/landscapes.json",
+   "meaning": "Each landscape and street kind: hint, era, sizes, heights, lots, blocks, coverage, setback, shape, and which building a lot of so many floors is (steps).",
+   "used": [
+    "src/v2/world/landscape.ts LANDSCAPES"
+   ],
+   "layers": [
+    "universe",
+    "book"
+   ]
+  },
+  "terrain.buildingTypes": {
+   "file": "config/terrain/building-types.json",
+   "meaning": "Building types: words, uses and what each is.",
+   "used": [
+    "src/v2/terrain/inventory.ts"
+   ],
+   "layers": [
+    "universe",
+    "book"
+   ]
+  },
+  "terrain.city": {
+   "file": "config/terrain/city.json",
+   "meaning": "What a city of each kind spawns (districts) and how they lie.",
+   "used": [
+    "src/v2/terrain/config.ts"
+   ],
+   "layers": [
+    "universe",
+    "book",
+    "place"
+   ]
+  },
+  "terrain.district": {
+   "file": "config/terrain/district.json",
+   "meaning": "What a district of each kind spawns (streets).",
+   "used": [
+    "src/v2/terrain/config.ts"
+   ],
+   "layers": [
+    "universe",
+    "book",
+    "place"
+   ]
+  },
+  "terrain.street": {
+   "file": "config/terrain/street.json",
+   "meaning": "A street kind's buildings: density and uses.",
+   "used": [
+    "src/v2/terrain/config.ts"
+   ],
+   "layers": [
+    "universe",
+    "book",
+    "place"
+   ]
+  },
+  "terrain.heights": {
+   "file": "config/terrain/heights.json",
+   "meaning": "Every building type's least floors and each area kind's least median, a hard gate.",
+   "used": [
+    "src/v2/terrain/config.ts loadHeights"
+   ],
+   "layers": [
+    "universe",
+    "book"
+   ]
+  },
+  "terrain.composite": {
+   "file": "config/terrain/composite.json",
+   "meaning": "A building's tenants by floor (composite buildings).",
+   "used": [
+    "src/v2/terrain/composite.ts"
+   ],
+   "layers": [
+    "universe",
+    "book"
+   ]
+  },
+  "models.uses": {
+   "file": "config/models.json",
+   "meaning": "Which model stands for each use, kind and role; old-world models only on ancient ground.",
+   "used": [
+    "src/v2/world/useModels.ts"
+   ],
+   "layers": [
+    "universe",
+    "book"
+   ]
+  }
+ }
+}

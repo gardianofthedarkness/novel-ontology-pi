@@ -66,7 +66,17 @@ test('answers on what the world settled: who says a line, an audit counted and i
     { id: 'r:s2', kind: 'audit', class: 'speaker', state: 'held', subject: 'b0_s6', value: { scene: 's2', card: 'dialogue:b0_s5', line: 'b0_s6', who: 'a', why: 'Jev\'s guess (40%), there' } },
   ] });
   const who = items.find(item => item.kind === 'who-speaks'), audit = items.find(item => item.kind === 'audit');
-  assert.deepEqual(who.options, ['a', 'c', 'none of them'], 'those there, not the one spoken to');
+  assert.deepEqual(who.options, ['a', 'b', 'c', 'a voice from elsewhere', 'someone unnamed'], 'those there and the one spoken to (it may be theirs), then no one listed');
   pinsFrom(pins, [{ item: who, answer: { verdict: 'c' } }, { item: audit, answer: { verdict: 'wrong' } }], { script: { scenes: [] } });
   assert.deepEqual([pins.speaker.b0_s5, pins.notSpeaker.b0_s6, pins.audits.speaker], ['c', 'a', { right: 0, wrong: 1 }]);
+});
+
+test('who says a line: a crowd is one option, pinned as its first member; no one listed is null', () => {
+  const pins = { speaker: {}, present: {}, remote: {}, kind: {}, meet: [], same: [], different: [] };
+  const [who] = heldItems({ ledger: [{ id: 'r:s3', kind: 'speaker', state: 'held', subject: 'b0_s7', value: { scene: 's2', card: 'dialogue:b0_s7', line: 'b0_s7', who: null, to: null, why: 'x', candidates: ['a', 'crowd:2:1', 'crowd:2:2'] } }] });
+  assert.deepEqual(who.options, ['a', 'someone in the crowd', 'a voice from elsewhere', 'someone unnamed']);
+  pinsFrom(pins, [{ item: who, answer: { verdict: 'someone in the crowd' } }], { script: { scenes: [] } });
+  assert.equal(pins.speaker.b0_s7, 'crowd:2:1');
+  pinsFrom(pins, [{ item: who, answer: { verdict: 'a voice from elsewhere' } }], { script: { scenes: [] } });
+  assert.equal(pins.speaker.b0_s7, null);
 });

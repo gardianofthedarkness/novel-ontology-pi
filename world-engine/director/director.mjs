@@ -7,7 +7,7 @@
 // Each move is walked on the world's path integral (its windowed walk graph, rooms through their doors). Nothing is
 // replayed: the engine is built once (export-strand-demo.mjs's `engine` hook) and the page written once a scene.
 //   npm run build && node world-engine/director/director.mjs <novel-dir> --reading <reading>/v2/data.json --from <scene> --to <scene>
-//     [--budget 60] [--stand-in] [--live] [--pace 6] [--agent <host state>] [--no-digest] [--no-speakers]
+//     [--budget 60] [--stand-in] [--live] [--pace 6] [--agent <host state>] [--no-digest] [--no-speakers] [--no-jev-review]
 // --no-digest: without the summarizer (digest.mjs), the pass and Jev's text questions as before; --no-speakers: no line's
 // speaker settled or held for the review (a run on actions and items).
 // --pace: seconds the live view is given to play each move before the next question (6 with --live).
@@ -27,23 +27,33 @@ const { VENDOR_FILES, PICKER_MODEL, retried } = await import('../live/sim-jev.mj
 const { passScene } = await import('./pass.mjs');
 const { withSystem2 } = await import('./system2.mjs');
 const { writeWorldLog } = await import('../log/write-log.mjs');
-const R = await import('../review/review.mjs'), C6 = await import('../review/canon.mjs'), SM = await import('../smoother/smoother.mjs'), OC = await import('../smoother/occupation.mjs');
+const R = await import('../review/review.mjs'), JR = await import('../review/jev-review.mjs'), C6 = await import('../review/canon.mjs'), SM = await import('../smoother/smoother.mjs'), OC = await import('../smoother/occupation.mjs');
 const SKY = await import('../digest/sky.mjs');
+const OM = await import('./on-the-move.mjs'), RD = await import('../world/roads.mjs');
 const RM = await import('../digest/rooms.mjs');
 const TR = await import('../digest/transport.mjs');
 const WF = await import('./workflow.mjs'), AT = await import('../laws/attacks.mjs'), IU = await import('../digest/in-use.mjs'), MT = await import('../digest/mounts.mjs'), CF = await import('../crowd/field.mjs'), DG = await import('../digest/digest.mjs'), FA = await import('../digest/facts.mjs'), LY = await import('../world/layers.mjs'), AIR = await import('../world/air.mjs'), UN = await import('../digest/underground-note.mjs'), G = await import('./gate.mjs'), LW = await import('../laws/laws.mjs');
 import { copyFile } from 'node:fs/promises';
+import { setting } from '../../dist/src/v2/settings.js';
 
-const CELL = 2, FLOOR = 3, PRESENT = new Set(['speaks', 'acts', 'addressed']);
+const CELL = setting('grid.cell'), FLOOR = setting('grid.floor'), PRESENT = new Set(['speaks', 'acts', 'addressed']);
 // The digest's moves played: at least this sure (below it, motion read into a spoken line or a thought).
-const MOVE_SURE = 0.5;
+const MOVE_SURE = setting('director.moveSure');
 // Human scale, the one unit kept (physics-laws.md §9): a person's height. Every other distance is a referent measured in
 // the world or a speed times the story's time.
-const BODY = 1.7;
+const BODY = setting('body.height');
 /** How far the layout artist and the checks look for a spot that agrees with the notes (metres; was 6 bodies, W10). */
-const FACT_SEARCH = 25;
+const FACT_SEARCH = setting('director.factSearch');
 // How far round a unit's start a spot under the street is looked for, when the unit is underground (metres).
-const UNDER_SEARCH = 120;
+const UNDER_SEARCH = setting('director.underSearch');
+// The widest a crowd's field reaches round the anchor (metres): the open ground a camera takes in, never a district or the
+// city. W13 (2026-11-07) died in scene 249 when a crowd sized by a city-wide frame asked for the walk graph of most of the
+// city, more steps than a map holds; W12's scene 153 crowd at 718 m had put 2,018,700 people on a district.
+const CROWD_REACH = setting('director.crowdReach');
+// The widest window a look round a point builds (metres): a wider radius looks within this one (W13: the same crash).
+const AROUND_MOST = setting('director.aroundMost');
+// Earshot on the street (metres; L6's public talk): those within it of one another at a scene start stand together.
+const EARSHOT = setting('talk.earshot');
 const seeded = text => { let h = 2166136261; for (const c of text) { h ^= c.charCodeAt(0); h = Math.imul(h, 16777619); } let s = h >>> 0; return () => { s = (s + 0x6d2b79f5) | 0; let t = Math.imul(s ^ (s >>> 15), 1 | s); t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t; return ((t ^ (t >>> 14)) >>> 0) / 4294967296; }; };
 const round = value => Math.round(value * 10) / 10;
 
@@ -77,7 +87,7 @@ export async function readerView(reading, text) {
   return { version: 2, kinds: Object.fromEntries(Object.entries(reading.kinds ?? {}).map(([id, entry]) => [id, entry.kind])), marks, names };
 }
 
-export async function direct(novelDir, { reading, readingPath = null, prefilm = null, from, to, jev, workModel = null, budget = Infinity, live = null, pace = 0, agent = null, digest = true, speakers = true, smoothing = null, blasts = [], log = console.error }) {
+export async function direct(novelDir, { reading, readingPath = null, prefilm = null, from, to, jev, workModel = null, budget = Infinity, live = null, pace = 0, agent = null, reviewer = null, digest = true, speakers = true, smoothing = null, blasts = [], onTheMove = true, log = console.error }) {
   // A card's line with its kind (spoken, action, environment, thought, fact, narration) and, spoken, who says it: the
   // reader colours sentences by kind, and the page puts a spoken line in a bubble over its speaker.
   // Who says a line is the reading's (EM², a Jev question during extraction): its answer and how sure; below its accept
@@ -179,8 +189,10 @@ export async function direct(novelDir, { reading, readingPath = null, prefilm = 
   const pins = await R.loadPins(novelDir), lastRun = await R.latestRun(novelDir);
   const oldLog = lastRun ? (await readFile(join(novelDir, 'stage', 'world', 'log', `${lastRun}.jsonl`), 'utf8').catch(() => '')).split('\n').filter(Boolean).map(row => JSON.parse(row)) : [];
   const oldPage = lastRun ? JSON.parse(await readFile(join(novelDir, 'stage', 'simulation', 'runs', 'director', `${lastRun}.page.json`), 'utf8').catch(() => 'null')) : null;
-  // run.json is the last run's record only if that run is the last one played (a stand-in's run is not on the list).
-  const lastRecord = lastRun ? JSON.parse(await readFile(join(out, 'run.json'), 'utf8').catch(() => 'null')) : null;
+  // run.json is the last run's record only if that run is the last one played (a stand-in's run is not on the list). The
+  // run's own copy (runs/<run>/run.json) first: a run stopped or crashed since leaves its own run.json beside it, and the
+  // smoothing went off without a word (W13's third pass, after a DNS blip, played with none).
+  const lastRecord = lastRun ? JSON.parse(await readFile(join(out, 'runs', lastRun, 'run.json'), 'utf8').catch(() => 'null')) ?? JSON.parse(await readFile(join(out, 'run.json'), 'utf8').catch(() => 'null')) : null;
   const oldRecord = lastRecord && `d${String(lastRecord.startedAt).replace(/\D/g, '').slice(0, 14)}` === lastRun ? lastRecord : null;
   const strandsNow = await strandsOf();
   // A rehearsal may pass a smoothing in (rehearsal.mjs: the run before it smoothed, back-tested a second pass).
@@ -281,6 +293,8 @@ export async function direct(novelDir, { reading, readingPath = null, prefilm = 
   let result = null;
   await strandDemo(novelDir, { from, to, worldOnly: true, plain: true, title: 'Director', played: { cast: Object.fromEntries(seg.script.scenes.map(entry => [entry.id, entry.present])), spawn: seg.spawn, strands: segStrands.strands }, engine: async E => {
     engineCost = E.cost;
+    // The road network vehicles drive (world-engine/world/roads.mjs): the landscapes' roads and the kept highways.
+    const roadNet = E.roadInputs?.roads?.length ? RD.roadGraph(E.roadInputs) : null;
     const { world, W } = E, server = await serve(join(work, 'index.html'), join(work, 'vendor')), chrome = await browser({ gpu: true });
     let page = null, lotsShown = -1;
     // A stand-in answers by rule and never looks (the test cycle, the user, 2026-11-03): it is shot no pictures, and the
@@ -318,7 +332,7 @@ export async function direct(novelDir, { reading, readingPath = null, prefilm = 
       function pieceOf({ scene, run }) {
         const starts = Object.fromEntries(Object.entries(run.starts).map(([who, value]) => [who, dense(value[0])]));
         const events = scene.events.map(event => ({ id: event.id, actors: event.actors ?? [], text: event.text, camera: event.camera ?? null, spots: [], hit: E.hits?.get(event.id) ?? null, blows: E.blows?.get(event.id) ?? [], hitThings: null, trace: null,
-          moves: scene.cast.map(person => E.moves.get(`${scene.id}|${event.id}|${person}`)).filter(Boolean).map(move => ({ person: move.person, how: move.how, with: null, path: move.path.map(dense), ensemble: (move.ensemble ?? []).map(other => other.map(dense)), ...(move.mount ? { mount: move.mount } : {}), ...(move.air ? { air: move.air } : {}) })) }));
+          moves: scene.cast.map(person => E.moves.get(`${scene.id}|${event.id}|${person}`)).filter(Boolean).map(move => ({ person: move.person, how: move.how, with: null, path: move.path.map(dense), ensemble: (move.ensemble ?? []).map(other => other.map(dense)), ...(move.mount ? { mount: move.mount } : {}), ...(move.air ? { air: move.air } : {}), ...(move.pace ? { pace: move.pace } : {}), ...(move.at ? { at: move.at } : {}), ...(move.real ? { real: true } : {}) })) }));
         return { scene: scene.id, starts, events, cast: scene.cast, grid: gridKey() };
       }
       // Each unnamed place's first unit (the world script's `scene`), for the live view to show it only once that unit has landed.
@@ -353,7 +367,8 @@ export async function direct(novelDir, { reading, readingPath = null, prefilm = 
         return (cell === S.STAIR ? `the stairs of ${lotName(index)}, floor ${k + 1}` : cell === S.CORRIDOR ? `a corridor of ${lotName(index)}, floor ${k + 1}` : room ? `${room.kind === 'room' ? 'a room' : room.kind === 'hall' ? 'a hall' : 'a hall rising through floors'} of ${lotName(index)}, floor ${room.floor + 1}` : `a wall of ${lotName(index)}, floor ${k + 1}`) + down;
       };
       // The walkable nodes round a point (within `radius` metres), with what each is: the pool spots and boxes are taken from.
-      const around = (x, z, radius) => {
+      const around = (x, z, wanted) => {
+        const radius = Math.min(wanted, AROUND_MOST);
         E.reach(x, z, radius + 16);
         const built = E.graphOf({ x, z }, radius + 24), { graph, type, lot } = built, nodes = [];
         for (let id = 0; id < type.length; id++) if (type[id] && graph.offsets[id + 1] > graph.offsets[id] && Math.abs(graph.x[id] - x) <= radius && Math.abs(graph.z[id] - z) <= radius) nodes.push({ id, x: graph.x[id], y: graph.y[id], z: graph.z[id], type: type[id], lot: lot[id], ground: built.ground?.[id] ?? 0 });
@@ -434,6 +449,22 @@ export async function direct(novelDir, { reading, readingPath = null, prefilm = 
         }
         return out.sort((m, n) => m.d - n.d).map(entry => entry.id);
       };
+      // A drive (a road vehicle's ride, mounts.mjs `ride:<x>:road`): the quickest way by road (world-engine/world/roads.mjs)
+      // from the kerb nearest where it starts to the kerb nearest the target, keeping left, up a ramp onto the expressway
+      // where that is quicker; as the walk grid's nodes along the lane (a deck's at its level, a tunnel's under the street),
+      // each with the second it is reached (`at`), so the car keeps its own speed on the page.
+      const driveRoute = (from, targets) => {
+        if (!roadNet || !targets.length) return null;
+        const a = at(from[0]), target = targets.slice(0, 8).map(id => ({ id, p: at(id) })).sort((m, n) => Math.hypot(m.p[0] - a[0], m.p[2] - a[2]) - Math.hypot(n.p[0] - a[0], n.p[2] - a[2]))[0];
+        if (Math.hypot(target.p[0] - a[0], target.p[2] - a[2]) < 60) return null;
+        const route = RD.drive(roadNet, [a[0], a[2]], [target.p[0], target.p[2]]);
+        if (!route) return null;
+        const k0 = W.nodePos(world, from[0]).k, path = [], times = [];
+        for (const [x, y, z, t] of route.pts) { const id = W.nodeId(world, Math.floor(x / CELL), Math.floor(z / CELL), k0 + Math.round(y / FLOOR)); if (path.at(-1) === id) { times[times.length - 1] = t; continue; } path.push(id); times.push(Math.round(t * 100) / 100); }
+        path[0] = from[0]; times[0] = 0;
+        if (path.at(-1) !== target.id) { path.push(target.id); times.push(times.at(-1) + 1); }
+        return Object.assign(path, { how: 'ride', ensemble: [], at: times, drove: { metres: route.metres, highway: route.highway, seconds: route.seconds } });
+      };
       // A move's path grown by a piece (several moves of one person in one card are one walk on the page), the steps that go
       // through the air kept as ranges [first, last, kind] (`at`: where in the piece they start): the page plays them
       // straight, at that kind's pace.
@@ -466,6 +497,8 @@ export async function direct(novelDir, { reading, readingPath = null, prefilm = 
           }
           how = 'run';
         }
+        // A road vehicle drives the road graph where one joins the two ends (else the level ground, as before).
+        if (/^ride:[^:]+:road$/.test(String(how))) { const driven = driveRoute(from, targets); if (driven) return driven; }
         // The layers (docs/v2/terrain-levels.md §8.2): a walk with a target in its own layer is walked in that layer; one
         // whose targets all lie in the other goes by a portal (a lift, a shaft, a ladder, the virtual elevator).
         const layerOf = id => (E.deepAt(id) ? 'deep' : 'near'), mine = layerOf(from[0]), same = targets.filter(id => layerOf(id) === mine);
@@ -701,10 +734,17 @@ export async function direct(novelDir, { reading, readingPath = null, prefilm = 
         // Where each carried-in person starts for the frame: the smoothed start where the smoothing moved them, else where they
         // stood (the user, 2026-11-03: a frame measured round where they stood before the revision was stale by hundreds of m).
         const startOf = who => { const revised = smoothedStart(scene, who); return revised !== null && revised !== undefined ? revised : was.get(who)[0]; };
+        // Whether someone who walked in last pass is in the frame: by where they stand now. They come in again (startFor,
+        // below), so the smoothing's start for them, somewhere on last pass's way in, is no place they stand; it still says
+        // where the scene is (the third pass, scene 66: Yomikawa counted as already in the frame by that start, then carried
+        // from where she stood, 480 m off; measured round where people stood now, the rehearsal's scene 26 framed Misaka's
+        // floor 40 storeys up, not the street, and Kamijou never reached her).
+        const arrivedThen = who => (smoothed?.people?.[who] ?? []).some(moment => moment.scene === scene.id && String(moment.card ?? '').startsWith('arrive:'));
+        const standsAt = who => arrivedThen(who) ? was.get(who)[0] : startOf(who);
         const middle = carriedIn.length ? [0, 1, 2].map(axis => { const values = carriedIn.map(who => at(startOf(who))[axis]).sort((a, b) => a - b); return values[Math.floor(values.length / 2)]; }) : null;
         const frameMetres = middle && firstScale ? measure(firstScale.frame, middle) : null;
         if (frameMetres) sceneRecord.frame = { ...firstScale.frame, metres: Math.round(frameMetres), middle: { x: Math.round(middle[0]), y: Math.round(middle[1]), z: Math.round(middle[2]) } };
-        const gap = who => { const p = at(startOf(who)); return Math.hypot(p[0] - middle[0], p[2] - middle[2]); };
+        const gap = who => { const p = at(standsAt(who)); return Math.hypot(p[0] - middle[0], p[2] - middle[2]); };
         const here = carriedIn.filter(who => !frameMetres || straightOn(who) || gap(who) <= frameMetres / 2);
         if (frameMetres) { const outside = here.filter(who => gap(who) > frameMetres / 2).map(who => ({ who, metres: Math.round(gap(who) - frameMetres / 2) })); if (outside.length) sceneRecord.frame.outside = outside; }
         if (here.length < carriedIn.length) sceneRecord.gathered = carriedIn.filter(who => !here.includes(who));
@@ -763,9 +803,55 @@ export async function direct(novelDir, { reading, readingPath = null, prefilm = 
         const positions = {}, travels = [];
         sceneRecord.spawned = []; sceneRecord.carried = []; sceneRecord.offPage = [];
         // Smoothed (§5a, W5b): someone whose start the least-action history moves stands where it has them.
-        const revisedAt = who => smoothedStart(scene, who);
+        // A start the smoothing moved, in its group's frame (the user, 2026-11-07, of W13's second pass: people shuttled
+        // between two halves of one group). The least-action history is the last pass's, and this pass has drifted from it,
+        // so a moved start keeps its place beside those it stood with there (within earshot, on its floor), where they start
+        // in this pass (carried, spawned, or where they walk in to), not that pass's own spot (scene 64: Index went to where
+        // Kamijou and Misaka had stood, 66 m from where they stood now; Kamijou then walked 97 m to her and 89 m back).
+        // Everyone else is placed first. Alone there, or only with others the smoothing moved too, the spot itself.
+        // Someone who walked in last pass: the smoothing's start for them is where they came from, not where they stood, so it
+        // is no spot to put them at (the rehearsal's scene 24: char_000004 smoothed back near her origin, 600 m off, and
+        // Kamijou walked 762 m to talk to her). They come in again, from where this pass has them, as the scene gathers.
+        const startFor = who => {
+          if (!arrivedThen(who)) return smoothedStart(scene, who);
+          const revision = startsMoved.get(`${scene.id}|${who}`);
+          if (revision && !record.revisions.some(entry => entry.scene === scene.id && entry.who === who)) record.revisions.push({ who, scene: scene.id, moments: [scene.id], metres: Math.round(revision.shift), rank: revision.rank, applied: false, by: 'smoothing', why: 'walked in last pass: comes in again' });
+          return null;
+        };
+        const moved = who => (startFor(who) ?? null) !== null;
+        // Where someone stood in the last pass once the scene began: where they walked in to, for one who walked in.
+        const priorStart = who => { const list = (smoothed?.people?.[who] ?? []).filter(moment => moment.scene === scene.id); const moment = list.find(entry => String(entry.card ?? '').startsWith('arrive:')) ?? list.find(entry => (entry.card ?? null) === null) ?? list[0]; return moment ? moment.map ?? moment.played : null; };
+        // Then and now at the same moment: one who walked in last pass stood where they walked in to, so they are a spot to
+        // regroup by only where they walk in this pass too, not where they wait before coming in (the third pass, scene 66:
+        // Yomikawa was carried at her origin, 570 m off, and Kamijou and Misaka were put there beside her).
+        const spotOf = who => { const node = travels.find(entry => entry.who === who)?.dest ?? (arrivedThen(who) ? null : positions[who]?.[0]); if (node === null || node === undefined) return null; const p = at(node); return { x: p[0], y: p[1], z: p[2] }; };
+        const middleOf = points => ({ x: points.reduce((sum, p) => sum + p.x, 0) / points.length, y: points.reduce((sum, p) => sum + (p.y ?? 0), 0) / points.length, z: points.reduce((sum, p) => sum + p.z, 0) / points.length });
+        const revisedAt = who => {
+          const start = startFor(who), revision = startsMoved.get(`${scene.id}|${who}`);
+          if (start === null || start === undefined || !revision) return start;
+          const to = revision.to, others = present.filter(other => other !== who && !moved(other) && spotOf(other) && priorStart(other));
+          const partners = others.filter(other => { const p = priorStart(other); return Math.hypot(p.x - to.x, p.z - to.z) <= EARSHOT && Math.abs((p.y ?? 0) - (to.y ?? 0)) < FLOOR / 2; });
+          // With nobody unmoved within earshot in the last pass: where they stood relative to the scene, by how far the
+          // scene's others have drifted since (the median of their shifts), unless that is within earshot (the third pass,
+          // scene 182: Kamijou took the second pass's spot alone, 330 m from the two carried in with him, and a line later one
+          // who walked in was pulled 590 m to him).
+          const median = values => { const sorted = [...values].sort((a, b) => a - b); return sorted[Math.floor(sorted.length / 2)]; };
+          const shifts = others.map(other => { const a = spotOf(other), b = priorStart(other); return { x: a.x - b.x, y: a.y - (b.y ?? 0), z: a.z - b.z }; });
+          const shift = partners.length ? (() => { const now = middleOf(partners.map(spotOf)), then = middleOf(partners.map(priorStart)); return { x: now.x - then.x, y: now.y - then.y, z: now.z - then.z }; })() : shifts.length ? { x: median(shifts.map(d => d.x)), y: median(shifts.map(d => d.y)), z: median(shifts.map(d => d.z)) } : null;
+          if (!shift || (!partners.length && Math.hypot(shift.x, shift.z) <= EARSHOT)) return start;
+          const group = partners.length ? partners : others;
+          const target = { x: to.x + shift.x, y: (to.y ?? 0) + shift.y, z: to.z + shift.z };
+          E.reach(target.x, target.z, 24);
+          // On the group's floor: where the nearest node there is on another (W13 rehearsal, scene 62: four floors up), the
+          // nearest of the group's own spots.
+          let near = W.nodeNear(world, E.graphOf({ x: target.x, z: target.z }), target.x, target.z, Math.round(target.y / FLOOR)) ?? null;
+          if (near !== null && Math.abs(at(near)[1] - target.y) > FLOOR / 2) { const own = group.map(other => travels.find(entry => entry.who === other)?.dest ?? positions[other]?.[0]).filter(node => node !== null && node !== undefined); near = own.sort((a, b) => Math.hypot(at(a)[0] - target.x, at(a)[2] - target.z) - Math.hypot(at(b)[0] - target.x, at(b)[2] - target.z))[0] ?? null; }
+          if (near === null) return start;
+          (sceneRecord.regrouped ??= []).push({ who, with: group, metres: Math.round(Math.hypot(target.x - to.x, target.z - to.z)), ...(partners.length ? {} : { by: 'scene' }) });
+          return near;
+        };
         sceneRecord.revised = [];
-        for (const who of present) {
+        for (const who of [...present.filter(other => !moved(other)), ...present.filter(moved)]) {
           const from = was.get(who), revised = revisedAt(who);
           // A smoothed start is walked to from where they were, never jumped to (the user, 2026-11-05: "a person can't just
           // disappear without a path"; a second pass from W10's smoothing put 89 people at their revised starts, 31 jumps in
@@ -832,7 +918,7 @@ export async function direct(novelDir, { reading, readingPath = null, prefilm = 
         let crowd = null;
         const ambience = (gate?.windows ?? []).some(window => window.scene === scene.id && window.fired.includes('backgroundAction'));
         if (dg && (dg.digest.background.crowd !== 'none' || ambience) && anchor !== null && anchor !== undefined) {
-          const p = at(anchor), radius = frameMetres ? frameMetres / 2 : measure({ referent: 'the street', of: null, times: 1 }, p) ?? null;
+          const p = at(anchor), wanted = frameMetres ? frameMetres / 2 : measure({ referent: 'the street', of: null, times: 1 }, p) ?? null, radius = wanted ? Math.min(wanted, CROWD_REACH) : null;
           const { nodes, built } = radius ? around(p[0], p[2], radius) : { nodes: [] };
           const open = nodes.filter(node => node.type === 1 && Math.abs(node.y - p[1]) < 1 && Math.hypot(node.x - p[0], node.z - p[2]) <= radius), ids = new Set(open.map(node => node.id));
           const neighbours = new Map(open.map(node => { const out = []; for (let e = built.graph.offsets[node.id]; e < built.graph.offsets[node.id + 1]; e++) if (ids.has(built.graph.to[e])) out.push(built.graph.to[e]); return [node.id, out]; }));
@@ -1054,7 +1140,8 @@ export async function direct(novelDir, { reading, readingPath = null, prefilm = 
           }
         }
         // Conversation and blocking (M8): the channels, formations and attention of this scene's talk.
-        const channelAt = new Map(), formationAt = new Map(), inFormation = new Set(), talkingUntil = new Map();
+        // talkedHere: everyone who has talked face to face in this scene so far (where its conversations meet).
+        const channelAt = new Map(), formationAt = new Map(), inFormation = new Set(), talkingUntil = new Map(), talkedHere = new Set();
         if (gate && (digestMeter || prefilm)) {
           const spans = prefilm ? [] : firedSpans('dialogueCoverage');
           if (prefilm && prepared?.dialogueCoverage) { const talk = prepared.dialogueCoverage; for (const entry of talk.exchanges ?? []) (channelAt.get(entry.sentence) ?? channelAt.set(entry.sentence, []).get(entry.sentence)).push(entry); for (const entry of talk.formations ?? []) (formationAt.get(entry.sentence) ?? formationAt.set(entry.sentence, []).get(entry.sentence)).push(entry); sceneRecord.talk = { exchanges: (talk.exchanges ?? []).length, formations: (talk.formations ?? []).length, attention: (talk.attention ?? []).length }; }
@@ -1162,10 +1249,10 @@ export async function direct(novelDir, { reading, readingPath = null, prefilm = 
             // Several moves of one person in one card (steps, then an implied move) are one walk on the page.
             const key = `${scene.id}|${card.id}|${person}`, earlier = E.moves.get(key);
             const tie = tiesNow().find(entry => entry.who === person), offStage = tie && !positions[tie.on] ? mountOf(tie.on) : null;
-            E.moves.set(key, { person, how: path.air && earlier ? earlier.how : path.how ?? (String(how).startsWith('ride') ? 'ride' : String(how).startsWith('climb') || String(how).startsWith('agile') || how === 'run' || earlier?.how === 'run' ? 'run' : 'walk'), ...grown(earlier, path, path.air ? path.how : null, path.airFrom ?? 0), ensemble: path.ensemble ?? [], ...(offStage ? { mount: offStage } : {}) });
+            E.moves.set(key, { person, how: path.air && earlier ? earlier.how : path.how ?? (String(how).startsWith('ride') ? 'ride' : String(how).startsWith('climb') || String(how).startsWith('agile') || how === 'run' || earlier?.how === 'run' ? 'run' : 'walk'), ...grown(earlier, path, path.air ? path.how : null, path.airFrom ?? 0), ensemble: path.ensemble ?? [], ...(offStage ? { mount: offStage } : {}), ...(path.at && !earlier ? { at: path.at } : {}) });
             positions[person] = [path.at(-1), positions[person][1]];
             // A leap or a flight a ceiling held down (terrain-levels §8.3), or one out through a hole in the ground skin (§8.4).
-            cardRecord.moves.push({ person, why, moved: true, steps: path.length, to: said(at(path.at(-1))), ...(tie ? { riding: tie.on } : {}), ...(path.capped ? { stoppedBy: path.capped } : {}), ...(path.through ? { through: path.through } : {}) });
+            cardRecord.moves.push({ person, why, moved: true, steps: path.length, to: said(at(path.at(-1))), ...(tie ? { riding: tie.on } : {}), ...(path.drove ? { drove: path.drove } : {}), ...(path.capped ? { stoppedBy: path.capped } : {}), ...(path.through ? { through: path.through } : {}) });
             if (!carrying) carryAlong(person, path, E.moves.get(key).how);
           };
           // Riding (mounts.mjs): the ties in hold by this card; who moves with whom (a rider with what carries them on the
@@ -1184,7 +1271,7 @@ export async function direct(novelDir, { reading, readingPath = null, prefilm = 
                 const key = `${scene.id}|${card.id}|${other}`, earlier = E.moves.get(key), from = positions[other];
                 const board = from[0] === path[0] ? [from[0]] : walk(scene, `${key}|boards|${person}`, from, [path[0]], 'run');
                 const ridden = [...(board ?? [from[0]]), ...path.slice(1)];
-                E.moves.set(key, { person: other, how, ...grown(earlier, ridden, path.air ? path.how : null, (board ?? [from[0]]).length - 1 + (path.airFrom ?? 0)), ensemble: [] });
+                E.moves.set(key, { person: other, how, ...grown(earlier, ridden, path.air ? path.how : null, (board ?? [from[0]]).length - 1 + (path.airFrom ?? 0)), ensemble: [], ...(path.at && !earlier && (board ?? [from[0]]).length === 1 ? { at: path.at } : {}) });
                 positions[other] = [path.at(-1), from[1]];
                 cardRecord.moves.push({ person: other, why: `rides with ${names.get(person) ?? person}${board ? '' : ' (boards from where they stood)'}`, moved: true, steps: ridden.length, riding: carrier === other ? person : carrier });
               }
@@ -1316,7 +1403,15 @@ export async function direct(novelDir, { reading, readingPath = null, prefilm = 
             if (members.length < 2) return;
             const speaks = who => Math.max(0, ...roles.filter(role => role.who.id === who).map(role => role.who.confidence ?? 0.5), card.people.some(person => person.id === who && person.how.includes('speaks')) ? 0.5 : 0);
             const placedBy = who => { const move = [...sceneRecord.cards.flatMap(entry => entry === cardRecord ? [] : entry.moves ?? []), ...cardRecord.moves].filter(entry => entry.person === who && entry.moved).at(-1); const sure = /^implied:.*?(\d{1,3})%\)/.exec(String(move?.why ?? '')); return sure ? Number(sure[1]) / 100 : 0; };
-            const anchor = members.reduce((a, b) => (placedBy(b) > placedBy(a) || (placedBy(b) === placedBy(a) && speaks(b) > speaks(a)) ? b : a));
+            // Where the conversation meets (the user, 2026-11-07: in W13 a listener walked to whoever spoke, card after card,
+            // and back): the one a fact of the text placed in this container (the surest) stays; else the member the least
+            // walking reaches, for the card's people and everyone who has talked face to face in this scene so far, so the
+            // few come to the many and a conversation already gathered stays where it is (a floor counts as 30 m).
+            const talkers = [...new Set([...members, ...[...talkedHere].filter(who => positions[who])])];
+            const walking = who => { const a = at(positions[who][0]); return talkers.reduce((sum, other) => { const b = at(positions[other][0]); return sum + Math.hypot(a[0] - b[0], a[2] - b[2]) + Math.abs(a[1] - b[1]) * 10; }, 0); };
+            const anchor = Math.max(...members.map(placedBy)) > 0
+              ? members.reduce((a, b) => (placedBy(b) > placedBy(a) || (placedBy(b) === placedBy(a) && speaks(b) > speaks(a)) ? b : a))
+              : members.reduce((a, b) => { const [wa, wb] = [walking(a), walking(b)]; return wb < wa - 0.5 || (Math.abs(wb - wa) <= 0.5 && speaks(b) > speaks(a)) ? b : a; });
             const gap = id => { const a = at(positions[anchor][0]), b = at(positions[id][0]); return { metres: Math.hypot(a[0] - b[0], a[2] - b[2]), floors: Math.round(Math.abs(a[1] - b[1]) / FLOOR) }; };
             const apart = members.filter(id => id !== anchor && (gap(id).metres > 5 || gap(id).floors > 0));
             let kind = 'live';
@@ -1334,7 +1429,7 @@ export async function direct(novelDir, { reading, readingPath = null, prefilm = 
               kind = String(said?.value ?? 'live'); cardRecord.talk = { kind, confidence: said?.confidence ?? null };
             }
             if (cardRecord.talk) cardRecord.talk.anchor = anchor;
-            if (kind !== 'remote') { const last = sentenceAt.get(card.sentences.at(-1)) ?? 0; for (const who of members) talkingUntil.set(who, Math.max(talkingUntil.get(who) ?? -1, last)); }
+            if (kind !== 'remote') { const last = sentenceAt.get(card.sentences.at(-1)) ?? 0; for (const who of members) { talkingUntil.set(who, Math.max(talkingUntil.get(who) ?? -1, last)); if (kind !== 'public') talkedHere.add(who); } }
             for (const id of apart) {
               if (kind === 'remote') { (cardRecord.laws ??= []).push({ law: 'L6', who: id, verdict: 'ok', why: 'remote: stays where they are' }); continue; }
               if (kind === 'public') {
@@ -1864,13 +1959,126 @@ export async function direct(novelDir, { reading, readingPath = null, prefilm = 
             desk.start(node, 'rush check', card.id);
             desk.check(node, 'rush check', (cardRecord.laws ?? []).filter(entry => entry.verdict === 'held').map(entry => ({ law: entry.law, who: entry.who, why: entry.why })), { card: card.id, canRetake: false, of: 'photography' });
           }
-          // The producer's camera rides with the card's event: the player and World · Live follow it card by card.
+          // The producer's camera rides with the card's event: the player and World · Live follow it card by card. It names
+          // its group (everyone who has acted, spoken or moved in the beat or cut so far): the player's group orbit centres
+          // on them as they stand frame by frame (strand-demo.html orbitTick; the user, 2026-11-08).
+          if (cardRecord.camera) cardRecord.camera.group = [...cameraGroup].filter(who => positions[who]);
           event.camera = cardRecord.camera ?? null;
           // Streamed: the line as far as this card, played on in World · Live; a moment to watch a move before the next question.
           await grow(scene, run);
           const went = cardRecord.moves.filter(move => move.moved);
           await stream(`scene ${sceneLabel(scene.id)} · card ${cards.indexOf(card) + 1}/${cards.length}${went.length ? ` · ${went.map(move => names.get(move.person) ?? move.person).join(', ')} moved` : ''}`, cardRecord.camera ? { x: cardRecord.camera.focus.x, z: cardRecord.camera.focus.z, r: 24 } : null);
           if (pace && went.length) await new Promise(done => setTimeout(done, pace * 1000));
+        }
+        // Talk on the move (on-the-move.mjs; the user, 2026-11-08): where the reading keeps people moving while they talk,
+        // the way they went over those cards is spread across them by their lines, the group in step (a leader, the others
+        // a cell beside, the carried on their carrier), each piece paced to last its card. Where each of them ends the
+        // stretch is kept, so the cards after it and the departures below play as they were.
+        if (onTheMove && dg) {
+          const lineAt = id => sentenceAt.get(id) ?? -1, formations = [...formationAt.values()].flat();
+          const signals = [
+            ...(dg.moves ?? []).filter(entry => (entry.sure ?? 1) >= MOVE_SURE).map(entry => ({ at: lineAt(entry.sentence), who: entry.who, state: OM.stateOfMove(entry), with: entry.with ? [entry.with] : [] })),
+            ...(dg.background ?? []).filter(entry => entry.who !== 'crowd').map(entry => ({ at: lineAt(entry.sentence), who: entry.who, state: OM.stateOfDoing(entry.doing), with: [] })),
+            ...formations.flatMap(entry => entry.who.map(who => ({ at: lineAt(entry.sentence), who, state: OM.stateOfFormation(entry.formation), with: OM.stateOfFormation(entry.formation) === 'walk' ? entry.who.filter(other => other !== who) : [] }))),
+          ].filter(signal => signal.at >= 0 && (signal.state || signal.with.length));
+          const initial = new Map((dg.digest?.people ?? []).map(entry => [entry.who, OM.stateOfDoing(entry.doing)]).filter(([, state]) => state));
+          const states = OM.statesOf({ cards: cards.map(card => ({ last: lastLine(card) })), signals, initial });
+          const talkers = cards.map(card => new Set(card.people.filter(person => person.how.some(how => how === 'speaks' || how === 'addressed')).map(person => person.id)));
+          const metres = (a, b) => { const p = at(a), q = at(b); return Math.hypot(p[0] - q[0], p[1] - q[1], p[2] - q[2]); };
+          const remote = cards.map(card => sceneRecord.cards.find(entry => entry.card === card.id)?.talk?.kind === 'remote');
+          for (const stretch of OM.stretchesOf({ states, talkers, remote })) {
+            const events = stretch.cards.map(k => scene.events.findIndex(event => event.id === cards[k].id)), ids = stretch.cards.map(k => cards[k].id);
+            const skip = why => (sceneRecord.onTheMove ??= []).push({ members: stretch.members, cards: ids, kept: why });
+            if (events.some(n => n < 0) || events.some((n, k) => k && n !== events[k - 1] + 1)) { skip('cards not in a row'); continue; }
+            const before = who => (events[0] ? run.events[events[0] - 1]?.at?.[who] : run.starts[who]) ?? null, after = who => run.events[events.at(-1)]?.at?.[who] ?? null;
+            // Talk while driving (OM.cutDrive; the user, 2026-11-08): a group riding a road vehicle whose drive the director
+            // laid (a ride with its timings, `at`, world-engine/world/roads.mjs). The vehicle keeps its own speed; the drive is
+            // cut across the stretch's cards by their reading, and everyone aboard goes node for node with it. Talk that
+            // outlasts the drive goes on with the car stopped where it arrived.
+            const movesOf = who => events.map(n => E.moves.get(`${scene.id}|${scene.events[n].id}|${who}`) ?? null);
+            const driver = stretch.members.find(who => movesOf(who).some(move => move?.how === 'ride' && move.at));
+            if (driver) {
+              const legs = movesOf(driver).filter(Boolean);
+              if (legs.some(move => move.how !== 'ride' || !move.at || move.air)) { skip(`${driver} does more than drive`); continue; }
+              const route = [], times = [];
+              for (const move of legs) { const offset = times.length ? times.at(-1) : 0; move.path.forEach((node, k) => { if (k === 0 && route.length && route.at(-1) === node) return; route.push(node); times.push(offset + move.at[k]); }); }
+              if (route.at(-1) !== after(driver)?.[0]) { skip(`${driver} ends off the drive`); continue; }
+              const aboard = stretch.members.filter(who => who === driver || (movesOf(who).some(Boolean) ? movesOf(who).every(move => !move || (move.how === 'ride' && move.path.at(-1) === route.at(-1))) : before(who)?.[0] === route[0]));
+              const weights = stretch.cards.map(k => OM.readSeconds(cards[k].sentences.map(line)));
+              const cuts = OM.cutDrive(times, weights), mount = legs.find(move => move.mount)?.mount ?? null;
+              for (const who of aboard) for (const n of events) E.moves.delete(`${scene.id}|${scene.events[n].id}|${who}`);
+              cuts.forEach(([from, to], k) => {
+                const n = events[k], record = sceneRecord.cards.find(entry => entry.card === ids[k]);
+                if (to > from) for (const who of aboard) E.moves.set(`${scene.id}|${scene.events[n].id}|${who}`, { person: who, how: 'ride', path: route.slice(from, to + 1), at: times.slice(from, to + 1).map(t => Math.round((t - times[from]) * 100) / 100), real: true, ensemble: [], ...(who === driver && mount ? { mount } : {}) });
+                for (const who of aboard) if (run.events[n]?.at) run.events[n].at[who] = [route[to], before(who)?.[1] ?? run.events[n].at[who]?.[1]];
+                if (record) record.onTheMove = { group: aboard, leader: driver, how: 'ride', ...(to > from ? { seconds: Math.round((times[to] - times[from]) * 10) / 10 } : { parked: true }) };
+              });
+              (sceneRecord.onTheMove ??= []).push({ members: aboard, cards: ids, leader: driver, how: 'ride', seconds: Math.round(weights.reduce((a, b) => a + b, 0) * 10) / 10, drive: Math.round(times.at(-1) * 10) / 10, parked: cuts.filter(([from, to]) => to === from).length });
+              continue;
+            }
+            // Each one's own way through the stretch: where they stood, then each card's walk; a ride, a flight or a leap, a
+            // climb, an appearing, or a pin of the review's keeps the stretch as the director played it.
+            const own = new Map();
+            let why = null;
+            for (const who of stretch.members) {
+              const from = before(who), to = after(who);
+              if (!from || !to) { why = `${who} not on stage throughout`; break; }
+              if (ids.some(id => pins.arrive[`${scene.id}|${id}|${who}`] || pins.stays[`${scene.id}|${id}|${who}`])) { why = `${who} pinned by the review`; break; }
+              const nodes = [from[0]];
+              for (const n of events) {
+                const move = E.moves.get(`${scene.id}|${scene.events[n].id}|${who}`);
+                if (!move) continue;
+                if (move.air || move.mount || !['walk', 'run'].includes(move.how)) { why = `${who} ${move.how}${move.mount ? ' aboard' : ''}`; break; }
+                for (const node of move.path) if (nodes.at(-1) !== node) nodes.push(node);
+              }
+              if (why) break;
+              if (nodes.at(-1) !== to[0]) { why = `${who} ends off their way`; break; }
+              own.set(who, { from, to, nodes, metres: nodes.slice(1).reduce((sum, node, n) => sum + metres(nodes[n], node), 0) });
+            }
+            if (why) { skip(why); continue; }
+            // The carried (the reading's "carried", with whoever carries them) ride on their carrier; the leader is a
+            // carrier, else whoever went furthest.
+            const carriedBy = new Map();
+            for (const k of stretch.cards) for (const [a, b] of states[k].ties) if (states[k].states.get(a) === 'carried' && states[k].states.get(b) !== 'carried' && stretch.members.includes(b)) carriedBy.set(a, b);
+            const walkers = stretch.members.filter(who => !carriedBy.has(who)), carriers = new Set(carriedBy.values());
+            const leader = [...walkers].sort((a, b) => (carriers.has(b) - carriers.has(a)) || own.get(b).metres - own.get(a).metres)[0];
+            if (!leader || own.get(leader).metres < 2) { skip('nobody went anywhere'); continue; }
+            const how = stretch.cards.some(k => states[k].states.get(leader) === 'run' || states[k].states.get(leader) === 'carried') || carriers.has(leader) ? 'run' : 'walk';
+            const route = own.get(leader).nodes;
+            // The cells round the leader's way, for the others to walk a cell beside it.
+            const points = route.map(at), xs = points.map(p => p[0]), zs = points.map(p => p[2]), mid = [(Math.min(...xs) + Math.max(...xs)) / 2, (Math.min(...zs) + Math.max(...zs)) / 2];
+            const cellsNear = new Map(around(mid[0], mid[1], Math.max(Math.max(...xs) - Math.min(...xs), Math.max(...zs) - Math.min(...zs)) / 2 + 8).nodes.map(node => { const c = W.cellOf(world, node.id); return [`${c.i},${c.j},${c.k}`, node.id]; }));
+            const lookup = { cell: id => W.cellOf(world, id), node: (i, j, k) => cellsNear.get(`${i},${j},${k}`) ?? null };
+            // A way in from where they stood and out to where they end (the director's own walk), when the way they keep
+            // to starts or ends off it.
+            const join = (who, a, b, label) => {
+              if (a === b) return [a];
+              const path = walk(scene, `${scene.id}|${ids[0]}|${who}|on the move ${label}`, [a, own.get(who).from[1]], [b], how);
+              return path && path.length > 1 ? path : null;
+            };
+            const ways = new Map([[leader, { nodes: route }]]);
+            walkers.filter(who => who !== leader).forEach((who, n) => ways.set(who, { nodes: OM.besideWay(route, OM.sideOf(n), lookup) }));
+            for (const who of stretch.members.filter(who => carriedBy.has(who))) { const carrier = ways.get(carriedBy.get(who)) ?? ways.get(leader); ways.set(who, { nodes: carrier.nodes }); }
+            for (const [who, way] of ways) {
+              if (who === leader) continue;
+              const into = join(who, own.get(who).from[0], way.nodes[0], 'in'), out = join(who, way.nodes.at(-1), own.get(who).to[0], 'out');
+              if (!into || !out) { why = `no walk ${!into ? 'onto' : 'off'} the way for ${who}`; break; }
+              way.lead = into.slice(0, -1); way.tail = out.slice(1);
+            }
+            if (why) { skip(why); continue; }
+            const weights = stretch.cards.map(k => OM.readSeconds(cards[k].sentences.map(line)));
+            const pieces = OM.inStep({ ways: [[leader, ways.get(leader)], ...[...ways].filter(([who]) => who !== leader)], weights, natural: OM.PACE[how], slowest: OM.SLOWEST[how], metres });
+            for (const who of stretch.members) for (const n of events) E.moves.delete(`${scene.id}|${scene.events[n].id}|${who}`);
+            const standing = new Map(stretch.members.map(who => [who, own.get(who).from]));
+            pieces.forEach((moves, k) => {
+              const n = events[k], record = sceneRecord.cards.find(entry => entry.card === ids[k]);
+              for (const move of moves) { E.moves.set(`${scene.id}|${scene.events[n].id}|${move.person}`, { person: move.person, how, path: move.path, ensemble: [], ...(move.pace ? { pace: move.pace } : {}), ...(move.at ? { at: move.at } : {}) }); standing.set(move.person, [move.path.at(-1), standing.get(move.person)[1]]); }
+              for (const who of stretch.members) if (run.events[n]?.at) run.events[n].at[who] = standing.get(who);
+              if (record) record.onTheMove = { group: stretch.members, leader, how, pace: moves.find(move => move.person === leader)?.pace ?? OM.PACE[how], ...(carriedBy.size ? { carried: Object.fromEntries(carriedBy) } : {}) };
+            });
+            (sceneRecord.onTheMove ??= []).push({ members: stretch.members, cards: ids, leader, how, metres: Math.round(own.get(leader).metres), seconds: Math.round(weights.reduce((a, b) => a + b, 0) * 10) / 10, ...(carriedBy.size ? { carried: Object.fromEntries(carriedBy) } : {}) });
+          }
+          for (const who of Object.keys(positions)) { const last = run.events.at(-1)?.at?.[who]; if (last && last[0] !== positions[who][0]) log(`on the move: ${who} ends at ${last[0]}, positions say ${positions[who][0]}`); }
         }
         // Departures (the user, 2026-11-03: a group leaving the strand is a fork; "they just run"): whoever's next container
         // in story time is at another place leaves now, running out of the frame toward that place, while the rest stay;
@@ -1940,6 +2148,12 @@ export async function direct(novelDir, { reading, readingPath = null, prefilm = 
       // What the laws held goes to the main agent (W5): one batch per scene by reach, sent to its console when one is given.
       const held = await R.holdForReview(novelDir, { run: id, name: who => names.get(who) ?? who, skip: speakers ? [] : ['who-speaks', 'audit', 'speaker'] }).catch(error => ({ error: String(error.message ?? error) }));
       record.review.held = { held: held.held, asked: held.asked, left: held.left, batches: held.batches?.length ?? 0, ...(held.error ? { error: held.error } : {}) };
+      // The review by Jev first (docs/v2/jev-review.md §16): what its policy lets stand is answered as Pi's answers are;
+      // the rest stays batched, and only batches with an item left go to the main agent.
+      if (reviewer && held.batches?.length) {
+        record.review.jev = await JR.reviewHeld(novelDir, { readingPath: reviewer.readingPath, decide: reviewer.decide, work: reviewer.work }).catch(error => ({ error: String(error.message ?? error) }));
+        log(`review by Jev: ${JSON.stringify(record.review.jev)}`);
+      }
       if (agent && held.batches?.length) record.review.sent = Object.keys(await R.sendToAgent(novelDir, agent.console, { expiresAt: agent.expiresAt })).length;
       log(`review: ${held.held ?? 0} held, ${held.batches?.length ?? 0} batches${agent ? ' sent to the main agent' : ''}`);
       }
@@ -1972,7 +2186,7 @@ export async function direct(novelDir, { reading, readingPath = null, prefilm = 
 }
 
 if (process.argv[1] === fileURLToPath(import.meta.url)) {
-  const { values, positionals: [novelDir] } = parseArgs({ allowPositionals: true, options: { reading: { type: 'string' }, from: { type: 'string' }, to: { type: 'string' }, budget: { type: 'string' }, 'stand-in': { type: 'boolean' }, live: { type: 'boolean' }, pace: { type: 'string' }, agent: { type: 'string' }, 'no-digest': { type: 'boolean' }, 'no-speakers': { type: 'boolean' }, 'live-test': { type: 'boolean' }, 'no-prefilm': { type: 'boolean' }, 'no-faculties': { type: 'boolean' }, 'from-last': { type: 'boolean' }, 'discard-edits': { type: 'boolean' }, 'keep-edits': { type: 'boolean' }, 'no-snapshots': { type: 'boolean' } } });
+  const { values, positionals: [novelDir] } = parseArgs({ allowPositionals: true, options: { reading: { type: 'string' }, from: { type: 'string' }, to: { type: 'string' }, budget: { type: 'string' }, 'stand-in': { type: 'boolean' }, live: { type: 'boolean' }, pace: { type: 'string' }, agent: { type: 'string' }, 'no-digest': { type: 'boolean' }, 'no-speakers': { type: 'boolean' }, 'live-test': { type: 'boolean' }, 'no-prefilm': { type: 'boolean' }, 'no-faculties': { type: 'boolean' }, 'from-last': { type: 'boolean' }, 'discard-edits': { type: 'boolean' }, 'keep-edits': { type: 'boolean' }, 'no-snapshots': { type: 'boolean' }, 'no-jev-review': { type: 'boolean' } } });
   // The universe's snapshots (src/ground/workspace/universe.ts; the user, 2026-11-05: "rerunning a previous volume returns to
   // the snapshot before that volume to recover clean status"). In a library, a book's first run is preceded by its `before`
   // snapshot; a rerun starts from that `before` (W11 had started on W10's smoothing, and played worse for it), unless
@@ -2013,6 +2227,8 @@ if (process.argv[1] === fileURLToPath(import.meta.url)) {
     const client = jevFromEnv({ ...process.env, JEV_MODEL: PICKER_MODEL });
     jev = Object.assign(cachedDecisions(client, join(resolve(novelDir), 'stage', 'director', 'cache')), { usage: client.usage });
   }
+  // The review by Jev after the run (§16): Jev as it is here, before the live view wraps it; never on a stand-in run.
+  const reviewJev = values['stand-in'] || values['no-jev-review'] ? null : jev;
   // System 2's work model (WORK_LLM_*), cached as Jev is; without one, system 2 is off and says so.
   let workModel = null;
   if (!values['stand-in'] && process.env.WORK_LLM_API_KEY) {
@@ -2031,7 +2247,8 @@ if (process.argv[1] === fileURLToPath(import.meta.url)) {
     // The pre-film casts' notes the reading step made (experiments/v2/prefilm.mjs), beside the reading.
     const prefilm = values['no-prefilm'] || values['no-faculties'] ? null : await (await import('../digest/prefilm.mjs')).loadPrefilm(dirname(resolve(values.reading)));
     if (prefilm) console.error(`pre-film casts' notes from the reading step: ${Object.keys(prefilm.units ?? {}).length} units${prefilm.standIn ? ' (made by a stand-in)' : ''}`);
-    const { record } = await direct(resolve(novelDir), { reading, readingPath: values.reading, prefilm, agent, digest: !values['no-digest'], speakers: !values['no-speakers'], from: values.from, to: values.to, jev, workModel, budget: values.budget ? Number(values.budget) : Infinity, live, pace: values.pace ? Number(values.pace) : values.live ? 6 : 0 });
+    const reviewer = reviewJev ? { decide: (state, questions) => reviewJev.decide(state, questions), work: workModel, readingPath: resolve(values.reading) } : null;
+    const { record } = await direct(resolve(novelDir), { reading, readingPath: values.reading, prefilm, agent, reviewer, digest: !values['no-digest'], speakers: !values['no-speakers'], from: values.from, to: values.to, jev, workModel, budget: values.budget ? Number(values.budget) : Infinity, live, pace: values.pace ? Number(values.pace) : values.live ? 6 : 0 });
     if (library?.book && !values['no-snapshots']) {
       const run = `d${String(record.startedAt).replace(/\D/g, '').slice(0, 14)}`, mode = values['stand-in'] ? 'a stand-in run' : values['from-last'] ? 'a second pass' : 'a run';
       const after = await U.takeSnapshot(library.root, { book: library.book, kind: 'after', run, parent: before?.id ?? null, why: `${mode} of ${library.book}, ${values.from} to ${values.to}` });

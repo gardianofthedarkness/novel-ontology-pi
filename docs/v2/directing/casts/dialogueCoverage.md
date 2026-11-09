@@ -18,6 +18,8 @@ A summary cast: the work model reading the text. Status: **built** (`world-engin
 - who talks with whom and through what
 - formations: beside, across a table, a ring, two sides of a door
 - attention: who looks at whom
+- talk on the move: a group walking or running while it talks, with the script supervisor's moves (world-engine/director/on-the-move.mjs lays it out and times it)
+- talk while driving: a group riding a road vehicle while it talks, the drive at the car's own speed on the road network and the highway, cut across the cards by their reading (on-the-move.mjs cutDrive)
 
 ## When it fires
 

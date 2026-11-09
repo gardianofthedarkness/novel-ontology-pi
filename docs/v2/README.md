@@ -34,6 +34,10 @@ Read them by the sections named here rather than from the top.
 | [stills.md](stills.md) | The stills cast: each book picture read by Jev with the text around it, its faces against the portraits; notes, picture facts and speakers |
 | [sky.md](sky.md) | The story sky: each unit's time of day and weather from the text, carried and smoothed, drawn in the world (daylight, snow, rain, fog) |
 | [terrain-levels.md](terrain-levels.md) | Design: the world as one column of levels (orbit, high and low air, the surface, water's surface, underwater, the underground, underground cities), how a place gets its level, water with waves and ripples, and the order of work |
+| [jev-review.md](jev-review.md) | Design: the review by Jev in front of the main agent (evidence packs, system 2, the laws, Pi for what is left and for audits), measured against Pi's W12 answers |
+| [roads-and-transit.md](roads-and-transit.md) | Design: the terrain cast's transport network (a road graph with lanes and links to the walk grid, riding on it; then highways, the subway, traffic), what riding while talking waits for |
+| [highway-research.md](highway-research.md) | Research: how highways are modelled (gravity demand, cost-benefit growth, least-cost alignment, design standards) and the proposal for our terrain: two kinds of expressway, over the streets or on their own corridor, measured on the fill |
+| [models-and-settings.md](models-and-settings.md) | Design: things and landmark buildings written as code (OpenSCAD) by the work model or an agent, nominated and ranked after the reading, checked by contract; one registry of settings with layers and fill operators; the model warehouse |
 | [world-engine.html](world-engine.html) | The reader's version of the journal up to the terrain's start |
 
 ## Stage 1: Extraction — done

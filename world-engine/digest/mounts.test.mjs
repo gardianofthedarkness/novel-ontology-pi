@@ -16,13 +16,13 @@ test('a carrier\'s sheet: a vehicle carries by its kind, a weapon attacks, a per
 test('the merged sheet: per kind the larger of each limit, and where it came from', () => {
   const own = { move: { agility: { factor: 2, sure: 0.8 } }, attack: { close: { reach: 1 } } };
   const merged = mergedSheet(own, [{ id: 'car', sheet: carrierSheet({ prop: { kind: 'a car' } }) }, { id: 'gun', sheet: carrierSheet({ prop: { kind: 'a small weapon', attack: { kind: 'line', range: 100 } } }) }, { id: 'stick', sheet: { move: {}, attack: { close: { reach: 3 } } } }]);
-  assert.deepEqual(merged.move, { agility: { factor: 2, by: 'own' }, ride: { factor: 3, by: 'car' } });
+  assert.deepEqual(merged.move, { agility: { factor: 2, by: 'own' }, ride: { factor: 3, road: true, by: 'car' } });
   assert.deepEqual(merged.attack, { close: { reach: 3, by: 'stick' }, line: { range: 100, by: 'gun' } });
 });
 
 test('a ridden move goes the carrier\'s way (flying first); an unridden one the ability in use, else as noted', () => {
   assert.equal(wayOf({ carrier: carrierSheet({ prop: { kind: 'a helicopter' } }) }), 'flight');
-  assert.equal(wayOf({ carrier: carrierSheet({ prop: { kind: 'a bus' } }) }), 'ride:2.5');
+  assert.equal(wayOf({ carrier: carrierSheet({ prop: { kind: 'a bus' } }) }), 'ride:2.5:road');
   assert.equal(wayOf({ carrier: carrierSheet({ person: { move: { appear: { reach: 80 } } } }) }), 'teleport:80');
   assert.equal(wayOf({ carrier: carrierSheet({ person: { move: {} } }), otherwise: 'run' }), 'run', 'carried by someone with no power: as they go');
   assert.equal(wayOf({ carrier: carrierSheet({ person: { move: {} } }), carrierWay: 'agile:4' }), 'agile:4', 'the carrier\'s own way this card');

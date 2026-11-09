@@ -1,5 +1,6 @@
 import { addPatch, circleOf, firstLandscape, LANDSCAPE_VERSION, placeBeside, type Landscape, type LandscapeType, type Patch } from "./landscape.js";
 import type { Building, Point } from "./cityFill.js";
+import { setting } from "../settings.js";
 
 /**
  * The canvas of places, built from the bottom up. Every recognised place (a city, a district like 第七学区, a street,
@@ -39,10 +40,10 @@ export const onSurface = (place: { plane?: string } | undefined) => !place?.plan
 export interface Canvas { places: Record<string, CanvasPlace>; born: number }
 
 /** The least radius of a place of each scale, in metres, before anything is built in it. */
-export const LEAST: Record<string, number> = { region: 300, city: 120, district: 60, street: 30, building: 12, room: 4 };
-const GAP = 10;
+export const LEAST: Record<string, number> = setting<Record<string, number>>("place.least");
+const GAP = setting<number>("place.gap");
 /** How far apart a pool keeps its members, by their kind (metres between their circles). */
-export const POOL_SPACING: Record<Unit["kind"], number> = { street: 40, building: 20, room: 8 };
+export const POOL_SPACING: Record<Unit["kind"], number> = setting<Record<Unit["kind"], number>>("place.poolSpacing");
 export const emptyCanvas = (): Canvas => ({ places: {}, born: 0 });
 /** A place's children; with null, the places at the top of the canvas (each a sibling of the others). */
 const childrenOf = (canvas: Canvas, id: string | null) => Object.values(canvas.places).filter((place) => place.parent === id);

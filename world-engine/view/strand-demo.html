@@ -87,6 +87,7 @@
         <button id="follow" aria-pressed="true">Follow</button>
         <button id="cuts" aria-pressed="false" title="Follow through the photographer's cuts (else a steady view of each card's people)">Cuts</button>
         <button id="jev" aria-pressed="false" title="Show what Jev decided at this moment">Jev trace</button>
+        <button id="smooth" aria-pressed="false" title="Smooth: walks round their corners and ease in and out; the camera follows on the replay's own time">Smooth</button>
         <input type="range" id="seek" min="0" max="1000" value="0" aria-label="Position in the strand">
         <span class="count" id="count"></span>
       </div>
@@ -164,7 +165,12 @@ const at = (place, node) => { const i = node % place.NX - (place.oi ?? 0), j = M
 const timing = (place, move) => {
   if (move.how === "teleport") return { total: 0.8, steps: [0, 0.8] };
   if (move.how === "direct") { const a = at(place, move.path[0]), b = at(place, move.path[1]), flight = Math.hypot(b.x - a.x, b.y - a.y, b.z - a.z) / 14 / DEMO; return { total: flight, steps: [0, flight] }; }
-  const steps = [0], speed = SPEED[move.how] || 1.4;
+  // A move may carry its own times (`at`, life seconds at each node): a group walking in step through a talk, each
+  // reaching a node when its leader reaches its own (world-engine/director/on-the-move.mjs).
+  // `real`: a drive under talk (on-the-move.mjs cutDrive) plays at life's own speed, as the talk does.
+  if (Array.isArray(move.at) && move.at.length === move.path.length) { const k = move.real ? 1 : DEMO; return { total: move.at.at(-1) / k, steps: move.at.map((s) => s / k) }; }
+  // A move may carry its own pace (m/s): a walk slowed to last the talk on it (experiments/v2/moving-talk.mjs).
+  const steps = [0], speed = move.pace ?? (SPEED[move.how] || 1.4);
   for (let k = 1; k < move.path.length; k++) {
     const a = at(place, move.path[k - 1]), b = at(place, move.path[k]), rise = b.y - a.y, run = Math.hypot(b.x - a.x, b.z - a.z);
     const air = airOf(move, k), arc = air ? null : flight(a, b);
@@ -1838,6 +1844,27 @@ let decor = () => {};
     roads.forEach(([ax, az, bx, bz, width], i) => { q.setFromAxisAngle(up, -Math.atan2(bz - az, bx - ax)); m.compose(new THREE.Vector3((ax + bx) / 2, -0.2, (az + bz) / 2), q, new THREE.Vector3(Math.hypot(bx - ax, bz - az), 1, width)); strips.setMatrixAt(i, m); });
     world.add(strips);
   }
+  // A city's expressway (world-engine/world/highways.mjs, kept by the terrain's transport step): decks on piers over the
+  // street, ramps sloping down to it, tunnels as a line on the ground over where they run. Vehicles drive it on the road
+  // graph (world-engine/world/roads.mjs); this only draws it.
+  for (const highway of data.highways ?? (data.highway ? [data.highway] : [])) {
+    const up = highway.knobs?.deckHeight ?? 10;
+    const ribbon = (points, width, heightOf) => {
+      const pos = [];
+      for (let n = 0; n < points.length - 1; n++) {
+        const [ax, az] = points[n], [bx, bz] = points[n + 1], L = Math.hypot(bx - ax, bz - az) || 1, nx = (-(bz - az) / L) * (width / 2), nz = ((bx - ax) / L) * (width / 2), ya = heightOf(n), yb = heightOf(n + 1);
+        pos.push(ax + nx, ya, az + nz, bx - nx, yb, bz - nz, ax - nx, ya, az - nz, ax + nx, ya, az + nz, bx + nx, yb, bz + nz, bx - nx, yb, bz - nz);
+      }
+      const geometry = new THREE.BufferGeometry(); geometry.setAttribute("position", new THREE.Float32BufferAttribute(pos, 3)); geometry.computeVertexNormals(); return geometry;
+    };
+    const deckLook = new THREE.MeshStandardMaterial({ color: 0x9aa7b4, roughness: 0.9, side: THREE.DoubleSide }), rampLook = new THREE.MeshStandardMaterial({ color: 0xd9a54a, roughness: 0.9, side: THREE.DoubleSide });
+    const tunnelLook = new THREE.MeshBasicMaterial({ color: 0xa87ae0, transparent: true, opacity: 0.55, depthWrite: false, side: THREE.DoubleSide });
+    const piers = [], pier = new THREE.BoxGeometry(2.2, 1, 2.2).translate(0, 0.5, 0);
+    for (const deck of highway.decks ?? []) { world.add(new THREE.Mesh(ribbon(deck, 17, () => up), deckLook)); for (let n = 0; n < deck.length; n += 8) piers.push(deck[n]); }
+    if (piers.length) { const columns = new THREE.InstancedMesh(pier, deckLook, piers.length); piers.forEach(([x, z], i) => { m.compose(new THREE.Vector3(x, 0, z), q.identity(), new THREE.Vector3(1, up - 0.4, 1)); columns.setMatrixAt(i, m); }); world.add(columns); }
+    for (const line of highway.tunnels ?? []) world.add(new THREE.Mesh(ribbon(line, 6, () => 0.25), tunnelLook));
+    for (const ramp of highway.ramps ?? []) for (const leg of ramp.legs) world.add(new THREE.Mesh(ribbon(leg, 7, (n) => Math.max(0.3, leg[n][2])), ramp.under ? tunnelLook : rampLook));
+  }
 }
 // The terrain's shapes (docs/v2/world-engine-v2.md §2.0.17): each shape Jev kept stands as a hologram where its part is now,
 // as large as its box: a platform a deck on columns, a plateau or a rectangle a block, a hill a dome, a basin a hollow, a
@@ -2103,6 +2130,121 @@ function pinCamera(segment) {
   if (across < 0.5 && Math.abs(camera.position.distanceTo(controls.target) - distance) < 2) return;
   pinGlide = { ...glideFrom({ to, direct: across < 150 }), t0: performance.now(), seconds: Math.min(4, Math.max(1.4, 1.4 + across / 350)) };
 }
+/**
+ * The group orbit, the native camera (the user, 2026-11-08: "revolutionize the camera system from places orbit to group
+ * of character center orbit native system"): the camera's centre is the card's people themselves, never a place's pin.
+ * Each frame the centre eases to their middle: the director's camera group for the beat (`event.camera.group`), else
+ * the card's actors, movers and speakers with the card before's, the one speaking counted twice; of groups far apart,
+ * the one nearest where the camera looks. The camera moves with the centre, so a walk is followed step by step. Turning
+ * and zooming orbit that moving centre and keep following: the viewer owns the angle and the zoom (a factor on the
+ * distance that fits the group), the group owns where the camera is. A jump far away (another place, a cut to another
+ * group) glides there. `?pin` brings back the pinned camera for comparison.
+ */
+const GROUP_ORBIT = !new URLSearchParams(location.search).has("pin");
+const groupCam = { ids: [], scene: null, fit: null, zoom: 1, held: false, centre: null, spread: 0 };
+function groupCamOf(segment, speaker) {
+  const real = (id) => id && !String(id).startsWith("crowd:") && !data.people[id]?.crowd, shown = (id) => { const entry = pawns.get(id); return entry?.pawn?.parent ? entry.pawn.position : null; };
+  let ids = segment.kind === "event" ? segment.event.camera?.group ?? null : null;
+  if (!ids?.length) {
+    ids = [...(segment.event?.actors ?? []), ...(segment.moves ?? []).map((move) => move.person), ...(segment.says ?? []).map((line) => line.who)];
+    if (groupCam.scene === segment.scene.id) ids.push(...groupCam.ids);
+  }
+  ids = [...new Set(ids)].filter((id) => real(id) && shown(id));
+  if (!ids.length) ids = Object.keys(segment.scene.starts ?? {}).filter((id) => real(id) && shown(id));
+  if (!ids.length) return null;
+  // Of groups apart (each within GROUP of another), the one nearest where the camera looks, else the speaker's, else the largest.
+  const groups = [];
+  for (const id of ids) {
+    const p = shown(id), near = groups.filter((group) => group.some((other) => { const q = shown(other); return Math.hypot(p.x - q.x, p.z - q.z) <= GROUP; }));
+    const merged = [...near.flat(), id]; for (const group of near) groups.splice(groups.indexOf(group), 1); groups.push(merged);
+  }
+  const middle = (group) => { let w = 0; const c = new THREE.Vector3(); for (const id of group) { const k = id === speaker ? 2 : 1; c.addScaledVector(shown(id), k); w += k; } return c.divideScalar(w); };
+  const group = groups.length === 1 ? groups[0] : groupCam.centre ? groups.reduce((a, b) => (middle(a).distanceTo(groupCam.centre) <= middle(b).distanceTo(groupCam.centre) ? a : b)) : groups.find((entry) => entry.includes(speaker)) ?? groups.reduce((a, b) => (b.length > a.length ? b : a));
+  const centre = middle(group), spread = Math.max(0, ...group.map((id) => { const p = shown(id); return Math.hypot(p.x - centre.x, p.z - centre.z); }));
+  groupCam.ids = group; groupCam.scene = segment.scene.id;
+  return { centre: centre.setY(centre.y + 1.2), spread };
+}
+function groupCamTick(segment, dt, speaker) {
+  controls.enablePan = false;
+  const found = groupCamOf(segment, speaker);
+  if (!found || pinGlide) return;
+  const { centre, spread } = found, fit = Math.min(700, Math.max(14, spread * 2.4 + 16));
+  groupCam.centre = centre; groupCam.spread = spread; groupCam.fit = fit;
+  const far = controls.target.distanceTo(centre);
+  // A jump (the first frame, another place, a cut to a group far off): glide over, the viewer's angle kept.
+  if (far > 250 || !groupCam.placed) {
+    const away = camera.position.clone().sub(controls.target);
+    if (away.lengthSq() < 1 || !groupCam.placed) { const turn = away.setY(0).lengthSq() > 1 ? away.clone().setY(0).normalize() : new THREE.Vector3(0.6, 0, 0.8), up = THREE.MathUtils.degToRad(50); away.copy(turn.multiplyScalar(Math.cos(up))).setY(Math.sin(up)); }
+    const to = { target: centre.clone(), position: centre.clone().add(away.setLength(fit * groupCam.zoom)) };
+    if (!groupCam.placed) { camera.position.copy(to.position); controls.target.copy(to.target); groupCam.placed = true; return; }
+    pinGlide = { ...glideFrom({ to, direct: far < 400 }), t0: performance.now(), seconds: Math.min(4, 1.4 + far / 500) };
+    return;
+  }
+  if (SMOOTH) { smoothFollow(segment); return; }
+  // Follow: the centre and the camera move together (the viewer's angle and distance kept): with the group's own step
+  // (the same people, a step a frame can take), so a steady walk is held without lag, then easing off what is left.
+  const key = groupCam.ids.join("|"), step = groupCam.last && groupCam.key === key ? centre.clone().sub(groupCam.last) : null;
+  groupCam.last = centre.clone(); groupCam.key = key;
+  const shift = step && step.length() < 6 ? step : new THREE.Vector3();
+  shift.add(centre.clone().sub(controls.target.clone().add(shift)).multiplyScalar(1 - Math.exp(-dt * (2.5 + far / 8))));
+  controls.target.add(shift); camera.position.add(shift);
+  // The distance eases to the one that fits the group, times the viewer's zoom (not while they turn or zoom).
+  if (!groupCam.held) { const away = camera.position.clone().sub(controls.target), d = away.length(), want = fit * groupCam.zoom; if (Math.abs(want - d) > 0.3) camera.position.copy(controls.target).add(away.setLength(d + (want - d) * (1 - Math.exp(-dt * 1.2)))); }
+}
+/**
+ * Smooth mode's follow (`?smooth`): where the camera looks is a function of the replay's own time, not of how fast frames
+ * come: the group's middle averaged over the moments around now (SMOOTH_W either side, a cosine window, the one speaking
+ * then counted twice), so it moves ahead of a walk instead of lagging it and never shakes with the frame rate; the distance
+ * that fits the group averaged the same way in log steps (an even zoom). When the card's group changes, the old group's
+ * middle hands over to the new one's over SMOOTH_HAND seconds. The viewer still owns the angle and the zoom.
+ */
+const SMOOTH_W = 1.4, SMOOTH_HAND = 1.2;
+function personAt(id, t) {
+  const segment = segmentAt(Math.max(0, Math.min(total - 1e-3, t)));
+  if ((segment.kind !== "event" && segment.kind !== "card") || !(id in (segment.scene.starts ?? {}))) return null;
+  const entry = built.get(segment.scene.place); if (!entry) return null;
+  const move = segment.moves.find((entry) => entry.person === id), node = segment.positions[id];
+  const p = move ? position(segment.place, move, t - segment.start) : node == null ? null : at(segment.place, node);
+  return p ? new THREE.Vector3(p.x - entry.cx, p.y, p.z - entry.cz) : null;
+}
+function smoothMiddle(ids, t, sceneId) {
+  const c = new THREE.Vector3(); let w = 0, logFit = 0;
+  for (let n = -6; n <= 6; n++) {
+    const tt = t + (n / 6) * SMOOTH_W, segment = segmentAt(Math.max(0, Math.min(total - 1e-3, tt)));
+    if (segment.scene.id !== sceneId) continue;
+    const speaking = segment.says?.find((line) => tt - segment.start >= line.from && tt - segment.start < line.to)?.who ?? null;
+    const shown = ids.map((id) => [id, personAt(id, tt)]).filter(([, p]) => p);
+    if (!shown.length) continue;
+    const m = new THREE.Vector3(); let mw = 0;
+    for (const [id, p] of shown) { const k = id === speaking ? 2 : 1; m.addScaledVector(p, k); mw += k; }
+    m.divideScalar(mw);
+    const spread = Math.max(0, ...shown.map(([, p]) => Math.hypot(p.x - m.x, p.z - m.z))), hann = 0.5 + 0.5 * Math.cos((Math.PI * n) / 7);
+    c.addScaledVector(m, hann); logFit += hann * Math.log(Math.min(700, Math.max(14, spread * 2.4 + 16))); w += hann;
+  }
+  return w ? { centre: c.divideScalar(w), fit: Math.exp(logFit / w) } : null;
+}
+function smoothFollow(segment) {
+  const key = groupCam.ids.join("|");
+  if (groupCam.smoothKey !== key) {
+    if (groupCam.smoothKey && groupCam.smoothScene === segment.scene.id) groupCam.hand = { ids: groupCam.smoothIds, scene: groupCam.smoothScene, t0: time };
+    else groupCam.hand = null;
+    groupCam.smoothKey = key; groupCam.smoothIds = [...groupCam.ids]; groupCam.smoothScene = segment.scene.id;
+  }
+  if (groupCam.hand && (time < groupCam.hand.t0 || time > groupCam.hand.t0 + SMOOTH_HAND)) groupCam.hand = null;
+  let found = smoothMiddle(groupCam.smoothIds, time, segment.scene.id);
+  if (found && groupCam.hand) {
+    const old = smoothMiddle(groupCam.hand.ids, time, groupCam.hand.scene), u = (time - groupCam.hand.t0) / SMOOTH_HAND, e = u * u * (3 - 2 * u);
+    if (old) found = { centre: old.centre.lerp(found.centre, e), fit: Math.exp(Math.log(old.fit) + (Math.log(found.fit) - Math.log(old.fit)) * e) };
+  }
+  if (!found) return;
+  const target = found.centre.setY(found.centre.y + 1.2), away = camera.position.clone().sub(controls.target);
+  if (!groupCam.held) away.setLength(found.fit * groupCam.zoom);
+  groupCam.fit = found.fit;
+  controls.target.copy(target); camera.position.copy(target).add(away);
+}
+window.__smooth = () => ({ on: SMOOTH, hand: !!groupCam.hand, fit: groupCam.fit && Math.round(groupCam.fit), target: controls.target.toArray().map((v) => Math.round(v * 100) / 100) });
+controls.addEventListener("start", () => { groupCam.held = true; });
+controls.addEventListener("end", () => { groupCam.held = false; if (groupCam.fit) groupCam.zoom = Math.min(8, Math.max(0.15, camera.position.distanceTo(controls.target) / groupCam.fit)); });
 /** The glide's way, from wherever the camera is when it starts: out over both places, across, and down. */
 function glideFrom(glide) {
   const from = { target: controls.target.clone(), position: camera.position.clone() }, d = from.target.distanceTo(glide.to.target);
@@ -2170,11 +2312,52 @@ function showTraces() {
 }
 // The lifts between the layers (data.world.underground.ways: foot x, y, z, top x, z, kind: 1 a lift, 2 a launch), by their ends.
 const liftAt = new Map((data.world?.underground?.ways ?? []).filter((way) => way[5]).map(([fx, , fz, tx, tz, kind]) => [`${fx},${fz}|${tx},${tz}`, kind]));
+/**
+ * Smooth mode (the Smooth button, World · Live's too, or `?smooth`; the user, 2026-11-09, after the perspective-illusion skill: "make our replay animation smooth"):
+ * a walk on one level goes round its grid corners instead of turning on the spot at each 2 m cell (the node centres
+ * relaxed once, then cut three times, Chaikin), and starts and stops with a short ramp of speed instead of at once; the
+ * walk keeps its own time. Climbs, lifts, flights and leaps keep their own ways. Off by default; the viewer turns it on
+ * and off (the user, 2026-11-09: "make this an option to be able to turn on and off"), remembered in this browser.
+ */
+let SMOOTH = new URLSearchParams(location.search).has("smooth");
+if (!SMOOTH && !new URLSearchParams(location.search).has("plain")) { try { SMOOTH = localStorage.getItem("strand-smooth") === "1"; } catch {} }
+function setSmooth(on) {
+  SMOOTH = !!on; groupCam.smoothKey = null; groupCam.hand = null; groupCam.last = null;
+  document.getElementById("smooth")?.setAttribute("aria-pressed", String(SMOOTH));
+  try { localStorage.setItem("strand-smooth", SMOOTH ? "1" : "0"); } catch {}
+}
+const smoothWays = new WeakMap();
+function smoothWay(place, move) {
+  if (smoothWays.has(move)) return smoothWays.get(move);
+  let way = null;
+  const pts = move.path.map((node) => at(place, node));
+  const flat = pts.length >= 3 && pts.every((p) => Math.abs(p.y - pts[0].y) < 0.01) && pts.slice(1).every((b, n) => !airOf(move, n + 1) && !flight(pts[n], b));
+  if (flat) {
+    let line = pts.map((p) => [p.x, p.z]);
+    line = line.map((p, n) => (n === 0 || n === line.length - 1 ? p : [(line[n - 1][0] + 2 * p[0] + line[n + 1][0]) / 4, (line[n - 1][1] + 2 * p[1] + line[n + 1][1]) / 4]));
+    for (let r = 0; r < 3; r++) { const out = [line[0]]; for (let n = 0; n < line.length - 1; n++) { const [ax, az] = line[n], [bx, bz] = line[n + 1]; out.push([ax * 0.75 + bx * 0.25, az * 0.75 + bz * 0.25], [ax * 0.25 + bx * 0.75, az * 0.25 + bz * 0.75]); } out.push(line.at(-1)); line = out; }
+    const cum = [0]; for (let n = 1; n < line.length; n++) cum.push(cum[n - 1] + Math.hypot(line[n][0] - line[n - 1][0], line[n][1] - line[n - 1][1]));
+    if (cum.at(-1) > 0.5) way = { line, cum, L: cum.at(-1), y: pts[0].y };
+  }
+  smoothWays.set(move, way);
+  return way;
+}
+/** Where a smoothed walk is at `elapsed`: along its rounded line, with the same total time, ramping up and down at its ends. */
+function wayAt(way, move, elapsed) {
+  const T = move.time.steps.at(-1), ramp = Math.min(0.45, T / 3), v = way.L / Math.max(1e-6, T - ramp), t = Math.min(T, Math.max(0, elapsed));
+  const s = t < ramp ? (v * t * t) / (2 * ramp) : t > T - ramp ? way.L - (v * (T - t) ** 2) / (2 * ramp) : v * (t - ramp / 2);
+  let low = 0, high = way.cum.length - 1; while (high - low > 1) { const mid = (low + high) >> 1; if (way.cum[mid] <= s) low = mid; else high = mid; }
+  const f = (s - way.cum[low]) / Math.max(1e-6, way.cum[high] - way.cum[low]), [ax, az] = way.line[low], [bx, bz] = way.line[high];
+  let k = 1; while (k < move.time.steps.length - 1 && move.time.steps[k] < elapsed) k++;
+  return { x: ax + (bx - ax) * f, z: az + (bz - az) * f, y: way.y, k };
+}
+
 function position(place, move, elapsed) {
   const steps = move.time.steps;
   if (move.how === "teleport") { const p = at(place, elapsed < 0.4 ? move.path[0] : move.path[1]); return { ...p, fade: Math.min(1, Math.abs(elapsed - 0.4) / 0.4), k: 2 }; }
   if (elapsed >= steps.at(-1)) return { ...at(place, move.path.at(-1)), k: move.path.length };
   if (move.how === "direct") { const a = at(place, move.path[0]), b = at(place, move.path[1]), f = elapsed / steps[1], lift = Math.sin(Math.PI * f) * 3; return { x: a.x + (b.x - a.x) * f, z: a.z + (b.z - a.z) * f, y: a.y + (b.y - a.y) * f + lift, k: 2 }; }
+  if (SMOOTH) { const way = smoothWay(place, move); if (way) return wayAt(way, move, elapsed); }
   let k = 1; while (k < steps.length - 1 && steps[k] < elapsed) k++;
   const a = at(place, move.path[k - 1]), b = at(place, move.path[k]), f = Math.min(1, Math.max(0, (elapsed - steps[k - 1]) / Math.max(1e-6, steps[k] - steps[k - 1]))), air = airOf(move, k), arc = air ? null : flight(a, b);
   if (air) return { x: a.x + (b.x - a.x) * f, z: a.z + (b.z - a.z) * f, y: a.y + (b.y - a.y) * f, k, flying: true };
@@ -2215,9 +2398,11 @@ function frame(now) {
     const pose = producerPose(segment.scene.id, segment.event.camera);
     if (pose) glide = { to: pose, start: time, seconds: 0.9, direct: true };
   }
-  // The pinned camera (the default; the user, 2026-11-05: "one continuous camera is borrowed by different casts, and
-  // there is a lock of center per area and scale"): the camera turns round an area's pin, not round people.
-  if (follow && !cuts) { glide = null; if (cameraSegment !== segment || now - pinChecked > 700) { cameraSegment = segment; pinChecked = now; pinCamera(segment); } }
+  // The pinned camera (`?pin`; the user, 2026-11-05: "one continuous camera is borrowed by different casts, and there is
+  // a lock of center per area and scale"): the camera turns round an area's pin. The default is the group orbit (groupCamTick,
+  // below, once the people stand where this frame puts them).
+  if (follow && !cuts) { glide = null; if (!GROUP_ORBIT && (cameraSegment !== segment || now - pinChecked > 700)) { cameraSegment = segment; pinChecked = now; pinCamera(segment); } }
+  else controls.enablePan = true;
   if (pinGlide) {
     const u = Math.min(1, (now - pinGlide.t0) / (pinGlide.seconds * 1000)), e = u < 0.5 ? 2 * u * u : 1 - (-2 * u + 2) ** 2 / 2;
     const bend = (a, b, c) => a.clone().multiplyScalar((1 - e) ** 2).add(b.clone().multiplyScalar(2 * (1 - e) * e)).add(c.clone().multiplyScalar(e * e));
@@ -2330,6 +2515,8 @@ function frame(now) {
     if (bubble?.userData.line !== saying) { if (bubble) { world.remove(bubble); bubble.material.map.dispose(); bubble.material.dispose(); } bubble = speechBubble(saying.text, saying.who ? data.people[saying.who]?.color ?? "#ffffff" : null, saying.who ? faces.get(saying.who) ?? null : null); bubble.userData.line = saying; world.add(bubble); }
     bubble.position.copy(speaker.position).add(new THREE.Vector3(0, 3.3 + bubble.scale.y / 2, 0));
   } else if (bubble) { world.remove(bubble); bubble.material.map.dispose(); bubble.material.dispose(); bubble = null; }
+  // The group orbit: the camera's centre on the card's people as they stand in this frame, the one speaking counted twice.
+  if (GROUP_ORBIT && follow && !cuts) groupCamTick(segment, dt, saying?.who ?? null);
   // Live mode: following is following Jev's focus — the camera and where it looks glide together toward the moment's
   // focus (a whole place away too), and the distance eases toward one that frames it, so each new frame carries on smoothly.
   if (liveMode && follow && cuts && !glide && liveFocus() && !segment.event?.camera) {
@@ -2456,6 +2643,7 @@ if (liveMode) {
     if (event.data?.type === "sky") { skyUnits = event.data.units ?? null; return; }
     if (event.data?.type === "daylightMode") { daylight.on = !!event.data.on && !capture; if (!daylight.on) { world.background.set(0x060c12); world.fog?.color.set(0x060c12); defaultFog.color.set(0x060c12); ambient.color.set(0xffffff); ambient.intensity = 0.75; sun.color.set(0xffffff); sun.intensity = 0.75; sun.position.set(30, 70, 20); daylight.sky.set(0x060c12); daylight.day = 0; daylight.phase = null; daylight.said = null; for (const object of [snowFall.object, rainFall.object, snowSheet, wetSheet, cloudLayer, sunPatch, ...shafts]) object.visible = false; for (const key of WX) wx[key] = 0; flash.level = 0; daylight.ambientI = 0.75; defaultFog.near = baseFog.near; defaultFog.far = baseFog.far; parent.postMessage({ type: "daylight", phase: "night", hour: null }, origin); } return; }
     if (event.data?.type === "cuts") { cuts = !!event.data.on; cameraSegment = null; return; }
+    if (event.data?.type === "smoothMode") { setSmooth(event.data.on); return; }
     // Reading along (the user, 2026-11-05: the bubbles ran ahead of the reader): the line the reader is on, so a card's
     // bubble shows that line for as long as it is being read, none otherwise.
     if (event.data?.type === "reading") { readLine = event.data.line ?? null; return; }
@@ -2491,7 +2679,8 @@ if (liveMode) {
   // Turning or zooming is the viewer taking the camera: following stops, and the world view keeps this frame while a
   // finger is down (it swaps the next moment in when it is lifted, with the camera where it was left).
   let told = 0, held = 0;
-  const take = () => { follow = false; glide = null; pinGlide = null; tellCamera(); parent.postMessage({ type: "interact" }, origin); };
+  // In the group orbit, turning and zooming orbit the people and keep following them (the viewer owns the angle and zoom).
+  const take = () => { if (!(GROUP_ORBIT && follow && !cuts)) follow = false; glide = null; pinGlide = null; tellCamera(); parent.postMessage({ type: "interact" }, origin); };
   // Raw input on the stage, so a touch is caught however the orbit controls take it: a finger or button down holds the
   // frame, lifting it lets the next moment in; a wheel or pinch takes the camera too.
   renderer.domElement.addEventListener("pointerdown", () => { held++; take(); parent.postMessage({ type: "touch", active: true }, origin); });
@@ -2604,6 +2793,10 @@ window.__blows = () => segments.filter((segment) => segment.kind === "event" && 
 window.__vehicles = () => [...pawns].filter(([, entry]) => entry.vehicle).map(([id]) => ({ id, kind: data.people[id].prop.kind, model: data.people[id].prop.model ?? null, shown: !!pawns.get(id).pawn.parent, at: pawns.get(id).pawn.parent ? pawns.get(id).pawn.position.toArray().map(Math.round) : null }));
 window.__goto = (at) => { time = Math.max(0, Math.min(total, at)); playing = false; follow = false; glide = null; return time; };
 window.__cam = controls;
+/** For checking the group orbit: who it holds, their middle, where the camera looks and from how far. */
+window.__groupCam = () => ({ on: GROUP_ORBIT && follow && !cuts, ids: groupCam.ids, centre: groupCam.centre?.toArray().map((v) => Math.round(v * 10) / 10) ?? null, target: controls.target.toArray().map((v) => Math.round(v * 10) / 10), distance: Math.round(camera.position.distanceTo(controls.target) * 10) / 10, fit: groupCam.fit && Math.round(groupCam.fit * 10) / 10, zoom: groupCam.zoom, gliding: !!pinGlide, time: Math.round(time * 10) / 10 });
+/** Play on from a moment, Follow kept (unlike __goto): for checking the camera as it plays. */
+window.__play = (at, rate = 2) => { time = Math.max(0, Math.min(total, at)); playing = true; speed = rate; stopAt = null; return time; };
 window.__moveTime = (scene, person) => { const segment = segments.find((entry) => entry.kind === "event" && entry.scene.id === scene && entry.moves.some((move) => move.person === person)); const move = segment?.moves.find((entry) => entry.person === person); return segment ? { start: segment.start, total: move.time.total } : null; };
 // The vehicles side by side at their kinds' sizes, where the camera looks (a car per model given): for checking the forms.
 let gallery = null;
@@ -2643,6 +2836,8 @@ function continueTo({ scene, event, camera: cam = null, speed: pace = 2, follow:
   glide = pose ? { to: pose, start: Math.max(time, segment.start - 0.6), seconds: 1.2, direct: true } : null;
 }
 
+$("smooth").setAttribute("aria-pressed", String(SMOOTH));
+$("smooth").addEventListener("click", () => setSmooth(!SMOOTH));
 $("play").addEventListener("click", () => { playing = !playing; $("play").textContent = playing ? "⏸ Pause" : "▶ Play"; });
 $("follow").addEventListener("click", () => { follow = !follow; $("follow").setAttribute("aria-pressed", String(follow)); if (!follow) controls.target.set(0, 4, 0); });
 $("cuts").setAttribute("aria-pressed", String(cuts)); $("cuts").addEventListener("click", () => { cuts = !cuts; cameraSegment = null; $("cuts").setAttribute("aria-pressed", String(cuts)); });

@@ -9,6 +9,7 @@
  *  - what that cannot hold, the parent's average takes.
  * Nominated buildings are the source of truth: never changed here (they add to the averages above them where they stand).
  */
+import { setting } from "../settings.js";
 export interface HeightPart {
   id: string;
   /** Its ground's area (m²). */
@@ -26,7 +27,7 @@ export interface HeightPart {
 }
 
 /** The deformation limit (the user, 2026-11-01): how far one spawn may lower a part, as a share of its average. */
-export const LIMIT = { lower: 0.15, damaged: 0.3 };
+export const LIMIT = setting<{ lower: number; damaged: number }>("spawn.heightLimit");
 
 export interface Unified { averages: Record<string, number>; parent: number; moved: { id: string; from: number; to: number }[] }
 

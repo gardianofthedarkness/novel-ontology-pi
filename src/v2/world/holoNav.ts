@@ -1,4 +1,5 @@
 import type { ArchitectureKind } from "./placeArchitecture.js";
+import { setting } from "../settings.js";
 
 /**
  * Nav grids for the holo stage: the named spots inside and around each kind
@@ -17,7 +18,7 @@ export interface NavBox { x: number; z: number; width: number; depth: number; he
 export const MANNERS = ["walk", "run", "sneak", "climb up", "go down", "fall", "teleport", "dragged"] as const;
 export type Manner = typeof MANNERS[number];
 /** Stage units per second along the way. */
-export const MANNER_SPEED: Record<Manner, number> = { walk: 120, run: 260, sneak: 60, "climb up": 80, "go down": 120, fall: 420, teleport: 1e6, dragged: 90 };
+export const MANNER_SPEED: Record<Manner, number> = setting<Record<Manner, number>>("walk.mannerSpeed");
 
 const spot = (id: string, label: string, hint: string, u: number, v: number, w: number, out?: [number, number]): NavSpot => ({ id, label, hint, u, v, w, out });
 const open = (entry: NavSpot): NavSpot => ({ ...entry, outdoor: true });

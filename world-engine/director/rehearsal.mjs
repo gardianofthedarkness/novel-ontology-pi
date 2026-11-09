@@ -6,12 +6,14 @@
 // canon are left alone. With --passes 2, the second pass plays from the first one's smoothing (back-tested: the whole
 // strand is known, so the least-action history of pass 1 is where pass 2 starts its people).
 //   node world-engine/director/rehearsal.mjs <copy of novel-dir> --reading <reading>/v2/data.json --from scene_000001 --to scene_000046 [--passes 2] [--out report.json]
+// --still-talk plays as before talk on the move (on-the-move.mjs): a walk and the talk on it as separate cards.
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { parseArgs } from 'node:util';
 import { direct, standIn } from './director.mjs';
 import { worldLog } from '../log/world-log.mjs';
+import { backAndForth } from '../log/back-and-forth.mjs';
 import { REVISION_LIMIT, smoothRun } from '../smoother/smoother.mjs';
 import { smoothBlasts } from '../smoother/blasts.mjs';
 import { checkAll } from '../laws/laws.mjs';
@@ -64,6 +66,7 @@ export function measure(record) {
     beats: record.gate?.beats ?? null, scaled: record.scenes.reduce((n, scene) => n + (scene.scales?.length ?? 0), 0), journeys: record.scenes.reduce((n, scene) => n + (scene.journeys?.length ?? 0), 0),
     exchanges: cards.reduce((n, card) => n + (card.exchanges?.length ?? 0), 0), askedJev: cards.reduce((n, card) => n + (card.exchanges?.filter(entry => entry.by === 'jev').length ?? 0), 0), conditions: cards.reduce((n, card) => n + (card.conditions?.length ?? 0), 0),
     talkKinds: count(cards.map(card => card.talk?.kind).filter(Boolean)), formations: cards.reduce((n, card) => n + (card.formations?.length ?? 0), 0),
+    onTheMove: { stretches: record.scenes.reduce((n, scene) => n + (scene.onTheMove ?? []).filter(entry => !entry.kept).length, 0), kept: count(record.scenes.flatMap(scene => (scene.onTheMove ?? []).filter(entry => entry.kept).map(entry => entry.kept.replace(/^\S+ /, '')))), cards: cards.filter(card => card.onTheMove).length },
     laws: count(cards.flatMap(card => (card.laws ?? []).map(law => `${law.law} ${law.verdict}`))), calls: record.calls, usage: record.usage, timing: record.timing ?? null,
     // M12: where each cast fired and found something, the leads the findings changed, the price.
     gateUnit: record.gate?.unit ?? null, stretches: (record.stretches ?? []).length,
@@ -89,17 +92,18 @@ export function smoothedOf({ run, record, page, spawn, strands, reading }) {
 }
 
 if (process.argv[1] === fileURLToPath(import.meta.url)) {
-  const { values, positionals: [novelDir] } = parseArgs({ allowPositionals: true, options: { 'keep-page': { type: 'boolean' }, reading: { type: 'string' }, from: { type: 'string' }, to: { type: 'string' }, passes: { type: 'string' }, out: { type: 'string' } } });
+  const { values, positionals: [novelDir] } = parseArgs({ allowPositionals: true, options: { 'keep-page': { type: 'boolean' }, 'still-talk': { type: 'boolean' }, reading: { type: 'string' }, from: { type: 'string' }, to: { type: 'string' }, passes: { type: 'string' }, out: { type: 'string' }, logs: { type: 'string' } } });
   if (!novelDir || !values.reading || !values.from || !values.to) { console.error('usage: node world-engine/director/rehearsal.mjs <copy of novel-dir> --reading <data.json> --from <scene> --to <scene> [--out report.json]'); process.exit(2); }
   const reading = JSON.parse(await readFile(values.reading, 'utf8')), world = join(resolve(novelDir), 'stage', 'world');
   const strands = JSON.parse(await readFile(join(world, 'strands.json'), 'utf8')), spawn = JSON.parse(await readFile(join(world, 'spawn.json'), 'utf8').catch(() => 'null'));
   const passes = [];
   // The pre-film casts' notes the reading step made, beside the reading (the real ones when a paid step made them).
   const prefilm = await (await import('../digest/prefilm.mjs')).loadPrefilm(dirname(resolve(values.reading)));
-  let smoothing = null, blasts = [];
+  // The first pass starts fresh (never from the copy's last real run's smoothing); each next one from the pass before it.
+  let smoothing = false, blasts = [];
   for (let pass = 1; pass <= Number(values.passes ?? 1); pass++) {
     const started = Date.now();
-    const { record, data } = await direct(resolve(novelDir), { reading, prefilm, from: values.from, to: values.to, jev: standIn(), workModel: ruledWork(), speakers: false, smoothing, blasts: blasts.map(entry => ({ ...entry })), log: () => {} });
+    const { record, data } = await direct(resolve(novelDir), { reading, prefilm, from: values.from, to: values.to, jev: standIn(), workModel: ruledWork(), speakers: false, smoothing, blasts: blasts.map(entry => ({ ...entry })), onTheMove: !values['still-talk'], log: () => {} });
     const smoothedNow = smoothedOf({ run: `rehearsal-${pass}`, record, page: data, spawn, strands, reading });
     // --keep-page: the page beside the run's record, as a real run keeps it (why-walk.mjs and the replay read it).
     if (values['keep-page']) { const id = `d${record.startedAt.replace(/\D/g, '').slice(0, 14)}`, folder = join(resolve(novelDir), 'stage', 'simulation', 'runs', 'director'); await mkdir(folder, { recursive: true }); await writeFile(join(folder, `${id}.page.json`), JSON.stringify(data)); passes.keptPage = id; }
@@ -108,6 +112,11 @@ if (process.argv[1] === fileURLToPath(import.meta.url)) {
     const lawReading = segmentWorld({ reading, script: segScript, spawn: null })?.reading ?? reading;
     const lawsNow = checkAll({ played: playedLine({ record, page: data, reading: lawReading }), strands: segStrands, script: segScript, speakers: speakersOf(lawReading), abilities: { version: 1, people: {} } });
     passes.push({ pass, minutes: Math.round((Date.now() - started) / 6000) / 10, ...measure(record), started: { fromSmoothing: record.revisions.filter(entry => entry.applied).length, held: record.revisions.filter(entry => !entry.applied).length }, smoothing: smoothedNow.report });
+    // Back and forth (the user, 2026-11-07): conversation pulls and round trips, from this pass's world log.
+    // --logs <dir>: each pass's world log and record kept there, to look into what moved whom.
+    const passLog = worldLog({ run: `rehearsal-${pass}`, record, page: data, spawn, strands });
+    if (values.logs) { await mkdir(resolve(values.logs), { recursive: true }); await writeFile(join(resolve(values.logs), `pass-${pass}.jsonl`), passLog.map(row => JSON.stringify(row)).join("\n")); await writeFile(join(resolve(values.logs), `pass-${pass}.record.json`), JSON.stringify(record)); }
+    { const movement = backAndForth({ log: passLog, record }); passes.at(-1).backAndForth = { talk: movement.talk, roundTrips: { count: movement.roundTrips.count, throughTalk: movement.roundTrips.throughTalk, kinds: movement.roundTrips.kinds }, regrouped: record.scenes.reduce((n, scene) => n + (scene.regrouped?.length ?? 0), 0) }; }
     passes.at(-1).broken = Object.fromEntries(lawsNow.map(law => [law.law, law.violations.length]));
     passes.at(-1).brokenExamples = Object.fromEntries(lawsNow.filter(law => law.violations.length).map(law => [law.law, law.violations.slice(0, 20)]));
     smoothing = smoothedNow.smoothed;

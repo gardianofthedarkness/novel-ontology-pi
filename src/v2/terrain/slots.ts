@@ -12,6 +12,7 @@
  *  - a mention spawns only when it can borrow nothing; so unnamed mentions never grow an area with their number.
  */
 import { CHILD, type Level, type Parent, type Resolver, spawnsOf } from "./config.js";
+import { setting } from "../settings.js";
 
 export type Point = [number, number];
 export interface Share { book: string; mention: string; scene: string | null }
@@ -94,7 +95,8 @@ export interface Choice {
   log: string[];
 }
 
-export const CROSS_WEIGHT = 0.3, LAMBDA = 1.5;
+const SLOTS = setting<{ crossWeight: number; lambda: number }>("spawn.slots");
+export const CROSS_WEIGHT = SLOTS.crossWeight, LAMBDA = SLOTS.lambda;
 
 /** A slot's sharers and damage in force in a book: only that book's (§4.5). */
 export const sharersIn = (slot: Slot, book: string) => slot.sharers.filter((share) => share.book === book);

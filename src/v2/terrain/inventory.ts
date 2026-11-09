@@ -10,6 +10,7 @@
  */
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
+import { setting } from "../settings.js";
 
 /** A type: what it is (saying nothing of its height: that is its scenes'), what the text may call it, its coarse use. */
 export interface BuildingType { use?: string; shape?: string; describe: string; words: string[] }
@@ -70,7 +71,7 @@ export async function searchBuildingTypes(query: BuildingQuery, types: Record<st
  * more was right, the three wrong ones led by under 0.5). By words alone: a word of the type in the name, and a lead of
  * `wordsLead`.
  */
-export const SURE = { lead: 0.5, wordsLead: 2 };
+export const SURE = setting<{ lead: number; wordsLead: number }>("spawn.typeSure");
 export function isSure(found: Found[]): boolean {
   const [first, second] = found;
   if (!first) return false;

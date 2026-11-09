@@ -4,7 +4,7 @@ import { mkdtemp, readFile, readdir, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { pickImpacts } from '../world/impact-choices.mjs';
-import { createLive, outcomeView } from './sim-jev.mjs';
+import { createLive, outcomeView, patiently } from './sim-jev.mjs';
 
 /** A browser that draws nothing: stills are a fixed picture, impact spots two letters, a measure 6 m across. */
 const fakeChrome = () => {
@@ -98,4 +98,21 @@ test('an event played is recorded with its picture and every move on it', async 
   assert.deepEqual([frame.kind, frame.phase, frame.text, frame.pictures.map(picture => picture.file)], ['step', 'step · Scene 1 · event 2', 'Ada → roof (walk)', ['frames/0-0.jpg']]);
   assert.deepEqual(frame.moves, moves);
   assert.equal(JSON.parse(await readFile(join(novel, 'stage', 'simulation', 'live.json'), 'utf8')).log[0].text, 'Ada → roof (walk)');
+});
+
+test('a Jev call waits out a network failure, but not a refusal or an abort', async () => {
+  const offline = () => Object.assign(new TypeError('fetch failed'), { cause: Object.assign(new Error('getaddrinfo ENOTFOUND api.example'), { code: 'ENOTFOUND' }) });
+  let calls = 0;
+  const waited = [];
+  assert.equal(await patiently(async () => { if (++calls < 3) throw offline(); return 'answers'; }, { waits: [1, 2, 3], onWait: ms => waited.push(ms) }), 'answers');
+  assert.deepEqual(waited, [1, 2], 'two waits, then the third call answers');
+  calls = 0;
+  await assert.rejects(patiently(async () => { calls++; throw new Error('Jev request failed: 400 bad question'); }, { waits: [1, 1] }), /400/);
+  assert.equal(calls, 1, 'a refusal is not asked again');
+  calls = 0;
+  await assert.rejects(patiently(async () => { calls++; throw offline(); }, { waits: [1, 1] }), /fetch failed/);
+  assert.equal(calls, 3, 'gives up after its waits');
+  const stop = new AbortController(); stop.abort(); calls = 0;
+  await assert.rejects(patiently(async () => { calls++; throw offline(); }, { waits: [1, 1], signal: stop.signal }), /fetch failed/);
+  assert.equal(calls, 1, 'an aborted call is not asked again');
 });
