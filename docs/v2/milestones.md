@@ -17,12 +17,12 @@ call); a real Jev run only when the user asks.
 | M5 | Building level on vol 1 | |
 | M6 | Growth across books | |
 | M7 | A real run; pools removed | |
-| M8 | One settings registry: every knob in a schema, layered universe < book < place, `novel settings`, fill operators | M8a–c done 2026-11-09 (72 keys, 8 tables; commands; fill operators; rehearsal identical); M8d (handles) left |
+| M8 | One settings registry: every knob in a schema, layered universe < book < place, `novel settings`, fill operators | M8a–c done 2026-11-09 (72 keys, 8 tables; commands; fill operators; rehearsal identical); M8d handles for anything + profiles begun 2026-11-09 |
 | M9 | With the simulation: shared slots split where they are damaged | with the simulation stage |
-| M10 | Models as code: nominate, brief, write or put, check; the warehouse (CC0 packs, our models, gkNextEngine's MIT kits) | built 2026-11-09 (23 of 23 pass; Pi skill); embeddings, CC0 packs and Codex/Claude Code left |
+| M10 | Models as code: nominate, brief, write or put, check; the warehouse (CC0 packs, our models, gkNextEngine's MIT kits) | built 2026-11-09 (23 of 23 pass; Pi skill); M10g–i the warehouse registry, its supply and its connections begun 2026-11-09; Codex/Claude Code left |
 | M11 | Landmark shells: named, described buildings as code, their footprint and height in the fill | built 2026-11-09 (2 in volume 1; height into the lot, footprint the lot's) |
 | M12 | People with bodies: a 7-bone standard, shared clips, parts by slot from the sheets | after M11 |
-| W15 | A paid volume 1 run with M8, M10 and M11 in, against W14 | when the user asks |
+| W15 | A paid volume 1 run with M8, M10 and M11 in, against W14 | done 2026-11-09 (about $0.34 with the models and a crashed attempt) |
 
 ## M0 — Design and configuration
 
@@ -561,9 +561,21 @@ Was "configurations of one's own, not now"; the user brought it forward so the m
       *Evidence:* on the rehearsal copy, Academy City with three operators got 1,390 street lights, 600 trees, 120 parked
       cars (still: scratchpad); with no override the first quarter's rehearsal is identical to the baseline again
       (236 moves, page and report the same).
-- [ ] **M8d Handles in World · Live.** Not built yet (the commands and the schema are what the handles will write).
-- [ ] A region's living areas as a choice (the user, 2026-11-01): East Asian megacity now ([living-areas.md](living-areas.md));
-      a European city, an American suburb as other profiles: a profile is a named set of overrides in the registry.
+- [x] **M8d Handles for anything** (built 2026-11-09) (the user, 2026-11-09: "not only think about American or European or anything, think
+      of it as anything"; design §8.2). A Settings panel in World · Live generated from the schema itself: every group
+      with its `about` and `after`, every key with its value, its source layer, unit and range (a slider for the 26
+      ranged numbers), the tables as rows; scoped to the book or the place shown. A change goes `POST /play/settings` to
+      the host, which runs `settingsSet` (checked, layered, logged with the panel's why, `--before` as a tick) and
+      answers with the problems or when it takes effect. Profiles are named sets of overrides and nothing more:
+      `novel settings profile save|apply|list` (`<universe>/profiles/<name>.json`); none built in. *Evidence:* a change
+      from the panel lands in the layer's log and shows in `novel settings diff`; a profile saved from one library's
+      overrides applies to a scratch library (the same `diff`). *Built:* `tools/pi-review/sim-settings.mjs` + the host's
+      `/play/settings.json` and `POST /play/settings`; the Settings panel in World · Live (75 keys in 22 groups, sliders
+      for the ranged ones, a why field, a place field, a before tick); `novel settings profile save|apply|list`.
+      *Evidence:* `test/warehouse.test.ts` (a profile of 2 overrides saved from one scratch library and applied to
+      another: the same `diff`), `tools/pi-review/sim-settings.test.mjs` (a change with a why lands in the layer's
+      log as "World · Live"; a wrong value is refused); headless Chrome on a host: the panel lists 75 keys, a refused
+      value answers 400 with the schema's words. *Cost:* none.
 
 **Pass:** no knob left outside the schema; today's world rebuilt identically with no override; the agent changes a
 place's generation in one command and sees it after a terrain rebuild. **Cost:** none (no model calls).
@@ -612,6 +624,38 @@ both installed 2026-11-09. Tried first in a scratch test: 5 of volume 1's things
 - [x] **M10f Every agent host** (built 2026-11-09, Pi only). `skills/novel-models/SKILL.md` (models and settings), in the
       Pi runner's manifest; it loads through Pi's own resource loader (`tools/pi-review/library-access.test.mjs`, 7 of 7 with
       the runner's tests). Codex and Claude Code wait for the adaptor's setup engine (adapters/README.md).
+- [x] **M10g The warehouse registry** (built 2026-11-09) (the user, 2026-11-09; design §8.3). One registry of sources outside any library
+      (`~/claude-world-first/model-packs/warehouse.json`), each with its kind (a SCAD kit or a glTF folder), path,
+      licence and URL; a catalogue per source in gkNextEngine's record shape, built by us: a SCAD kit's modules
+      evaluated with OpenSCAD and measured as models are, a glTF folder's files measured and baked to the player's mesh.
+      `novel warehouse list|add|refresh`; `kit`, `pack` and `own` registered as the built-in sources. The licence gate:
+      CC0, MIT, Apache-2.0, BSD, CC-BY-4.0 with attribution; anything else only with the user's recorded OK. *Evidence:*
+      a scratch kit of three modules and a one-file glTF folder registered and catalogued in the tests
+      (`test/warehouse.test.ts`: the module with a required parameter is no part, the buried one is not ok, the glTF
+      cube's size and colour come through); `novel warehouse list` on this Mac: kit 668 (665 ok), pack 114, own 25.
+      *Cost:* none.
+- [x] **M10h Supply and search** (built 2026-11-09; `fetch` written, not yet run against a real download) (design §8.3, §8.5). `novel warehouse fetch <name> <url> --licence --ok "<the user's
+      words>"` (a download needs the user's permission: never without `--ok`; into its own new folder, LICENSE and
+      SOURCE.txt kept, 200 MB by default); `find "<words>"` over every catalogue by name, category, the reading's size
+      and, when the local embedding server is up, embeddings; `show`. The skill's "Your own warehouse": where to look,
+      what never to take, the download rules. Pi's manifest and allowlist take `novel warehouse`. *Evidence:* `find`
+      ranks the scratch kit's pine first for "pine tree" within its source and `kit:cw_nature_pine` first over 665 real
+      parts; the skill loads through Pi's loader (`library-access.test.mjs`); the manifest names `novel warehouse`.
+      Embeddings ranking is wired for a running local server, not yet measured. *Cost:* none.
+- [x] **M10i The warehouse connected to the configuration** (built 2026-11-09) (design §8.4, §8.6). Slots as settings: `fill.props`
+      (a part per prop kind, by place), `models.vehicles` (a part per vehicle kind), `models.parts` (a part per thing
+      kind, taken by `bind` before the work model is asked), and parts in the `models.uses` table with a floors range;
+      `novel warehouse use <part> for <slot>` as sugar over `novel settings set`. The export puts each used part's mesh
+      on the page and the player draws props, lots and vehicles as the part. A Warehouse panel in World · Live: sources,
+      categories, search, Assign. *Evidence:* the first quarter's rehearsal identical with no override; with `prop:tree`
+      bound to a kit tree the page's `scadModels` holds it and the trees' mesh is the part's. *Done:* the first
+      quarter's rehearsal identical with no override (236 moves, the same laws, the same report as before this work);
+      `novel warehouse use kit:cw_nature_pine for prop:tree` on the rehearsal copy, then the world page: `scadModels`
+      3 (the two landmarks and the pine), the city's landscape carries `propModels.tree → scad:we14cbf2b`, 1,944
+      trees drawn as the kit's stepped pine (still in the scratchpad). Also found and fixed on the way: the export
+      drew building uses from the static `config/models.json`, not the layered `models.uses` table M8a had declared
+      (now `table('models.uses')`). Not yet seen in a rehearsal: a vehicle slot (the first quarter's vehicles have
+      their own models) and a building use's part. *Cost:* none.
 
 **Pass:** every nominated thing has a model or a part; every model passes its checks; the first quarter's rehearsal
 unchanged in laws and moves (a model is a look). **Cost:** reported per model and per book.
@@ -639,6 +683,49 @@ Against W14 (`d20261109020441`, $0.17): laws broken by kind, moves, held, speake
 checks; the run's cost with the models' share on its own line. Before it: M8a–c, M10a–e and M11 rehearsed on the first
 quarter, and a new `before` snapshot with the models and settings in.
 
+- [x] **Run** (2026-11-09, library 16, checkout `app-cca9324-w15`, before `0017`). The first attempt
+      (`d20261109073558`) died in scene 153 on the first road drive any full run had played: the drive's life seconds
+      were put on the path as `at`, hiding the array's own `at()` (fixed as `times`, 1c354b8). The rerun
+      (`d20261109081436`, `--discard-edits`; scenes 1–152 asked of Jev again, see the cost) finished all 286 scenes; after
+      snapshot `0019`.
+- *Evidence against W14:*
+
+  | | W14 | W15 |
+  | --- | --- | --- |
+  | Jev calls | 504 | 516 |
+  | Moves (moved / unmoved) | 878 / 330 | 872 / 325 |
+  | Laws broken | L6 5, L9 3, L10 7 | L6 6, L9 3, L10 7 |
+  | Held for review | 129 (13 batches) | 127 (13 batches) |
+  | Speakers: world applied / held | 93 / 94 | 90 / 92 |
+  | Jev review: stood | 7 of 50 | 7 of 50 |
+  | System 2 differing from Jev | 161 of 274 | 158 of 277 |
+  | Drives on the road graph (`drove`) | 0 | 0 |
+  | Vehicle moves on the page | | 13 (4 change floor: 2 an aircraft's, and two found wrong below) |
+
+  The car in unit 154 was W14's L10 "carried 144 floors to the office"; with its own model it became a vehicle and
+  was moved, not held (see below). New in W15: two L10 roof leaps to an office (units 11, 162), one L10 with no place
+  to stand (119), one L6 across 40 floors (237).
+- *Models drawn:* all 23 of the page's models (21 things and vehicles, 2 landmark shells on their lots; the player's
+  `__models()`: 23 of 23 drawn), and 3,189 pieces of street furniture from `fill.ops` in the city. Page 9.3 MB.
+- *Cost:* the rerun $0.15 (Jev $0.12, system 2 $0.03); the crashed attempt about $0.07 more (its 224 Jev answers,
+  about $0.05, were asked again: Jev's cache key holds the pictures, which render a little differently each run, so a
+  rerun never replays Jev; system 2's text-only answers did replay, 117 of them); the models $0.13 once, before
+  filming (71 requests); together about $0.34.
+- *Review:* Pi answered all 13 batches (43 who-speaks items, 09:41–10:02 UTC; with Jev's 7 that stood, 50 answers),
+  kept as snapshot `0020-manual`; not applied (a `--from-last` second pass applies them). 127 held items stay open.
+- *Found after the report (2026-11-09):* no move in W15 drove the road graph; the page's three `ride` moves are
+  vehicles on the walk grid. Two vehicles were moved as people up stairs: unit 154's car, by a layout note ("floor 3,
+  stated"), walked 135 m round the block and up an office tower to floor 3 (the still that looked like the Darts Bar's
+  rooms is that tower); unit 179's van ran up six floors by the on-foot way a ride falls back to (meant for a rider who
+  gets off). Fixed in the director: a vehicle that rides and does not fly never takes a path that changes floor (a road
+  drive and a blow's throw excepted); such a move is held (L10) or, for a quiet layout move, left unplayed, and a rider
+  who goes on up the stairs leaves the vehicle where it stands.
+  *Evidence:* engine tests 184 of 184; the first quarter's rehearsal identical with and without it (236 moves, the
+  same laws, the same report); units 150–180 rehearsed with and without it: before, unit 154's car went to "a wall of
+  the shop (4 floors), floor 3" and to the 144-floor office's floor 3; after, those two moves are left unplayed and the
+  car keeps to the street (77 → 75 moves, laws unchanged). A cached replay of W15 cannot check it: Jev's cache key holds
+  the pictures, which render a little differently each run (the replay stopped at the first question, unpaid).
+
 ## Evidence and cost, as they land
 
 | Step | Date | Tests | Evidence | Model calls | Cost |
@@ -649,4 +736,6 @@ quarter, and a new `before` snapshot with the models and settings in.
 | M10a–c models as code | 2026-11-09 | models 7/7 | 23 of 23 of volume 1's nominated things pass the contract (12 first run, 19 after the scaled rule, 4 rewrites) | 62 work-model requests | $0.108 |
 | M10d warehouse | 2026-11-09 | | 17 of 135 small things bound to a kit part, 117 none | 9 | $0.020 |
 | M10e–f, M11 | 2026-11-09 | Pi skill loader 7/7 | first quarter with models: laws identical; 2 landmarks drawn, their lots' heights from their models | 2 | $0.004 |
+| M8d handles + profiles, M10g–i warehouse | 2026-11-09 | warehouse 5/5, sim-settings 2/2, settings-commands 4/4, schema 6/6, engine 184/184 | first quarter identical with no override; the pine drawn for 1,944 trees; panels on a host list 75 keys and 807 parts | none | none |
+| W15 paid volume 1 | 2026-11-09 | | 286 of 286 scenes after one crash fixed (1c354b8); laws L6 6, L9 3, L10 7 (W14: 5, 3, 7); 23 of 23 models drawn; no road drive (two vehicles walked up stairs: fixed after); 127 held | 516 + 224 Jev, 255 + 58 system 2 | $0.15 rerun + about $0.07 crashed attempt + $0.13 models = about $0.34 |
 

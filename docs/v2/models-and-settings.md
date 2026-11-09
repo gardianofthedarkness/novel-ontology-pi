@@ -141,3 +141,107 @@ The steps, each with its tests, evidence and cost, are milestones M8 (settings),
 M12 (bodies) and the paid run W15 in [milestones.md](milestones.md); the decision is in the journal,
 [world-engine-v2.md](world-engine-v2.md) §2.0.23. Open: how many models per book (cost is small: about 2,000 tokens a
 thing).
+
+## 8. Handles for anything, and the warehouse registry (M8d, M10g–i; the user, 2026-11-09)
+
+The user, after W15: "We will do m8d first, but not only think about American or European or anything, think of it as
+anything. We should have guidance in the skill to have agent being able to register their own model warehouse, search
+in internet to supply the warehouse, and connect warehouse to configurations." And whether to use the blog's warehouse
+management system.
+
+### 8.1 gkNextEngine's warehouse, and what we take
+
+- `gnb scad catalog` evaluates every kit module and writes one record per module: its category from the module's name
+  (the second segment: `cw_bldg_barn` is a `bldg`), footprint, height, zMin, centre, triangles, colours, warnings, ok.
+  We already read its output: `catalog.json` (12 kits, 668 modules) is what `novel model parts|bind` search.
+- `ScadLibrary` is a parts browser inside their C++/Vulkan engine (a preview and parameters on the left, the modules by
+  category on the right), driven by their agent scripts. It is their engine's; ours is World · Live.
+- Taken: one evaluated record per part whatever its source; the name contract as the default classifier of a SCAD kit;
+  a browser of our own. Not taken: their engine or its tools.
+
+### 8.2 Handles are the schema's own interface
+
+World · Live gets a **Settings** panel generated from `config/world.schema.json`: the groups with their `about` and
+`after`; every key with its value, where it came from (default, universe, book, place), unit and range (a slider for a
+ranged number, a field for the rest); the tables as rows (`fill.ops` as its list of operators). Its scope is the book,
+or the place shown. A change goes `POST /play/settings` to the host, which runs `settingsSet` (checked against the
+schema, written to its layer, logged with the panel's `why`, `--before` as a tick) and answers with the problems or
+with when it takes effect. Nothing in it is a region: "an East Asian megacity" is only today's defaults.
+
+**Profiles** are named sets of overrides, nothing more: `novel settings profile save <novel> <name> --why` keeps the
+overrides in force as `<universe>/profiles/<name>.json`; `profile apply <novel> <name> --why [--before]` sets each one
+through the schema; `profile list`. Anyone makes one ("a European old town", "a space colony", "my test city"); none is
+built in.
+
+### 8.3 The warehouse registry
+
+One registry of sources, `~/claude-world-first/model-packs/warehouse.json` (`NOVEL_WAREHOUSE` moves it), outside any
+library because packs are shared by every library:
+
+```json
+{ "version": 1, "sources": { "gk": { "kind": "scad", "path": "gknextengine-scad", "licence": "MIT",
+  "url": "https://github.com/gameknife/gkNextEngine", "fetched": "2026-11-09", "by": "claude", "note": "668 modules" } } }
+```
+
+A source's catalogue is `<path>/catalog.json` in gk's record shape, built by us (`novel warehouse add|refresh`):
+
+- a **SCAD kit** (`kind: scad`): every `module name()` with no required parameter in every `.scad` file is evaluated with
+  OpenSCAD and measured as a model is (`evaluate`, `measure`, `solidOf`): footprint, height, zMin, closed, pieces,
+  triangles, colours; its category from the name's second segment, or from `--categories '{"regex": "category"}'`;
+- a **glTF/GLB folder** (`kind: gltf`): every `.glb` or `.gltf` measured and baked with the playground baker's reader
+  (size, triangles; positions and indices to `<path>/meshes/<part>.mesh.json` in the player's mesh shape, grey where a
+  file has no colours); its category from its folder or a `--categories` map.
+
+Our own `universe/models` is the source `own`; gk's kits are `kit` and the baked CC0 packs `pack`, registered at first
+use so the references already written keep working. A part is `<source>:<part>`.
+
+`novel warehouse`:
+
+| Command | Does | Model calls |
+| --- | --- | --- |
+| `list [--source <name>]` | The sources, their counts by category, licences, paths | none |
+| `add <name> <path> --licence <SPDX> --why <text> [--from <url>] [--kind scad\|gltf] [--categories <json>]` | Registers a folder already on disk and builds its catalogue. Refused unless the licence is allowed (CC0-1.0, MIT, Apache-2.0, BSD-2-Clause, BSD-3-Clause, CC-BY-4.0 with its attribution kept); `--allowed-by "<the user's words>"` records the user's OK for another | none |
+| `fetch <name> <url> --licence <SPDX> --ok "<the user's words>" [--path <folder in the repository>] [--limit <MB>]` | Downloads a git repository (or one folder of it) or a zip into its own new folder under the packs root, keeps its LICENSE and writes SOURCE.txt (url, commit, date), then `add`. Never without `--ok`: a download needs the user's permission, asked with the name, licence and size. Default limit 200 MB (13 GB free on this Mac) | none |
+| `refresh <name>` | Rebuilds a source's catalogue | none |
+| `find "<words>" [--kind <thing kind>] [--category <c>] [--size <m>] [--source <name>] [--top N]` | Searches every catalogue: words against name and category (synonyms from the kinds' categories), a size filter near the reading's size, and, when the local embedding server is up, embeddings of "name, category, size" ranked by the words. Results as `<source>:<part>` with size and category | none (local) |
+| `show <source>:<part>` | Its record; `--still <file.png>` renders it with OpenSCAD for an agent that can look | none |
+| `use <source>:<part> for <slot> <novel> --why <text> [--place <id>] [--before] [--floors a b]` | Connects a part to a configuration slot (8.4); sugar over `novel settings set` | none |
+
+### 8.4 Connecting the warehouse to the configuration
+
+Each slot is a setting in the schema, so it resolves by layer, logs, diffs, snapshots and shows in the handles like
+every other knob:
+
+| Slot | Setting | Layers | Drawn as |
+| --- | --- | --- | --- |
+| `prop:<kind>` (tree, street-light, bench, bin, car, bollard) | `fill.props` `{ "tree": "kit:cw_nature_pine" }` | universe, book, place | the export puts each used part's mesh in the page's `scadModels` and the reference on the landscape's `props`; the player draws the kind as the part (one instanced mesh a kind, as now) instead of the plain shape |
+| `vehicle:<kind>` (a car, a bus, …) | `models.vehicles` `{ "a bus": "kit:cw_veh_bus" }` | universe, book | `carModel`: after a thing's own model, before transport.json's pick |
+| `kind:<thing kind>` (a small weapon, …) | `models.parts` `{ "a small weapon": "kit:cw_wpn_knife" }` | universe, book | `novel model bind` binds a thing of that kind to it without asking the work model; `novel model use <thing> <part>` stays per thing |
+| `use:<building use>` / `role:<role>` | the `models.uses` table, `uses.<use>.fill[<part>] = [floors]` | universe, book | like a landmark shell: `scad:` on the lot, the lot's plan scaling it |
+
+When it shows: props and uses at the next run or rehearsal (the fill is built then); vehicles and kinds at the next
+director run. No model call anywhere.
+
+### 8.5 The skill
+
+`skills/novel-models/SKILL.md` grows "Your own warehouse": register, supply, connect. Supply says where to look (Kenney,
+KayKit, Quaternius, Poly Haven, OpenGameArt filtered to CC0; GitHub OpenSCAD libraries whose LICENSE is MIT, Apache or
+BSD; per-asset sites like Sketchfab or Poly Pizza only asset by asset), what never to take (GPL, CC-NC, CC-ND, no
+licence, anything whose licence is unclear), and the rules: ask the user before any download with its name, licence
+and size; a download goes into its own new folder and nothing from it is ever run as a script; keep its LICENSE; record
+the URL. Pi's manifest and allowlist take `novel warehouse`.
+
+### 8.6 World · Live
+
+A **Warehouse** panel beside Settings: the sources and categories, the parts with size and category, a search box
+(`GET /play/warehouse.json?find=…`), and Assign to a slot (`POST /play/warehouse/use`, the same `why`). A part's
+preview is its mesh in a small view when the part is on the page (the player's own `scadGeometry`), else its size and
+category; a still later.
+
+### 8.7 Tests, evidence, cost
+
+Tests: a scratch SCAD kit of three modules and a one-file glTF folder registered and catalogued (records, categories,
+the licence gate), `find` by words and size, `use` writing the setting and refusing a bad slot or part, profiles save
+and apply, the host's settings and warehouse routes. Evidence: the first quarter's rehearsal identical with no
+override; with `prop:tree` bound to a kit tree, the page's `scadModels` holds it and the trees' instanced mesh is the
+part's geometry; a settings change from the panel lands in the layer's log. Cost: none.

@@ -148,11 +148,31 @@ export async function bindKit(novelDir: string, row: { label: string; id: string
   return { record, ...result };
 }
 
+/**
+ * Bind a thing to any warehouse part (`<source>:<part>`; src/v2/models/warehouse.ts): a kit module is rendered and checked
+ * as `bindKit` does; a glTF, baked or own part's mesh is copied in as the thing's, at the part's own size.
+ */
+export async function bindPart(novelDir: string, row: { label: string; id: string; kind: string; size: number[] | null }, ref: string, by: string, why?: string) {
+  if (ref.startsWith("kit:")) return bindKit(novelDir, row, ref.slice(4), by);
+  const WH = await import("./warehouse.js"), part = await WH.partOf(ref, { novelDir }), mesh = part ? await WH.meshOfPart(ref, { novelDir }) : null;
+  if (!part || !mesh) throw new Error(`No part ${ref} in the warehouse (novel warehouse find "<words>"; list shows the sources).`);
+  const store = storeOf(novelDir); await mkdir(store, { recursive: true });
+  await writeJson(join(store, `${row.id}.mesh.json`), mesh);
+  const catalog = await catalogOf(novelDir);
+  const record: Record_ = { id: row.id, label: row.label, kind: row.kind, state: "part", part: ref, by, at: new Date().toISOString(), size: mesh.size, triangles: mesh.t.length / 3, problems: [], warnings: [`${part.category}, ${part.unit === "kit" ? "kit units" : "metres"}${why ? `; bound: ${why}` : ""}`] };
+  catalog.models[row.id] = record; catalog.names[row.label] = row.id;
+  await writeJson(join(store, "catalog.json"), catalog);
+  return { record, ok: true, problems: [] as string[], warnings: record.warnings ?? [] };
+}
+
 /** The work model picks a kit part for each thing that takes one (a shortlist by kind; "none" when nothing fits). */
 export async function pickParts(rows: Nomination[], sentences: Map<string, { text: string }>, writer: Writer, batch = 15) {
-  const modules = await kitModules(), picks: { id: string; module: string | null }[] = [], usage = { prompt: 0, completion: 0, requests: 0 };
-  for (let n = 0; n < rows.length; n += batch) {
-    const group = rows.slice(n, n + batch), categories = [...new Set(group.flatMap((row) => KIT_CATEGORIES[row.kind] ?? ["prop"]))];
+  const modules = await kitModules(), picks: { id: string; module: string | null; ref?: string }[] = [], usage = { prompt: 0, completion: 0, requests: 0 };
+  // The warehouse's slot for a kind (`models.parts`, novel warehouse use <part> for kind:<kind>; milestones M10i): a thing
+  // of that kind takes the part the configuration names, and the work model is not asked about it.
+  const slots = setting<Record<string, string | null>>("models.parts"), asked = rows.filter((row) => { const ref = slots[row.kind]; if (ref) { picks.push({ id: row.id, module: null, ref }); return false; } return true; });
+  for (let n = 0; n < asked.length; n += batch) {
+    const group = asked.slice(n, n + batch), categories = [...new Set(group.flatMap((row) => KIT_CATEGORIES[row.kind] ?? ["prop"]))];
     const shortlist = modules.filter((m) => categories.includes(m.category)).map((m) => `${m.name} (${m.category}, ${m.footprint.join("×")} m, ${m.height} m tall)`);
     const items = group.map((row) => { const line = [...sentences.values()].find((s) => s.text.includes(row.label))?.text ?? ""; return `${row.id}: ${row.label} (${row.kind})${line ? ` — ${line.slice(0, 120)}` : ""}`; });
     const reply = await writer.generateWithInfo({ system: "You match things from a novel to the closest 3D part in a parts library, or none when no part is that kind of thing. Reply with a JSON object {\"<id>\": \"<module name>\" | \"none\"} for every id given.", prompt: [`Parts (name, category, footprint, height):`, ...shortlist, "", "Things:", ...items].join("\n"), jsonSchema: { type: "object" }, maxTokens: 2000 });

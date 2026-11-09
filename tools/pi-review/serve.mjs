@@ -12,6 +12,7 @@ import { resolveAlbumAsset } from './album.mjs';
 import { configuredLibraryBindings, readLibraryLive, withLibraryLive } from './library-live.mjs';
 import { readUniverseTimePlace } from './universe-time-place.mjs';
 import { runReport, reportPage } from './run-report.mjs';
+import { applySetting, settingsView, useWarehousePart, warehouseView } from './sim-settings.mjs';
 import { addDirectorNote, directorAlbum, directorDev, directorSky, directorFile, directorReading, directorNotes, directorReview, pagePolicy, liveFrames, livePicture, liveState, liveWorld, simulationLivePage, simulationNowPage, simulationPage, simulationVendor, simulationWorldPage, terrainStep } from './sim-play.mjs';
 
 const requestLimit = 15000;
@@ -178,7 +179,7 @@ export async function createViewer({ port = 4324, origin, expiresAt, readLive = 
       const route = url.pathname.match(/^\/view\/([a-zA-Z0-9_-]+)(\/.*)$/);
       if (!route || Buffer.byteLength(route[1]) !== Buffer.byteLength(access) || !timingSafeEqual(Buffer.from(route[1]), Buffer.from(access))) { send(401); return; }
       const scopedPath = route[2];
-      const allowed = scopedPath === '/api/pi/messages' || scopedPath === '/play/terrain/step' || scopedPath === '/play/notes' ? 'POST' : scopedPath === '/api/live/stream' ? 'GET' : 'GET, HEAD';
+      const allowed = scopedPath === '/api/pi/messages' || scopedPath === '/play/terrain/step' || scopedPath === '/play/notes' || scopedPath === '/play/settings' || scopedPath === '/play/warehouse/use' ? 'POST' : scopedPath === '/api/live/stream' ? 'GET' : 'GET, HEAD';
       if (!allowed.split(', ').includes(request.method)) { send(405, undefined, { Allow: allowed }); request.resume(); return; }
       if (scopedPath === '/api/pi/messages') {
         if (!piConsole) { send(404); request.resume(); return; }
@@ -211,6 +212,22 @@ export async function createViewer({ port = 4324, origin, expiresAt, readLive = 
         const step = await bounded(async () => terrainStep(await resolveWorkspace(volume), mode));
         if (!step) { send(400); return; }
         send(200, JSON.stringify(step), { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store' });
+        return;
+      }
+      if (scopedPath === '/play/settings.json' || scopedPath === '/play/settings' || scopedPath === '/play/warehouse.json' || scopedPath === '/play/warehouse/use') {
+        // The handles (sim-settings.mjs; milestones M8d, M10i): the settings as the schema describes them and the warehouse,
+        // read; a change or a part's connection written through the same commands an agent runs, with the panel's why.
+        const volume = url.searchParams.get('volume') ?? 'active';
+        if (!resolveWorkspace || volume !== 'active' && (!/^[1-9]\d*$/.test(volume) || !Number.isSafeInteger(Number(volume)))) { send(404); request.resume(); return; }
+        const jsonOut = { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store' };
+        if (scopedPath === '/play/settings.json') { const place = url.searchParams.get('place'); if (place && !/^[\w:-]{1,80}$/.test(place)) { send(400); return; } send(200, JSON.stringify(await bounded(async () => settingsView(await resolveWorkspace(volume), { place }))), jsonOut); return; }
+        if (scopedPath === '/play/warehouse.json') { const q = key => url.searchParams.get(key); send(200, JSON.stringify(await bounded(async () => warehouseView(await resolveWorkspace(volume), { find: q('find') ?? '', kind: q('kind'), category: q('category'), source: q('source'), size: q('size'), top: q('top') ?? 40 }))), jsonOut); return; }
+        let body = '';
+        for await (const chunk of request) { body += chunk; if (body.length > 16384) { send(413); return; } }
+        let parsed = null; try { parsed = JSON.parse(body); } catch { /* a bad body */ }
+        if (!parsed || typeof parsed !== 'object') { send(400); return; }
+        const reply = await bounded(async () => (scopedPath === '/play/settings' ? applySetting(await resolveWorkspace(volume), parsed) : useWarehousePart(await resolveWorkspace(volume), parsed)));
+        send(reply?.error ? 400 : 200, JSON.stringify(reply), jsonOut);
         return;
       }
       if (scopedPath === '/play/dev.json' || scopedPath === '/play/dev/file') {

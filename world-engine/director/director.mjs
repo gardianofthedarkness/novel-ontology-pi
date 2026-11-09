@@ -172,7 +172,13 @@ export async function direct(novelDir, { reading, readingPath = null, prefilm = 
   const MD = await load('dist/src/v2/models/models.js'), modelCatalog = await MD.catalogOf(novelDir), modelStore = MD.storeOf(novelDir), scadMeshes = new Map();
   for (const [id, record] of Object.entries(modelCatalog.models ?? {})) if (record.state === 'ok' || (record.state === 'part' && String(record.part).startsWith('kit:'))) { const mesh = JSON.parse(await readFile(join(modelStore, `${id}.mesh.json`), 'utf8').catch(() => 'null')); if (mesh) scadMeshes.set(id, mesh); }
   const scadOf = name => { const id = modelCatalog.names?.[String(name ?? '')]; return id && scadMeshes.has(id) ? id : null; };
-  const carModel = (prop, name) => { if (!prop?.kind) return null; const own = scadOf(name); if (own) return `scad:${own}`; if (!vehicleModels) return null; const model = TR.modelOf(transport, String(name ?? ''), prop.kind); return model && vehicleModels.models?.[model] ? model : null; };
+  // The warehouse's vehicle slots (`models.vehicles`, novel warehouse use <part> for vehicle:<kind>; milestones M10i): a
+  // vehicle of a kind with no model of its own is drawn as the part the configuration names, its mesh on the page as a
+  // model's is (src/v2/models/warehouse.ts meshOfPart; the page id of a part is idOfRef).
+  const WH = await load('dist/src/v2/models/warehouse.js'), PR = await load('dist/src/v2/models/partRefs.js'), vehicleSlots = setting('models.vehicles');
+  for (const ref of Object.values(vehicleSlots)) if (ref && !scadMeshes.has(PR.idOfRef(ref))) { const mesh = await WH.meshOfPart(ref, { novelDir }).catch(() => null); if (mesh) scadMeshes.set(PR.idOfRef(ref), mesh); }
+  const slotModel = kind => { const ref = vehicleSlots[kind]; return ref && scadMeshes.has(PR.idOfRef(ref)) ? `scad:${PR.idOfRef(ref)}` : null; };
+  const carModel = (prop, name) => { if (!prop?.kind) return null; const own = scadOf(name); if (own) return `scad:${own}`; const slot = slotModel(prop.kind); if (slot) return slot; if (!vehicleModels) return null; const model = TR.modelOf(transport, String(name ?? ''), prop.kind); return model && vehicleModels.models?.[model] ? model : null; };
   const scadSize = model => (String(model ?? '').startsWith('scad:') ? scadMeshes.get(model.slice(5))?.size ?? null : null);
   const ownerOf = name => transport?.props?.[String(name ?? '')]?.owner ?? null;
   // The settei cast's ability sheet (universe/abilities.json): what each person can do to move. A move goes one of those
@@ -183,6 +189,11 @@ export async function direct(novelDir, { reading, readingPath = null, prefilm = 
   // `item:<label>`) has a sheet as abilities do; a ridden move goes the carrier's way, a vehicle's own move its own.
   const carrierOf = id => { if (!id) return null; if (id.startsWith('item:')) return MT.carrierSheet({ prop: propOf(id.slice(5)) }); const prop = slotProp(id); return prop?.vehicle ? MT.carrierSheet({ prop }) : MT.carrierSheet({ person: abilitySheet?.people?.[id] ?? { move: {} } }); };
   const ownVehicle = id => { const prop = slotProp(id); return prop?.vehicle ? MT.carrierSheet({ prop }) : null; };
+  // A vehicle that keeps to the ground (a car, a van, a train, a boat: it rides and does not fly) never takes stairs, a jump
+  // or a fall: its own way (`ride:<×>`) is the level ground, and a drive the roads and their decks. A path that changes its
+  // floor moved it as a person (W15: unit 154's car run up an office tower's stairs to floor 3 by a layout note; unit
+  // 179's van up six floors by the on-foot way a ride falls back to, which is for a rider who gets off).
+  const groundVehicle = id => { const sheet = ownVehicle(id); return sheet?.move?.ride && !sheet.move.flight ? sheet : null; };
   const howFor = (person, ability, otherwise, riding = null) => {
     if (riding && carrierOf(riding)) return MT.wayOf({ carrier: carrierOf(riding), otherwise });
     if (ownVehicle(person)) return MT.wayOf({ carrier: ownVehicle(person), otherwise });
@@ -356,6 +367,7 @@ export async function direct(novelDir, { reading, readingPath = null, prefilm = 
       const withLine = data => ({ ...data, ...(skyPage ? { sky: { units: skyPage } } : {}), people: Object.fromEntries(Object.entries(data.people ?? {}).map(([id, person]) => { const prop = slotProp(id); return [id, prop?.shape ? { ...person, prop: { kind: prop.kind, shape: prop.shape, size: scadSize(carModel(prop, propSheet?.ids?.[id] ?? person.name)) ?? prop.size, airborne: prop.airborne ?? 0, ...(prop.vehicle ? { vehicle: true } : {}), ...(carModel(prop, propSheet?.ids?.[id] ?? person.name) ? { model: carModel(prop, propSheet?.ids?.[id] ?? person.name) } : {}), ...(ownerOf(propSheet?.ids?.[id]) && ownerOf(propSheet?.ids?.[id]) !== 'not said' ? { owner: ownerOf(propSheet?.ids?.[id]) } : {}) } } : person]; })), models: { ...(data.models ?? {}), ...vehiclesUsed(data), ...furnitureUsed() }, ...(scadMeshes.size || data.scadModels ? { scadModels: { ...(data.scadModels ?? {}), ...scadUsed(data) } } : {}), ...(E.rooms?.size ? { rooms: [...E.rooms.values()] } : {}), macro: (data.macro ?? []).map(node => (bornOf.has(node.id) ? { ...node, born: bornOf.get(node.id) } : node)), things: [...(data.things ?? []), ...thingsOnPage()], scenes: data.scenes.map(entry => { const piece = played.has(entry.id) ? pieceOf(played.get(entry.id)) : null; return piece ? { ...entry, starts: piece.starts, events: piece.events, cast: piece.cast, landed: true } : { ...entry, landed: false }; }) });
       const dense = id => { const { i, j, k } = W.cellOf(world, id), g = page.world; return ((k + g.ok) * g.NZ + (j + g.oj)) * g.NX + (i + g.oi); };
       const at = id => { const p = W.nodePos(world, id); return [p.x, p.y, p.z]; };
+      const changesFloor = path => { if (!path || path.length < 2 || path.drove || path.air) return false; const y0 = at(path[0])[1]; return path.some(id => Math.abs(at(id)[1] - y0) > 1); };
       const lotOf = (x, z) => world.lotAt.get(W.cellKey(Math.floor(x / CELL), Math.floor(z / CELL)));
       const lotName = index => { const lot = world.lots[index]; return lot.label ?? `the ${lot.role ?? 'building'} (${lot.height ?? lot.floors} floors)`; };
       // What stands at a point, in words: a building's room, corridor or stairs on a floor, its roof, open ground, the air.
@@ -1247,7 +1259,9 @@ export async function direct(novelDir, { reading, readingPath = null, prefilm = 
           sceneRecord.cards.push(cardRecord);
           const event = { id: card.id, text: card.sentences.map(id => text.get(id)?.text ?? '').join('').slice(0, 120), actors: card.people.filter(person => positions[person.id] && person.how.some(how => PRESENT.has(how))).map(person => person.id) };
           scene.events.push(event);
-          const moveTo = (person, path, how, why, { quiet = false } = {}) => {
+          const moveTo = (person, path, how, why, { quiet = false, thrown = false } = {}) => {
+            // A ground vehicle's path that changes floor is no way for it (`groundVehicle`): held like any walk not found.
+            if (!thrown && groundVehicle(person) && changesFloor(path)) { walk.failed = `${slotProp(person)?.kind ?? 'a vehicle'} keeps to the level ground: no way there but stairs`; walk.code = 'NO_PATH'; why = why ?? walk.failed; path = null; }
             // Reachable (L10): a move no walk reaches is held with why, and nobody moves. A quiet move (the background's
             // routine, a graded step) that finds no walk is left unplayed without a law.
             if (path && path.length < 2) { cardRecord.moves.push({ person, why: why ?? 'already there', moved: false }); return; }
@@ -1277,6 +1291,8 @@ export async function direct(novelDir, { reading, readingPath = null, prefilm = 
             carrying = true;
             try {
               for (const other of along) {
+                // A ground vehicle stays where it is when its rider's way changes floor (they go on on foot).
+                if (groundVehicle(other) && changesFloor(path)) { cardRecord.moves.push({ person: other, why: `stays: ${slotProp(other)?.kind ?? 'a vehicle'} keeps to the level ground (${names.get(person) ?? person} goes on on foot)`, moved: false }); continue; }
                 // Aboard first: one who stands apart runs to where the ride starts, then goes with it.
                 const key = `${scene.id}|${card.id}|${other}`, earlier = E.moves.get(key), from = positions[other];
                 const board = from[0] === path[0] ? [from[0]] : walk(scene, `${key}|boards|${person}`, from, [path[0]], 'run');
@@ -1697,7 +1713,7 @@ export async function direct(novelDir, { reading, readingPath = null, prefilm = 
               const thrown = exchange.knockback ? measure(exchange.knockback, t) : 0;
               if (t && entry.outcome === 'hit' && thrown >= BODY / 2) {
                 const target = away(a ?? [t[0] - 1, t[1], t[2]], at(positions[exchange.target][0]), thrown);
-                if (target !== null) moveTo(exchange.target, walk(scene, `${scene.id}|${card.id}|${exchange.target}|thrown|${exchange.sentence}`, positions[exchange.target], [target], 'run'), 'run', `fight: thrown ${Math.round(thrown)} m by ${a ? names.get(exchange.attacker) ?? exchange.attacker : 'the blow'} (${entry.attack})`, { quiet: true });
+                if (target !== null) moveTo(exchange.target, walk(scene, `${scene.id}|${card.id}|${exchange.target}|thrown|${exchange.sentence}`, positions[exchange.target], [target], 'run'), 'run', `fight: thrown ${Math.round(thrown)} m by ${a ? names.get(exchange.attacker) ?? exchange.attacker : 'the blow'} (${entry.attack})`, { quiet: true, thrown: true });
               } else if (t && entry.outcome === 'dodged') {
                 const p = at(positions[exchange.target][0]), side = a ? [-(p[2] - a[2]), p[0] - a[0]] : [1, 0], d = Math.hypot(...side) || 1, aim = [p[0] + side[0] / d * 2, p[2] + side[1] / d * 2], pool = near(p, 1, 3);
                 if (pool.length) moveTo(exchange.target, walk(scene, `${scene.id}|${card.id}|${exchange.target}|dodges|${exchange.sentence}`, positions[exchange.target], [pool.reduce((x, y) => (Math.hypot(y.x - aim[0], y.z - aim[1]) < Math.hypot(x.x - aim[0], x.z - aim[1]) ? y : x)).id], 'run'), 'run', `fight: dodges ${a ? names.get(exchange.attacker) ?? exchange.attacker : ''}`.trim(), { quiet: true });

@@ -21,7 +21,7 @@ test("show lists every key with where it came from; a prefix narrows it", async 
   const all = await settingsShow(novel);
   assert.ok(all.count >= 60 && all.changed === 0);
   const fill = await settingsShow(novel, { prefix: "fill" });
-  assert.deepEqual(fill.settings.map((row) => row.key).sort(), ["fill.buildingArea", "fill.ops", "fill.streets"]);
+  assert.deepEqual(fill.settings.map((row) => row.key).sort(), ["fill.buildingArea", "fill.ops", "fill.props", "fill.streets"]);
   assert.equal(fill.settings[0].from, "default");
 });
 

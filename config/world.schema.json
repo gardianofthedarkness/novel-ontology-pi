@@ -158,6 +158,21 @@
    ],
    "kind": "knob"
   },
+  "fill.props": {
+   "default": {},
+   "unit": "part per prop kind",
+   "meaning": "Which warehouse part draws each kind of street furniture the fill operators put down (tree, street-light, bench, bin, car, bollard): a map kind -> <source>:<part> (novel warehouse find|use); a kind with none is drawn as its plain shape.",
+   "used": [
+    "src/v2/world/fillOps.ts PROP_KINDS",
+    "world-engine/world/export-strand-demo.mjs props"
+   ],
+   "layers": [
+    "universe",
+    "book",
+    "place"
+   ],
+   "kind": "presentation"
+  },
   "landscape.peak": {
    "default": 600,
    "unit": "m",
@@ -1459,6 +1474,32 @@
     "universe"
    ],
    "kind": "hard"
+  },
+  "models.vehicles": {
+   "default": {},
+   "unit": "part per vehicle kind",
+   "meaning": "Which warehouse part draws a vehicle of each kind (a car, a van or a truck, a bus, a train or a carriage, a motorbike or a bicycle, a boat, a helicopter, an aircraft, a drone) when the thing has no model of its own: a map kind -> <source>:<part>; else the transport specialist's pick among the baked cars, else the page's form from parts.",
+   "used": [
+    "world-engine/director/director.mjs carModel"
+   ],
+   "layers": [
+    "universe",
+    "book"
+   ],
+   "kind": "presentation"
+  },
+  "models.parts": {
+   "default": {},
+   "unit": "part per thing kind",
+   "meaning": "Which warehouse part a thing of each kind is bound to by novel model bind before the work model is asked (a small weapon, a handheld thing, a bag or a box, and any kind the nomination gives a part): a map kind -> <source>:<part>.",
+   "used": [
+    "src/v2/models/models.ts pickParts"
+   ],
+   "layers": [
+    "universe",
+    "book"
+   ],
+   "kind": "presentation"
   }
  },
  "tables": {

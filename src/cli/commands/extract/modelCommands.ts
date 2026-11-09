@@ -6,7 +6,7 @@
 import { readFile } from "node:fs/promises";
 import { join, resolve } from "node:path";
 import { workModelFromEnv } from "../../../ground/connectors/workModel.js";
-import { bindKit, logUsage, nominateBuildings, recheckModel, briefOf, catalogOf, checkModel, idOf, kitModules, KIT_CATEGORIES, nominate, nominationsOf, pickParts, propsOf, putModel, readingOf, saveNominations, storeOf, writeModel, type Nomination } from "../../../v2/models/models.js";
+import { bindKit, bindPart, logUsage, nominateBuildings, recheckModel, briefOf, catalogOf, checkModel, idOf, kitModules, KIT_CATEGORIES, nominate, nominationsOf, pickParts, propsOf, putModel, readingOf, saveNominations, storeOf, writeModel, type Nomination } from "../../../v2/models/models.js";
 import { loadWorkspaceSentences } from "./timeplaceCommands.js";
 
 async function sceneMap(novelDir: string, reading?: string) {
@@ -79,15 +79,10 @@ export async function modelCheck(novelDir: string, thing: string | null) {
 }
 
 export async function modelUse(novelDir: string, thing: string, part: string, options: { why?: string } = {}) {
-  if (!/^(kit|pack):[\w.-]+$/.test(part)) throw new Error("A part is kit:<module> (gkNextEngine's SCAD kits) or pack:<model> (our CC0 packs).");
+  if (!/^[a-z][a-z0-9_-]*:[\w.-]+$/.test(part)) throw new Error("A part is <source>:<part>: kit:<module> (gkNextEngine's SCAD kits), pack:<model> (the baked CC0 packs), own:<id>, or a source registered with novel warehouse add (novel warehouse find \"<words>\").");
   const row = await rowOf(novelDir, thing);
-  if (part.startsWith("kit:")) { const made = await bindKit(novelDir, row, part.slice(4), process.env.NOVEL_AGENT ?? "agent"); return { label: row.label, id: row.id, part, state: made.record.state, size: made.record.size ?? null, problems: made.record.problems, warnings: made.record.warnings }; }
-  const catalog = await catalogOf(novelDir);
-  catalog.models[row.id] = { id: row.id, label: row.label, kind: row.kind, state: "part", part, by: process.env.NOVEL_AGENT ?? "agent", at: new Date().toISOString(), ...(options.why ? { problems: [], warnings: [`bound: ${options.why}`] } : {}) };
-  catalog.names[row.label] = row.id;
-  const { writeFile, rename, mkdir } = await import("node:fs/promises"), file = join(storeOf(novelDir), "catalog.json");
-  await mkdir(storeOf(novelDir), { recursive: true }); await writeFile(`${file}.tmp`, `${JSON.stringify(catalog, null, 1)}\n`); await rename(`${file}.tmp`, file);
-  return { label: row.label, id: row.id, part };
+  const made = await bindPart(novelDir, row, part, process.env.NOVEL_AGENT ?? "agent", options.why);
+  return { label: row.label, id: row.id, part, state: made.record.state, size: made.record.size ?? null, problems: made.record.problems, warnings: made.record.warnings };
 }
 
 export async function modelShow(novelDir: string, thing: string) {
@@ -104,9 +99,9 @@ export async function modelBind(novelDir: string, options: { limit?: number } = 
   const { picks, usage } = await pickParts(rows, sentences, writer), out = [];
   for (const pick of picks) {
     const row = rows.find((entry) => entry.id === pick.id)!;
-    if (!pick.module) { out.push({ label: row.label, id: row.id, kind: row.kind, part: null }); continue; }
-    const made = await bindKit(novelDir, row, pick.module, "work model");
-    out.push({ label: row.label, id: row.id, kind: row.kind, part: pick.module, state: made.record.state, problems: made.record.problems });
+    if (!pick.module && !pick.ref) { out.push({ label: row.label, id: row.id, kind: row.kind, part: null }); continue; }
+    const made = pick.ref ? await bindPart(novelDir, row, pick.ref, "the configuration (models.parts)") : await bindKit(novelDir, row, pick.module!, "work model");
+    out.push({ label: row.label, id: row.id, kind: row.kind, part: pick.ref ?? pick.module, state: made.record.state, problems: made.record.problems });
   }
   await logUsage(novelDir, { op: "bind", ...usage, things: rows.length });
   return { asked: rows.length, bound: out.filter((row) => (row as { state?: string }).state === "part").length, none: out.filter((row) => !row.part).length, failed: out.filter((row) => (row as { state?: string }).state === "failed").length, usage, rows: out };

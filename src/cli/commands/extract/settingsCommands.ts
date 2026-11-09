@@ -9,7 +9,7 @@
 import { existsSync } from "node:fs";
 import { mkdir, readFile, rename, writeFile } from "node:fs/promises";
 import { dirname, join, resolve } from "node:path";
-import { forgetLayers, layersOf, merge, problemsOf, resolveSetting, schema, table, universeFor, type Layer } from "../../../v2/settings.js";
+import { forgetLayers, layersOf, merge, overridesOf, problemsOf, resolveSetting, schema, table, universeFor, type Layer } from "../../../v2/settings.js";
 import { latestSnapshot, libraryOf, readSnapshot, takeSnapshot } from "../../../ground/workspace/universe.js";
 
 interface LayerFile { values?: Record<string, unknown>; tables?: Record<string, unknown>; places?: Record<string, { values?: Record<string, unknown>; tables?: Record<string, unknown> }>; log?: unknown[] }
@@ -148,4 +148,44 @@ export async function settingsDiff(novelDir: string, options: { from?: string } 
   const added = now.filter((row) => !before.has(id(row))), removed = then.filter((row) => !after.has(id(row)));
   const changed = now.filter((row) => before.has(id(row)) && !same(before.get(id(row))!.value, row.value)).map((row) => ({ ...row, was: before.get(id(row))!.value }));
   return { against: options.from, added, removed, changed, count: added.length + removed.length + changed.length };
+}
+
+// ---- profiles (milestones M8d): a named set of overrides and nothing more ----------------------------------------------
+
+interface Profile { version: 1; name: string; at: string; why: string; by: string | null; from: string; overrides: { layer: Layer; place: string | null; key: string; value: unknown; table: boolean }[] }
+const profilesDir = (novelDir: string) => { const universe = universeFor(resolve(novelDir)); if (!universe) throw new Error(`${novelDir} has no universe folder two levels up: profiles live in a library (novel library init).`); return join(universe, "profiles"); };
+const profileName = (name: string) => { if (!/^[a-z0-9][a-z0-9_-]{0,47}$/i.test(name)) throw new Error("A profile's name is letters, digits, - and _ (e.g. old-town, space-colony)."); return name; };
+
+/** Keep the overrides in force (every layer and place) as a profile the universe holds; any agent or user makes one. */
+export async function settingsProfileSave(novelDir: string, name: string, options: { why?: string; by?: string }) {
+  if (!options.why?.trim()) throw new Error("--why <text> is required: say what this profile is.");
+  const scope = scopeOf(novelDir), overrides = overridesOf({ book: scope.book, universe: scope.universe }).map(({ layer, place, key, value, table: isTable }) => ({ layer, place, key, value, table: isTable }));
+  const profile: Profile = { version: 1, name: profileName(name), at: new Date().toISOString(), why: options.why, by: options.by ?? process.env.NOVEL_AGENT ?? null, from: scope.book, overrides };
+  const file = join(profilesDir(novelDir), `${profile.name}.json`);
+  await mkdir(dirname(file), { recursive: true }); await writeFile(`${file}.${process.pid}.tmp`, `${JSON.stringify(profile, null, 1)}\n`); await rename(`${file}.${process.pid}.tmp`, file);
+  return { saved: profile.name, file, overrides: overrides.length, keys: [...new Set(overrides.map((entry) => entry.key))], next: `novel settings profile apply <novel-dir> ${profile.name} --why <text>` };
+}
+
+/** Set a profile's overrides one by one through the schema (each checked, layered and logged; a place's to its place). */
+export async function settingsProfileApply(novelDir: string, name: string, options: { why?: string; before?: boolean; by?: string }) {
+  if (!options.why?.trim()) throw new Error("--why <text> is required.");
+  const file = join(profilesDir(novelDir), `${profileName(name)}.json`);
+  if (!existsSync(file)) { const have = await settingsProfileList(novelDir); throw new Error(`No profile ${name}${have.profiles.length ? ` (have: ${have.profiles.map((entry) => entry.name).join(", ")})` : ""}.`); }
+  const profile = JSON.parse(await readFile(file, "utf8")) as Profile, applied: { key: string; place: string | null; layer: Layer }[] = [], refused: { key: string; place: string | null; problem: string }[] = [];
+  for (const [n, entry] of profile.overrides.entries()) {
+    try {
+      const set = await settingsSet(novelDir, entry.key, JSON.stringify(entry.value), { place: entry.place ?? undefined, layer: entry.layer === "place" ? undefined : entry.layer, why: `profile ${profile.name}: ${options.why}`, isTable: entry.table, by: options.by, before: options.before && n === profile.overrides.length - 1 });
+      applied.push({ key: entry.key, place: entry.place, layer: set.layer });
+    } catch (error) { refused.push({ key: entry.key, place: entry.place, problem: String((error as Error).message ?? error) }); }
+  }
+  return { applied: profile.name, overrides: applied.length, refused, keys: [...new Set(applied.map((entry) => entry.key))], takesEffect: "props, fill and landscape settings at the next run or rehearsal; the rest at the next director run", next: `novel settings diff ${novelDir}` };
+}
+
+/** The universe's profiles. */
+export async function settingsProfileList(novelDir: string) {
+  const dir = profilesDir(novelDir), { readdir } = await import("node:fs/promises");
+  const names = existsSync(dir) ? (await readdir(dir)).filter((entry) => entry.endsWith(".json")) : [];
+  const profiles = [];
+  for (const entry of names) { const profile = JSON.parse(await readFile(join(dir, entry), "utf8")) as Profile; profiles.push({ name: profile.name, at: profile.at, why: profile.why, by: profile.by, overrides: profile.overrides.length, keys: [...new Set(profile.overrides.map((item) => item.key))] }); }
+  return { dir, profiles, next: profiles.length ? `novel settings profile apply <novel-dir> ${profiles[0].name} --why <text>` : "novel settings profile save <novel-dir> <name> --why <text>" };
 }

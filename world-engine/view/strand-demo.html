@@ -1420,7 +1420,7 @@ function scadGeometry(id, mesh) {
   geometry.computeBoundingBox(); const box = geometry.boundingBox; geometry.translate(-(box.min.x + box.max.x) / 2, -box.min.y, -(box.min.z + box.max.z) / 2); geometry.computeVertexNormals();
   geometry.userData.shared = true; scadGeometries.set(id, geometry); return geometry;
 }
-window.__models = () => ({ on: MODELS_ON, models: Object.keys(data.scadModels ?? {}).length, drawn: scadGeometries.size });
+window.__models = () => ({ on: MODELS_ON, models: Object.keys(data.scadModels ?? {}).length, drawn: scadGeometries.size, props: world.children.filter((child) => child.isInstancedMesh && child.userData.props).map((child) => ({ kind: child.userData.props, part: child.userData.part ?? null, count: child.count })) });
 function vehicleForm(kind, model, fill, edges) {
   const dims = VEHICLE_DIMS[kind];
   if (!dims && !model) return null;
@@ -1884,12 +1884,21 @@ let decor = () => {};
       bench: [new THREE.BoxGeometry(1.8, 0.5, 0.6).translate(0, 0.45, 0), 0x8a6a4a], bin: [new THREE.CylinderGeometry(0.35, 0.3, 0.9, 8).translate(0, 0.45, 0), 0x5a6a72],
       car: [new THREE.BoxGeometry(4.4, 1.5, 1.8).translate(0, 0.75, 0), 0x7a8fa8], bollard: [new THREE.CylinderGeometry(0.15, 0.15, 0.9, 6).translate(0, 0.45, 0), 0x9aa4ad],
     };
-    for (const [kind, [geometry, color]] of Object.entries(PROP_LOOK)) {
-      const own = props.filter(([what]) => what === kind);
-      if (!own.length) continue;
-      const mesh = new THREE.InstancedMesh(geometry, new THREE.MeshStandardMaterial({ color, roughness: 0.85 }), own.length);
-      own.forEach(([, x, z, turn], i) => { q.setFromAxisAngle(up, -(turn ?? 0)); m.compose(new THREE.Vector3(x, 0, z), q, new THREE.Vector3(1, 1, 1)); mesh.setMatrixAt(i, m); });
-      mesh.userData.props = kind; world.add(mesh);
+    // A kind drawn as a warehouse part where its landscape names one (fill.props; milestones M10i): the part's mesh from
+    // scadModels, instanced like the plain shape, scaled where the part is in kit units; the Models button turns it off.
+    const groups = new Map();
+    for (const entry of data.landscapes ?? []) for (const prop of entry.props ?? []) {
+      const [kind] = prop, slot = MODELS_ON ? entry.propModels?.[kind] : null, id = slot && String(slot.model ?? "").startsWith("scad:") ? slot.model.slice(5) : null, part = id && data.scadModels?.[id] ? id : null;
+      const key = `${kind}|${part ?? ""}`;
+      if (!groups.has(key)) groups.set(key, { kind, part, scale: part ? slot.scale ?? 1 : 1, items: [] });
+      groups.get(key).items.push(prop);
+    }
+    for (const { kind, part, scale, items } of groups.values()) {
+      if (!PROP_LOOK[kind] && !part) continue;
+      const geometry = part ? scadGeometry(part, data.scadModels[part]) : PROP_LOOK[kind][0], material = part ? scadLook : new THREE.MeshStandardMaterial({ color: PROP_LOOK[kind][1], roughness: 0.85 });
+      const mesh = new THREE.InstancedMesh(geometry, material, items.length);
+      items.forEach(([, x, z, turn], i) => { q.setFromAxisAngle(up, -(turn ?? 0)); m.compose(new THREE.Vector3(x, 0, z), q, new THREE.Vector3(scale, scale, scale)); mesh.setMatrixAt(i, m); });
+      mesh.userData.props = kind; if (part) mesh.userData.part = part; world.add(mesh);
     }
   }
   // A city's expressway (world-engine/world/highways.mjs, kept by the terrain's transport step): decks on piers over the

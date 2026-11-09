@@ -68,7 +68,8 @@ import { SIM_USAGE, simPick, simRun, simShow, simStrands, simTerrain } from "./c
 import { sourceGrep, sourceSimilar } from "./commands/extract/sourceCommands.js";
 import { worldAnswer, worldBatch, worldPool } from "./commands/extract/worldCommands.js";
 import { castAsk, castMerge, castReview, castSheet, castShow, sky } from "./commands/extract/castCommands.js";
-import { settingsDiff, settingsExplain, settingsSet, settingsShow, settingsUnset } from "./commands/extract/settingsCommands.js";
+import { settingsDiff, settingsExplain, settingsProfileApply, settingsProfileList, settingsProfileSave, settingsSet, settingsShow, settingsUnset } from "./commands/extract/settingsCommands.js";
+import { warehouseAdd, warehouseFetch, warehouseFind, warehouseList, warehouseRefresh, warehouseShow, warehouseUse } from "./commands/extract/warehouseCommands.js";
 import { modelBind, modelBrief, modelCheck, modelList, modelNominate, modelParts, modelPut, modelShow, modelUse, modelWrite } from "./commands/extract/modelCommands.js";
 import { readingShow, sourceEpub, worldApply, worldCanon, worldHeld, worldLogShow, worldUndo } from "./commands/extract/worldReviewCommands.js";
 import { STAGE_USAGE, stageArchitecture, stageLandscape, stageLines, stageMovement, stageObjects, stagePrep, stageScale, stageShow } from "./commands/extract/stageCommands.js";
@@ -166,6 +167,14 @@ const COMMANDS: Record<string, string> = {
   "novel settings set <novel-dir> <key> '<JSON>' [--place <id>] [--layer universe|book] [--table] --why <text> [--before]": "Check a value against the schema, write it to its layer, log why; --before takes the book's new before snapshot (a full rerun restores the latest)",
   "novel settings unset <novel-dir> <key> [--place <id>] [--layer universe|book] [--table] --why <text> [--before]": "Take an override out: the value falls back to the layer below",
   "novel settings diff <novel-dir> [--from <snapshot-id>]": "Every override in force, or what changed in the settings files since a snapshot",
+  "novel settings profile save|apply|list <novel-dir> [<name>] --why <text> [--before]": "A profile is a named set of overrides and nothing more (<universe>/profiles/<name>.json): save the overrides in force as one, apply one through the schema, list them",
+  "novel warehouse list [--source <name>] [<novel-dir>]": "The model warehouse's sources (gkNextEngine's kits, the baked CC0 packs, the universe's own models, yours) with counts by category and licences",
+  "novel warehouse add <name> <folder> --licence <SPDX> --why <text> [--from <url>] [--kind scad|gltf] [--categories '<json>'] [--allowed-by <text>]": "Register a folder of SCAD kits or glTF files already on disk and build its catalogue (OpenSCAD evaluates each module; glTF files are measured and baked); CC0, MIT, Apache, BSD and CC-BY-4.0 pass, any other licence only with the user's recorded OK",
+  "novel warehouse fetch <name> <https-url> --licence <SPDX> --ok '<the user\'s words>' --why <text> [--path <folder>] [--limit <MB>]": "Download a git repository (or one folder of it) or a zip into its own new folder under the packs root, LICENSE and SOURCE.txt kept, then add it. Never without the user's OK: ask them first with the name, licence and size",
+  "novel warehouse refresh <name>": "Rebuild a source's catalogue",
+  "novel warehouse find '<words>' [--kind '<thing kind>'] [--category <c>] [--size <m>] [--source <name>] [--top N] [<novel-dir>]": "Parts ranked for a few words over every catalogue (name, category, the kind's categories, size closeness; embeddings when the local server is up), as <source>:<part>",
+  "novel warehouse show <source>:<part> [--still <file.png>] [<novel-dir>]": "A part's record and mesh size; --still renders a picture with OpenSCAD",
+  "novel warehouse use <source>:<part> for <slot> <novel-dir> --why <text> [--place <id>] [--before] [--floors a b]": "Connect a part to a slot of the world's configuration: prop:<kind> (fill.props), vehicle:<kind> (models.vehicles), kind:<thing kind> (models.parts), use:<building use> or role:<role> (the models.uses table); written through the settings schema",
   "novel model nominate <novel-dir> [--reading <data.json>] [--top N]": "Rank the book's things (scenes, sentences, kind); the important, well-described ones get a model of their own, the rest a warehouse part (no model call)",
   "novel model list <novel-dir> [--state todo|made|failed|part]": "The nominated things and their models' state",
   "novel model brief <novel-dir> <thing>": "What a writer needs for one thing: its lines, kind, the reading's size, the contract and its checks",
@@ -173,7 +182,7 @@ const COMMANDS: Record<string, string> = {
   "novel model put <novel-dir> <thing> <file.scad|-> [--by <who>]": "Your own model code, held to the same contract",
   "novel model check <novel-dir> <thing> | --all": "Check kept models again against the contract as it stands (OpenSCAD, manifold-3d) and update their records; no model call",
   "novel model show <novel-dir> <thing>": "A model's code and record",
-  "novel model use <novel-dir> <thing> kit:<module>|pack:<model> [--why <text>]": "Bind a thing to a warehouse part instead of writing one",
+  "novel model use <novel-dir> <thing> <source>:<part> [--why <text>]": "Bind a thing to a warehouse part instead of writing one (kit:<module>, pack:<model>, own:<id>, or a registered source's part)",
   "novel model bind <novel-dir> [--limit N]": "The work model binds each thing that takes a part to the closest kit part (gkNextEngine's SCAD kits, MIT), rendered and checked",
   "novel model parts '<kind>'": "The kit parts a kind of thing may take, with their sizes (for choosing by hand)",
   "novel world canon <novel-dir> [--run <id>]": "What a director run settled into canon by its gates: presence, place, speakers, where each person is, strands (undoable)",
@@ -828,8 +837,16 @@ async function main(): Promise<void> {
   }
 
   if (cmd === "settings") {
-    const usage = "Usage: novel settings show <novel-dir> [<prefix>] [--place <id>] [--changed] | explain <key> | set <novel-dir> <key> '<JSON>' [--place <id>] [--layer universe|book] [--table] --why <text> [--before] | unset <novel-dir> <key> [...] --why <text> | diff <novel-dir> [--from <snapshot>]";
+    const usage = "Usage: novel settings show <novel-dir> [<prefix>] [--place <id>] [--changed] | explain <key> | set <novel-dir> <key> '<JSON>' [--place <id>] [--layer universe|book] [--table] --why <text> [--before] | unset <novel-dir> <key> [...] --why <text> | diff <novel-dir> [--from <snapshot>] | profile save|apply|list <novel-dir> [<name>] --why <text> [--before]";
     if (sub === "explain") { if (!positional[2]) throw new Error(usage); out(settingsExplain(positional[2]), pretty); return; }
+    if (sub === "profile") {
+      const what = positional[2], dir = positional[3], name = positional[4] && !positional[4].startsWith("--") ? positional[4] : undefined;
+      if (!["save", "apply", "list"].includes(what ?? "") || !dir) throw new Error("novel settings profile save|apply|list <novel-dir> [<name>] --why <text> [--before]");
+      if (what === "list") { out(await settingsProfileList(dir), pretty); return; }
+      if (!name) throw new Error(`novel settings profile ${what} <novel-dir> <name> --why <text>`);
+      out(what === "save" ? await settingsProfileSave(dir, name, { why: flag(positional, "--why") }) : await settingsProfileApply(dir, name, { why: flag(positional, "--why"), before: positional.includes("--before") }), pretty);
+      return;
+    }
     const novelDir = positional[2];
     if (!["show", "set", "unset", "diff"].includes(sub ?? "") || !novelDir) throw new Error(usage);
     const layer = flag(positional, "--layer") as "universe" | "book" | undefined, place = flag(positional, "--place"), why = flag(positional, "--why");
@@ -840,6 +857,26 @@ async function main(): Promise<void> {
     if (sub === "unset") { if (!positional[3]) throw new Error(usage); out(await settingsUnset(novelDir, positional[3], common), pretty); return; }
     out(await settingsDiff(novelDir, { from: flag(positional, "--from") }), pretty);
     return;
+  }
+
+  if (cmd === "warehouse") {
+    const usage = "Usage: novel warehouse list [--source <name>] [<novel-dir>] | add <name> <folder> --licence <SPDX> --why <text> [...] | fetch <name> <url> --licence <SPDX> --ok '<words>' --why <text> [--path <folder>] [--limit <MB>] | refresh <name> | find '<words>' [--kind '<thing kind>'] [...] | show <source>:<part> [--still <png>] | use <source>:<part> for <slot> <novel-dir> --why <text> [--place <id>] [--before] [--floors a b]";
+    const number = (name: string) => { const value = flag(positional, name); return value === undefined ? undefined : Number(value); }, free = (n: number) => (positional[n] && !positional[n].startsWith("--") ? positional[n] : undefined);
+    const json = (name: string) => { const value = flag(positional, name); if (value === undefined) return undefined; try { return JSON.parse(value) as Record<string, string>; } catch { throw new Error(`${name} takes JSON`); } };
+    if (sub === "list") { out(await warehouseList({ source: flag(positional, "--source"), novelDir: free(2) }), pretty); return; }
+    if (sub === "add") { if (!free(2) || !free(3)) throw new Error(usage); out(await warehouseAdd(positional[2], positional[3], { licence: flag(positional, "--licence") ?? "", why: flag(positional, "--why") ?? "", url: flag(positional, "--from") ?? null, kind: flag(positional, "--kind") as "scad" | "gltf" | undefined, categories: json("--categories"), allowedBy: flag(positional, "--allowed-by"), unit: flag(positional, "--unit") as "m" | "kit" | undefined }), pretty); return; }
+    if (sub === "fetch") { if (!free(2) || !free(3)) throw new Error(usage); out(await warehouseFetch(positional[2], positional[3], { licence: flag(positional, "--licence") ?? "", why: flag(positional, "--why") ?? "", ok: flag(positional, "--ok") ?? "", path: flag(positional, "--path"), limitMB: number("--limit"), kind: flag(positional, "--kind") as "scad" | "gltf" | undefined, categories: json("--categories"), allowedBy: flag(positional, "--allowed-by"), unit: flag(positional, "--unit") as "m" | "kit" | undefined }), pretty); return; }
+    if (sub === "refresh") { if (!free(2)) throw new Error(usage); out(await warehouseRefresh(positional[2]), pretty); return; }
+    if (sub === "find") { if (!free(2)) throw new Error(usage); out(await warehouseFind(positional[2], { kind: flag(positional, "--kind"), category: flag(positional, "--category"), size: number("--size"), source: flag(positional, "--source"), top: number("--top"), novelDir: free(3), embeddings: positional.includes("--embeddings") ? true : undefined }), pretty); return; }
+    if (sub === "show") { if (!free(2)) throw new Error(usage); out(await warehouseShow(positional[2], { still: flag(positional, "--still"), novelDir: free(3) }), pretty); return; }
+    if (sub === "use") {
+      if (!free(2) || positional[3] !== "for" || !free(4) || !free(5)) throw new Error(usage);
+      const floorsAt = positional.indexOf("--floors"), floors = floorsAt >= 0 ? [Number(positional[floorsAt + 1]), Number(positional[floorsAt + 2])] as [number, number] : undefined;
+      if (floors && floors.some((v) => !Number.isFinite(v))) throw new Error("--floors takes two numbers: the least and the most floors the part stands for");
+      out(await warehouseUse(positional[5], positional[2], positional[4], { why: flag(positional, "--why"), place: flag(positional, "--place"), before: positional.includes("--before"), floors }), pretty);
+      return;
+    }
+    throw new Error(usage);
   }
 
   if (cmd === "sky") {

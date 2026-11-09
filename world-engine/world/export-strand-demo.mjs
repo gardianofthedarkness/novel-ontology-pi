@@ -13,7 +13,7 @@ import { fileURLToPath, pathToFileURL } from 'node:url';
 import { parseArgs } from 'node:util';
 import { mapPicture } from './world-map.mjs';
 import { partsIn, snapMarkers } from './composite.mjs';
-import { setting } from '../../dist/src/v2/settings.js';
+import { setting, table } from '../../dist/src/v2/settings.js';
 
 const repository = resolve(dirname(fileURLToPath(import.meta.url)), '..', '..');
 const load = path => import(pathToFileURL(`${repository}/${path}`));
@@ -885,6 +885,24 @@ export async function strandDemo(novelDir, options) {
   // Each open place's landscape, filled (src/v2/world/landscape.ts), in map metres: what stands around the staged grids,
   // never on them (nor on the units and circles built inside it). Derived view data: only nominated buildings are canon.
   const modelSizes = Object.fromEntries(Object.entries(library.models).map(([id, model]) => [id, model.size]));
+  // The warehouse's parts the configuration names (src/v2/models/warehouse.ts; milestones M10i): a part per prop kind by
+  // place (fill.props) and parts standing for building uses and roles (the models.uses table, layered). Each one's mesh
+  // goes on the page as a landmark's does (landmarkMeshes, `scad:<idOfRef>`), its size known to the model pickers.
+  const WH = await load('dist/src/v2/models/warehouse.js'), PR = await load('dist/src/v2/models/partRefs.js'), modelTable = table('models.uses');
+  const isRef = model => typeof model === 'string' && !model.startsWith('scad:') && !library.models[model] && PR.PART_REF.test(model);
+  const partRefs = new Set(), partUnits = new Map(), partsMissing = [];
+  for (const place of Object.values(canvas.places)) for (const ref of Object.values(setting('fill.props', { place: place.id }) ?? {})) if (ref) partRefs.add(ref);
+  for (const entry of Object.values(modelTable.uses ?? {})) for (const ref of Object.keys(entry.fill ?? {})) if (isRef(ref)) partRefs.add(ref);
+  for (const ref of Object.values(modelTable.roles ?? {})) if (isRef(ref)) partRefs.add(ref);
+  for (const ref of partRefs) {
+    const part = await WH.partOf(ref, { novelDir }).catch(() => null), mesh = part?.ok ? await WH.meshOfPart(ref, { novelDir }).catch(() => null) : null;
+    if (mesh) { landmarkMeshes.set(PR.idOfRef(ref), mesh); modelSizes[ref] = mesh.size; partUnits.set(ref, part.unit ?? 'm'); } else partsMissing.push(ref);
+  }
+  /** A model picked by the table as the page draws it: a warehouse part as `scad:<id>` (its mesh on the page), anything else as itself. */
+  const asPage = model => { if (!isRef(model) || !landmarkMeshes.has(PR.idOfRef(model))) return model; landmarksUsed.add(PR.idOfRef(model)); return `scad:${PR.idOfRef(model)}`; };
+  // The plain shapes' heights (strand-demo.html PROP_LOOK): a part in kit units is scaled to them.
+  const PROP_HEIGHTS = { tree: 8, 'street-light': 7, bench: 0.7, bin: 0.9, car: 1.5, bollard: 0.9 };
+  const propModelsFor = placeId => { const out = {}; for (const [kind, ref] of Object.entries(setting('fill.props', { place: placeId }) ?? {})) { if (!ref || !landmarkMeshes.has(PR.idOfRef(ref))) continue; const id = PR.idOfRef(ref), mesh = landmarkMeshes.get(id); landmarksUsed.add(id); out[kind] = { model: `scad:${id}`, part: ref, scale: partUnits.get(ref) === 'kit' && mesh.size[1] > 0 ? Math.round(((PROP_HEIGHTS[kind] ?? 1) / mesh.size[1]) * 1000) / 1000 : 1 }; } return Object.keys(out).length ? out : null; };
   // On a plain map only terrain's ground stands: what terrain kept, and what a pool's members borrowed (no stand-in area's).
   const landscapes = Object.values(canvas.places).filter(place => place.landscape && (!options.plain || terrain?.sites?.[place.id]?.ground || place.landscape.patches.some(patch => patch.borrowed))).map(place => {
     const [wx, wz] = C.worldOf(canvas, place.id), round = value => Math.round(value * 10) / 10, filled = fillOf(place.landscape, place.id);
@@ -913,7 +931,7 @@ export async function strandDemo(novelDir, options) {
     }
     // Its height is its scenes' (the user, 2026-11-01): taller than any model of its use stands for, it is drawn as a tower
     // (its use's models yield to its kind's: useModels.ts), never cut down to its use's.
-    const tallest = use => Math.max(0, ...Object.values(UM.MODELS.uses[use]?.fill ?? {}).map(([, most]) => most));
+    const tallest = use => Math.max(0, ...Object.values(modelTable.uses[use]?.fill ?? {}).map(([, most]) => most));
     const asDecided = b => {
       const entry = decided.get(b.lot);
       if (!entry) return b;
@@ -969,9 +987,9 @@ export async function strandDemo(novelDir, options) {
     const grown = terrain?.mode === 'spawn' ? tallAndWide(placed, localRoads, fixedOf, podium) : { buildings: placed, roads: localRoads };
     // Then none stands inside another (tall.ts clearOverlaps): the city drawn at true size shows every overlap.
     const apartNow = clearOverlaps(grown.buildings, fixedOf), shaped = { ...grown, buildings: apartNow.buildings, overlapped: apartNow.overlapped, movedAside: apartNow.moved };
-    const buildings = [...shaped.buildings, ...sunk].map(b => { const patch = patchOf(b), era = LANDSCAPES[patch.type]?.era ?? 'modern'; if (b.landmark) landmarksUsed.add(b.landmark); return { id: `${place.id}:${b.lot}`, x: b.x + wx, z: b.z + wz, w: b.w, d: b.d, angle: b.angle, floors: b.floors, kind: b.kind, model: b.landmark ? `scad:${b.landmark}` : UM.modelFor({ ...b, era }, `${place.id}:${b.lot}`, modelSizes), ...(b.use ? { use: b.use } : {}), ...(b.base ? { base: b.base } : {}), ...(sunken(b) ? { y0: b.y0 } : {}), ...(b.plane ? { plane: b.plane } : {}), manifold: manifoldOf(patch), era, patch: patch.id }; });
+    const buildings = [...shaped.buildings, ...sunk].map(b => { const patch = patchOf(b), era = LANDSCAPES[patch.type]?.era ?? 'modern'; if (b.landmark) landmarksUsed.add(b.landmark); return { id: `${place.id}:${b.lot}`, x: b.x + wx, z: b.z + wz, w: b.w, d: b.d, angle: b.angle, floors: b.floors, kind: b.kind, model: b.landmark ? `scad:${b.landmark}` : asPage(UM.modelFor({ ...b, era }, `${place.id}:${b.lot}`, modelSizes, modelTable)), ...(b.use ? { use: b.use } : {}), ...(b.base ? { base: b.base } : {}), ...(sunken(b) ? { y0: b.y0 } : {}), ...(b.plane ? { plane: b.plane } : {}), manifold: manifoldOf(patch), era, patch: patch.id }; });
     // A composite building's parts, each its use's model inside its host (composite.mjs).
-    const parts = partsIn({ terrain, buildings, place, here, modelFor: (b, id) => UM.modelFor(b, id, modelSizes) });
+    const parts = partsIn({ terrain, buildings, place, here, modelFor: (b, id) => asPage(UM.modelFor(b, id, modelSizes, modelTable)) });
     // What lies under it (hallsOf, src/v2/world/underground.ts): malls, the storm water, deep facilities, in world metres.
     const shift = ([x, z]) => [Math.round((x + wx) * 10) / 10, Math.round((z + wz) * 10) / 10], under = U.hallsOf(place.landscape).filter(hall => !(borrowsSlot && hall.street)).map(hall => ({ ...hall, ...(hall.layer && hall.id === 'p0:under' ? { id: `${place.id}:under` } : {}), boxes: hall.boxes.map(box => { const [x, z] = shift([box.x, box.z]); return { ...box, x, z }; }), bores: hall.bores.map(bore => ({ ...bore, a: shift(bore.a), b: shift(bore.b) })), up: hall.up.map(shift) }));
     const roads = shaped.roads.map(road => ({ a: [road.a[0] + wx, road.a[1] + wz], b: [road.b[0] + wx, road.b[1] + wz], width: road.width, level: road.level }));
@@ -984,7 +1002,7 @@ export async function strandDemo(novelDir, options) {
     const patches = place.landscape.patches.map(patch => ({ id: patch.id, type: patch.type, era: LANDSCAPES[patch.type]?.era ?? 'modern', born: patch.born ?? null, centre: [round(patch.x + wx), round(patch.z + wz)], radius: round(patch.R), height: round(patch.H), manifold: manifoldOf(patch),
       outline: Array.from({ length: 48 }, (_, n) => { const angle = (n / 48) * Math.PI * 2, d = reachOf(patch, [patch.x + Math.cos(angle), patch.z + Math.sin(angle)]); return [round(patch.x + wx + Math.cos(angle) * d), round(patch.z + wz + Math.sin(angle) * d)]; }) }));
     return { place: place.id, types: place.landscape.patches.map(patch => patch.type), ...(shaped.thickened !== undefined ? { tall: { widened: shaped.widened, trimmed: shaped.trimmed, thickened: shaped.thickened, cleared: shaped.cleared, overlapped: shaped.overlapped, movedAside: shaped.movedAside } } : {}), patches, manifolds: buildings.map(b => b.manifold), buildings: buildings.map(b => [round(b.x), round(b.z), round(b.w), round(b.d), Math.round(b.angle * 1000) / 1000, b.floors]), bases: buildings.filter(b => b.base).map(b => [round(b.x), round(b.z), round(b.w), round(b.d), Math.round(b.angle * 1000) / 1000, b.base.floors]), parts: parts.map(part => [...part.box.slice(0, 4).map(round), Math.round(part.box[4] * 1000) / 1000, round(part.box[5]), round(part.box[6]), part.id, part.model, part.host, Math.round(part.area)]), waters: (filled.waters ?? []).map(water => [round(water.a[0] + wx), round(water.a[1] + wz), round(water.b[0] + wx), round(water.b[1] + wz), water.width]), roads: roads.map(road => [round(road.a[0]), round(road.a[1]), round(road.b[0]), round(road.b[1]), road.width, road.level]), plazas: filled.plazas.map(plaza => [round(plaza.x + wx), round(plaza.z + wz), round(plaza.r)]),
-      walls: filled.walls.map(([a, b]) => [round(a[0] + wx), round(a[1] + wz), round(b[0] + wx), round(b[1] + wz)]), ...(opsMade?.props.length ? { props: opsMade.props } : {}), source: { buildings, roads, plazas: filled.plazas.map(plaza => ({ x: plaza.x + wx, z: plaza.z + wz, r: plaza.r })), underground: under } };
+      walls: filled.walls.map(([a, b]) => [round(a[0] + wx), round(a[1] + wz), round(b[0] + wx), round(b[1] + wz)]), ...(opsMade?.props.length ? { props: opsMade.props, ...(propModelsFor(place.id) ? { propModels: propModelsFor(place.id) } : {}) } : {}), source: { buildings, roads, plazas: filled.plazas.map(plaza => ({ x: plaza.x + wx, z: plaza.z + wz, r: plaza.r })), underground: under } };
   });
   /** The theme of the manifold at a point: the era of the patch reaching it most surely (modern where no landscape does). */
   const themeAt = (x, z) => {
@@ -1515,7 +1533,7 @@ export async function strandDemo(novelDir, options) {
   const looseNow = worn => {
     const standing = new Set([...world.lots.map(lot => lot.source), ...(options.worldOnly ? shellsNow() : W.shellsOf(world)).map(shell => shell.source)]);
     return world.source.buildings.filter(b => !standing.has(b.id)).map(b => {
-      const model = b.model && (library.models[b.model] || (String(b.model).startsWith('scad:') && landmarkMeshes.has(b.model.slice(5)))) ? b.model : UM.roleModel({ role: W.roleOf(b.kind, b.floors), w: b.w, d: b.d, floors: b.floors, era: b.era }, `loose:${b.id}`, modelSizes);
+      const model = b.model && (library.models[b.model] || (String(b.model).startsWith('scad:') && landmarkMeshes.has(b.model.slice(5)))) ? b.model : asPage(UM.roleModel({ role: W.roleOf(b.kind, b.floors), w: b.w, d: b.d, floors: b.floors, era: b.era }, `loose:${b.id}`, modelSizes, modelTable));
       if (model) { if (String(model).startsWith('scad:')) landmarksUsed.add(model.slice(5)); else worn.add(model); }
       return [Math.round(b.x * 10) / 10, Math.round(b.z * 10) / 10, Math.round(b.w * 10) / 10, Math.round(b.d * 10) / 10, Math.round(b.angle * 1000) / 1000, b.floors, model ?? null];
     });
@@ -1587,7 +1605,7 @@ export async function strandDemo(novelDir, options) {
     if (options.worldOnly) for (const model of ['kk-tunnel', 'kk-mall', 'kk-military']) worn.add(model);
     // One world: a lot is named whichever place named it.
     const named = (placeId, index) => [...lotNames.values()].find(entry => entry.lot === index);
-    const shellOf = (placeId, lot, index) => { const name = named(placeId, index), own = !name && sourceModel.get(lot.source); if (own && String(own).startsWith('scad:') && landmarkMeshes.has(own.slice(5))) { landmarksUsed.add(own.slice(5)); return own; } if (own && library.models[own]) { worn.add(own); return own; } const floors = lot.height ?? lot.floors, model = UM.roleModel({ role: lot.role, w: lot.skeleton.nx * SKELETON_CELL, d: lot.skeleton.nz * SKELETON_CELL, floors: name?.model === 'skyscraper' ? Math.max(floors, 25) : floors, era: lot.era, named: name?.model }, `${placeId}:${index}`, modelSizes); if (model) worn.add(model); return model; };
+    const shellOf = (placeId, lot, index) => { const name = named(placeId, index), own = !name && sourceModel.get(lot.source); if (own && String(own).startsWith('scad:') && landmarkMeshes.has(own.slice(5))) { landmarksUsed.add(own.slice(5)); return own; } if (own && library.models[own]) { worn.add(own); return own; } const floors = lot.height ?? lot.floors, model = asPage(UM.roleModel({ role: lot.role, w: lot.skeleton.nx * SKELETON_CELL, d: lot.skeleton.nz * SKELETON_CELL, floors: name?.model === 'skyscraper' ? Math.max(floors, 25) : floors, era: lot.era, named: name?.model }, `${placeId}:${index}`, modelSizes, modelTable)); if (model && !String(model).startsWith('scad:')) worn.add(model); return model; };
     const shells = world.lots.map((lot, index) => shellOf('world', lot, index));
     // The terrain stage (§2.0.18): every building no one has reached yet stands as its shell (the engine's lot with its
     // tiling, destruction and inside switched off), drawn as a lot's shell is; reached, it stands as a full lot.
@@ -1606,6 +1624,7 @@ export async function strandDemo(novelDir, options) {
       i0: lot.i0, j0: lot.j0, nx: lot.nx, nz: lot.nz, floors: lot.floors, height: lot.height, born: lot.born, source: lot.source, manifold: lot.manifold, era: lot.era, place: lot.place,
       // A turned lot's plan (sx × sz cells, `cells` in its order) stands in its own frame [x, z, angle] at the building's true size.
       sx: lot.skeleton.nx, sz: lot.skeleton.nz, ...(lot.k0 ? { k0: lot.k0 } : {}), frame: lot.frame ? [Math.round(lot.frame.x * 100) / 100, Math.round(lot.frame.z * 100) / 100, Math.round(lot.frame.angle * 10000) / 10000] : null, cells: [...lot.skeleton.cells].join(''), rooms: lot.rooms.map(room => [room.floor, room.i0, room.j0, room.i1, room.j1, room.top ?? room.floor, ROOM_KINDS.indexOf(room.kind ?? 'room'), room.doors]) }));
+    if (partsMissing.length) notes.partsMissing = partsMissing;
     notes.world = { chunks: world.chunks.size, lots: world.lots.length, shells: worldShells.length, nodes: world.cells.length / 3, grid: [NX, NZ, K] };
     return {
       models: Object.fromEntries([...worn].filter(model => !String(model).startsWith('scad:')).map(model => [model, library.models[model]])), modelSource: library.source,
