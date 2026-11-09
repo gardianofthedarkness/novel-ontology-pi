@@ -180,6 +180,11 @@ export async function direct(novelDir, { reading, readingPath = null, prefilm = 
   const slotModel = kind => { const ref = vehicleSlots[kind]; return ref && scadMeshes.has(PR.idOfRef(ref)) ? `scad:${PR.idOfRef(ref)}` : null; };
   const carModel = (prop, name) => { if (!prop?.kind) return null; const own = scadOf(name); if (own) return `scad:${own}`; const slot = slotModel(prop.kind); if (slot) return slot; if (!vehicleModels) return null; const model = TR.modelOf(transport, String(name ?? ''), prop.kind); return model && vehicleModels.models?.[model] ? model : null; };
   const scadSize = model => (String(model ?? '').startsWith('scad:') ? scadMeshes.get(model.slice(5))?.size ?? null : null);
+  // What a vehicle does besides being seen (src/v2/models/interact.ts; milestones M15): its interaction sheet by kind and
+  // size with the book's overrides (models.interact); the vehicles the text broke, each with its wreck part for the page.
+  const IA = await load('dist/src/v2/models/interact.js');
+  const sheetOf = id => { const prop = slotProp(id); return prop?.vehicle ? IA.interactOf({ ref: vehicleSlots[prop.kind] ?? null, kind: prop.kind, size: prop.size }) : null; };
+  const wrecks = new Map();
   const ownerOf = name => transport?.props?.[String(name ?? '')]?.owner ?? null;
   // The settei cast's ability sheet (universe/abilities.json): what each person can do to move. A move goes one of those
   // ways only where the pre-film notes say the line has it in use (a move's or a journey's `ability`, in-use.json).
@@ -362,9 +367,9 @@ export async function direct(novelDir, { reading, readingPath = null, prefilm = 
       let heldBefore = new Map();
       // The vehicle models the page's people (a vehicle slot) and things are drawn as; only those go on the page.
       const vehiclesUsed = data => { const used = new Set([...Object.entries(data.people ?? {}).map(([id, person]) => carModel(slotProp(id), propSheet?.ids?.[id] ?? person.name)), ...thingsOnPage().map(thing => thing.vehicleModel), 'car-sedan'].filter(Boolean)); return Object.fromEntries([...used].filter(name => vehicleModels?.models?.[name]).map(name => [name, vehicleModels.models[name]])); };
-      const scadUsed = data => { const used = new Set([...Object.entries(data.people ?? {}).map(([id, person]) => carModel(slotProp(id), propSheet?.ids?.[id] ?? person.name)), ...thingsOnPage().map(thing => thing.vehicleModel)].filter(model => String(model ?? '').startsWith('scad:')).map(model => model.slice(5))); return Object.fromEntries([...used].map(id => [id, scadMeshes.get(id)])); };
+      const scadUsed = data => { const used = new Set([...Object.entries(data.people ?? {}).map(([id, person]) => carModel(slotProp(id), propSheet?.ids?.[id] ?? person.name)), ...thingsOnPage().map(thing => thing.vehicleModel), ...[...wrecks.values()].map(wreck => wreck.model)].filter(model => String(model ?? '').startsWith('scad:')).map(model => model.slice(5))); return Object.fromEntries([...used].map(id => [id, scadMeshes.get(id)])); };
       const furnitureUsed = () => Object.fromEntries([...new Set([...E.rooms.values()].flatMap(room => room.furniture.map(piece => `kk-furniture-${piece[0]}`)))].filter(name => furnitureModels?.models?.[name]).map(name => [name, furnitureModels.models[name]]));
-      const withLine = data => ({ ...data, ...(skyPage ? { sky: { units: skyPage } } : {}), people: Object.fromEntries(Object.entries(data.people ?? {}).map(([id, person]) => { const prop = slotProp(id); return [id, prop?.shape ? { ...person, prop: { kind: prop.kind, shape: prop.shape, size: scadSize(carModel(prop, propSheet?.ids?.[id] ?? person.name)) ?? prop.size, airborne: prop.airborne ?? 0, ...(prop.vehicle ? { vehicle: true } : {}), ...(carModel(prop, propSheet?.ids?.[id] ?? person.name) ? { model: carModel(prop, propSheet?.ids?.[id] ?? person.name) } : {}), ...(ownerOf(propSheet?.ids?.[id]) && ownerOf(propSheet?.ids?.[id]) !== 'not said' ? { owner: ownerOf(propSheet?.ids?.[id]) } : {}) } } : person]; })), models: { ...(data.models ?? {}), ...vehiclesUsed(data), ...furnitureUsed() }, ...(scadMeshes.size || data.scadModels ? { scadModels: { ...(data.scadModels ?? {}), ...scadUsed(data) } } : {}), ...(E.rooms?.size ? { rooms: [...E.rooms.values()] } : {}), macro: (data.macro ?? []).map(node => (bornOf.has(node.id) ? { ...node, born: bornOf.get(node.id) } : node)), things: [...(data.things ?? []), ...thingsOnPage()], scenes: data.scenes.map(entry => { const piece = played.has(entry.id) ? pieceOf(played.get(entry.id)) : null; return piece ? { ...entry, starts: piece.starts, events: piece.events, cast: piece.cast, landed: true } : { ...entry, landed: false }; }) });
+      const withLine = data => ({ ...data, ...(skyPage ? { sky: { units: skyPage } } : {}), people: Object.fromEntries(Object.entries(data.people ?? {}).map(([id, person]) => { const prop = slotProp(id); return [id, prop?.shape ? { ...person, prop: { kind: prop.kind, shape: prop.shape, size: scadSize(carModel(prop, propSheet?.ids?.[id] ?? person.name)) ?? prop.size, airborne: prop.airborne ?? 0, ...(prop.vehicle ? { vehicle: true } : {}), ...(carModel(prop, propSheet?.ids?.[id] ?? person.name) ? { model: carModel(prop, propSheet?.ids?.[id] ?? person.name) } : {}), ...(ownerOf(propSheet?.ids?.[id]) && ownerOf(propSheet?.ids?.[id]) !== 'not said' ? { owner: ownerOf(propSheet?.ids?.[id]) } : {}), ...(wrecks.has(id) ? { wreck: { model: wrecks.get(id).model, scene: wrecks.get(id).scene, event: wrecks.get(id).event, at: wrecks.get(id).at } } : {}) } } : person]; })), models: { ...(data.models ?? {}), ...vehiclesUsed(data), ...furnitureUsed() }, ...(scadMeshes.size || data.scadModels ? { scadModels: { ...(data.scadModels ?? {}), ...scadUsed(data) } } : {}), ...(E.rooms?.size ? { rooms: [...E.rooms.values()] } : {}), macro: (data.macro ?? []).map(node => (bornOf.has(node.id) ? { ...node, born: bornOf.get(node.id) } : node)), things: [...(data.things ?? []), ...thingsOnPage()], scenes: data.scenes.map(entry => { const piece = played.has(entry.id) ? pieceOf(played.get(entry.id)) : null; return piece ? { ...entry, starts: piece.starts, events: piece.events, cast: piece.cast, landed: true } : { ...entry, landed: false }; }) });
       const dense = id => { const { i, j, k } = W.cellOf(world, id), g = page.world; return ((k + g.ok) * g.NZ + (j + g.oj)) * g.NX + (i + g.oi); };
       const at = id => { const p = W.nodePos(world, id); return [p.x, p.y, p.z]; };
       const changesFloor = path => { if (!path || path.length < 2 || path.drove || path.air) return false; const y0 = at(path[0])[1]; return path.some(id => Math.abs(at(id)[1] - y0) > 1); };
@@ -1237,6 +1242,11 @@ export async function direct(novelDir, { reading, readingPath = null, prefilm = 
           const id = `item:${name}`, thing = things.get(id) ?? things.set(id, { id, name, size: 0.5, holder: null, at: null, broken: false, placed: [], events: [] }).get(id);
           thing.holder = person.who; thing.at = null; thing.events.push({ scene: scene.id, card: null, event: 'held', who: person.who });
         }
+        // Standing vehicles stand in the walk graph (milestones M15b): a ground vehicle's footprint as a thing while it
+        // stands (people walk round it or over it), lifted for a card it or its riders act in, so its own moves and their
+        // boarding are not blocked by it, and stood again where the card leaves it.
+        const standing = new Set();
+        const standAll = () => { for (const id of Object.keys(positions)) { const sheet = sheetOf(id), prop = slotProp(id); if (!sheet?.solid || sheet.layer !== 'ground' || (prop?.airborne ?? 0) > 0 || !positions[id] || wrecks.has(id)) continue; const p = at(positions[id][0]), size = prop?.size ?? [4, 2, 2]; if (E.standThing?.(id, { x: p[0], z: p[2], w: Math.max(1, size[0]), d: Math.max(1, size[2]), h: Math.max(1, size[1]) }) !== false) standing.add(id); } };
         for (const card of cards) {
           const cardRecord = { card: card.id, kind: card.kind, ...(card.pass ? { pass: true } : {}), event: scene.events.length, lines: card.sentences.map(line), moves: [] };
           // The beat's scale (M5): Jev's pictures and the moves' reach sized by its zoom (a street's 32 m without one).
@@ -1261,6 +1271,8 @@ export async function direct(novelDir, { reading, readingPath = null, prefilm = 
           scene.events.push(event);
           const moveTo = (person, path, how, why, { quiet = false, thrown = false } = {}) => {
             // A ground vehicle's path that changes floor is no way for it (`groundVehicle`): held like any walk not found.
+            // A wreck stays where it fell (milestones M15d): no later move plays for a vehicle the text broke.
+            if (wrecks.has(person)) { cardRecord.moves.push({ person, why: 'a wreck stays where it fell', moved: false }); return; }
             if (!thrown && groundVehicle(person) && changesFloor(path)) { walk.failed = `${slotProp(person)?.kind ?? 'a vehicle'} keeps to the level ground: no way there but stairs`; walk.code = 'NO_PATH'; why = why ?? walk.failed; path = null; }
             // Reachable (L10): a move no walk reaches is held with why, and nobody moves. A quiet move (the background's
             // routine, a graded step) that finds no walk is left unplayed without a law.
@@ -1283,6 +1295,7 @@ export async function direct(novelDir, { reading, readingPath = null, prefilm = 
           // stage, and everyone it carries); a vehicle off the stage drawn under its rider (the page's `mount`).
           const tiesNow = () => { const end = lastLine(card); return ties.filter(tie => (sentenceAt.get(tie.sentence) ?? Infinity) <= end); };
           const mountOf = id => { const prop = id.startsWith('item:') ? propOf(id.slice(5)) : slotProp(id); return prop?.vehicle ? { kind: prop.kind, size: prop.size, airborne: prop.airborne ?? 0 } : null; };
+          { const acting = new Set(card.people.map(person => person.id)); for (const tie of tiesNow()) if (acting.has(tie.who)) acting.add(tie.on); for (const id of [...standing]) if (acting.has(id) && E.liftThing?.(id) !== undefined) standing.delete(id); }
           let carrying = false;
           function carryAlong(person, path, how) {
             const live = tiesNow(), carrier = live.find(tie => tie.who === person)?.on ?? person, group = new Set([carrier, ...live.filter(tie => tie.on === carrier).map(tie => tie.who)]);
@@ -1915,7 +1928,18 @@ export async function direct(novelDir, { reading, readingPath = null, prefilm = 
             cardRecord.hit = { smoothed: true, told: blast.told, across: blast.r * 2, centre: blast.centre, struck: !!E.hits.get(event.id) };
           }
           const smoothedHere = blasts.some(entry => entry.container === scene.id && entry.told === card.id);
-          if (cardRecord.breaks && calls < budget && !smoothedHere) {
+          // A vehicle the text breaks (milestones M15c): the blast sized by its interaction sheet where it stands, no Jev
+          // question asked; its riders thrown clear; its wreck on the page from this card (M15d).
+          const broke = cardRecord.breaks ? [...new Set([...digestIn(dg?.breaks ?? [], card).filter(entry => entry.sure >= 0.7).map(entry => String(entry.what)), ...(cardRecord.breaksSaid ?? []).map(String)])] : [];
+          const crashed = [...new Set(broke.flatMap(what => Object.keys(positions).filter(id => slotProp(id)?.vehicle && !wrecks.has(id) && (() => { const label = String(propSheet?.ids?.[id] ?? names.get(id) ?? ''); return label.length > 1 && (what.includes(label) || label.includes(what)); })())))];
+          for (const id of crashed) {
+            const sheet = sheetOf(id), p = at(positions[id][0]), r = Math.max(1, sheet.crash.radius), strength = [0, 0.5, 0.7, 0.9, 1][sheet.crash.degree] ?? 0.7;
+            if (sheet.crash.degree > 0) { E.reach(p[0], p[2], r + 16); wakeBelow(positions); E.hitSphere(scene, { id: event.id }, { x: p[0], y: p[1], z: p[2], r }, strength, `${scene.id}|${event.id}|crash|${id}`); }
+            cardRecord.hit = { crash: id, across: r * 2, degree: sheet.crash.degree, struck: !!E.hits.get(event.id), centre: { x: Math.round(p[0] * 10) / 10, y: Math.round(p[1] * 10) / 10, z: Math.round(p[2] * 10) / 10 } };
+            if (sheet.breaks !== 'none') { const ref = sheet.wreck, mesh = ref ? await WH.meshOfPart(ref, { novelDir }).catch(() => null) : null; if (mesh) scadMeshes.set(PR.idOfRef(ref), mesh); wrecks.set(id, { scene: scene.id, event: scene.events.length - 1, model: mesh ? `scad:${PR.idOfRef(ref)}` : null, part: ref, at: { x: Math.round(p[0] * 10) / 10, y: Math.round(p[1] * 10) / 10, z: Math.round(p[2] * 10) / 10 } }); if (standing.has(id)) { E.liftThing?.(id); standing.delete(id); } }
+            for (const tie of tiesNow().filter(tie => tie.on === id && positions[tie.who])) { const ring = around(p[0], p[2], Math.max(4, r)).nodes.filter(node => node.type === 1 && Math.hypot(node.x - p[0], node.z - p[2]) >= Math.min(3, r / 2)).slice(0, 8).map(node => node.id); if (ring.length) moveTo(tie.who, walk(scene, `${scene.id}|${card.id}|${tie.who}|crash|${id}`, positions[tie.who], ring, 'run'), 'run', `crash: thrown clear of ${names.get(id) ?? propSheet?.ids?.[id] ?? id}`, { quiet: true, thrown: true }); }
+          }
+          if (cardRecord.breaks && calls < budget && !smoothedHere && !crashed.length) {
             const played = await grow(scene, run, true), at_ = Math.max(0, (played?.end ?? 0) - 0.02), slug = `${scene.id.slice(-3)}-${card.id.replace(/[^a-z0-9_]/gi, '_')}-hit`;
             await chrome.evaluate(`window.__stage.capture(${JSON.stringify({ id: `${slug}-look`, place: scene.placeId, at: at_, only: [scene.placeId], frame: [1440, 900] })})`);
             const spots = await chrome.evaluate(`window.__stage.impactSpots(${JSON.stringify({ place: scene.placeId })})`) ?? [];
@@ -1954,6 +1978,7 @@ export async function direct(novelDir, { reading, readingPath = null, prefilm = 
             if (changes.length) cardRecord.holdings = changes.map(entry => ({ ...entry, ...(ownerOf(entry.thing) && ownerOf(entry.thing) !== 'not said' ? { owner: ownerOf(entry.thing) } : {}) }));
             heldBefore = now;
           }
+          standAll();
           run.events.push({ at: Object.fromEntries(Object.entries(positions).map(([who, value]) => [who, value])) });
           // A card no one was asked about: the producer's camera on the people of the card, as they stood when it began.
           // The camera holds one group for a beat (M4; the user, 2026-11-03: the camera shifting back and forth): everyone

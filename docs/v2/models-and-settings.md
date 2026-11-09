@@ -433,7 +433,7 @@ kind):
 overrides it; `find` and `show` print the sheet in one line. Nothing crashes by itself: the text says when, the sheet
 says how much. The work model never sees any of this.
 
-### 11.3 The engine's use of it (M15b–d, to build)
+### 11.3 The engine's use of it (M15b–d, built 2026-11-09)
 
 1. **Standing vehicles as things** (M15b): a parked or landed vehicle enters the walk graph as a solid thing of its
    footprint (`solid`, its layer), and leaves it when it moves; a flying thing blocks nothing on the ground.
@@ -444,5 +444,8 @@ says how much. The work model never sees any of this.
 3. **The wreck** (M15d): a broken part is drawn as its `wreck` part at the crash point (or its own model in the rubble
    material, its structure cells fallen), and stays there as the other debris does.
 
-Evidence: `test/interact.test.ts` (defaults by kind and words and size, overrides, the setting's refusals); for M15b–d
-a rehearsal where a scene's text has a crash: the lot's cells broken by the sheet's radius, the wreck on the page.
+Evidence: `test/interact.test.ts` (defaults by kind and words and size, overrides, the setting's refusals); the first
+quarter's rehearsal unchanged in moves and laws with vehicles standing in the graph (236 → 236, 105 → 116 graph builds);
+unit 158's helicopter, destroyed by the text, blasted 24 m across from its sheet with no Jev question and left as the
+kit's wreck where it fell (the still in the scratchpad). Still to do: a broken item's wreck; the blast into the ground
+skin; the stand-in and cached-digest replay is how a crash is checked unpaid (`--stand-in`, a dead work-model URL).

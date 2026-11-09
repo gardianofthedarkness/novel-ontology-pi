@@ -1401,6 +1401,7 @@ function portraitsArrived(portraits) {
 const crowdShape = new THREE.CapsuleGeometry(0.22, 0.75, 3, 8), crowdLooks = new Map();
 // The look of a slot drawn as the thing it is (a vehicle, a weapon): the things' gold, a little brighter.
 const propLook = new THREE.MeshBasicMaterial({ color: 0xffd36e, transparent: true, opacity: 0.35, depthWrite: false }), propEdges = new THREE.LineBasicMaterial({ color: 0xffd36e, transparent: true, opacity: 0.9 });
+const wreckLook = new THREE.MeshBasicMaterial({ color: 0x9aa7b2, transparent: true, opacity: 0.3, depthWrite: false }), wreckEdges = new THREE.LineBasicMaterial({ color: 0x9aa7b2, transparent: true, opacity: 0.85 });
 sharedMaterials.add(propLook); sharedMaterials.add(propEdges);
 crowdShape.userData.shared = true;
 // Vehicles (the settei cast's kinds, world-engine/digest/settei.mjs KINDS): a car is one of the baked CC0 cars when the
@@ -1513,7 +1514,11 @@ for (const [id, person] of Object.entries(data.people)) {
     if (!vehicle) { const fill = shapeGeometry(person.prop.shape); form.add(new THREE.Mesh(fill, propLook), new THREE.LineSegments(new THREE.EdgesGeometry(fill), propEdges)); }
     form.scale.set(w, h, d); form.position.y = person.prop.airborne ?? 0; pawn.add(form);
     const body = new THREE.Mesh(), name = label(person.name, person.color, 24); name.position.y = (person.prop.airborne ?? 0) + h + 1.4; pawn.add(name);
-    body.userData.shared = true; pawns.set(id, { pawn, body, vehicle: !!vehicle, lift: (person.prop.airborne ?? 0) + h / 2 }); continue;
+    // Its wreck (milestones M15d): the part its interaction sheet names, in the rubble's grey, on the ground from the
+    // card where the text broke it; the vehicle's own form until then.
+    let wreck = null;
+    if (person.prop.wreck) { const wreckForm = vehicleForm(person.prop.kind, person.prop.wreck.model, wreckLook, wreckEdges) ?? vehicleForm(person.prop.kind, null, wreckLook, wreckEdges); if (wreckForm) { wreckForm.scale.set(w, h * 0.6, d); wreckForm.visible = false; pawn.add(wreckForm); wreck = { form: wreckForm, own: form, key: `${person.prop.wreck.scene}|${person.prop.wreck.event}`, at: person.prop.wreck.at ?? null }; } }
+    body.userData.shared = true; pawns.set(id, { pawn, body, vehicle: !!vehicle, lift: (person.prop.airborne ?? 0) + h / 2, ...(wreck ? { wreck } : {}) }); continue;
   }
   const tint = new THREE.Color(person.color), pawn = new THREE.Group();
   const body = new THREE.Mesh(new THREE.CapsuleGeometry(0.35, 0.95, 4, 12), new THREE.MeshStandardMaterial({ color: tint, emissive: tint, emissiveIntensity: 0.7, transparent: true })); body.position.y = 0.82; pawn.add(body);
@@ -2557,6 +2562,8 @@ function frame(now) {
   for (const [id, pawnEntry] of pawns) {
     const { pawn, body, vehicle } = pawnEntry;
     const move = segment.moves.find((entry) => entry.person === id), node = segment.positions[id];
+    // A wrecked vehicle: its wreck from the card that broke it, its own form before (and again when the replay rewinds).
+    if (pawnEntry.wreck) { const broken = time >= bornAt(pawnEntry.wreck.key); if (pawnEntry.wreck.form.visible !== broken) { pawnEntry.wreck.form.visible = broken; pawnEntry.wreck.own.visible = !broken; } if (broken) { const fell = pawnEntry.wreck.at; if (!pawn.parent) world.add(pawn); pawn.position.set((fell?.x ?? pawn.position.x + entry.cx) - entry.cx, 0, (fell?.z ?? pawn.position.z + entry.cz) - entry.cz); pawn.rotation.y = 0; continue; } }
     showMount(pawnEntry, move?.mount ?? null);
     if ((vehicle || pawnEntry.mountForm) && pawn.parent) headTo(id, pawn, dt); else if (pawn.rotation.y) { pawn.rotation.y = 0; headings.delete(id); }
     const travel = segment.kind === "macro" && segment.travels.find((entry) => entry.migration.person === id);

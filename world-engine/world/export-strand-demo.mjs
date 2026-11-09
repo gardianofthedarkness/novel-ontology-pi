@@ -175,6 +175,14 @@ export async function strandDemo(novelDir, options) {
   // What each change of the world touched (the research handoff's bounded repair): a window whose box no change since its
   // build touches stays as it was built, with the walks solved on it; a change with no boxes touches every window.
   const dirty = [], changed = (boxes = null) => { shared.version++; dirty.push({ version: shared.version, boxes }); };
+  // A thing the director stands in the world (a parked vehicle, by its interaction sheet; milestones M15b): its footprint
+  // in the walk graph as the digest's things stand, and out of it when it moves. Only the windows it touches rebuild.
+  const standThing = (id, { x, z, w, d, h }) => {
+    const footprint = { i0: Math.floor((x - w / 2) / 2), i1: Math.floor((x + w / 2) / 2), j0: Math.floor((z - d / 2) / 2), j1: Math.floor((z + d / 2) / 2), top: Math.max(1, Math.round(h / 3)), grounded: Math.max(w, d) <= 8 }, was = shared.things.get(id);
+    if (was && was.i0 === footprint.i0 && was.i1 === footprint.i1 && was.j0 === footprint.j0 && was.j1 === footprint.j1 && was.top === footprint.top) return false;
+    shared.things.set(id, footprint); changed([{ x0: Math.min(was?.i0 ?? footprint.i0, footprint.i0) * 2 - 4, x1: (Math.max(was?.i1 ?? footprint.i1, footprint.i1) + 1) * 2 + 4, z0: Math.min(was?.j0 ?? footprint.j0, footprint.j0) * 2 - 4, z1: (Math.max(was?.j1 ?? footprint.j1, footprint.j1) + 1) * 2 + 4 }]); return true;
+  };
+  const liftThing = id => { const was = shared.things.get(id); if (!was) return false; shared.things.delete(id); changed([{ x0: was.i0 * 2 - 4, x1: (was.i1 + 1) * 2 + 4, z0: was.j0 * 2 - 4, z1: (was.j1 + 1) * 2 + 4 }]); return true; };
   const overlaps = (a, b) => a.x0 <= b.x1 && b.x0 <= a.x1 && a.z0 <= b.z1 && b.z0 <= a.z1;
   const lotBounds = lot => ({ x0: lot.i0 * 2, x1: (lot.i0 + lot.nx) * 2, z0: lot.j0 * 2, z1: (lot.j0 + lot.nz) * 2 });
   const allWays = new Map();
@@ -1675,7 +1683,7 @@ export async function strandDemo(novelDir, options) {
   // line's starts, handed on so the loop plays forward card by card on the same world (no export again, no replay): it adds
   // its cards to the chosen scenes, its moves to `moves` and its positions to `runs`, streams the world in with `reach`, and
   // calls `assemble` for the page as far as it has played.
-  if (options.engine) await options.engine({ roadInputs: { roads: landscapes.flatMap(entry => entry.roads ?? []), highways: Object.values(terrain?.highways ?? {}).filter(highway => highway.lines?.length) }, world, W, graphOf, cost, reach, solve, onFoot, portalsNear, DEEP, deepAt, beamCeiling, sampleWalk, T, kappa, lambda, runs, moves, chosen, assemble, snapshot, names: inputs.names, hits, hitSphere, wake });
+  if (options.engine) await options.engine({ roadInputs: { roads: landscapes.flatMap(entry => entry.roads ?? []), highways: Object.values(terrain?.highways ?? {}).filter(highway => highway.lines?.length) }, world, W, graphOf, cost, reach, solve, onFoot, portalsNear, DEEP, deepAt, beamCeiling, sampleWalk, T, kappa, lambda, runs, moves, chosen, assemble, snapshot, names: inputs.names, hits, hitSphere, wake, standThing, liftThing });
   return data;
 }
 
