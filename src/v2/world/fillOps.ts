@@ -24,7 +24,8 @@ export function checkOps(ops: unknown): string[] {
     const at = `fill.ops[${n}]`;
     if (!op || typeof op !== 'object') { out.push(`${at} must be an object`); return; }
     if (!['scatter', 'line', 'ring'].includes(op.op)) out.push(`${at}.op must be scatter, line or ring`);
-    if (!(PROP_KINDS as readonly string[]).includes(op.what)) out.push(`${at}.what must be one of ${PROP_KINDS.join(', ')}`);
+    // A kind beyond the six built in (a wind turbine, a shrine lantern) is drawn only where fill.props connects a part to it (milestones M13; the no-hint test, 2026-11-09).
+    if (!(PROP_KINDS as readonly string[]).includes(op.what) && !/^[a-z][a-z0-9-]{0,30}$/.test(String(op.what))) out.push(`${at}.what must be one of ${PROP_KINDS.join(', ')}, or a kind's name (lower-case letters, digits, -) that fill.props connects a part to`);
     const number = (name: string, low: number, high: number, needed = false) => { if (op[name] === undefined) { if (needed) out.push(`${at}.${name} is needed`); return; } if (typeof op[name] !== 'number' || op[name] < low || op[name] > high) out.push(`${at}.${name} must be a number from ${low} to ${high}`); };
     if (op.op === 'scatter') { number('n', 1, 5000, true); number('gap', 0.5, 100); if (op.on !== undefined && !['open', 'street', 'plaza'].includes(op.on)) out.push(`${at}.on must be open, street or plaza`); }
     if (op.op === 'line') { number('every', 2, 400, true); number('offset', 0, 20); if (op.along !== undefined && !['arterial', 'collector', 'local', 'boulevard', 'avenue', 'any'].includes(op.along)) out.push(`${at}.along must be a road level or any`); if (op.side !== undefined && !['both', 'left', 'right'].includes(op.side)) out.push(`${at}.side must be both, left or right`); }

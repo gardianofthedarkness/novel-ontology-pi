@@ -67,10 +67,13 @@ export function catalogueOf(name: string, source: Source): Part[] {
 
 /** Our own models of a universe, as a source (`own:<id>`), where a novel is given. */
 export async function ownParts(novelDir: string): Promise<Part[]> {
-  const catalog = await catalogOf(novelDir);
+  const catalog = await catalogOf(novelDir), store = storeOf(novelDir);
+  // The model's English gloss: the first comment line of its code (the work model writes "<label> (wind turbine) ..."),
+  // so a search in English reaches a model named in the book's language.
+  const glossOf = (id: string) => { try { const first = readFileSync(join(store, `${id}.scad`), "utf8").split("\n").find((line) => line.trim().startsWith("//")) ?? ""; return first.replace(/^\s*\/\/\s*/, "").replace(/^[^\s(]*\s*/, "").replace(/[():,;]/g, " ").trim().slice(0, 120); } catch { return ""; } };
   // A model is named at birth (the user, 2026-11-09): its label's slug is its name, so `find "<label>"` recalls it exactly
   // and `own:<slug>` (or `own:<id>`) names it; the id stays as the page's and the store's key.
-  return Object.values(catalog.models).filter((record) => (record.state === "ok" || record.state === "part") && record.size).map((record) => ({ ref: `own:${slugOf(record.label) || record.id}`, source: "own", name: slugOf(record.label) || record.id, category: record.kind, footprint: [record.size![0], record.size![2]], height: record.size![1], triangles: record.triangles ?? 0, ok: true, note: record.label, id: record.id, unit: "m" as const }));
+  return Object.values(catalog.models).filter((record) => (record.state === "ok" || record.state === "part") && record.size).map((record) => ({ ref: `own:${slugOf(record.label) || record.id}`, source: "own", name: slugOf(record.label) || record.id, category: record.kind, footprint: [record.size![0], record.size![2]], height: record.size![1], triangles: record.triangles ?? 0, ok: true, note: [record.label, glossOf(record.id)].filter(Boolean).join(" "), id: record.id, unit: "m" as const }));
 }
 
 /** Every part of every source (and the universe's own, given a novel). */

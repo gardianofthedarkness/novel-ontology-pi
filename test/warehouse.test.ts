@@ -40,7 +40,8 @@ function cubeGlb(): Buffer {
 
 test("part references: the slot maps hold only kinds and references; a reference splits and gets a stable page id", () => {
   assert.deepEqual(checkPartMap("fill.props", { tree: "kit:cw_nature_pine", bench: null }), []);
-  assert.match(checkPartMap("fill.props", { lamp: "kit:x" }).join(" "), /not a kind here/);
+  assert.match(checkPartMap("fill.props", { "Lamp Post!": "kit:x" }).join(" "), /not a kind here/);
+  assert.deepEqual(checkPartMap("fill.props", { "wind-turbine": "kit:hc_prop_wind_turbine" }), [], "a kind of one's own");
   assert.match(checkPartMap("models.vehicles", { "a bus": "bus" }).join(" "), /part reference/);
   assert.deepEqual(checkPartMap("models.parts", { "a small weapon": "my-kit:knife_01" }), []);
   assert.deepEqual(problemsOf("fill.props", { tree: "kit:cw_nature_pine" }), []);
@@ -70,7 +71,7 @@ test("a glTF folder is registered and catalogued: one part, its size and colour,
   assert.equal(used.layer, "book"); assert.equal(used.pageId, `scad:${idOfRef("cubes:red_cube")}`);
   const file = JSON.parse(readFileSync(join(novel, "stage", "settings.json"), "utf8"));
   assert.deepEqual(file.values["fill.props"], { bin: "cubes:red_cube" });
-  await assert.rejects(WH.usePart(novel, "cubes:red_cube", "prop:lamp", { why: "x" }), /not a kind here/);
+  await assert.rejects(WH.usePart(novel, "cubes:red_cube", "prop:Lamp Post!", { why: "x" }), /not a kind here/);
   await assert.rejects(WH.usePart(novel, "cubes:no_such", "prop:tree", { why: "x" }), /No part/);
   const shop = await WH.usePart(novel, "cubes:red_cube", "use:shop", { why: "shops as cubes", floors: [1, 3] });
   assert.equal(shop.set.table, true);
@@ -121,9 +122,12 @@ test("a model named at birth is recalled exactly by its label, for nothing: own:
   const store = join(lib, "universe", "models"); mkdirSync(store, { recursive: true });
   const mesh = { p: [0, 0, 0, 1, 0, 0, 0, 1, 0], t: [0, 1, 2], c: [200, 200, 200], size: [1, 1, 0] };
   writeFileSync(join(store, "m0000abcd.mesh.json"), JSON.stringify(mesh));
+  writeFileSync(join(store, "m0000abcd.scad"), "// Advertising Van (loudspeaker truck) stylised, low-poly\nmodule thing() { cube(1); }\nthing();\n");
   writeFileSync(join(store, "catalog.json"), JSON.stringify({ version: 1, models: { m0000abcd: { id: "m0000abcd", label: "Advertising Van", kind: "a van or a truck", state: "ok", at: "2026-11-09T00:00:00Z", size: [5.9, 2.5, 2.5], triangles: 300 } }, names: { "Advertising Van": "m0000abcd" } }));
   const found = await WH.findParts("Advertising Van", { novelDir: novel });
   assert.equal(found.exact, true); assert.equal(found.parts[0].ref, "own:advertising_van"); assert.ok(found.parts[0].score >= 10);
+  const byGloss = await WH.findParts("loudspeaker truck", { novelDir: novel });
+  assert.equal(byGloss.parts[0]?.ref, "own:advertising_van", "the English gloss in the code's first comment line is searched too");
   const byWords = await WH.findParts("van", { novelDir: novel, kind: "a van or a truck" });
   assert.ok(byWords.parts.some((part) => part.ref === "own:advertising_van"), "its words find it among the kits' vans too");
   for (const ref of ["own:advertising_van", "own:m0000abcd", "own:Advertising_Van"]) { const part = await WH.partOf(ref, { novelDir: novel }); assert.equal(part?.id, "m0000abcd", ref); assert.deepEqual((await WH.meshOfPart(ref, { novelDir: novel }))?.size, [1, 1, 0], ref); }

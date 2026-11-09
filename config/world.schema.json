@@ -146,7 +146,7 @@
   "fill.ops": {
    "default": [],
    "unit": "operators",
-   "meaning": "What a place's fill scatters besides its buildings (trees, street lights, benches, bins, parked cars, bollards): a list of operators scatter (on open ground, along streets, in plazas), line (along roads of a level, every so many metres) and ring (round a point); never inside a building or on a carriageway.",
+   "meaning": "What a place's fill scatters besides its buildings (trees, street lights, benches, bins, parked cars, bollards, or any kind of your own that fill.props connects a part to): a list of operators scatter (on open ground, along streets, in plazas), line (along roads of a level, every so many metres) and ring (round a point); never inside a building or on a carriageway.",
    "used": [
     "src/v2/world/fillOps.ts applyOps",
     "world-engine/world/export-strand-demo.mjs props"
@@ -161,7 +161,7 @@
   "fill.props": {
    "default": {},
    "unit": "part per prop kind",
-   "meaning": "Which warehouse part draws each kind of street furniture the fill operators put down (tree, street-light, bench, bin, car, bollard): a map kind -> <source>:<part> (novel warehouse find|use); a kind with none is drawn as its plain shape.",
+   "meaning": "Which warehouse part draws each kind of street furniture the fill operators put down: the six built in (tree, street-light, bench, bin, car, bollard), or any kind of your own (wind-turbine, lantern) that a fill operator names in its `what`: a map kind -> <source>:<part> (novel warehouse find|use); a built-in kind with none is drawn as its plain shape, a kind of your own with none is not drawn.",
    "used": [
     "src/v2/world/fillOps.ts PROP_KINDS",
     "world-engine/world/export-strand-demo.mjs props"

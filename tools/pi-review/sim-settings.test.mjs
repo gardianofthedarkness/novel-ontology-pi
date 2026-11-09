@@ -49,6 +49,6 @@ test('the warehouse view lists the sources and the slots in use; a part goes to 
   const used = await useWarehousePart(novel, { part, slot: 'vehicle:a car', why: 'the test car' });
   assert.equal(used.ok, true); assert.equal(used.connected.slot, 'vehicle:a car');
   assert.deepEqual((await warehouseView(novel, {})).slots.vehicles, { 'a car': part });
-  assert.match((await useWarehousePart(novel, { part, slot: 'prop:lamp', why: 'x' })).error, /not a kind here/);
+  assert.match((await useWarehousePart(novel, { part, slot: 'prop:Lamp Post!', why: 'x' })).error, /needed|not a kind here/);
   assert.match((await useWarehousePart(novel, { part: 'pack:no_such_model', slot: 'prop:car', why: 'x' })).error, /No part/);
 });

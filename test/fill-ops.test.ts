@@ -10,7 +10,8 @@ const buildings = [{ x: 60, z: 30, w: 30, d: 20, angle: 0 }];
 
 test("operators are checked: kinds, numbers, unknown parts", () => {
   assert.deepEqual(checkOps([{ op: "line", what: "street-light", along: "arterial", every: 30 }]), []);
-  assert.match(checkOps([{ op: "scatter", what: "dragon", n: 3 }]).join(" "), /what must be one of/);
+  assert.match(checkOps([{ op: "scatter", what: "Dragon!", n: 3 }]).join(" "), /what must be one of/);
+  assert.deepEqual(checkOps([{ op: "scatter", what: "wind-turbine", on: "street", n: 3 }]), [], "a kind of one's own, drawn where fill.props connects a part");
   assert.match(checkOps([{ op: "line", what: "tree" }]).join(" "), /every is needed/);
   assert.match(checkOps([{ op: "ring", what: "bench", n: 4, r: 10, colour: "red" }]).join(" "), /colour is not a part/);
   assert.match(problemsOf("fill.ops", [{ op: "scatter", what: "tree", n: 0 }]).join(" "), /n must be a number from 1/);

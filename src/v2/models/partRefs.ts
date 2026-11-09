@@ -16,7 +16,8 @@ export function checkPartMap(key: string, value: unknown): string[] {
   const out: string[] = [];
   const kinds: readonly string[] | null = key === "fill.props" ? PROP_KINDS_FOR_PARTS : key === "models.vehicles" ? VEHICLE_KINDS : null;
   for (const [kind, part] of Object.entries(value as Record<string, unknown>)) {
-    if (kinds && !kinds.includes(kind)) out.push(`${key}.${kind}: not a kind here (${kinds.join(", ")})`);
+    // fill.props takes any kind's name (a fill operator may put down a kind of its own, drawn as the part); the vehicle kinds are fixed.
+    if (kinds && !kinds.includes(kind) && !(key === "fill.props" && /^[a-z][a-z0-9-]{0,30}$/.test(kind))) out.push(`${key}.${kind}: not a kind here (${kinds.join(", ")}${key === "fill.props" ? ", or a kind's name in lower-case letters, digits and -" : ""})`);
     if (part !== null && (typeof part !== "string" || !PART_REF.test(part))) out.push(`${key}.${kind} must be a part reference <source>:<part> (novel warehouse find), or null to take none`);
   }
   return out;
