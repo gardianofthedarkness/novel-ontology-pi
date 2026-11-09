@@ -395,3 +395,54 @@ destructability and the art style automatically in the warehouse." So: the write
 for no colour and no style; the world draws every part in its own ink at draw time (a thing's gold or a lot's blue,
 always with edge lines), the highway too. Destruction is the engine's (structure cells, a lot's skeleton), never a
 skin's, so a written model breaks as a baked one does. Left for later: a skin that loses its part over a broken cell.
+
+## 11. What a part does: interaction sheets (M15; the user, 2026-11-09)
+
+The user: "for custom built large objects, for example planes, first are they able to interact with buildings? What
+happens when they crash and explode? They should be also configured in the warehouse for interactability."
+
+### 11.1 What the engine does today (measured 2026-11-09)
+
+- **Flights avoid buildings by going over them.** A flight or a leap (`world/air.mjs`) rises above the highest roof
+  under its line and leaves a building by a window; a plane's flight is the same route. Nothing is hit by moving.
+- **Standing things block.** A thing the digest placed (`items`) stands in the walk graph as cells people walk round or
+  on top of (`worldGraph` places things). A vehicle is a pawn, not a thing: parked, it blocks nothing.
+- **Crashes and explosions happen when the text says so, and only then.** The digest reports what is destroyed
+  (`breaks`), a fight's blows (`exchanges`, the attacker null for "the world itself") and an item's `broken` event; a blow
+  is close, line or area (L21) with the attacker's limits (ability, weapon, a person's); Jev picks where it lands
+  (`impact-choices`); the engine breaks the building's cells, people are thrown. A vehicle has no limits of its own, so
+  a plane's crash today is sized as a person's throw, and nothing says what the plane becomes.
+- **A broken thing keeps its look.** `broken` is recorded; a big thing's structure cells fall when hit; its skin stays.
+
+### 11.2 The sheet
+
+Every part carries an **interaction sheet** beside its look (`src/v2/models/interact.ts`), with defaults by kind and
+kit category scaled by size, and a book's overrides in the `models.interact` setting (keys: a part's reference or a
+kind):
+
+| Field | Means | A car | A bus | A helicopter | An airliner | A turbine (38 m) | A knife |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| `solid` | blocks a walk where it stands | yes | yes | yes | yes | yes | no |
+| `layer` | ground, air, water | ground | ground | air | air | ground | ground |
+| `seats` | how many ride | 5 | 40 | 6 | 200 | 0 | 0 |
+| `crash` | degree 0–4 (the digest's damage words) and radius, when the text says it crashes | 1 / 4 m | 2 / 8 m | 3 / 12 m | 4 / 30 m | 2 / 13 m | 0 |
+| `breaks` | wreck, structure (cells fall), none | wreck | wreck | wreck | wreck | structure | none |
+| `wreck` | the part drawn when broken | kit wreck | kit wreck | kit heli wreck | kit wreck | – | – |
+
+`novel warehouse interact <part> <book>` shows a sheet; `novel warehouse interact <part>|'<kind>' '<json>' <book> --why`
+overrides it; `find` and `show` print the sheet in one line. Nothing crashes by itself: the text says when, the sheet
+says how much. The work model never sees any of this.
+
+### 11.3 The engine's use of it (M15b–d, to build)
+
+1. **Standing vehicles as things** (M15b): a parked or landed vehicle enters the walk graph as a solid thing of its
+   footprint (`solid`, its layer), and leaves it when it moves; a flying thing blocks nothing on the ground.
+2. **A crash sized by the sheet** (M15c): when the digest says a vehicle crashes, explodes or is destroyed (a `breaks`
+   entry or an item `broken` with a vehicle's kind, an exchange with the vehicle as the blow), the blow is an `area`
+   with the sheet's degree and radius at the point its path ended (where it met the lot, the roof, the ground), through
+   the same impact and cell-breaking machinery a weapon's blast uses; its riders are thrown as a fight throws them.
+3. **The wreck** (M15d): a broken part is drawn as its `wreck` part at the crash point (or its own model in the rubble
+   material, its structure cells fallen), and stays there as the other debris does.
+
+Evidence: `test/interact.test.ts` (defaults by kind and words and size, overrides, the setting's refusals); for M15b–d
+a rehearsal where a scene's text has a crash: the lot's cells broken by the sheet's radius, the wreck on the page.

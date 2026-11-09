@@ -4,7 +4,7 @@
  * with a catalogue of evaluated records; parts are `<source>:<part>`; `use` connects a part to a slot of the world's
  * configuration through the settings schema. JSON out; nothing here asks a model; a download needs the user's OK.
  */
-import { addSource, fetchSource, findParts, listSources, meshOfPart, partOf, refreshSource, SLOTS, usePart, type AddOptions } from "../../../v2/models/warehouse.js";
+import { addSource, fetchSource, findParts, interactionOf, listSources, meshOfPart, partOf, refreshSource, setInteraction, SLOTS, usePart, type AddOptions } from "../../../v2/models/warehouse.js";
 
 export async function warehouseList(options: { source?: string; novelDir?: string } = {}) {
   const out = await listSources(options);
@@ -33,7 +33,14 @@ export async function warehouseShow(ref: string, options: { novelDir?: string } 
   const part = await partOf(ref, { novelDir: options.novelDir });
   if (!part) throw new Error(`No part ${ref} (novel warehouse find "<words>").`);
   const mesh = await meshOfPart(ref, { novelDir: options.novelDir });
-  return { ...part, size: [part.footprint[0], part.height, part.footprint[1]], mesh: mesh ? { triangles: mesh.t.length / 3, size: mesh.size } : null, next: `novel warehouse use ${ref} for <slot> <novel-dir> --why <text>` };
+  return { ...part, size: [part.footprint[0], part.height, part.footprint[1]], mesh: mesh ? { triangles: mesh.t.length / 3, size: mesh.size } : null, interact: (await interactionOf(ref, { novelDir: options.novelDir })).interact, next: `novel warehouse use ${ref} for <slot> <novel-dir> --why <text>; novel warehouse interact ${ref} '<json>' <novel-dir> --why <text>` };
+}
+
+export async function warehouseInteract(novelDir: string, key: string, raw: string | undefined, options: { why?: string; before?: boolean }) {
+  if (raw === undefined) return interactionOf(key, { novelDir });
+  if (!options.why?.trim()) throw new Error("--why <text> is required: say why this sheet changes.");
+  let sheet: Record<string, unknown>; try { sheet = JSON.parse(raw) as Record<string, unknown>; } catch { throw new Error("The sheet is JSON: '{\"solid\": true, \"crash\": {\"degree\": 3, \"radius\": 12}, \"breaks\": \"wreck\", \"wreck\": \"kit:cw_veh_heli_wreck\"}'"); }
+  return setInteraction(novelDir, key, sheet, { ...options, why: options.why });
 }
 
 export async function warehouseUse(novelDir: string, ref: string, slot: string, options: { why?: string; place?: string; before?: boolean; floors?: [number, number]; by?: string }) {

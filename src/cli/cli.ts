@@ -69,7 +69,7 @@ import { sourceGrep, sourceSimilar } from "./commands/extract/sourceCommands.js"
 import { worldAnswer, worldBatch, worldPool } from "./commands/extract/worldCommands.js";
 import { castAsk, castMerge, castReview, castSheet, castShow, sky } from "./commands/extract/castCommands.js";
 import { settingsDiff, settingsExplain, settingsProfileApply, settingsProfileList, settingsProfileSave, settingsSet, settingsShow, settingsUnset } from "./commands/extract/settingsCommands.js";
-import { warehouseAdd, warehouseFetch, warehouseFind, warehouseList, warehouseRefresh, warehouseShow, warehouseUse } from "./commands/extract/warehouseCommands.js";
+import { warehouseAdd, warehouseFetch, warehouseFind, warehouseInteract, warehouseList, warehouseRefresh, warehouseShow, warehouseUse } from "./commands/extract/warehouseCommands.js";
 import { lookContext } from "./commands/extract/lookCommands.js";
 import { modelBind, modelBrief, modelCheck, modelList, modelNominate, modelParts, modelPut, modelShow, modelUse, modelWrite } from "./commands/extract/modelCommands.js";
 import { readingShow, sourceEpub, worldApply, worldCanon, worldHeld, worldLogShow, worldUndo } from "./commands/extract/worldReviewCommands.js";
@@ -176,6 +176,7 @@ const COMMANDS: Record<string, string> = {
   "novel warehouse refresh <name>": "Rebuild a source's catalogue",
   "novel warehouse find '<words>' [--kind '<thing kind>'] [--category <c>] [--size <m>] [--source <name>] [--top N] [<novel-dir>]": "Parts ranked for a few words over every catalogue: an exact name (a model's label, given at birth) first, then name, category, the kind's categories and size closeness, as <source>:<part>",
   "novel warehouse show <source>:<part> [<novel-dir>]": "A part's record and its mesh's size",
+  "novel warehouse interact <source>:<part>|'<kind>' [<json sheet>] <novel-dir> [--why <text>] [--before]": "A part's interaction sheet as it resolves for the book (solid, layer, seats, crash degree and radius, what it becomes when broken, its wreck part); with a JSON sheet and --why, the book's override, written as the models.interact setting",
   "novel warehouse use <source>:<part> for <slot> <novel-dir> --why <text> [--place <id>] [--before] [--floors a b]": "Connect a part to a slot of the world's configuration: prop:<kind> (fill.props), vehicle:<kind> (models.vehicles), kind:<thing kind> (models.parts), use:<building use> or role:<role> (the models.uses table); written through the settings schema",
   "novel model nominate <novel-dir> [--reading <data.json>] [--top N]": "Rank the book's things (scenes, sentences, kind); the important, well-described ones get a model of their own, the rest a warehouse part (no model call)",
   "novel model list <novel-dir> [--state todo|made|failed|part]": "The nominated things and their models' state",
@@ -870,7 +871,7 @@ async function main(): Promise<void> {
   }
 
   if (cmd === "warehouse") {
-    const usage = "Usage: novel warehouse list [--source <name>] [<novel-dir>] | add <name> <folder> --licence <SPDX> --why <text> [...] | fetch <name> <url> --licence <SPDX> --ok '<words>' --why <text> [--path <folder>] [--limit <MB>] | refresh <name> | find '<words>' [--kind '<thing kind>'] [...] | show <source>:<part> | use <source>:<part> for <slot> <novel-dir> --why <text> [--place <id>] [--before] [--floors a b]";
+    const usage = "Usage: novel warehouse list [--source <name>] [<novel-dir>] | add <name> <folder> --licence <SPDX> --why <text> [...] | fetch <name> <url> --licence <SPDX> --ok '<words>' --why <text> [--path <folder>] [--limit <MB>] | refresh <name> | find '<words>' [--kind '<thing kind>'] [...] | show <source>:<part> | use <source>:<part> for <slot> <novel-dir> --why <text> [--place <id>] [--before] [--floors a b] | interact <source>:<part>|'<kind>' ['<json>'] <novel-dir> [--why <text>] [--before]";
     const number = (name: string) => { const value = flag(positional, name); return value === undefined ? undefined : Number(value); }, free = (n: number) => (positional[n] && !positional[n].startsWith("--") ? positional[n] : undefined);
     // A trailing book folder after the flags (novel warehouse find '<words>' --top 5 <novel-dir>): the last token, unless it is a flag or a flag's value.
     const VALUE_FLAGS = new Set(["--kind", "--category", "--size", "--source", "--top", "--licence", "--why", "--from", "--categories", "--allowed-by", "--unit", "--ok", "--path", "--limit", "--place", "--floors"]);
@@ -882,6 +883,13 @@ async function main(): Promise<void> {
     if (sub === "refresh") { if (!free(2)) throw new Error(usage); out(await warehouseRefresh(positional[2]), pretty); return; }
     if (sub === "find") { if (!free(2)) throw new Error(usage); out(await warehouseFind(positional[2], { kind: flag(positional, "--kind"), category: flag(positional, "--category"), size: number("--size"), source: flag(positional, "--source"), top: number("--top"), novelDir: trailing(3) }), pretty); return; }
     if (sub === "show") { if (!free(2)) throw new Error(usage); out(await warehouseShow(positional[2], { novelDir: trailing(3) }), pretty); return; }
+    if (sub === "interact") {
+      const key = free(2); if (!key) throw new Error(usage);
+      const withSheet = positional[4] && !positional[4].startsWith("--") ? true : false, novelDir = withSheet ? positional[4] : free(3);
+      if (!novelDir) throw new Error("novel warehouse interact <source>:<part>|'<kind>' ['<json sheet>'] <novel-dir> [--why <text>] [--before]");
+      out(await warehouseInteract(novelDir, key, withSheet ? positional[3] : undefined, { why: flag(positional, "--why"), before: positional.includes("--before") }), pretty);
+      return;
+    }
     if (sub === "use") {
       if (!free(2) || positional[3] !== "for" || !free(4) || !free(5)) throw new Error(usage);
       const floorsAt = positional.indexOf("--floors"), floors = floorsAt >= 0 ? [Number(positional[floorsAt + 1]), Number(positional[floorsAt + 2])] as [number, number] : undefined;

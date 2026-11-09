@@ -16,6 +16,7 @@ import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { checkOps } from "./world/fillOps.js";
 import { checkPartMap } from "./models/partRefs.js";
+import { checkInteract } from "./models/interact.js";
 
 export type Layer = "universe" | "book" | "place";
 export interface Entry { default: unknown; unit: string; meaning: string; used: string[]; layers: Layer[]; kind: "hard" | "knob" | "physics" | "structure" | "presentation"; range?: [number, number]; wired?: boolean }
@@ -64,6 +65,7 @@ export function problemsOf(key: string, value: unknown, layer?: Layer): string[]
   if (key === "fill.ops") return [...out, ...checkOps(value)];
   // The warehouse's slot maps (kind -> part; milestones M10i): their keys are kinds, not parts of the default.
   if (key === "fill.props" || key === "models.vehicles" || key === "models.parts") return [...out, ...checkPartMap(key, value)];
+  if (key === "models.interact") return [...out, ...checkInteract(value)];
   walk(key, entry.default, value);
   if (entry.range && typeof value === "number" && (value < entry.range[0] || value > entry.range[1])) out.push(`${key} = ${value} is outside ${entry.range[0]}–${entry.range[1]} ${entry.unit}`);
   return out;

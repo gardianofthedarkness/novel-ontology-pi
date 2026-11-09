@@ -1575,6 +1575,19 @@
     "book"
    ],
    "kind": "presentation"
+  },
+  "models.interact": {
+   "default": {},
+   "unit": "sheet per part or kind",
+   "meaning": "What a warehouse part does in the world besides being seen (milestones M15): whether it blocks a walk where it stands (solid), its layer (ground, air, water), how many it seats, what its crash does to what it hits when the text says it crashes or explodes (crash.degree 0 to 4 as the digest's damage words, crash.radius in metres), and what it becomes when broken (breaks: wreck, structure or none; wreck: the part drawn then). Keys are a part's reference or a kind; each value a partial sheet over the kind's defaults (src/v2/models/interact.ts).",
+   "used": [
+    "src/v2/models/interact.ts interactOf"
+   ],
+   "layers": [
+    "universe",
+    "book"
+   ],
+   "kind": "physics"
   }
  },
  "tables": {

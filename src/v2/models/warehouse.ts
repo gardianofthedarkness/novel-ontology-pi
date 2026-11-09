@@ -16,6 +16,7 @@ import { spawnSync } from "node:child_process";
 import { evaluate, forPlayer, measure, readOff, solidOf } from "./scad.js";
 import { KIT_CATEGORIES, KITS, catalogOf, storeOf } from "./models.js";
 import { PART_REF, idOfRef, slugOf, splitRef } from "./partRefs.js";
+import { interactOf } from "./interact.js";
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..", "..", "..", "..");
 export const PACKS_ROOT = process.env.NOVEL_MODEL_PACKS ?? join(process.env.HOME ?? "", "claude-world-first", "model-packs");
@@ -310,7 +311,7 @@ export async function findParts(words: string, options: FindOptions = {}) {
     return { part, score };
   });
   const top = scored.filter((row) => row.score > 0).sort((a, b) => b.score - a.score || a.part.name.localeCompare(b.part.name)).slice(0, options.top ?? 20);
-  return { words, kind: options.kind ?? null, searched: all.length, exact: top.some(({ score }) => score >= 10), parts: top.map(({ part, score }) => ({ ref: part.ref, category: part.category, size: [part.footprint[0], part.height, part.footprint[1]], unit: part.unit, triangles: part.triangles, score: Math.round(score * 100) / 100, ...(part.note ? { note: part.note } : {}) })) };
+  return { words, kind: options.kind ?? null, searched: all.length, exact: top.some(({ score }) => score >= 10), parts: top.map(({ part, score }) => { const sheet = interactOf({ ref: part.ref, name: part.name, kind: part.source === "own" ? part.category : null, category: part.category, size: [part.footprint[0], part.height, part.footprint[1]] }); return { ref: part.ref, category: part.category, size: [part.footprint[0], part.height, part.footprint[1]], unit: part.unit, triangles: part.triangles, score: Math.round(score * 100) / 100, ...(part.note ? { note: part.note } : {}), interact: `${sheet.solid ? "solid" : "passable"}, ${sheet.layer}${sheet.seats ? `, seats ${sheet.seats}` : ""}, crash ${sheet.crash.degree}/${sheet.crash.radius} m, breaks ${sheet.breaks}` }; }) };
 }
 
 /** One part's record, or null. */
@@ -380,4 +381,20 @@ export async function usePart(novelDir: string, ref: string, slot: string, optio
   const { settingsSet } = await import("../../cli/commands/extract/settingsCommands.js");
   const set = await settingsSet(novelDir, write.key, JSON.stringify(write.value), { place: options.place, why: options.why, before: options.before, isTable: write.isTable, by: options.by });
   return { connected: { slot, part: ref, size: [part.footprint[0], part.height, part.footprint[1]], unit: part.unit, category: part.category }, pageId: `scad:${idOfRef(ref)}`, ...set };
+}
+
+/** A part's interaction sheet as it resolves for a book (its kind's defaults, then the book's overrides). */
+export async function interactionOf(ref: string, options: { novelDir?: string } = {}) {
+  const part = await partOf(ref, options);
+  if (!part) throw new Error(`No part ${ref} in the warehouse (novel warehouse find "<words>").`);
+  return { ref, kind: part.source === "own" ? part.category : null, category: part.category, size: [part.footprint[0], part.height, part.footprint[1]], interact: interactOf({ ref, name: part.name, kind: part.source === "own" ? part.category : null, category: part.category, size: [part.footprint[0], part.height, part.footprint[1]] }) };
+}
+
+/** Override a part's (or a kind's) sheet for a book: written as the models.interact setting through the schema (checked, layered, logged). */
+export async function setInteraction(novelDir: string, key: string, sheet: Record<string, unknown>, options: { why: string; before?: boolean; by?: string }) {
+  if (!PART_REF.test(key) && !/^[a-z][\p{L}\p{N} ,'-]{1,60}$/u.test(key)) throw new Error(`${key} is neither a part reference nor a kind of thing.`);
+  if (PART_REF.test(key) && !(await partOf(key, { novelDir }))) throw new Error(`No part ${key} in the warehouse.`);
+  const { settingsSet } = await import("../../cli/commands/extract/settingsCommands.js");
+  const set = await settingsSet(novelDir, "models.interact", JSON.stringify({ [key]: sheet }), { why: options.why, before: options.before, by: options.by });
+  return { key, sheet, ...set, now: PART_REF.test(key) ? (await interactionOf(key, { novelDir })).interact : null };
 }

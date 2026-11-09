@@ -98,5 +98,13 @@ any you register. A part is `<source>:<part>`.
    `role:<role>`. Each writes a setting through the schema (logged, `diff` shows it).
    Props and buildings show at the next run or rehearsal; vehicles and things at the next
    director run. A part is a look, never canon.
+5. **What a part does** (its interaction sheet): `novel warehouse interact <part> <dir>` shows
+   whether it blocks a walk where it stands, its layer (ground, air, water), how many it seats,
+   what its crash does when the text says it crashes or explodes (a degree 0 to 4 and a
+   radius in metres), and what it becomes when broken (a wreck part, its structure, nothing).
+   The defaults come from its kind and size; a book overrides with
+   `novel warehouse interact <part>|'<kind>' '<json>' <dir> --why <text>` (e.g. a wide-body
+   airliner: `'{"crash":{"degree":4,"radius":40}}'`). Nothing crashes by itself: the text says
+   when, the sheet says how much.
 
 Say what you changed and why in `--why`; the user reads the log.

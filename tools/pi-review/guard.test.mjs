@@ -332,6 +332,7 @@ test('settings, warehouse and model commands pass for the assigned book, with a 
     `novel model nominate '${novel}'`, `novel model list '${novel}' --state todo`, `novel model brief '${novel}' 'the van'`, `novel model write '${novel}' --all --limit 5`, `novel model check '${novel}' --all`,
     `novel model use '${novel}' 'the van' kit:cw_veh_van --why 'a van'`, `novel model bind '${novel}'`, `novel model parts 'a small weapon'`,
     `novel look context '${novel}'`, `novel look context '${novel}' --place loc_000001 --top 12`,
+    `novel warehouse interact kit:cw_veh_bus '${novel}'`, `novel warehouse interact 'an aircraft' '{"crash":{"degree":4,"radius":40}}' '${novel}' --why 'a wide-body'`,
   ]) assert.equal(authorize(command).kind, 'cli', command);
   assert.equal(authorize(`novel warehouse use kit:cw_nature_pine for prop:tree '${novel}' --why 'pines'`).label, 'novel warehouse use');
   for (const command of [
@@ -339,6 +340,6 @@ test('settings, warehouse and model commands pass for the assigned book, with a 
     `novel settings profile apply '${novel}' old-town`, `novel warehouse fetch mykit https://github.com/x/y --licence MIT --why 'no ok'`, `novel warehouse fetch mykit http://github.com/x/y --licence MIT --ok yes --why w`,
     `novel warehouse add mykit /tmp/other --licence MIT --why w`, `novel warehouse use kit:cw_nature_pine for lamp:tree '${novel}' --why w`, `novel warehouse use kit:cw_nature_pine for prop:tree /tmp/other --why w`,
     `novel warehouse use kit:cw_nature_pine for prop:tree '${novel}'`, `novel warehouse find 'tree' --top 500`, `novel model put '${novel}' 'the van' /tmp/van.scad`, `novel model write /tmp/other --all`,
-    `novel model use '${novel}' 'the van' van`, `novel warehouse list --source 'kit; env'`, `novel look context /tmp/other`, `novel look context '${novel}' --top 500`,
+    `novel model use '${novel}' 'the van' van`, `novel warehouse list --source 'kit; env'`, `novel look context /tmp/other`, `novel look context '${novel}' --top 500`, `novel warehouse interact kit:cw_veh_bus '{"solid":false}' '${novel}'`, `novel warehouse interact kit:cw_veh_bus /tmp/other`,
   ]) assert.throws(() => authorize(command), command);
 });

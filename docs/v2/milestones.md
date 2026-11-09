@@ -23,6 +23,7 @@ call); a real Jev run only when the user asks.
 | M11 | Landmark shells: named, described buildings as code, their footprint and height in the fill | built 2026-11-09 (2 in volume 1; height into the lot, footprint the lot's) |
 | M12 | People with bodies: a 7-bone standard, shared clips, parts by slot from the sheets | after M11 |
 | M13 | All SCAD: quantised page meshes, vehicles and furniture from the kits, a building kit of our own, the baked packs retired, every remaining baked choice a layered setting (design §9) | items M13a–g listed 2026-11-09; M13g begun |
+| M15 | Interaction sheets: what a part does (solid, layer, seats, crash degree and radius, what it becomes when broken), defaults by kind, overrides per book; the engine's use of them (design §11) | M15a the sheets built 2026-11-09; M15b–d (standing vehicles as things, crashes sized by the sheet, the wreck) to build |
 | M14 | The look pass: the world generator set from the text, top down the place tree, hooked after the reading and before the terrain loop (design §10) | built and proved with no hint 2026-11-09 (volume 1: 502 turbines from the text alone); M14d the pipeline hook and volume 2 end to end left |
 | W15 | A paid volume 1 run with M8, M10 and M11 in, against W14 | done 2026-11-09 (about $0.34 with the models and a crashed attempt) |
 
@@ -758,6 +759,20 @@ write (about $0.1 for 60 modules). Steps, each with evidence and cost in design 
 - [x] **Recall by name, free** (built 2026-11-09, with M10h): `find` matches a part's name, label or reference exactly
       first; a written model is `own:<label's slug>`. *Evidence:* `test/warehouse.test.ts` (a model named at birth found
       with `exact: true` by its label, by slug and by id). *Cost:* none.
+
+## M15 — Interaction sheets (the user, 2026-11-09: "configured in the warehouse for interactability")
+
+- [x] **M15a The sheets** (built 2026-11-09): `src/v2/models/interact.ts` (solid, layer, seats, crash degree and
+      radius, breaks, wreck; defaults by kind, by a kit part's words, by size: anything 10 m or taller carries
+      structure), the `models.interact` setting (universe, book; checked), `novel warehouse interact <part>|'<kind>'
+      ['<json>'] <book>`, the sheet in `find` and `show`, the guard and the skill. *Tests:* `test/interact.test.ts`.
+- [ ] **M15b Standing vehicles as things:** a parked or landed vehicle enters the walk graph as a solid thing and leaves
+      it when it moves. *Evidence:* a rehearsal where a walk goes round a parked bus that it went through before.
+- [ ] **M15c A crash sized by the sheet:** when the text says a vehicle crashes or explodes, an `area` blow with the
+      sheet's degree and radius where its path ended, through the impact and cell-breaking machinery a blast uses;
+      riders thrown. *Evidence:* a scene with a crash in the text: the lot's cells broken by the radius.
+- [ ] **M15d The wreck:** a broken part drawn as its wreck part (or its model in the rubble material, its cells fallen)
+      where it fell. *Evidence:* the page after the crash.
 
 ## M14 — The look pass (the user, 2026-11-09: "true end to end")
 
