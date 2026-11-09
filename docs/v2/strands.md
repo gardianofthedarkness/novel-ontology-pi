@@ -109,25 +109,35 @@ Measured by the lines seen on the strand (prototype; volume 1, library 16, read 
 The same fold after the walk, measured in **beats** instead of lines: a beat is one conversation (a dialogue card; every
 spoken line of volume 1 is inside one) or one action outside a conversation, with one of the unit's acting people of the
 strand taking part (acting, speaking or spoken to). Volume 1 has 456 (212 conversations, 204 actions outside one; a
-beat running across units counts in each). Three readings of "next" were tested (prototype; library 16, read only):
+beat running across units counts in each). Readings of "next" tested (prototype; library 16, read only; the user then
+asked "What about the next beat in the next segment", the last two rows):
 
 | Lands when the new group has | Text: strands | splits | unions | Run W15: strands | splits | unions | Text strands also in the run |
 | --- | --- | --- | --- | --- | --- | --- | --- |
 | one beat while apart | 21 | 17 | 17 | 31 | 20 | 20 | 20 of 21 |
-| **two beats: the one that shows them apart, then the next** | **17** | **13** | **14** | **24** | **13** | **14** | **16 of 17** |
-| three beats | 14 | 10 | 11 | 22 | 11 | 12 | 14 of 14 |
-| one beat in a unit after the split unit | 15 | 11 | 12 | 22 | 11 | 12 | 14 of 15 |
+| two beats: the one that shows them apart, then the next | 17 | 13 | 14 | 17 | 13 | 14 | 16 of 17 |
+| three beats | 13 | 10 | 11 | 14 | 11 | 12 | 13 of 13 |
+| one beat in any unit after the split unit | 14 | 11 | 12 | 14 | 11 | 12 | 13 of 14 |
+| **a beat in the group's next segment** | **14** | **11** | **12** | **14** | **11** | **12** | **13 of 14** |
+| a beat in the very next segment told in the story | 9 | 7 | 7 | 10 | 8 | 8 | 9 of 9 |
 | (for comparison) 40 lines seen apart, §0.1 | 10 | 8 | 8 | 15 | 9 | 9 | 10 of 10 |
 
+A first count let a new group (one that left nobody: a person first seen, or a sub-unit of the run) never fold under a
+beat rule; corrected, the table is the corrected count. That one fix took the run's two-beat count from 24 to 17.
+
 - **One beat folds nothing**: a split begins with someone acting, so every split strand has one.
-- **Two beats** (the plainest reading of "the next dialogue or action"): folds the four text strands of one person, one
-  unit and one beat (units 70, 236, 248, 273). Kept, where 40 lines folds them: one person alone for 166–167 and 171;
-  the pairs of 170 and 172, 183–185, 213 and 215, 238–239 and 242; 214 and 241; 197. Each has a second conversation or
-  action while apart, often within 15 to 30 lines. The run lacks one (170, which it splits from 172) and adds 8: the
-  people standing out of reach of their group in units 52 (twice), 95, 127, 163 and 221, unit 172 on its own, and the
-  group of 220–225.
-- **One beat after the split unit** folds also 183–185 and 245–247, whose beats all fall in their first unit (their
-  later units have the people acting in narration only).
+- **Two beats** folds the four text strands of one person, one unit and one beat (units 70, 236, 248, 273), and keeps
+  197, one person with two beats in one unit. In the run it also folds every person who stood out of reach of their
+  group for one unit without acting again (units 52 twice, 95, 127, 163, 221).
+- **The group's next segment** (the next unit of the strand in which its people appear; a unit nobody acts in rides on
+  the strand being told and is skipped, else the main strand of 145 units folds at its second unit, 13): the split
+  lands only when the group's next segment has a dialogue or action of theirs. It folds the text's 70, 183–185, 197,
+  236, 245–247, 248 and 273: their next segment has no beat, or there is none. Kept: the main, the opening group 2–11,
+  32–38, the lines 68–165 and 83–156, 130–136, 146–150, 187–200, and the short ones 166–171 (one person), 170 and 172,
+  213 and 215, 214 and 241, 238–242. The run agrees on 13 of 14: it splits 170 from 172 and keeps the group of 220–225;
+  every one-off person standing apart folds. Counting narration in which they act as a beat changes nothing here.
+- **The very next segment told** (the story stays with the new group and they act at once) is the strictest: it folds
+  166–171, 170–172, 213–215, 214–241 and 238–242 as well, leaving the 9 long lines.
 - **Beats against lines.** Beats follow what the group does, lines follow how long the telling is: a long conversation
   is one beat, a quick exchange of actions is several, and a long unit of narration is none. With beats a strand of
   short scenes where the group talks again lands; with 40 lines it folds unless the telling runs on.
