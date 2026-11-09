@@ -1603,6 +1603,21 @@
     "book"
    ],
    "kind": "structure"
+  },
+  "director.backCredits": {
+   "default": true,
+   "unit": "on/off",
+   "meaning": "A credit the reading made through a description or as the one spoken to puts a person in a unit only when the unit names them, credits them strongly, or the unit before names or credits them (docs/v2/strands.md section 0.6). Off: every credit places its person, as before 2026-11-09.",
+   "used": [
+    "src/v2/rules/presence.ts corroborateCredits",
+    "world-engine/director/segments.mjs segmentWorld",
+    "src/v2/extraction/flow.ts (new readings: always on)"
+   ],
+   "layers": [
+    "universe",
+    "book"
+   ],
+   "kind": "knob"
   }
  },
  "tables": {

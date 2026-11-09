@@ -4,6 +4,7 @@
 // the reading had scenes and, beside them, segments cut a second time (M14), played as scene~part with the scene as their
 // parent; that split is gone. Kept from it: the cards aligned to the units, presence by physics, and the gate reading each
 // unit's kind. Pure: the reading, the world script and the spawn plan in; the views the director plays out.
+import { corroborateCredits } from '../../dist/src/v2/rules/presence.js';
 
 /**
  * The cards aligned to the segments (the user, 2026-11-03: "aligned"): a card that runs across a segment's boundary (a
@@ -88,8 +89,11 @@ export function scenesAsSegments(reading) {
  * windows), the cards aligned to them, who is in each by physics (the world script's view), and the spawn plan's starts
  * for those present. A reading made with segments cut a second time (M14) plays its scenes; its segments are not read.
  */
-export function segmentWorld({ reading: given, script, spawn }) {
+export function segmentWorld({ reading: given, script, spawn, backCredits = true }) {
   if (!given?.scenes?.length) return null;
+  // Credits a unit does not back leave their people described (rules/presence.ts corroborateCredits; docs/v2/strands.md
+  // §0.6; the setting director.backCredits): a reading made before the check gets it here, one made after is unchanged.
+  if (backCredits && given.roles) { const backed = corroborateCredits(given.cards ?? [], given.roles, given.scenes); given = { ...given, cards: backed.cards, roles: backed.roles }; }
   const segments = scenesAsSegments(given), cards = alignCards(given.cards, segments), scriptScenes = new Map((script?.scenes ?? []).map(scene => [scene.id, scene]));
   const presence = segmentPresence({ segments, cards, scriptScenes }), ids = segments.map(segment => segment.scene);
   const reading = { ...given, segments, scenes: given.scenes.map((scene, n) => ({ ...scene, type: segments[n].type })), cards };

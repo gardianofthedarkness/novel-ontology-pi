@@ -15,6 +15,7 @@ import { readHeadings, readStoryboard, type Cut } from "./storyboard.js";
 import { CATEGORY_OF, typeNames, type Decide, type Detected, type EntityType } from "./typing.js";
 import { designationForms, introSentences, introTerms, type IntroParts } from "./front.js";
 import { settledCategory, usualType } from "../rules/typing.js";
+import { corroborateCredits } from "../rules/presence.js";
 
 /**
  * The v2 reading flow (the user's sketch, 2026-10-30; docs/v2/world-engine-v2.md §2):
@@ -341,6 +342,9 @@ export async function readFlow(blocks: FlowBlock[], decideRaw: Decide, lister: L
     }
     card.people = [...people].map(([id, entry]) => ({ id, how: [...entry.how], at: [...entry.at] }));
   }
+  // A credit through a description or as the one spoken to puts a person in a unit only when the unit backs it
+  // (rules/presence.ts corroborateCredits; docs/v2/strands.md §0.6).
+  { const backed = corroborateCredits(cards, resolved.roles, scenes); cards = backed.cards; resolved.roles = backed.roles; }
   facts.settle(chart, pos);
   // Place EM (docs/v2/world-model.md §5): the tree, the settings, the unnamed places and occupancy, apart from matter.
   const spatial = spatialMentions({ em, cards, roles: resolved.roles, scenes });

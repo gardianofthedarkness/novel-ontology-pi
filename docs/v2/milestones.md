@@ -859,6 +859,12 @@ the rest's next appearance): the text 8 strands, all right against the text; the
 The reunions read (strands.md §0.5): 2 of 6 right, 2 wrong (lines the reading credits to absent people), 2 off in time;
 confirmed by the next action (rule 11): the text 6 strands, 4 unions, the wrong ones refused.
 
+- [x] **M17-credit The reading's credit checked** (the user, 2026-11-09: "Yes let's fix it"; strands.md §0.6):
+      `corroborateCredits` (`src/v2/rules/presence.ts`) in `flow.ts` and `segments.mjs segmentWorld`, setting
+      `director.backCredits` (on); volume 1: 23 of 443 unit credits demoted, 21 right against the text; strands
+      (prototype, rules 1–12) 4 in the text, 2 unions; first-quarter rehearsal: smoothing better, L6 at unit 26 shows
+      a stand-in misplacement the wrong credit had hidden. Tests: `test/v2-presence-credits.test.ts`.
+
 - [ ] **M17e The builder by interaction**: a unit's group is its acting people (`evidence`); a split is part of a group
       acting while the rest is next told out of its view; a union is people of two strands acting in one unit; the
       envelope read from the strand's places; a latency (`strands.latency`, 40 lines by default: a strand seen apart

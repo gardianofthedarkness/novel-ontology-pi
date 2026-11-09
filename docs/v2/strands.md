@@ -251,8 +251,65 @@ the main at 169 in the fight. The union of 24 moves to 27, where all three act t
 need the reading's credit fixed (who acts in 140, 156, 171 and 217), or a union that moves only the people who met (the
 chairman stays apart when the guard goes out). The run agrees with the text on all 6, and adds the run fault of 220–225.
 
+### 0.6 The reading's credit fixed (built; the user, 2026-11-09: "Yes let's fix it")
+
+Every wrong union and wrong unit of §0.4–0.5 came from a credit: the roles of the reading put a person in a line
+through a description ("the girl", "the big sister", "the Number One") or as the one spoken to, and the description
+was someone else's, imagined, or on a phone. The roles keep how they got there (`via`, the description), so the fix is
+code over the saved reading, with no new paid reading.
+
+**The credit check (built):** `corroborateCredits` in `src/v2/rules/presence.ts`. A credit is weak when it came through
+a description that is not one of that person's aliases, or when the person is the one spoken to. A weak credit puts the
+person in a unit only when the unit also names them or credits them strongly, or the unit before names or credits them;
+otherwise the card keeps them as described, and the line's role loses them (`id: null`, `unbacked` keeps who the
+reading had). An alias is a description that, across the book, credits one person only and credits them at least once
+where they are named ("the Number Three" for the fighter). People the text only describes (slots) are never weak. A
+credit spanning units keeps the units that back it. It runs where new readings build their cards (`flow.ts`) and where
+the world engine loads a saved reading (`segments.mjs segmentWorld`, for the director and the pre-film casts), behind
+the setting `director.backCredits` (on; off plays as before). Tests: `test/v2-presence-credits.test.ts`.
+
+**Volume 1:** 23 of 443 unit credits demoted. Read against the text, 21 are right: imagined speakers (66), titles and
+descriptions of one person read as another (24 and 27, where the girl who calls out is the one who fled, not the one
+left behind; 140 and 217; 142, 143 and 231; 151, 168 and 181; 252 and 254), speech to a stranger read as to a known
+person (253, 284, 285). Two are real people (60 and 64), who stay in view through the hold.
+
+12. **An action aimed at someone is an interaction** (for strands): in an action's line, the one acting and a person
+    named in that line who is in the unit; the person aimed at takes part in the unit's union. "She turns her gaze to
+    the fighter" at 171 now reunites there (prototype, for M17e).
+
+| Rules (prototype) | Text strands | Splits | Unions | Unions refused by rule 11 |
+| --- | --- | --- | --- | --- |
+| 1–11 on the reading as saved (§0.5) | 6 | 2 | 4 | 24, 66, 140 |
+| 1–12 on the checked credit | **4** | **1** | **2** | none |
+
+The 4: the main; the guard and the chairman's line (32–38, 83–87, 137–144, and 156), into the main at 217; the faller's
+line (130–136, 145–155, 157–161, 168), into the main at 169 in the fight; unit 1 with nobody acting. Folded: 70, 197,
+and the lone costumed girl of 166–167, who now rejoins at 171, two units after she is first seen. With the false
+credits at 24 and 27 gone, the one left behind at unit 11 is next told at 58, together with the one who fled, so the
+flight of 12–23 is no longer a strand: the case of an interlude not cut in with the main (§0.4). Rule 11 refuses nothing
+now; it stays as a guard. Still open: 217 is early (a camera) and closes the chairman's part with the guard's, and 156
+stays on the guard and chairman's line (the chairman spoken to on a phone, backed by the unit before).
+
+**What it does to a played run** (the first quarter rehearsed with a stand-in Jev, unpaid):
+
+| Measure | Before the check | With it |
+| --- | --- | --- |
+| largest smoothing correction (m) | 623 | 397 |
+| metres outside the frame after smoothing | 792 | 231 |
+| far back-and-forth while talking (m) | 288 | 217 |
+| speaker-present law (L6) broken | 0 | 5 |
+
+The 5 L6 are all unit 26: two people talk 91 m and 40 floors apart. Before the check the wrong credit at 24 had the
+protagonist "spoken to" by someone on a rooftop, so he was walked up 40 floors and stood, by chance, near the fighter,
+whom the stand-in had sent up an office tower at unit 14; the text has both at a subway exit on the ground. With the
+check he stays on the ground and the fighter's height shows. A real run asks Jev the kind of talk there (the stand-in
+does not). With the setting off, the rehearsal is the one before, 212 of 213 measures equal (the 213th a timing).
+
+The W15 run was played with the old credits: re-stranded under the checked presence it gives 7 strands (people stood
+where the old credit put them) until a run is played with the check.
+
 **What it changes in what is built:**
-- M17e: rules 1–11; the group is the people acting together (rule 9); the split test reads the rest's next appearance
+- M17e: rules 1–12 (the credit check is built; rule 12 is the strand builder's); the group is the people acting together (rule 9); the split test reads the rest's next appearance
   (rule 10); the union keeps the id of the strand begun first; the latency is the next-segment beat (§0.2), the fold
   after the walk; a strand of nobody folds into the first. The strands file keeps each folded strand (`folded`: its
   units, its beats, where it went) for the review.

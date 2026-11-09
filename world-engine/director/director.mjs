@@ -103,7 +103,7 @@ export async function direct(novelDir, { reading, readingPath = null, prefilm = 
   // world script's, the spawn plan's and the strands' views by physics are built here and played (kept beside the world
   // files in stage/world/segments for the log, the laws and the rehearsal).
   const worldFile = async name => JSON.parse(await readFile(join(novelDir, 'stage', 'world', name), 'utf8').catch(() => 'null'));
-  const SG = await import('./segments.mjs'), seg = SG.segmentWorld({ reading, script: await worldFile('script.json'), spawn: await worldFile('spawn.json') });
+  const SG = await import('./segments.mjs'), seg = SG.segmentWorld({ reading, script: await worldFile('script.json'), spawn: await worldFile('spawn.json'), backCredits: setting('director.backCredits', { book: novelDir }) });
   if (!seg) throw new Error('the reading has no scenes to play');
   const segStrands = SG.strandsFile(seg.script, await (await import('./strand-builder.mjs')).strandBuilder(novelDir));
   const segForkOf = new Map((segStrands.scenes ?? []).map(entry => [entry.id, entry.fork ?? entry.id]));
