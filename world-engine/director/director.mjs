@@ -472,7 +472,8 @@ export async function direct(novelDir, { reading, readingPath = null, prefilm = 
         for (const [x, y, z, t] of route.pts) { const id = W.nodeId(world, Math.floor(x / CELL), Math.floor(z / CELL), k0 + Math.round(y / FLOOR)); if (path.at(-1) === id) { times[times.length - 1] = t; continue; } path.push(id); times.push(Math.round(t * 100) / 100); }
         path[0] = from[0]; times[0] = 0;
         if (path.at(-1) !== target.id) { path.push(target.id); times.push(times.at(-1) + 1); }
-        return Object.assign(path, { how: 'ride', ensemble: [], at: times, drove: { metres: route.metres, highway: route.highway, seconds: route.seconds } });
+        // Its life seconds at each node as `times` (never `at`: that would hide the array's own at(); W15 died on it, scene 153).
+        return Object.assign(path, { how: 'ride', ensemble: [], times, drove: { metres: route.metres, highway: route.highway, seconds: route.seconds } });
       };
       // A move's path grown by a piece (several moves of one person in one card are one walk on the page), the steps that go
       // through the air kept as ranges [first, last, kind] (`at`: where in the piece they start): the page plays them
@@ -1258,7 +1259,7 @@ export async function direct(novelDir, { reading, readingPath = null, prefilm = 
             // Several moves of one person in one card (steps, then an implied move) are one walk on the page.
             const key = `${scene.id}|${card.id}|${person}`, earlier = E.moves.get(key);
             const tie = tiesNow().find(entry => entry.who === person), offStage = tie && !positions[tie.on] ? mountOf(tie.on) : null;
-            E.moves.set(key, { person, how: path.air && earlier ? earlier.how : path.how ?? (String(how).startsWith('ride') ? 'ride' : String(how).startsWith('climb') || String(how).startsWith('agile') || how === 'run' || earlier?.how === 'run' ? 'run' : 'walk'), ...grown(earlier, path, path.air ? path.how : null, path.airFrom ?? 0), ensemble: path.ensemble ?? [], ...(offStage ? { mount: offStage } : {}), ...(path.at && !earlier ? { at: path.at } : {}) });
+            E.moves.set(key, { person, how: path.air && earlier ? earlier.how : path.how ?? (String(how).startsWith('ride') ? 'ride' : String(how).startsWith('climb') || String(how).startsWith('agile') || how === 'run' || earlier?.how === 'run' ? 'run' : 'walk'), ...grown(earlier, path, path.air ? path.how : null, path.airFrom ?? 0), ensemble: path.ensemble ?? [], ...(offStage ? { mount: offStage } : {}), ...(Array.isArray(path.times) && !earlier ? { at: path.times } : {}) });
             positions[person] = [path.at(-1), positions[person][1]];
             // A leap or a flight a ceiling held down (terrain-levels §8.3), or one out through a hole in the ground skin (§8.4).
             cardRecord.moves.push({ person, why, moved: true, steps: path.length, to: said(at(path.at(-1))), ...(tie ? { riding: tie.on } : {}), ...(path.drove ? { drove: path.drove } : {}), ...(path.capped ? { stoppedBy: path.capped } : {}), ...(path.through ? { through: path.through } : {}) });
@@ -1280,7 +1281,7 @@ export async function direct(novelDir, { reading, readingPath = null, prefilm = 
                 const key = `${scene.id}|${card.id}|${other}`, earlier = E.moves.get(key), from = positions[other];
                 const board = from[0] === path[0] ? [from[0]] : walk(scene, `${key}|boards|${person}`, from, [path[0]], 'run');
                 const ridden = [...(board ?? [from[0]]), ...path.slice(1)];
-                E.moves.set(key, { person: other, how, ...grown(earlier, ridden, path.air ? path.how : null, (board ?? [from[0]]).length - 1 + (path.airFrom ?? 0)), ensemble: [], ...(path.at && !earlier && (board ?? [from[0]]).length === 1 ? { at: path.at } : {}) });
+                E.moves.set(key, { person: other, how, ...grown(earlier, ridden, path.air ? path.how : null, (board ?? [from[0]]).length - 1 + (path.airFrom ?? 0)), ensemble: [], ...(Array.isArray(path.times) && !earlier && (board ?? [from[0]]).length === 1 ? { at: path.times } : {}) });
                 positions[other] = [path.at(-1), from[1]];
                 cardRecord.moves.push({ person: other, why: `rides with ${names.get(person) ?? person}${board ? '' : ' (boards from where they stood)'}`, moved: true, steps: ridden.length, riding: carrier === other ? person : carrier });
               }
