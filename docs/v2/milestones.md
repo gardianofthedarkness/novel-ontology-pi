@@ -856,6 +856,8 @@ group's next segment (the user: "What about the next beat in the next segment"):
 interactions beat"; strands.md §0.3): 11 of volume 1's 12 unions unchanged, one 26 units later. Read against the
 text (strands.md §0.4): 7 of 13 strands wrong, from two causes, fixed in the prototype (the group is the people acting;
 the rest's next appearance): the text 8 strands, all right against the text; the W15 run 9 (the 9th a run fault).
+The reunions read (strands.md §0.5): 2 of 6 right, 2 wrong (lines the reading credits to absent people), 2 off in time;
+confirmed by the next action (rule 11): the text 6 strands, 4 unions, the wrong ones refused.
 
 - [ ] **M17e The builder by interaction**: a unit's group is its acting people (`evidence`); a split is part of a group
       acting while the rest is next told out of its view; a union is people of two strands acting in one unit; the

@@ -215,8 +215,44 @@ another place, then a third person at a computer; the schemer faces the main gro
 rules a split needs the rest told meanwhile, and nobody else is told between 244 and 249. It is a different group doing
 a different thing, but no other strand runs beside it, so no physics can collide.
 
+### 0.5 The reunions, read (the user, 2026-11-09)
+
+> "What about reunion stats, are they also correct?"
+
+The 6 unions of the 8-strand result of §0.4, read in the text (privately):
+
+| Union at unit | What the text does there | Verdict |
+| --- | --- | --- |
+| 24 | the one who fled meets the one left behind's new companion; the one who fled arrives at 26, all act together at 27 | right in place, but the whole strand closes before half of it arrives |
+| 66 | two people imagine aloud what other people would say; the reading credits those imagined lines to two absent people | **wrong**: nobody of the other strand is there |
+| 140 | the guard and the chairman argue in a closed room; the reading credits a line of theirs to a person who is falling elsewhere | **wrong**: the faller's fall goes on at 145 and he is caught at 146 |
+| 169 | a fight begins between the two strands' people | right |
+| 175 | a third joins the fight | right, 4 units late: she turns on the fighters at 171, where the reading has no shared card |
+| 217 | the guard, in the closed room, sees the others arrive at the gate on a camera and goes out; they act together at 223; the chairman stays in the room | early, and it closes the chairman's part too |
+
+Two right, two wrong, two off in time. Unit 156 is also on the wrong strand: it is a captor on a phone call, and the
+chairman is only named in it. Every wrong case comes from the reading crediting a person with acting or speaking where
+the text only names, quotes or imagines them; the latency and the rules take that credit at its word.
+
+11. **A union is confirmed by the next action.** A union stands when, at the next unit where anyone who came from the
+    closing strand acts, someone of the other side acts or is in view. Otherwise it is refused (the groups act beside
+    each other there) and the walk runs again, until none is refused. The next *action*, not the next appearance: a
+    person wrongly credited is then held in view for 30 lines, which confirmed the wrong union of 66 at 67.
+
+| Rules | Text strands | Splits | Unions | Unions refused | W15 run strands |
+| --- | --- | --- | --- | --- | --- |
+| §0.4 (rules 1–10) | 8 | 5 | 6 | | 9 |
+| and 11: a union confirmed by the next action | **6** | **2** | **4** | 24, 66, 140 | 7 |
+
+With rule 11: the wrong unions of 66 and 140 are refused and the strands they cut come back whole: the guard and the
+chairman's line is 32–38, 83–87, 137–145 (and 156), into the main at 217; the faller's line is 130–136 and 146–168, into
+the main at 169 in the fight. The union of 24 moves to 27, where all three act together. Left: 175 still 4 units late,
+217 still 6 units early and still closing the chairman's part with the guard's, 156 still on the wrong strand. These
+need the reading's credit fixed (who acts in 140, 156, 171 and 217), or a union that moves only the people who met (the
+chairman stays apart when the guard goes out). The run agrees with the text on all 6, and adds the run fault of 220–225.
+
 **What it changes in what is built:**
-- M17e: rules 1–10; the group is the people acting together (rule 9); the split test reads the rest's next appearance
+- M17e: rules 1–11; the group is the people acting together (rule 9); the split test reads the rest's next appearance
   (rule 10); the union keeps the id of the strand begun first; the latency is the next-segment beat (§0.2), the fold
   after the walk; a strand of nobody folds into the first. The strands file keeps each folded strand (`folded`: its
   units, its beats, where it went) for the review.
