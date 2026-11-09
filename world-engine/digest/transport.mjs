@@ -1,3 +1,4 @@
+import { setting } from '../../dist/src/v2/settings.js';
 // The transport specialist (a pre-film cast; the user, 2026-11-06: "transport specialist"): for each vehicle the book
 // names, which of the CC0 kits' models it is (picked by Jev from its kind's models, with the lines it is named in); and for
 // each vehicle, weapon or machine, whose it is (a person of its lines, an organization, or not said). Who drives, rides or
@@ -25,6 +26,8 @@ export const OWNER_OTHER = { 'an organization': 'a group, a company, the city, a
 /** A model by the words in its name alone (before the specialist has asked, or where it says none fits). */
 export function ruleModel(kind, label = '') {
   const name = String(label);
+  // The configuration's word rules first (models.vehicleWords; milestones M13g): { kind: { regex: model } }, in order.
+  for (const [pattern, model] of Object.entries(setting('models.vehicleWords')[kind] ?? {})) { try { if (new RegExp(pattern, 'iu').test(name)) return model; } catch { /* a bad pattern is skipped */ } }
   if (kind === 'a car') {
     if (/taxi|cab|\u51fa\u79df|\u30bf\u30af\u30b7\u30fc/i.test(name)) return 'kn-taxi';
     if (/police|patrol|\u8b66|\u30d1\u30c8\u30ab\u30fc/i.test(name)) return 'kn-police';

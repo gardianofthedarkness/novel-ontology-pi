@@ -690,6 +690,46 @@
    ],
    "kind": "presentation"
   },
+  "view.props": {
+   "default": {
+    "tree": {
+     "height": 8,
+     "colour": "3f8f5a"
+    },
+    "street-light": {
+     "height": 7,
+     "colour": "c8d6e0"
+    },
+    "bench": {
+     "height": 0.7,
+     "colour": "8a6a4a"
+    },
+    "bin": {
+     "height": 0.9,
+     "colour": "5a6a72"
+    },
+    "car": {
+     "height": 1.5,
+     "colour": "7a8fa8"
+    },
+    "bollard": {
+     "height": 0.9,
+     "colour": "9aa4ad"
+    }
+   },
+   "unit": "metres and hex colour per prop kind",
+   "meaning": "How each kind of street furniture is drawn when it has no warehouse part (fill.props): the plain shape's height in metres and its colour; a part in kit units is scaled to this height.",
+   "used": [
+    "world-engine/world/export-strand-demo.mjs propLooks",
+    "world-engine/view/strand-demo.html PROP_LOOK"
+   ],
+   "layers": [
+    "universe",
+    "book",
+    "place"
+   ],
+   "kind": "presentation"
+  },
   "buildings.roleOf": {
    "default": {
     "hospital": "hospital",
@@ -1500,6 +1540,41 @@
     "book"
    ],
    "kind": "presentation"
+  },
+  "models.halls": {
+   "default": {
+    "corridor": "kk-tunnel",
+    "tunnel": "kk-tunnel",
+    "station": "kk-tunnel",
+    "utility": "kk-tunnel",
+    "mall": "kk-mall",
+    "shelter": "kk-military"
+   },
+   "unit": "model per hall kind",
+   "meaning": "Which model dresses each kind of underground hall on the terrain stage (corridor, tunnel, station, utility, mall, shelter): a baked model's name or a warehouse part <source>:<part>; a kind with none is drawn as its plain box.",
+   "used": [
+    "world-engine/world/export-strand-demo.mjs hallModels",
+    "world-engine/view/strand-demo.html UNDER_MODELS"
+   ],
+   "layers": [
+    "universe",
+    "book",
+    "place"
+   ],
+   "kind": "presentation"
+  },
+  "models.vehicleWords": {
+   "default": {},
+   "unit": "rules per vehicle kind",
+   "meaning": "Which baked model (or warehouse part) a vehicle of a kind is drawn as, by the words of its name, before the built-in rules (taxi, police, ambulance, fire, truck): { \"<kind>\": { \"<regex over the name>\": \"<model or part>\" } }; checked in order, the first match wins. Empty: the built-in rules alone.",
+   "used": [
+    "world-engine/digest/transport.mjs ruleModel"
+   ],
+   "layers": [
+    "universe",
+    "book"
+   ],
+   "kind": "presentation"
   }
  },
  "tables": {
@@ -1588,6 +1663,17 @@
    "meaning": "Which model stands for each use, kind and role; old-world models only on ancient ground.",
    "used": [
     "src/v2/world/useModels.ts"
+   ],
+   "layers": [
+    "universe",
+    "book"
+   ]
+  },
+  "models.furniture": {
+   "file": "config/furniture.json",
+   "meaning": "Each room kind's furniture as rules from the walls in (wall, grid, centre, around, back, corner, row, stools): the furniture kit's model names, by room type (the architect's rooms, digest/rooms.mjs).",
+   "used": [
+    "world-engine/digest/rooms.mjs RECIPES"
    ],
    "layers": [
     "universe",

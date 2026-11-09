@@ -1,3 +1,4 @@
+import { table } from "../../dist/src/v2/settings.js";
 // The architect's rooms (the user, 2026-11-06: "Architect should pick a room type when conversation happens in a room").
 // When a conversation plays in a room of a building, Jev picks what kind of room it is from a fixed list (the text, the
 // building, its floor); the room is then furnished by its kind from the CC0 furniture kit (KayKit Furniture Bits, baked by
@@ -27,25 +28,9 @@ export const ROOM_TYPE_NAMES = Object.keys(ROOM_TYPES);
 
 // Each kind's furniture as rules (the kit's model names), from the walls in: `wall` items stand along the walls facing in,
 // `grid` items fill the floor in rows, `centre` one in the middle, `around` chairs round the last centred table.
-const RECIPES = {
-  classroom: [{ grid: ['table_small', 'chair_A'], pitch: [1.6, 1.8] }, { front: 'table_medium' }],
-  office: [{ wall: ['table_medium', 'cabinet_medium', 'table_medium', 'shelf_A_big', 'cabinet_small'], chair: 'chair_A' }, { corner: 'lamp_standing' }],
-  'meeting room': [{ centre: 'table_medium_long' }, { around: 'chair_A' }, { corner: 'cactus_medium_A' }],
-  bedroom: [{ back: 'bed_single_A', large: 'bed_double_A' }, { wall: ['cabinet_small', 'shelf_A_small'] }, { centre: 'rug_oval_A' }, { corner: 'lamp_standing' }],
-  'living room': [{ back: 'couch_pillows' }, { centre: 'table_low' }, { wall: ['armchair', 'shelf_B_large_decorated', 'armchair'] }, { under: 'rug_rectangle_stripes_A' }, { corner: 'lamp_standing' }, { corner: 'cactus_medium_B' }],
-  'kitchen or dining room': [{ centre: 'table_medium' }, { around: 'chair_B_wood' }, { wall: ['cabinet_medium', 'cabinet_medium', 'cabinet_small'] }],
-  'café or restaurant': [{ grid: ['table_small', 'chair_A_wood', 'chair_A_wood'], pitch: [2.4, 2.4], pairs: true }, { corner: 'cactus_small_A' }],
-  bar: [{ wall: ['cabinet_medium', 'cabinet_medium', 'cabinet_medium'], stools: 'chair_stool' }, { grid: ['table_small', 'chair_stool'], pitch: [2.4, 2.4], away: 2.2 }],
-  shop: [{ wall: ['cabinet_medium_decorated', 'shelf_B_large_decorated', 'cabinet_medium_decorated', 'shelf_B_large_decorated'] }, { centre: 'table_medium' }],
-  'hospital room': [{ row: 'bed_single_B', beside: 'cabinet_small' }, { corner: 'chair_C' }],
-  laboratory: [{ grid: ['table_medium_long', 'chair_stool'], pitch: [3.2, 2.6] }, { wall: ['cabinet_medium', 'cabinet_medium'] }],
-  'library or study': [{ wall: ['shelf_A_big', 'shelf_A_big', 'shelf_A_big', 'shelf_A_big', 'shelf_A_big'] }, { centre: 'table_medium_long' }, { around: 'chair_B' }],
-  'lobby or hall': [{ wall: ['armchair', 'table_small', 'armchair'] }, { corner: 'cactus_medium_A' }, { corner: 'cactus_medium_B' }, { wall: ['pictureframe_large_A'] }],
-  storage: [{ wall: ['cabinet_medium', 'cabinet_medium', 'cabinet_small', 'cabinet_medium', 'cabinet_small'] }, { grid: ['cabinet_small'], pitch: [2.2, 2.2] }],
-  cell: [{ back: 'bed_single_B' }],
-  'control room': [{ wall: ['table_medium_long', 'table_medium_long', 'cabinet_medium'], chair: 'chair_C' }],
-  'not said': [],
-};
+// The recipes live in config/furniture.json, read through the settings schema (the table models.furniture; milestones
+// M13g): a universe or a book may furnish a kind its own way.
+const RECIPES = table("models.furniture").types;
 /** Every model a recipe can use (to bake and to put on a page). */
 export const FURNITURE_MODELS = [...new Set(Object.values(RECIPES).flatMap(rules => rules.flatMap(rule => Object.values(rule).flat().filter(value => typeof value === 'string'))))].sort();
 

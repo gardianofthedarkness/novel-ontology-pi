@@ -22,7 +22,7 @@ call); a real Jev run only when the user asks.
 | M10 | Models as code: nominate, brief, write or put, check; the warehouse (CC0 packs, our models, gkNextEngine's MIT kits) | built 2026-11-09 (23 of 23 pass; Pi skill); M10g–i the warehouse registry, its supply and its connections begun 2026-11-09; Codex/Claude Code left |
 | M11 | Landmark shells: named, described buildings as code, their footprint and height in the fill | built 2026-11-09 (2 in volume 1; height into the lot, footprint the lot's) |
 | M12 | People with bodies: a 7-bone standard, shared clips, parts by slot from the sheets | after M11 |
-| M13 | All SCAD: quantised page meshes, vehicles and furniture from the kits, a building kit of our own, the baked packs retired (design §9) | proposed 2026-11-09 (the user: "check if we can entirely switch to scad") |
+| M13 | All SCAD: quantised page meshes, vehicles and furniture from the kits, a building kit of our own, the baked packs retired, every remaining baked choice a layered setting (design §9) | items M13a–g listed 2026-11-09; M13g begun |
 | W15 | A paid volume 1 run with M8, M10 and M11 in, against W14 | done 2026-11-09 (about $0.34 with the models and a crashed attempt) |
 
 ## M0 — Design and configuration
@@ -697,6 +697,16 @@ write (about $0.1 for 60 modules). Steps, each with evidence and cost in design 
 - [ ] **M13e The baked packs retired:** `architectureModels.json`, the bakers and the glTF path dropped from the
       critical path (2.8 MB out of the repository; 525 MB off the Mac when the user empties the packs folder).
 - [ ] **M13f People as a rig** (M12).
+- [x] **M13g Every baked choice a layered setting** (built 2026-11-09) (the user, 2026-11-09: "if mesh still exist, make every baked setting
+      configurable based on context"): while baked models remain, what picks them is a setting in the schema, resolved
+      by universe < book < place like every knob, never a constant in code: the underground halls' models (`models.halls`,
+      was `UNDER_MODELS` in the player), the rooms' furniture recipes by room kind (`models.furniture`, a table, was
+      `RECIPES` in rooms.mjs), the vehicle picks by name words (`models.vehicleWords`, was `modelOf` in transport.mjs),
+      the plain prop looks (`view.props`). *Built:* `models.halls`, `models.vehicleWords` (checked before the built-in
+      word rules), `view.props` (height and colour a kind; a kit-unit part scales to the height), and the table
+      `models.furniture` (`config/furniture.json`, 17 room kinds, moved out of rooms.mjs); the export puts `hallModels`
+      and `propLooks` on the page and the player reads them. 78 keys, 9 tables. *Evidence:* schema 6/6 (every default
+      valid, every key read), engine 184/184; an override of each seen on a page: not yet. *Cost:* none.
 - [x] **Recall by name, free** (built 2026-11-09, with M10h): `find` matches a part's name, label or reference exactly
       first; a written model is `own:<label's slug>`. *Evidence:* `test/warehouse.test.ts` (a model named at birth found
       with `exact: true` by its label, by slug and by id). *Cost:* none.

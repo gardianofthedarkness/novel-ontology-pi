@@ -901,8 +901,7 @@ export async function strandDemo(novelDir, options) {
   /** A model picked by the table as the page draws it: a warehouse part as `scad:<id>` (its mesh on the page), anything else as itself. */
   const asPage = model => { if (!isRef(model) || !landmarkMeshes.has(PR.idOfRef(model))) return model; landmarksUsed.add(PR.idOfRef(model)); return `scad:${PR.idOfRef(model)}`; };
   // The plain shapes' heights (strand-demo.html PROP_LOOK): a part in kit units is scaled to them.
-  const PROP_HEIGHTS = { tree: 8, 'street-light': 7, bench: 0.7, bin: 0.9, car: 1.5, bollard: 0.9 };
-  const propModelsFor = placeId => { const out = {}; for (const [kind, ref] of Object.entries(setting('fill.props', { place: placeId }) ?? {})) { if (!ref || !landmarkMeshes.has(PR.idOfRef(ref))) continue; const id = PR.idOfRef(ref), mesh = landmarkMeshes.get(id); landmarksUsed.add(id); out[kind] = { model: `scad:${id}`, part: ref, scale: partUnits.get(ref) === 'kit' && mesh.size[1] > 0 ? Math.round(((PROP_HEIGHTS[kind] ?? 1) / mesh.size[1]) * 1000) / 1000 : 1 }; } return Object.keys(out).length ? out : null; };
+  const propModelsFor = placeId => { const out = {}; for (const [kind, ref] of Object.entries(setting('fill.props', { place: placeId }) ?? {})) { if (!ref || !landmarkMeshes.has(PR.idOfRef(ref))) continue; const id = PR.idOfRef(ref), mesh = landmarkMeshes.get(id); landmarksUsed.add(id); out[kind] = { model: `scad:${id}`, part: ref, scale: partUnits.get(ref) === 'kit' && mesh.size[1] > 0 ? Math.round(((setting('view.props', { place: placeId })[kind]?.height ?? 1) / mesh.size[1]) * 1000) / 1000 : 1 }; } return Object.keys(out).length ? out : null; };
   // On a plain map only terrain's ground stands: what terrain kept, and what a pool's members borrowed (no stand-in area's).
   const landscapes = Object.values(canvas.places).filter(place => place.landscape && (!options.plain || terrain?.sites?.[place.id]?.ground || place.landscape.patches.some(patch => patch.borrowed))).map(place => {
     const [wx, wz] = C.worldOf(canvas, place.id), round = value => Math.round(value * 10) / 10, filled = fillOf(place.landscape, place.id);
@@ -1603,7 +1602,8 @@ export async function strandDemo(novelDir, options) {
     // A lot is drawn as its building's model (its use's, config/models.json), else as its role's use's (useModels.ts roleModel).
     const sourceModel = new Map(world.source.buildings.map(b => [b.id, b.model]));
     // And its underground as theirs: passages as the tunnel, malls as the mall (§2.0.17).
-    if (options.worldOnly) for (const model of ['kk-tunnel', 'kk-mall', 'kk-military']) worn.add(model);
+    const hallModels = setting('models.halls'), propLooks = setting('view.props');
+    if (options.worldOnly) for (const model of new Set(Object.values(hallModels))) if (library.models[model]) worn.add(model);
     // One world: a lot is named whichever place named it.
     const named = (placeId, index) => [...lotNames.values()].find(entry => entry.lot === index);
     const shellOf = (placeId, lot, index) => { const name = named(placeId, index), own = !name && sourceModel.get(lot.source); if (own && String(own).startsWith('scad:') && landmarkMeshes.has(own.slice(5))) { landmarksUsed.add(own.slice(5)); return own; } if (own && library.models[own]) { worn.add(own); return own; } const floors = lot.height ?? lot.floors, model = asPage(UM.roleModel({ role: lot.role, w: lot.skeleton.nx * SKELETON_CELL, d: lot.skeleton.nz * SKELETON_CELL, floors: name?.model === 'skyscraper' ? Math.max(floors, 25) : floors, era: lot.era, named: name?.model }, `${placeId}:${index}`, modelSizes, modelTable)); if (model && !String(model).startsWith('scad:')) worn.add(model); return model; };
@@ -1630,6 +1630,7 @@ export async function strandDemo(novelDir, options) {
     return {
       models: Object.fromEntries([...worn].filter(model => !String(model).startsWith('scad:')).map(model => [model, library.models[model]])), modelSource: library.source,
       ...(landmarksUsed.size ? { scadModels: Object.fromEntries([...landmarksUsed].map(id => [id, landmarkMeshes.get(id)])) } : {}),
+      hallModels, propLooks,
       things: entities.filter(entity => entity.placed.length).map(entity => ({ id: entity.id, name: entity.name, aliases: entity.aliases, model: entity.model, theme: entity.theme ?? null, switched: entity.switched, shape: entity.shape, size: entity.size, height: entity.height, placed: entity.placed,
         struct: entity.struct ? { nx: entity.struct.nx, nz: entity.struct.nz, floors: entity.struct.floors, cells: [...entity.struct.cells].join('') } : null })),
       title: options.title ?? `${name(chosen[0].placeId)} …`, exportedAt: new Date().toISOString(), T: Math.round(T * 1000) / 1000, kappa, lambda, notes,

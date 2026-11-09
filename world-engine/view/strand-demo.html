@@ -1124,7 +1124,8 @@ function buildPlace(id) {
     const show = (mesh, x, z, extra = {}) => { const at = atPoint(x, z) ?? (terrainStage ? 0 : undefined); if (at === undefined) return; group.add(mesh); chunks.push({ mesh, at, x, z, ...extra }); };
     // The terrain view dresses its passages and malls in their models (docs/v2/world-engine-v2.md §2.0.17): a tunnel along each
     // box and bore of a passage, the mall over a mall's boxes, all of one model in one draw, in a lot shell's pale blue.
-    const UNDER_MODELS = { corridor: "kk-tunnel", tunnel: "kk-tunnel", station: "kk-tunnel", utility: "kk-tunnel", mall: "kk-mall", shelter: "kk-military" }, underModels = new Map();
+    // Which model dresses each hall kind: the page's (models.halls, a layered setting; milestones M13g), else the old constants.
+    const UNDER_MODELS = data.hallModels ?? { corridor: "kk-tunnel", tunnel: "kk-tunnel", station: "kk-tunnel", utility: "kk-tunnel", mall: "kk-mall", shelter: "kk-military" }, underModels = new Map();
     const dress = (name, x, y, z, angle, w, h, d) => { const shell = shellOf(name); if (!shell) return; if (!underModels.has(name)) underModels.set(name, []); underModels.get(name).push(new THREE.Matrix4().compose(new THREE.Vector3(x, y, z), new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), -angle), new THREE.Vector3(w / shell.size.x, h / shell.size.y, d / shell.size.z))); };
     for (const hall of under.halls) {
       const material = tint[hall.kind] ?? mats.deep, y = -hall.depth + hall.height / 2;
@@ -1879,11 +1880,10 @@ let decor = () => {};
   // instanced mesh a kind, plain shapes at their real sizes.
   const props = (data.landscapes ?? []).flatMap((entry) => entry.props ?? []);
   if (props.length) {
-    const PROP_LOOK = {
-      tree: [new THREE.ConeGeometry(2.2, 6, 7).translate(0, 5, 0), 0x3f8f5a], "street-light": [new THREE.BoxGeometry(0.25, 7, 0.25).translate(0, 3.5, 0), 0xc8d6e0],
-      bench: [new THREE.BoxGeometry(1.8, 0.5, 0.6).translate(0, 0.45, 0), 0x8a6a4a], bin: [new THREE.CylinderGeometry(0.35, 0.3, 0.9, 8).translate(0, 0.45, 0), 0x5a6a72],
-      car: [new THREE.BoxGeometry(4.4, 1.5, 1.8).translate(0, 0.75, 0), 0x7a8fa8], bollard: [new THREE.CylinderGeometry(0.15, 0.15, 0.9, 6).translate(0, 0.45, 0), 0x9aa4ad],
-    };
+    // The plain shapes: each kind's height and colour from the page (view.props, a layered setting; milestones M13g).
+    const looks = data.propLooks ?? {}, look = (kind, height, colour) => [looks[kind]?.height ?? height, parseInt(looks[kind]?.colour ?? colour, 16)];
+    const shape = { tree: (h) => new THREE.ConeGeometry(h * 0.275, h * 0.75, 7).translate(0, h * 0.625, 0), "street-light": (h) => new THREE.BoxGeometry(0.25, h, 0.25).translate(0, h / 2, 0), bench: (h) => new THREE.BoxGeometry(1.8, h * 0.7, 0.6).translate(0, h * 0.65, 0), bin: (h) => new THREE.CylinderGeometry(0.35, 0.3, h, 8).translate(0, h / 2, 0), car: (h) => new THREE.BoxGeometry(4.4, h, 1.8).translate(0, h / 2, 0), bollard: (h) => new THREE.CylinderGeometry(0.15, 0.15, h, 6).translate(0, h / 2, 0) };
+    const PROP_LOOK = Object.fromEntries(Object.entries({ tree: [8, "3f8f5a"], "street-light": [7, "c8d6e0"], bench: [0.7, "8a6a4a"], bin: [0.9, "5a6a72"], car: [1.5, "7a8fa8"], bollard: [0.9, "9aa4ad"] }).map(([kind, [h, c]]) => { const [height, colour] = look(kind, h, c); return [kind, [shape[kind](height), colour]]; }));
     // A kind drawn as a warehouse part where its landscape names one (fill.props; milestones M10i): the part's mesh from
     // scadModels, instanced like the plain shape, scaled where the part is in kit units; the Models button turns it off.
     const groups = new Map();
