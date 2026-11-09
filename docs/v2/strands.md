@@ -138,6 +138,30 @@ beat rule; corrected, the table is the corrected count. That one fix took the ru
   every one-off person standing apart folds. Counting narration in which they act as a beat changes nothing here.
 - **The very next segment told** (the story stays with the new group and they act at once) is the strictest: it folds
   166–171, 170–172, 213–215, 214–241 and 238–242 as well, leaving the 9 long lines.
+
+### 0.3 Reunite at once on a shared beat (the user, 2026-11-09)
+
+> "How about reuniting. I think reunite should be immediate after two groups have interactions beat"
+
+8. **A union is a shared beat**: a conversation (dialogue card), an action (in or out of a conversation) or an event in
+   which people of two strands act, speak or are spoken to. The strands reunite in that unit, with no latency: the
+   latency (§0.2) only ever holds back a split. Strands whose people act in one unit without a shared beat stay apart
+   (`beside`): when built, such a unit is cut into a sub-unit per group, as a run's are, so each plays on its own strand.
+
+Measured with the next-segment latency (prototype; library 16, read only):
+
+| | Unions by co-acting in a unit (§0) | Unions by a shared beat | Strands | Units with groups side by side |
+| --- | --- | --- | --- | --- |
+| Text | 12 | 12 | 14, unchanged | 1 |
+| Run W15 | 12 | 12 | 14, unchanged | 1 |
+
+- **Volume 1 nearly always reunites with a beat**: 11 of 12 unions are the same. The one that moves: the group of
+  146–150 acts beside the main in unit 151 without a shared beat; its people stay in view there through unit 160, and
+  it reunites at unit 177, where one of them talks with the main group. Under the beat rule they are apart for those 26
+  units although the text holds them in one place, in view of each other. Text and run move it alike.
+- **Which strand keeps its id** follows the most units, so the main's id can change hands at a union: without the 146
+  group's units, the main closes into the line of 68 at unit 169. The id is a name only; the build should keep the id
+  of the strand that began first, so the main keeps its name.
 - **Beats against lines.** Beats follow what the group does, lines follow how long the telling is: a long conversation
   is one beat, a quick exchange of actions is several, and a long unit of narration is none. With beats a strand of
   short scenes where the group talks again lands; with 40 lines it folds unless the telling runs on.

@@ -852,7 +852,9 @@ latency of 40 lines (the user: "strand lands only when we see they seperate long
 every text strand in the run. By the new group's next dialogue or action (two beats while apart; the user: "Try latency by
 next dialogue or action"): the text 17, the run 17 (corrected); by a beat in the
 group's next segment (the user: "What about the next beat in the next segment"): the text 14, the run 14, 13 in both
-(strands.md §0.2); which latency to build is the user's choice.
+(strands.md §0.2). Reunion at once on a shared beat (the user: "reunite should be immediate after two groups have
+interactions beat"; strands.md §0.3): 11 of volume 1's 12 unions unchanged, one 26 units later. Which latency to build
+is the user's choice.
 
 - [ ] **M17e The builder by interaction**: a unit's group is its acting people (`evidence`); a split is part of a group
       acting while the rest is next told out of its view; a union is people of two strands acting in one unit; the
