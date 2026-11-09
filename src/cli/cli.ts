@@ -70,6 +70,7 @@ import { worldAnswer, worldBatch, worldPool } from "./commands/extract/worldComm
 import { castAsk, castMerge, castReview, castSheet, castShow, sky } from "./commands/extract/castCommands.js";
 import { settingsDiff, settingsExplain, settingsProfileApply, settingsProfileList, settingsProfileSave, settingsSet, settingsShow, settingsUnset } from "./commands/extract/settingsCommands.js";
 import { warehouseAdd, warehouseFetch, warehouseFind, warehouseList, warehouseRefresh, warehouseShow, warehouseUse } from "./commands/extract/warehouseCommands.js";
+import { lookContext } from "./commands/extract/lookCommands.js";
 import { modelBind, modelBrief, modelCheck, modelList, modelNominate, modelParts, modelPut, modelShow, modelUse, modelWrite } from "./commands/extract/modelCommands.js";
 import { readingShow, sourceEpub, worldApply, worldCanon, worldHeld, worldLogShow, worldUndo } from "./commands/extract/worldReviewCommands.js";
 import { STAGE_USAGE, stageArchitecture, stageLandscape, stageLines, stageMovement, stageObjects, stagePrep, stageScale, stageShow } from "./commands/extract/stageCommands.js";
@@ -168,6 +169,7 @@ const COMMANDS: Record<string, string> = {
   "novel settings unset <novel-dir> <key> [--place <id>] [--layer universe|book] [--table] --why <text> [--before]": "Take an override out: the value falls back to the layer below",
   "novel settings diff <novel-dir> [--from <snapshot-id>]": "Every override in force, or what changed in the settings files since a snapshot",
   "novel settings profile save|apply|list <novel-dir> [<name>] --why <text> [--before]": "A profile is a named set of overrides and nothing more (<universe>/profiles/<name>.json): save the overrides in force as one, apply one through the schema, list them",
+  "novel look context <novel-dir> [--place <id>] [--top N]": "The look pass (after the reading, before the terrain loop): the place tree top down with each place's environment sentences, the words a setting answers, the warehouse parts the text names, and the keys a place may set; then novel settings set | novel warehouse use ... --place <id> --why <sentence ids>",
   "novel warehouse list [--source <name>] [<novel-dir>]": "The model warehouse's sources (gkNextEngine's kits, the baked CC0 packs, the universe's own models, yours) with counts by category and licences",
   "novel warehouse add <name> <folder> --licence <SPDX> --why <text> [--from <url>] [--kind scad|gltf] [--categories '<json>'] [--allowed-by <text>]": "Register a folder of SCAD kits or glTF files already on disk and build its catalogue (OpenSCAD evaluates each module; glTF files are measured and baked); CC0, MIT, Apache, BSD and CC-BY-4.0 pass, any other licence only with the user's recorded OK",
   "novel warehouse fetch <name> <https-url> --licence <SPDX> --ok '<the user\'s words>' --why <text> [--path <folder>] [--limit <MB>]": "Download a git repository (or one folder of it) or a zip into its own new folder under the packs root, LICENSE and SOURCE.txt kept, then add it. Never without the user's OK: ask them first with the name, licence and size",
@@ -856,6 +858,14 @@ async function main(): Promise<void> {
     if (sub === "set") { if (!positional[3] || positional[4] === undefined) throw new Error(usage); out(await settingsSet(novelDir, positional[3], positional[4], common), pretty); return; }
     if (sub === "unset") { if (!positional[3]) throw new Error(usage); out(await settingsUnset(novelDir, positional[3], common), pretty); return; }
     out(await settingsDiff(novelDir, { from: flag(positional, "--from") }), pretty);
+    return;
+  }
+
+  if (cmd === "look") {
+    const novelDir = positional[2];
+    if (sub !== "context" || !novelDir) throw new Error("Usage: novel look context <novel-dir> [--place <id>] [--top N]");
+    const top = flag(positional, "--top");
+    out(await lookContext(novelDir, { place: flag(positional, "--place"), top: top === undefined ? undefined : Number(top) }), pretty);
     return;
   }
 

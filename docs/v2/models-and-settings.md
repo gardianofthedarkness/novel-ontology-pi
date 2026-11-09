@@ -351,3 +351,36 @@ the warehouse change (6c8d4e1 and the exact-name commit), 2026-11-09:
 At Ponytail's "ultra" level the all-SCAD request itself: justified where it deletes (the baked packs and their three
 bakers, the player's 56 lines of vehicle forms, two mesh encodings into one); not yet justified for furniture (129 KB
 that works) until the kit's furniture is seen to look right, so M13d goes last.
+
+## 10. The look pass: the world generator set from the text, top down (M14; the user, 2026-11-09)
+
+The user, after the console tests: "It needs to be end to end. We can't reply on the user to tell the agent there's
+turbines. The agent has to be able to figure it out on its own by a workflow hooked of modifying terrain generation
+setting for a place before terrain loop after reading, so he can query the environment sentences. It needs to be able
+to modify on the level of places tree top down."
+
+**The step.** After a book's reading and before its terrain loop, a pre-film cast: the main agent sets the world
+generator for the book's places from the text alone. Nothing of the book is in the request it gets; the workflow's
+message is the same for every book (`tools/pi-review/look-pass.mjs`, sent to Pi's console the way the director's
+review batches are).
+
+**The query.** `novel look context <novel> [--place <id>] [--top N]`: the place tree top down (the book, its cities,
+their districts and streets, ordered by how much happens in each), and for each place its telling sentences: the
+reading's environment sentences first, then facts and narration that name something a setting answers (streets,
+buildings, trees, lights, vehicles, turbines, water, sky, underground, industry, crowds), each with its id, scene and
+the words found; the counts of those words; the warehouse parts the text names (a model of this universe by its label
+in the sentences, kit parts by the words); and the keys a place may set against those a book sets. Bounded (`--top`
+sentences a place, 8 by default), no model call.
+
+**The writes.** The agent decides the book-level look first (what every place shares), then each place's overrides
+where its own sentences differ, with `novel settings set ... --place <id> --why "<sentence ids>: <what they say>"` and
+`novel warehouse use <part> for <slot> ... --place <id>`; a kind of thing the fill does not know gets a kind of its own
+(`prop:wind-turbine`) and a `fill.ops` operator; the last change carries `--before`. A child inherits its parent's
+settings and is set only for what the text says about it. A look is never canon.
+
+**The hook.** `node tools/pi-review/look-pass.mjs <library> <volume>`: refuses without the book's reading; the message's
+id is a hash of the book and its reading, so a second send is a duplicate, not a repeat; waits for Pi to go idle and
+reports the commands run and the settings written. In the pipeline it runs after the reading and before `terrain`.
+
+**Evidence.** `test/look.test.ts` (the tree top down, environment first, words counted, a model found by its label,
+`--place`); the pass run with no hint on a book with a reading (M14 in the milestones).

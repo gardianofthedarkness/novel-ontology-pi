@@ -63,6 +63,7 @@ const FORMS = {
   settings: "novel settings show <book> [<prefix>] [--place <id>] [--changed] | explain <key> | set <book> <key> '<JSON>' [--place <id>] [--layer universe|book] [--table] --why <text> [--before] | unset <book> <key> [...] --why <text> | diff <book> [--from <snapshot>] | profile save|apply|list <book> [<name>] --why <text> [--before]  (novel-models skill)",
   warehouse: "novel warehouse list [--source <name>] [<book>] | find '<words>' [--kind '<kind>'] [--category <c>] [--size <m>] [--source <name>] [--top N] [<book>] | show <source>:<part> [<book>] | use <source>:<part> for <slot> <book> --why <text> [--place <id>] [--before] [--floors a b] | fetch <name> <https-url> --licence <SPDX> --ok '<the user's words>' --why <text> [--path <folder>] [--limit <MB>] | refresh <name> | add <name> <folder under the packs root> --licence <SPDX> --why <text>  (novel-models skill; a download only with the user's OK)",
   model: "novel model nominate <book> [--top N] | list <book> [--state todo|made|failed|part] | brief <book> <thing> | write <book> <thing>|--all [--limit N] | check <book> <thing>|--all | show <book> <thing> | use <book> <thing> <source>:<part> [--why <text>] | bind <book> [--limit N] | parts '<kind>'  (novel-models skill)",
+  look: "novel look context <book> [--place <id>] [--top N]  (the look pass, novel-models skill: each place's environment sentences, the parts the text names, the keys a place may set; then novel settings set|warehouse use ... --place <id> --why <sentence ids>)",
   help: 'novel help', config: 'novel config',
 };
 const READS = "Reads: cat NOVEL_JOB.json, cat <skill/reference path>, wc -l <source or evidence file>, sed -n 'A,Bp' <file> (at most 150 lines per page).";
@@ -394,6 +395,7 @@ function permit(command, scope) {
   // The world generator's settings (novel settings; milestones M8d), the model warehouse (novel warehouse; M10g–i) and models
   // as code (novel model; M10): the assigned book's only; a why wherever something is written; a download only with the
   // user's OK; a folder registered only under the packs root. Flags come in pairs or as switches, each at most once.
+  if (verb === 'look') valid = operation === 'context' && tokens[2] === novel && (() => { for (let i = 3; i < tokens.length; i += 2) { if (tokens[i] === '--place' && /^[\w:-]{1,80}$/.test(tokens[i + 1] ?? '')) continue; if (tokens[i] === '--top' && /^\d+$/.test(tokens[i + 1] ?? '') && Number(tokens[i + 1]) >= 1 && Number(tokens[i + 1]) <= 40) continue; return false; } return true; })();
   if (verb === 'settings' || verb === 'warehouse' || verb === 'model') {
     const text = (value, most = 400) => typeof value === 'string' && value.trim().length > 0 && !value.startsWith('-') && Buffer.byteLength(value) <= most;
     const KEY = /^[a-z][\w.]{1,60}$/i, REF = /^[a-z][a-z0-9_-]*:[\p{L}\p{N}._-]{1,120}$/u, SLOT = /^(prop|vehicle|kind|use|role):[\p{L}\p{N} .-]{1,60}$/u, PLACE = /^[\w:-]{1,80}$/, NAME = /^[a-z][a-z0-9_-]{0,31}$/, INT = (most) => (value) => /^\d+$/.test(value ?? '') && Number(value) >= 1 && Number(value) <= most;
@@ -440,5 +442,5 @@ function permit(command, scope) {
     }
   }
   if (!valid) throw new Error('Command outside this block/workspace CLI allowlist; no shell, direct file writes, credential access, or auto-approve');
-  return { kind: 'cli', args: tokens, label: `novel ${verb}${['album', 'calendar', 'changeset', 'em', 'fix', 'graph', 'timeline', 'settings', 'warehouse', 'model'].includes(verb) ? ` ${operation}` : ''}` };
+  return { kind: 'cli', args: tokens, label: `novel ${verb}${['album', 'calendar', 'changeset', 'em', 'fix', 'graph', 'timeline', 'settings', 'warehouse', 'model', 'look'].includes(verb) ? ` ${operation}` : ''}` };
 }

@@ -23,6 +23,7 @@ call); a real Jev run only when the user asks.
 | M11 | Landmark shells: named, described buildings as code, their footprint and height in the fill | built 2026-11-09 (2 in volume 1; height into the lot, footprint the lot's) |
 | M12 | People with bodies: a 7-bone standard, shared clips, parts by slot from the sheets | after M11 |
 | M13 | All SCAD: quantised page meshes, vehicles and furniture from the kits, a building kit of our own, the baked packs retired, every remaining baked choice a layered setting (design §9) | items M13a–g listed 2026-11-09; M13g begun |
+| M14 | The look pass: the world generator set from the text, top down the place tree, hooked after the reading and before the terrain loop (design §10) | built 2026-11-09; the no-hint pass to prove |
 | W15 | A paid volume 1 run with M8, M10 and M11 in, against W14 | done 2026-11-09 (about $0.34 with the models and a crashed attempt) |
 
 ## M0 — Design and configuration
@@ -746,6 +747,21 @@ write (about $0.1 for 60 modules). Steps, each with evidence and cost in design 
 - [x] **Recall by name, free** (built 2026-11-09, with M10h): `find` matches a part's name, label or reference exactly
       first; a written model is `own:<label's slug>`. *Evidence:* `test/warehouse.test.ts` (a model named at birth found
       with `exact: true` by its label, by slug and by id). *Cost:* none.
+
+## M14 — The look pass (the user, 2026-11-09: "true end to end")
+
+- [x] **M14a `novel look context`** (built 2026-11-09): the place tree top down with each place's environment sentences,
+      the words a setting answers, the parts the text names (a model of the universe by its label), the keys a place
+      may set. Guard: `look context <book> [--place <id>] [--top N]`. *Tests:* `test/look.test.ts`.
+- [x] **M14b The hook** (built 2026-11-09): `tools/pi-review/look-pass.mjs <library> <volume>` sends the workflow's
+      message (the same for every book, nothing of the book in it) to Pi's console as the review batches go, waits for
+      Pi, reports its commands and the settings written. The skill's "The look pass" tells the agent the order: the book
+      first, then each place where its own sentences differ, `--why` with sentence ids, `--before` last.
+- [ ] **M14c The pass proved with no hint** on a book with a reading: the agent finds what the text says about the city
+      (turbines everywhere, from the environment sentences alone), connects the universe's own model, sets the book
+      and its places top down. *Evidence:* the settings log after the pass; the terrain loop then builds with them.
+- [ ] **M14d In the pipeline:** the hook runs after the reading and before `terrain` for every book; volume 2 read and
+      passed end to end (a paid reading, when the user says so).
 
 ## W15 — Volume 1 again, with models and settings (a paid run, when the user asks)
 
