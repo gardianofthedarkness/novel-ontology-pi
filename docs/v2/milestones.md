@@ -630,7 +630,16 @@ both installed 2026-11-09. Tried first in a scratch test: 5 of volume 1's things
       `novel settings` and `novel warehouse` command refused: the scoped CLI's guard (`tools/pi-review/guard.mjs`) knew
       none of `settings`, `warehouse` or `model`, so the skill's commands were never runnable from Pi. Added, scoped to
       the assigned book, a why wherever something is written, a download only with the user's `--ok`, a folder
-      registered only under the packs root (`guard.test.mjs`, 21 of 21).
+      registered only under the packs root (`guard.test.mjs`, 21 of 21). *Then the test passed:* on library 16's new
+      volume 2 workspace (the snapshot's vol-2 records, its text and EPUB; no reading, no model call), two one-line
+      console requests: (1) "make the city's trees pine trees from the model warehouse, and widen the arterial streets
+      to 24 m" took 62 s and 19 commands (manifest and skill read, `settings show` 78 keys, `explain` ×2, `timeplace
+      show`, `warehouse find 'pine tree'`, `show` ×3 to compare pines, `list`, `use kit:cw_nature_pine for prop:tree`,
+      `set fill.streets`, `diff`, `show`; 1 refused `novel query` variant), both written to the book layer with reasons
+      ("widen arterial streets from 18 m to 24 m; other street widths and lot sizes unchanged"); (2) "draw every bus as a
+      bus from the warehouse kits, then save the overrides now in force as a profile named pine-city" took 33 s and
+      11 commands, nothing refused: `use kit:dd_veh_bus for vehicle:"a bus"`, `profile save` (3 overrides). Pi's
+      writes are now attributed `by: pi` in the settings log (`NOVEL_AGENT` in the runner's CLI environment).
 - [x] **M10g The warehouse registry** (built 2026-11-09) (the user, 2026-11-09; design §8.3). One registry of sources outside any library
       (`~/claude-world-first/model-packs/warehouse.json`), each with its kind (a SCAD kit or a glTF folder), path,
       licence and URL; a catalogue per source in gkNextEngine's record shape, built by us: a SCAD kit's modules
