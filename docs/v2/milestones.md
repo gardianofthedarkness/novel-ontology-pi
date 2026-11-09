@@ -25,6 +25,7 @@ call); a real Jev run only when the user asks.
 | M13 | All SCAD: quantised page meshes, vehicles and furniture from the kits, a building kit of our own, the baked packs retired, every remaining baked choice a layered setting (design §9) | items M13a–g listed 2026-11-09; M13g begun |
 | M15 | Interaction sheets: what a part does (solid, layer, seats, crash degree and radius, what it becomes when broken), defaults by kind, overrides per book; the engine's use of them (design §11) | M15a–d built 2026-11-09: sheets, standing vehicles in the walk graph, a text crash sized by the sheet, the wreck pinned where it fell |
 | M14 | The look pass: the world generator set from the text, top down the place tree, hooked after the reading and before the terrain loop (design §10) | built and proved with no hint 2026-11-09 (volume 1: 502 turbines from the text alone); M14d the pipeline hook and volume 2 end to end left |
+| M17 | Strands as groups in envelopes: one builder for the book and the director, splits only across envelopes, unions kept, physics a layer per strand, re-strand after smoothing (docs/v2/strands.md) | items M17a–d listed 2026-11-09; before M16 |
 | M16 | Across books per strand: a strand registry (open, continued), shares and damage by strand, damage kept into the universe and replayed out of it (design §4.5) | items M16a–e listed 2026-11-09 after the review before volume 2 |
 | W15 | A paid volume 1 run with M8, M10 and M11 in, against W14 | done 2026-11-09 (about $0.34 with the models and a crashed attempt) |
 | W16 | A paid volume 2 run on the universe of volume 1, M16 in force | when the user asks |
@@ -812,6 +813,25 @@ write (about $0.1 for 60 modules). Steps, each with evidence and cost in design 
 - [ ] **M14d In the pipeline:** the hook runs after the reading and before `terrain` for every book; volume 2 read and
       passed end to end (a paid reading, when the user says so).
 
+## M17 — Strands as groups in envelopes (the user, 2026-11-09; design docs/v2/strands.md)
+
+Revisited before M16: a strand is a timeline performed by a group of people in a limited enveloping area; its physics
+touches no other strand; two strands unify where the text has their groups together. Today v1's lanes make 28 forks of
+volume 1 (18 of one scene, 16 of 27 side forks in the main fork's own street) and the world is one for all of them.
+
+- [ ] **M17a The builder**: `groupStrands(script, { envelope })` in `src/v2/extraction/strands.ts`, the walk of §3 (sources,
+      continue or split by envelope, union keeping the larger id, entries as today); `strands.mjs` and the director's
+      `segments.mjs strandsFile` on it; `strands.json` with `envelope`, `unites`, `open` per fork; the setting
+      `strands.envelope` (default `district`). *Expected on volume 1:* 18 strands, the main of 244 scenes uniting 18.
+- [ ] **M17b The run on them**: the first quarter rehearsed before and after (moves, laws: L1's "first in this strand"
+      amendments should fall), the world log's strands, the review's identity proposals unchanged in kind.
+- [ ] **M17c Physics per strand**: the engine's damage state a layer per strand (copy-on-write by lot), the director
+      playing each scene in its strand's layer, splits copying, unions merging; the page showing the played strand's
+      layer. *Proof:* units 160–175 rehearsed with a stand-in Jev: fork 162's blasts unseen by the main strand until
+      scene 173, seen after.
+- [ ] **M17d Re-strand after smoothing**: groups read off a run's smoothed positions, reported against the text's
+      strands; the cross-book registry takes them when a run exists. *First case:* W15's record.
+
 ## M16 — Across books, per strand (the user, 2026-11-09)
 
 The review before volume 2 (2026-11-09): the per-book clearing of the design's §4.5 was bookkeeping only. `Slot.damaged`
@@ -819,7 +839,7 @@ is written by nothing (1,178 slots in the universe, none damaged), nothing carri
 reads a file the director's runs never write), and the W15 run's 24 blasts include one on a nominated building's own lot
 (loc_000010's, scene 117, strength 0.9) that no later book would have seen; the other 17 struck lots are the landscape's
 own fill or non-nominated buildings inside nominated districts. The user's call: clear per strand, not per book ("what if
-the next book returned to a non finished strand?"); the policy as rewritten is design §4.5.
+the next book returned to a non finished strand?"); the policy as rewritten is design §4.5. Builds on M17 (the strands themselves).
 
 - [ ] **M16a The strand registry** (`experiments/v2/strands.mjs --universe <dir>`): every fork of the book in
       `universe/strands.json` (book, fork, scenes, people by name, the last scene's place and chapter); `open` read from

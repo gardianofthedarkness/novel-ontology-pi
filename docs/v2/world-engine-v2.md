@@ -405,6 +405,8 @@ reading's own since §2.0.9), `novel sim terrain`
 
 ### 2.0.7a Story strands in v2 (the user's call, 2026-11-01: "v1 has strands already proven to work to some extent, we can build it directly") — built
 
+> Revisited 2026-11-09: strands as groups in envelopes, with unions and physics per strand (docs/v2/strands.md, M17); the lanes below are the first build.
+
 The v2 story time is one clock with flashbacks (a calendar and a time tree); a v2 book was simulated as one line in
 reading order. Spawning needs each person's own world line: a person carries their position from their own last scene at
 the same place, and arrives from elsewhere otherwise. So v1's strands (`apps/playground/src/data/storyStrands.ts`, about
