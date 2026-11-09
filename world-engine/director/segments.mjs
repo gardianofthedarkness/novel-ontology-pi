@@ -102,29 +102,18 @@ export function segmentWorld({ reading: given, script, spawn }) {
 
 /**
  * The strands file (stage/world/strands.json's shape) of a segment script, in story time (the user, 2026-11-03: "we need
- * to make it story objective time order, as strands become forks"). v1's strands (`storyStrands` on the script's
- * projection, `scriptProjection`) give each container its layer (its place in story time, from the evidence of order:
- * a person's worldline, a flashback, stated times) and the lane it continues; a container with nobody in it stands alone
- * (no borrowed cast: nobody is placed without evidence). Then, in story order (layer, then reading order): a container is
- * on the fork of the one it continues, else starts one; each person's entry comes `from` the last container they were
- * in **in story time** (a flashback hands nothing over), at the same place or not. Someone new in a strand comes from
- * nowhere, which is fine.
+ * to make it story objective time order, as strands become forks"), by group and envelope (docs/v2/strands.md; the user,
+ * 2026-11-09: "a timeline performed by a group of people in a limited, enveloping area"). The builder is the book's own
+ * (`groupStrands`, `strandsDocument`: src/v2/extraction/strands.ts), bound with the book's envelope scale and the built
+ * world's place tree by strand-builder.mjs: a container is on the strand its people are on unless they are told in
+ * another envelope while the rest of their group is told elsewhere; where the text has groups together they are one
+ * strand again. Each person's entry comes `from` the last container they were in **in story time** (a flashback hands
+ * nothing over), at the same place or not; a container with nobody in it is on the strand being told. `strands` is the
+ * builder's own answer (its maps), for the engine's per-fork timeline.
  */
-export function strandsFile(script, { scriptProjection, storyStrands }) {
-  const alone = new Set(script.scenes.filter(scene => !scene.present?.length).map(scene => scene.id));
-  const strands = storyStrands(scriptProjection(script), { alone });
-  const index = new Map(script.scenes.map((scene, n) => [scene.id, n])), byId = new Map(script.scenes.map(scene => [scene.id, scene]));
-  const order = [...script.scenes].sort((a, b) => (strands.layer.get(a.id) ?? 0) - (strands.layer.get(b.id) ?? 0) || index.get(a.id) - index.get(b.id));
-  const forkOf = new Map(), last = new Map(), entries = new Map();
-  for (const scene of order) {
-    const previous = strands.continues?.get(scene.id) ?? null;
-    forkOf.set(scene.id, previous && forkOf.has(previous) ? forkOf.get(previous) : scene.id);
-    const flashback = scene.clock === null;
-    entries.set(scene.id, (scene.present ?? []).map(person => { const from = flashback ? null : last.get(person) ?? null; return { person, from, samePlace: !!from && !!scene.place && byId.get(from)?.place === scene.place }; }));
-    if (!flashback) for (const person of scene.present ?? []) last.set(person, scene.id);
-  }
-  const forks = [...new Set(forkOf.values())].map(id => ({ id, scenes: order.filter(scene => forkOf.get(scene.id) === id).map(scene => scene.id) }));
-  return { version: 1, from: 'v2-script-segments', order: 'story', scenes: script.scenes.map(scene => ({ id: scene.id, parent: scene.parent ?? null, fork: forkOf.get(scene.id) ?? null, layer: strands.layer.get(scene.id) ?? null, lane: strands.lane.get(scene.id) ?? null, continues: strands.continues?.get(scene.id) ?? null, entries: entries.get(scene.id) ?? [] })), forks, checks: strands.checks, strands };
+export function strandsFile(script, { groupStrands, strandsDocument, envelope, tree }) {
+  const strands = groupStrands(script, { ...(envelope ? { envelope } : {}), ...(tree ? { tree } : {}) });
+  return { ...strandsDocument(script, strands, 'v2-script-segments'), strands };
 }
 
 /**

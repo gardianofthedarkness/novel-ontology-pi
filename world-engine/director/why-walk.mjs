@@ -12,11 +12,11 @@
 import { execFileSync } from 'node:child_process';
 import { copyFile, mkdir, readFile, writeFile } from 'node:fs/promises';
 import { dirname, join, resolve } from 'node:path';
-import { fileURLToPath, pathToFileURL } from 'node:url';
+import { fileURLToPath } from 'node:url';
 import { parseArgs } from 'node:util';
 import { inlineStrand, strandDemo } from '../world/export-strand-demo.mjs';
 
-const repository = resolve(dirname(fileURLToPath(import.meta.url)), '..', '..'), load = path => import(pathToFileURL(join(repository, path)).href);
+const repository = resolve(dirname(fileURLToPath(import.meta.url)), '..', '..');
 const CELL = 2, FLOOR = 3;
 const KIND = { 1: ['open ground', '#d9d4c3'], 2: ['corridor / stair', '#8fa6bf'], 3: ['room', '#e2b980'], 4: ['roof', '#b48fd6'], 5: ['underground hall', '#5f9e98'], 6: ['rubble', '#a1785c'] };
 
@@ -49,7 +49,7 @@ if (process.argv[1] === fileURLToPath(import.meta.url)) {
   let reading = JSON.parse(await readFile(resolve(values.reading), 'utf8'));
   const worldFile = async name => JSON.parse(await readFile(join(dir, 'stage', 'world', name), 'utf8').catch(() => 'null'));
   const SG = await import('./segments.mjs'), seg = SG.segmentWorld({ reading, script: await worldFile('script.json'), spawn: await worldFile('spawn.json') });
-  const segStrands = SG.strandsFile(seg.script, { scriptProjection: (await load('dist/src/v2/extraction/strands.js')).scriptProjection, storyStrands: (await load('dist/apps/playground/src/data/storyStrands.js')).storyStrands });
+  const segStrands = SG.strandsFile(seg.script, await (await import('./strand-builder.mjs')).strandBuilder(dir));
   const held = heldMoves(record);
   const scenesOf = held.map(entry => entry.container).sort();
   // The page's nodes are its grid's dense cells; the engine's are numbered as first asked for (W.nodeId), so a run's

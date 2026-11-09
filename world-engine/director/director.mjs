@@ -105,7 +105,7 @@ export async function direct(novelDir, { reading, readingPath = null, prefilm = 
   const worldFile = async name => JSON.parse(await readFile(join(novelDir, 'stage', 'world', name), 'utf8').catch(() => 'null'));
   const SG = await import('./segments.mjs'), seg = SG.segmentWorld({ reading, script: await worldFile('script.json'), spawn: await worldFile('spawn.json') });
   if (!seg) throw new Error('the reading has no scenes to play');
-  const segStrands = SG.strandsFile(seg.script, { scriptProjection: (await load('dist/src/v2/extraction/strands.js')).scriptProjection, storyStrands: (await load('dist/apps/playground/src/data/storyStrands.js')).storyStrands });
+  const segStrands = SG.strandsFile(seg.script, await (await import('./strand-builder.mjs')).strandBuilder(novelDir));
   const segForkOf = new Map((segStrands.scenes ?? []).map(entry => [entry.id, entry.fork ?? entry.id]));
   reading = seg.reading;
   const scriptOf = async () => seg.script ?? { scenes: [] }, strandsOf = async () => segStrands, spawnOf = async () => seg.spawn;
@@ -357,7 +357,8 @@ export async function direct(novelDir, { reading, readingPath = null, prefilm = 
         const starts = Object.fromEntries(Object.entries(run.starts).map(([who, value]) => [who, dense(value[0])]));
         const events = scene.events.map(event => ({ id: event.id, actors: event.actors ?? [], text: event.text, camera: event.camera ?? null, spots: [], hit: E.hits?.get(event.id) ?? null, blows: E.blows?.get(event.id) ?? [], hitThings: null, trace: null,
           moves: scene.cast.map(person => E.moves.get(`${scene.id}|${event.id}|${person}`)).filter(Boolean).map(move => ({ person: move.person, how: move.how, with: null, path: move.path.map(dense), ensemble: (move.ensemble ?? []).map(other => other.map(dense)), ...(move.mount ? { mount: move.mount } : {}), ...(move.air ? { air: move.air } : {}), ...(move.pace ? { pace: move.pace } : {}), ...(move.at ? { at: move.at } : {}), ...(move.real ? { real: true } : {}) })) }));
-        return { scene: scene.id, starts, events, cast: scene.cast, grid: gridKey() };
+        // The hits before this scene that its strand had not seen when it was played (M17c): the page leaves them out of it.
+        return { scene: scene.id, starts, events, cast: scene.cast, grid: gridKey(), unseen: E.layers?.unseen(scene.id) ?? [] };
       }
       // Each unnamed place's first unit (the world script's `scene`), for the live view to show it only once that unit has landed.
       const bornOf = new Map();
@@ -673,6 +674,13 @@ export async function direct(novelDir, { reading, readingPath = null, prefilm = 
         record.scenes.push(sceneRecord);
         asking = sceneRecord;
         if (!run || !reads) continue;
+        // The scene is played in its strand's layer of the world (strand-layers.mjs; docs/v2/strands.md §4; milestones M17c):
+        // what another strand broke, stood or caved in is not in it until the two unite; a split begins as a copy.
+        { const entered = E.enter?.(scene.id);
+          if (entered) {
+            sceneRecord.layer = { strand: entered.layer, ...(entered.created ? { began: true } : {}), ...(entered.merged.length ? { united: entered.merged.map(entry => entry.strand) } : {}), ...(entered.switched || entered.merged.length ? { lots: entered.lots.length, things: entered.things.length, under: entered.cells.length + entered.marks.length } : {}), ...(entered.unseen.length ? { unseen: entered.unseen } : {}) };
+            if (entered.switched || entered.merged.length) log(`${scene.id}: in strand ${entered.layer}${entered.created ? ' (begun)' : ''}${entered.merged.length ? `, united with ${entered.merged.map(entry => entry.strand).join(' ')}` : ''}: ${entered.lots.length} lots, ${entered.things.length} things, ${entered.cells.length + entered.marks.length} underground cells differ; ${entered.unseen.length} hits unseen`);
+          } }
         // The world state (docs/v2/world-engine-redesign.md §1): who stands where carries through the story. Someone seen before
         // carries on from where they are; seen for the first time, they start at spawning's start (spawning happens once);
         // standing outside the scene's place, they travel to their start in it (walked; beyond 300 m they arrive off-page).
@@ -2163,6 +2171,8 @@ export async function direct(novelDir, { reading, readingPath = null, prefilm = 
         await save();
       }
       // The things placed over the line, for the record.
+      // The world's layers as the run left them, and what began, united and changed hands on the way (M17c).
+      if (E.layers) record.layers = E.layers.report();
       record.items = [...things.values()].map(thing => ({ id: thing.id, name: thing.name, size: thing.size, holder: thing.holder, placements: thing.placed.length, broken: thing.broken, events: thing.events }));
       result = { data: { ...withLine(page), title: `The director · ${from} – ${to}`, director: payload() }, calls };
       // The run as a playable run of the book (stage/simulation/index.json, the Player's list): replayed card by card. A
@@ -2187,6 +2197,13 @@ export async function direct(novelDir, { reading, readingPath = null, prefilm = 
         const onNow = OC.occupation({ reading, script: await scriptOf(), strands: strandsNow, pins });
         await writeFile(join(novelDir, 'stage', 'world', 'smoothed', `${id}.json`), JSON.stringify({ version: 1, run: id, ...smoothedNow, onStage: onNow.proposals, on: onNow.on }));
         record.smoothing = { ...(record.smoothing ?? {}), after: { moments: Object.values(smoothedNow.people).reduce((n, list) => n + list.length, 0), revisions: smoothedNow.revisions.length } };
+        // The run re-stranded (M17d, restrand.mjs): the groups and envelopes read off where its people stood, against the
+        // text's strands; its strands file beside the smoothed positions, for the report and the cross-book registry.
+        try {
+          const RS = await import('../smoother/restrand.mjs'), again = await RS.restrandRun(novelDir, { run: id, script: await scriptOf(), smoothed: { run: id, ...smoothedNow }, only: record.scenes.map(entry => entry.scene), write: true });
+          record.restrand = RS.summary(again.report);
+          log(`re-stranded: ${RS.describe(again.report)[0]}`);
+        } catch (error) { record.restrand = { error: String(error.message ?? error) }; }
       } catch (error) { record.smoothing = { ...(record.smoothing ?? {}), error: String(error.message ?? error) }; }
       // What the run settled into canon (W6, canon.mjs), each by its gate, undoable; the graph rebuilt from the bundle. First,
       // so what it holds (the lines no one could settle, the audits) goes to the review with the rest.
@@ -2231,7 +2248,7 @@ export async function direct(novelDir, { reading, readingPath = null, prefilm = 
   const framesNow = (await readFile(framesFile, 'utf8').catch(() => '')).split('\n').filter(Boolean);
   if (framesNow.length > framesBefore) await writeFile(join(runDir, 'frames.jsonl'), framesNow.slice(framesBefore).join('\n') + '\n');
   await writeFile(join(runDir, 'index.json'), JSON.stringify({ version: 1, run: runId, from, to, model: jev.modelId, startedAt: record.startedAt, finishedAt: record.finishedAt, calls,
-    files: { record: 'run.json', laws: 'laws.json', log: 'run.log', pins: 'pins.json', frames: 'frames.jsonl', page: `../../../simulation/runs/director/${runId}.page.json`, worldLog: `../../../world/log/${runId}.jsonl`, ledger: `../../../world/ledger/${runId}.jsonl`, smoothed: `../../../world/smoothed/${runId}.json`, canon: '../../../world/canon.jsonl', pool: '../../../world/pool.jsonl', answers: '../../../world/answers.jsonl' } }, null, 1));
+    files: { record: 'run.json', laws: 'laws.json', log: 'run.log', pins: 'pins.json', frames: 'frames.jsonl', page: `../../../simulation/runs/director/${runId}.page.json`, worldLog: `../../../world/log/${runId}.jsonl`, ledger: `../../../world/ledger/${runId}.jsonl`, smoothed: `../../../world/smoothed/${runId}.json`, restrand: `../../../world/restrand/${runId}.json`, canon: '../../../world/canon.jsonl', pool: '../../../world/pool.jsonl', answers: '../../../world/answers.jsonl' } }, null, 1));
   log(`run ${runId} done: ${calls} calls; its records in stage/director/runs/${runId}/`);
   return { record, ...result };
 }

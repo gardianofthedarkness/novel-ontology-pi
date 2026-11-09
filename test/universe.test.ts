@@ -41,6 +41,7 @@ test("classify: state, a run's files, derived, the text", () => {
   assert.equal(classify("vol-1/novel/stage/world/spawn.json").kind, "state");
   assert.equal(classify("universe/terrain.json").kind, "state");
   assert.deepEqual(classify("vol-1/novel/stage/world/smoothed/d20261105013948.json"), { kind: "run", run: "d20261105013948" });
+  assert.deepEqual(classify("vol-1/novel/stage/world/restrand/d20261105013948.json"), { kind: "run", run: "d20261105013948" }, "a run's strands (M17d)");
   assert.deepEqual(classify("vol-1/novel/stage/director/runs/d20261105013948/workflow.json"), { kind: "run", run: "d20261105013948" });
   assert.deepEqual(classify("vol-1/novel/stage/simulation/runs/director/d1.page.json"), { kind: "run", run: "d1" });
   for (const rel of ["vol-1/novel/ontology/graph.lbug", "vol-1/novel/stage/director/cache/x.json", "vol-1/novel/stage/director/shots/a.png", "vol-1/novel/stage/simulation/live/page.json", "vol-1/novel/stage/simulation/live.json"]) assert.equal(classify(rel).kind, "derived", rel);
@@ -57,6 +58,7 @@ test("libraryOf finds the library and the book from a novel folder", async () =>
     assert.deepEqual(libraryOf(join(root, "vol-1", "novel")), { root, book: "vol-1" });
     assert.deepEqual(libraryOf(root), { root, book: null });
     assert.equal(libraryPaths(root).book("vol-1").world.smoothed("d1"), join(root, "vol-1/novel/stage/world/smoothed/d1.json"));
+    assert.equal(libraryPaths(root).book("vol-1").world.restrand("d1"), join(root, "vol-1/novel/stage/world/restrand/d1.json"));
   } finally { await rm(root, { recursive: true, force: true }); }
 });
 

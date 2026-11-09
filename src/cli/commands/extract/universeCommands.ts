@@ -51,7 +51,7 @@ function describePaths(root: string, book?: string) {
     const b = paths.book(book);
     shown.book = {
       dir: b.dir, novel: b.novel, source: b.source, ontology: b.ontology, graph: b.graph, reading: b.reading, terrain: b.terrain,
-      world: { ...b.world, log: b.world.log("<run>"), ledger: b.world.ledger("<run>"), smoothed: b.world.smoothed("<run>") },
+      world: { ...b.world, log: b.world.log("<run>"), ledger: b.world.ledger("<run>"), smoothed: b.world.smoothed("<run>"), restrand: b.world.restrand("<run>") },
       director: { ...b.director, runs: b.director.runs("<run>") }, simulation: { ...b.simulation, page: b.simulation.page("<run>") },
     };
   }

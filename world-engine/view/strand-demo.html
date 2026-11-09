@@ -204,6 +204,10 @@ function travelOf(migration, scene = null, place = null) {
 // The timeline: a card per scene, then its events, each as long as its slowest move or long enough to read; hits counted per
 // place. Built again in place when the director's loop grows the line (`extend`): the page is not loaded again.
 const segments = [], eventStart = new Map(), sceneStart = new Map(), placeHits = {};
+// Each hit's event (milestones M17c): a scene's `unseen` lists the events whose hits its strand had not seen when it was
+// played (another strand's, before the two unite): the scene is drawn without them.
+const hitEvent = new Map();
+let layerShown = null;
 let total = 0;
 // A dialogue card's spoken lines (the director's cards, each line with its kind and speaker): the card lasts long enough to
 // read them (SAY a character), each line shown in a bubble over its speaker for its share of the card.
@@ -211,7 +215,7 @@ const SAY = 0.16;
 // Blows (the director's fights, an event's `blows`): each plays BLOW seconds after the one before, from BLOW_FROM in.
 const BLOW = 1.1, BLOW_FROM = 0.35;
 function buildTimeline() {
-  segments.length = 0; eventStart.clear(); sceneStart.clear(); for (const key of Object.keys(placeHits)) delete placeHits[key];
+  segments.length = 0; eventStart.clear(); sceneStart.clear(); hitEvent.clear(); for (const key of Object.keys(placeHits)) delete placeHits[key];
   const sayings = new Map((data.director?.cards ?? []).map((card) => [`${card.scene}|${card.event}`, card.lines.filter((line) => line.kind === "spoken" && line.text.trim())]));
   let clock = 0;
   const hitsSoFar = {};
@@ -254,7 +258,7 @@ function buildTimeline() {
   }
   total = clock;
   for (const segment of segments) { if (segment.kind === "event") eventStart.set(`${segment.scene.id}|${segment.eventIndex}`, segment.start); if (segment.kind === "card") sceneStart.set(segment.scene.id, segment.start); }
-  for (const scene of data.scenes) for (const event of scene.events) if (event.hit) (placeHits[keyOf(scene.place)] ??= []).push(event.hit);
+  for (const scene of data.scenes) for (const event of scene.events) if (event.hit) { (placeHits[keyOf(scene.place)] ??= []).push(event.hit); hitEvent.set(event.hit, event.id); }
   // Damage other story lines left on the world before this one (the engine applied it from stage/simulation/world.json): drawn
   // as hits from the start, before this line's own.
   const earlierHits = (data.world?.earlier ?? []).map((entry) => ({ lot: entry.lot, destroyed: entry.destroyed, fell: entry.fell, cutOff: [], cutRooms: [], blasted: entry.blasted.length ? entry.blasted : null, fallen: entry.fallen }));
@@ -1306,17 +1310,18 @@ function release(root) {
 }
 for (const material of Object.values(mats)) if (material?.isMaterial) sharedMaterials.add(material);
 sharedMaterials.add(groundMat); unit.userData.shared = true;
-function drawSkeletons(id, entry, count, settling = null) {
-  const reached = entry.bornAt ? entry.bornAt.filter((at) => at <= time).length : 0, key = `${count}|${settling ? 1 : 0}|${reached}|${entry.farKey ?? ""}`;
+function drawSkeletons(id, entry, count, settling = null, unseen = null) {
+  const reached = entry.bornAt ? entry.bornAt.filter((at) => at <= time).length : 0, key = `${count}|${settling ? 1 : 0}|${reached}|${entry.farKey ?? ""}|${unseen?.key ?? ""}`;
   if (entry.shownHits === key) return;
   entry.shownHits = key;
+  entry.leftOut = unseen ? (placeHits[keyOf(id)] ?? []).slice(0, count).filter((hit) => unseen.ids.has(hitEvent.get(hit))).length : 0;
   // The insides drawn before are let go, not only taken off (the user, 2026-11-05: the phone's browser reloading the page;
   // every rebuild kept the last one's geometry, some 20 geometries a jump about the story).
   if (entry.dynamic) { entry.group.remove(entry.dynamic); release(entry.dynamic); }
   const place = data.places[id], dynamic = new THREE.Group(), lost = place.lots.map(() => new Set()), cutCells = place.lots.map(() => new Set()), cutRooms = place.lots.map(() => new Set());
   // A hit may reach several buildings (an impact sphere): each lot it reaches loses its own cells.
   const gone = place.lots.map(() => new Set()), structural = new Set(), rubble = [];
-  for (const hit of (placeHits[keyOf(id)] ?? []).slice(0, count)) for (const part of buildingParts(place, hit)) {
+  for (const hit of (placeHits[keyOf(id)] ?? []).slice(0, count)) if (!unseen?.ids.has(hitEvent.get(hit))) for (const part of buildingParts(place, hit)) {
     for (const cell of [...part.destroyed, ...(part.fell ?? [])]) lost[part.lot].add(cell);
     cutCells[part.lot] = new Set(part.cutOff); cutRooms[part.lot] = new Set(part.cutRooms);
     if (!part.blasted) continue;
@@ -2106,13 +2111,14 @@ const poseFor = (id) => { const spot = macroAt.get(id) ?? { x: 0, z: 0 }, place 
  * frame held at the line's end plays the new piece on from there; a reader replaying an earlier card is left where they are.
  */
 const gridOf = () => `${data.world?.NX}x${data.world?.NZ}+${data.world?.oi},${data.world?.oj},${data.world?.ok}`;
-function extendLine({ scene, starts = null, events = null, cast = null, grid = null, focus = null }) {
+function extendLine({ scene, starts = null, events = null, cast = null, grid = null, focus = null, unseen = null }) {
   if (grid && grid !== gridOf()) return null;
   const own = data.scenes.find((entry) => entry.id === scene);
   if (!own) return null;
   if (starts) own.starts = starts;
   if (events) own.events = events;
   if (cast) own.cast = cast;
+  if (unseen) own.unseen = unseen;
   own.landed = true;
   if (focus && data.live) data.live.focus = focus;
   buildTimeline(); buildHitTimes(); traceUnits = null;
@@ -2489,7 +2495,10 @@ function frame(now) {
     }
   }
   const settling = !quiet && segment.kind === "event" && segment.event.hit && elapsed < 3.2 ? segment.event.hit : null;
-  for (const id of new Map(Object.keys(data.places).map((id) => [keyOf(id), id])).values()) drawSkeletons(id, built.get(id), (hitTimes[keyOf(id)] ?? []).filter((at) => at <= time && (hitsBefore === null || at < hitsBefore)).length, keyOf(id) === keyOf(segment.scene.place) ? settling : null);
+  // The scene's strand's layer of the world (M17c): hits of a strand it has not united with are left out of it.
+  layerShown = { scene: segment.scene.id, strand: segment.scene.strand ?? null, unseen: segment.scene.unseen?.length ?? 0 };
+  const unseen = segment.scene.unseen?.length ? { key: `${segment.scene.id}:${segment.scene.unseen.length}`, ids: new Set(segment.scene.unseen) } : null;
+  for (const id of new Map(Object.keys(data.places).map((id) => [keyOf(id), id])).values()) drawSkeletons(id, built.get(id), (hitTimes[keyOf(id)] ?? []).filter((at) => at <= time && (hitsBefore === null || at < hitsBefore)).length, keyOf(id) === keyOf(segment.scene.place) ? settling : null, unseen);
   if (!capture) showTraces();
   if (segment !== shownSegment) {
     shownSegment = segment; showPaths(segment, entry); showTrace(segment);
@@ -2667,6 +2676,8 @@ function cullByInterest(entry, shot = null) {
  */
 const SEE = { front: 0.06, near: 0.35, margin: 6, every: 120, hold: 700 };
 /** For checking: which buildings of each built place are seen through now (in front) or dimmed (beside the line of sight). */
+// The strand's layer shown (M17c): the scene, its strand, the hits of other strands it has not seen, those left out of the drawing.
+window.__layers = () => ({ ...layerShown, hits: [...new Set(Object.values(placeHits).flat())].length, leftOut: [...new Set(built.values())].reduce((sum, entry) => sum + (entry.leftOut ?? 0), 0) });
 window.__seen = () => Object.fromEntries([...built].map(([id, entry]) => [id, { front: [...entry.masked], near: [...(entry.near ?? [])], fade: entry.lots.map((lot) => Math.round((lot.fade ?? 1) * 100) / 100) }]));
 const sightHit = new THREE.Vector3();
 function seeThrough(entry, segment, now, dt, elapsed) {

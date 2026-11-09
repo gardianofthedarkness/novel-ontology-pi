@@ -25,7 +25,7 @@ call); a real Jev run only when the user asks.
 | M13 | All SCAD: quantised page meshes, vehicles and furniture from the kits, a building kit of our own, the baked packs retired, every remaining baked choice a layered setting (design §9) | items M13a–g listed 2026-11-09; M13g begun |
 | M15 | Interaction sheets: what a part does (solid, layer, seats, crash degree and radius, what it becomes when broken), defaults by kind, overrides per book; the engine's use of them (design §11) | M15a–d built 2026-11-09: sheets, standing vehicles in the walk graph, a text crash sized by the sheet, the wreck pinned where it fell |
 | M14 | The look pass: the world generator set from the text, top down the place tree, hooked after the reading and before the terrain loop (design §10) | built and proved with no hint 2026-11-09 (volume 1: 502 turbines from the text alone); M14d the pipeline hook and volume 2 end to end left |
-| M17 | Strands as groups in envelopes: one builder for the book and the director, splits only across envelopes, unions kept, physics a layer per strand, re-strand after smoothing (docs/v2/strands.md) | items M17a–d listed 2026-11-09; before M16 |
+| M17 | Strands as groups in envelopes: one builder for the book and the director, splits only across envelopes, unions kept, physics a layer per strand, re-strand after smoothing (docs/v2/strands.md) | M17a–d built 2026-11-09: volume 1 is 2 strands at the district scale (28 before), a world layer per strand, W15 re-stranded (4 strands in the run, 28 units played away from their places) |
 | M16 | Across books per strand: a strand registry (open, continued), shares and damage by strand, damage kept into the universe and replayed out of it (design §4.5) | items M16a–e listed 2026-11-09 after the review before volume 2 |
 | W15 | A paid volume 1 run with M8, M10 and M11 in, against W14 | done 2026-11-09 (about $0.34 with the models and a crashed attempt) |
 | W16 | A paid volume 2 run on the universe of volume 1, M16 in force | when the user asks |
@@ -816,21 +816,34 @@ write (about $0.1 for 60 modules). Steps, each with evidence and cost in design 
 ## M17 — Strands as groups in envelopes (the user, 2026-11-09; design docs/v2/strands.md)
 
 Revisited before M16: a strand is a timeline performed by a group of people in a limited enveloping area; its physics
-touches no other strand; two strands unify where the text has their groups together. Today v1's lanes make 28 forks of
-volume 1 (18 of one scene, 16 of 27 side forks in the main fork's own street) and the world is one for all of them.
+touches no other strand; two strands unify where the text has their groups together. Before, v1's lanes made 28 forks of
+volume 1 (18 of one scene, 16 of 27 side forks in the main fork's own street) and the world was one for all of them.
+Built 2026-11-09 (the user: "I agree let's build it"); the rules as built and the measurements are in docs/v2/strands.md.
 
-- [ ] **M17a The builder**: `groupStrands(script, { envelope })` in `src/v2/extraction/strands.ts`, the walk of §3 (sources,
-      continue or split by envelope, union keeping the larger id, entries as today); `strands.mjs` and the director's
-      `segments.mjs strandsFile` on it; `strands.json` with `envelope`, `unites`, `open` per fork; the setting
-      `strands.envelope` (default `district`). *Expected on volume 1:* 18 strands, the main of 244 scenes uniting 18.
-- [ ] **M17b The run on them**: the first quarter rehearsed before and after (moves, laws: L1's "first in this strand"
-      amendments should fall), the world log's strands, the review's identity proposals unchanged in kind.
-- [ ] **M17c Physics per strand**: the engine's damage state a layer per strand (copy-on-write by lot), the director
-      playing each scene in its strand's layer, splits copying, unions merging; the page showing the played strand's
-      layer. *Proof:* units 160–175 rehearsed with a stand-in Jev: fork 162's blasts unseen by the main strand until
-      scene 173, seen after.
-- [ ] **M17d Re-strand after smoothing**: groups read off a run's smoothed positions, reported against the text's
-      strands; the cross-book registry takes them when a run exists. *First case:* W15's record.
+- [x] **M17a The builder**: `groupStrands(script, { envelope, tree })` in `src/v2/extraction/strands.ts` (envelopes apart
+      only on evidence, a strand moves with its group, a split only when the rest is told elsewhere meanwhile, a union
+      keeping the larger id, flashbacks closed strands); bound per book by `director/strand-builder.mjs` (the setting
+      `strands.envelope`, default `district`; the built tree from the terrain registry); `strands.mjs`, the director's
+      segments, the pre-film casts and `why-walk` on it; the file is `version: 2` with `envelope`, `open`, `splitFrom`,
+      `into`, `intoAt`, `unites` per strand. *Measured on volume 1:* 2 strands at the district and street scales (the
+      main of 284 units; one person alone for units 166–167, into the main at 171), 5 at the building scale, 1 at the
+      city's. The plan's estimate of 18 was a prototype's and wrong. Tests: `test/v2-group-strands.test.ts`.
+- [x] **M17b The run on them**: the director's segment strands are the builder's for all 286 units; the first quarter
+      rehearsed before and after is the same on 188 of 189 measures (one lead count 25 to 24): it has one strand either way.
+- [x] **M17c Physics per strand**: `world/strand-layers.mjs` (copy-on-write by lot; things, the underground's cave-ins
+      and the hits seen per layer), the engine entering a unit's strand layer, splits copying, unions merging, the page
+      drawing the played strand's hits, the rehearsal's `layers` measure. *Proof:* units 160–175 at the building scale
+      with a stand-in Jev: the blast of 163 (strand 162–165) is unseen by the side strand 166–167 and by the main at
+      168, and seen from the union at 169 on. Gaps listed in strands.md §4 (digest things' cells, the legacy damage log,
+      the underground on the page, vehicles' standing places).
+- [x] **M17d Re-strand after smoothing**: `smoother/restrand.mjs` (the run as a script: envelopes from the built sites
+      that held the people, people apart for a whole unit in a sub-unit, the unnamed within earshot with the group; the
+      same builder; the report against the text). Written by the director at a run's end to
+      `stage/world/restrand/<run>.json` (a run's own file in universe snapshots), measured per pass by the rehearsal,
+      and a CLI. *First case, W15 at the district scale:* the text 2 strands, the run 4 (units 162–167, 197 and 245–248
+      each apart from the main and back into it, all from units the text places only at the city's scale); 28 units
+      played in another district than their place (126–129, 165, 189–196, 202–216), cause not yet investigated. Street
+      and building scales over-strand a run (14 and 20). First quarter with a stand-in: the text 1, the run 2.
 
 ## M16 — Across books, per strand (the user, 2026-11-09)
 

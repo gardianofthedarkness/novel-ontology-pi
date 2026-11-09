@@ -1588,6 +1588,21 @@
     "book"
    ],
    "kind": "physics"
+  },
+  "strands.envelope": {
+   "default": "district",
+   "unit": "place scale",
+   "meaning": "The scale of the area that envelops a strand's group (room, building, street, district, city, region). A sub-group is its own strand only while it is told in another area of this scale and the rest of the group is told elsewhere; a walk inside the area is the same strand. Larger: fewer, longer strands; smaller: more.",
+   "used": [
+    "src/v2/extraction/strands.ts groupStrands",
+    "world-engine/director/strand-builder.mjs strandBuilder",
+    "experiments/v2/strands.mjs"
+   ],
+   "layers": [
+    "universe",
+    "book"
+   ],
+   "kind": "structure"
   }
  },
  "tables": {
@@ -1782,6 +1797,10 @@
   "models": {
    "about": "Models as code (milestones M10).",
    "after": "The next novel model nominate or write; models already made are kept."
+  },
+  "strands": {
+   "about": "Strands: groups in envelopes (docs/v2/strands.md).",
+   "after": "The strands built for the next run or rehearsal (experiments/v2/strands.mjs for the book's file; the director builds its own for the units it plays)."
   }
  }
 }

@@ -59,7 +59,7 @@ export function libraryPaths(root: string) {
         dir: world, script: join(world, "script.json"), strands: join(world, "strands.json"), spawn: join(world, "spawn.json"),
         pins: join(world, "pins.json"), speakers: join(world, "speakers.json"), canon: join(world, "canon.jsonl"), pool: join(world, "pool.jsonl"),
         log: (run: string) => join(world, "log", `${run}.jsonl`), ledger: (run: string) => join(world, "ledger", `${run}.jsonl`),
-        smoothed: (run: string) => join(world, "smoothed", `${run}.json`),
+        smoothed: (run: string) => join(world, "smoothed", `${run}.json`), restrand: (run: string) => join(world, "restrand", `${run}.json`),
       },
       director: { dir: director, record: join(director, "run.json"), runs: (run: string) => join(director, "runs", run), cache: join(director, "cache") },
       simulation: { dir: simulation, index: join(simulation, "index.json"), page: (run: string) => join(simulation, "runs", "director", `${run}.page.json`) },
@@ -104,7 +104,7 @@ export type Kind = "state" | "run" | "derived" | "source";
 
 /** A run's own files: written once under its id, named by a snapshot, never copied into one. */
 const RUN_FILES: RegExp[] = [
-  /^vol-[^/]+\/novel\/stage\/world\/(?:log|ledger|smoothed)\/([^/]+?)\.jsonl?$/,
+  /^vol-[^/]+\/novel\/stage\/world\/(?:log|ledger|smoothed|restrand)\/([^/]+?)\.jsonl?$/,
   /^vol-[^/]+\/novel\/stage\/director\/runs\/([^/]+)\//,
   /^vol-[^/]+\/novel\/stage\/simulation\/runs\/director\/([^/]+?)\.page\.json$/,
 ];

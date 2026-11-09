@@ -63,7 +63,7 @@ export function placedJourney(journey, places) {
 
 /**
  * Every pre-film cast over a reading. `text`: sentence id → its text; `work`: a work model (cached by the caller); `strandsOf`:
- * (script) → the strands file (segments.mjs strandsFile with the TypeScript pieces bound); `pins`: the review's presence
+ * (script) → the strands file (segments.mjs strandsFile, bound by director/strand-builder.mjs); `pins`: the review's presence
  * pins ({ "unit|who": true | false }); `from`/`to`: unit ids to read (all when absent); `parallel`: requests at once.
  * Returns { units, usage }.
  */

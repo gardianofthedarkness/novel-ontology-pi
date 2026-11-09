@@ -14,6 +14,7 @@ import { parseArgs } from 'node:util';
 import { mapPicture } from './world-map.mjs';
 import { partsIn, snapMarkers } from './composite.mjs';
 import { setting, table } from '../../dist/src/v2/settings.js';
+import { layered, strandLayers } from './strand-layers.mjs';
 
 const repository = resolve(dirname(fileURLToPath(import.meta.url)), '..', '..');
 const load = path => import(pathToFileURL(`${repository}/${path}`));
@@ -175,16 +176,36 @@ export async function strandDemo(novelDir, options) {
   // What each change of the world touched (the research handoff's bounded repair): a window whose box no change since its
   // build touches stays as it was built, with the walks solved on it; a change with no boxes touches every window.
   const dirty = [], changed = (boxes = null) => { shared.version++; dirty.push({ version: shared.version, boxes }); };
+  // Physics per strand (strand-layers.mjs; docs/v2/strands.md §4; milestones M17c): with the group builder's strands, what
+  // a scene breaks, stands or caves in is written to its strand's layer of the world, and a scene is played in its strand's
+  // layer (`enterScene`). Null with strands of the earlier kind: one world for every line, as before.
+  let layers = null, enteredScene = null;
   // A thing the director stands in the world (a parked vehicle, by its interaction sheet; milestones M15b): its footprint
   // in the walk graph as the digest's things stand, and out of it when it moves. Only the windows it touches rebuild.
   const standThing = (id, { x, z, w, d, h }) => {
     const footprint = { i0: Math.floor((x - w / 2) / 2), i1: Math.floor((x + w / 2) / 2), j0: Math.floor((z - d / 2) / 2), j1: Math.floor((z + d / 2) / 2), top: Math.max(1, Math.round(h / 3)), grounded: Math.max(w, d) <= 8 }, was = shared.things.get(id);
     if (was && was.i0 === footprint.i0 && was.i1 === footprint.i1 && was.j0 === footprint.j0 && was.j1 === footprint.j1 && was.top === footprint.top) return false;
-    shared.things.set(id, footprint); changed([{ x0: Math.min(was?.i0 ?? footprint.i0, footprint.i0) * 2 - 4, x1: (Math.max(was?.i1 ?? footprint.i1, footprint.i1) + 1) * 2 + 4, z0: Math.min(was?.j0 ?? footprint.j0, footprint.j0) * 2 - 4, z1: (Math.max(was?.j1 ?? footprint.j1, footprint.j1) + 1) * 2 + 4 }]); return true;
+    layers?.thing(id, was ?? null, footprint); shared.things.set(id, footprint); changed([{ x0: Math.min(was?.i0 ?? footprint.i0, footprint.i0) * 2 - 4, x1: (Math.max(was?.i1 ?? footprint.i1, footprint.i1) + 1) * 2 + 4, z0: Math.min(was?.j0 ?? footprint.j0, footprint.j0) * 2 - 4, z1: (Math.max(was?.j1 ?? footprint.j1, footprint.j1) + 1) * 2 + 4 }]); return true;
   };
-  const liftThing = id => { const was = shared.things.get(id); if (!was) return false; shared.things.delete(id); changed([{ x0: was.i0 * 2 - 4, x1: (was.i1 + 1) * 2 + 4, z0: was.j0 * 2 - 4, z1: (was.j1 + 1) * 2 + 4 }]); return true; };
+  const liftThing = id => { const was = shared.things.get(id); if (!was) return false; layers?.thing(id, was, null); shared.things.delete(id); changed([{ x0: was.i0 * 2 - 4, x1: (was.i1 + 1) * 2 + 4, z0: was.j0 * 2 - 4, z1: (was.j1 + 1) * 2 + 4 }]); return true; };
   const overlaps = (a, b) => a.x0 <= b.x1 && b.x0 <= a.x1 && a.z0 <= b.z1 && b.z0 <= a.z1;
   const lotBounds = lot => ({ x0: lot.i0 * 2, x1: (lot.i0 + lot.nx) * 2, z0: lot.j0 * 2, z1: (lot.j0 + lot.nz) * 2 });
+  /**
+   * Play a scene in its strand's layer (M17c): the layer is put in the world, and the walk graph's windows over what differs
+   * from the layer left (the lots, the things, the underground's cells and marks) are rebuilt; no others. Says what was
+   * entered (strand-layers.mjs: enter), or null when the world has no layers or the scene no strand.
+   */
+  const footprintBox = (a, b) => ({ x0: Math.min(a.i0, b.i0) * 2 - 4, x1: (Math.max(a.i1, b.i1) + 1) * 2 + 4, z0: Math.min(a.j0, b.j0) * 2 - 4, z1: (Math.max(a.j1, b.j1) + 1) * 2 + 4 });
+  const enterScene = sceneId => {
+    const entered = layers?.enter(sceneId);
+    if (!entered) return null;
+    enteredScene = sceneId;
+    const boxes = [...entered.lots.map(index => lotBounds(world.lots[index])), ...entered.things.map(({ was, now }) => footprintBox(was ?? now, now ?? was)),
+      ...entered.cells.map(key => { const { ci, cj } = W.chunkOf(key); return { x0: ci * 2 - 2, x1: ci * 2 + 4, z0: cj * 2 - 2, z1: cj * 2 + 4 }; }),
+      ...entered.marks.map(mark => ({ x0: mark.x - mark.r - 2, x1: mark.x + mark.r + 2, z0: mark.z - mark.r - 2, z1: mark.z + mark.r + 2 }))];
+    if (boxes.length) changed(boxes);
+    return entered;
+  };
   const allWays = new Map();
   const graphOf = (focus = null, half = 0) => {
     if (shared.built?.version !== shared.version) {
@@ -417,6 +438,7 @@ export async function strandDemo(novelDir, options) {
     if (fighter.y < -1) {
       const r = chosen?.sphere?.r ?? 2 + 2 * strength, round = value => Math.round(value * 10) / 10, under = underHit(fighter, r, strength);
       notes.hits++; notes.impacts.sphere++;
+      layers?.hit(event.id);
       hits.set(event.id, { lot: -1, under, strength: Math.round(strength * 100) / 100, point: { x: fighter.x, y: fighter.y, z: fighter.z }, box: { x: [fighter.x - r, fighter.x + r], y: [fighter.y - r, fighter.y + r], z: [fighter.z - r, fighter.z + r] }, sphere: { x: round(fighter.x), y: round(fighter.y), z: round(fighter.z), r } });
       return;
     }
@@ -436,9 +458,11 @@ export async function strandDemo(novelDir, options) {
     if (index === undefined) return;
     const lot = group.layout.lots[index], point = { x: Math.min(Math.max(p.x, lot.i0 * 2 + 1), (lot.i0 + lot.nx) * 2 - 1), y: Math.min(p.y, (lot.floors - 1) * 3), z: Math.min(Math.max(p.z, lot.j0 * 2 + 1), (lot.j0 + lot.nz) * 2 - 1) };
     const half = 3 + 5 * strength, box = { x: [point.x - half, point.x + half], y: [Math.max(0, point.y - 3), point.y + 3 + 3 * strength], z: [point.z - half, point.z + half] };
+    layers?.touch(index);
     const result = degrade(group.layout, index, group.standing[index], box, strength, stream(seed, 'hit'));
     group.standing[index] = result.standing; group.version++;
     notes.hits++; notes.destroyed += result.destroyed.length;
+    layers?.hit(event.id);
     hits.set(event.id, { lot: index, strength: Math.round(strength * 100) / 100, point, box, destroyed: result.destroyed, cutOff: result.cutOff, cutRooms: result.cutRooms, under: underHit(point, half, strength) });
   };
   /**
@@ -551,6 +575,7 @@ export async function strandDemo(novelDir, options) {
       if (gap > chosen.r) return;
       const structure = (shared.structures[index] ??= structureOf(lot)), units = shared.units[index] ?? intact(structure), { broken } = blast(structure, units, chosen, strength);
       if (!broken.length) return;
+      layers?.touch(index);
       const hit = units.slice(); for (const unit of broken) hit[unit] = 0;
       const { standing: after } = settle(structure, hit);
       shared.units[index] = after; shared.standing[index] = skeletonStanding(structure, after);
@@ -561,7 +586,7 @@ export async function strandDemo(novelDir, options) {
     if (touched.length) { changed(touched); notes.tunnelled = (notes.tunnelled ?? 0) + touched.length; }
     const group = groups.get(scene.placeId);
     // A lot's structure and what of it stands now (its skeleton's cells as the walk left them, walls and roof as hits left them).
-    const unitsOf = index => { const structure = (group.structures[index] ??= structureOf(group.layout.lots[index])), units = group.units[index] ?? intact(structure); for (let cell = 0; cell < structure.cells; cell++) units[cell] = group.standing[index][cell] && structure.kind[cell] ? 1 : 0; return { structure, units }; };
+    const unitsOf = index => { layers?.touch(index); const structure = (group.structures[index] ??= structureOf(group.layout.lots[index])), units = group.units[index] ?? intact(structure); for (let cell = 0; cell < structure.cells; cell++) units[cell] = group.standing[index][cell] && structure.kind[cell] ? 1 : 0; return { structure, units }; };
     const struck = group.layout.lots.map((lot, index) => { const [base, roof] = spanOf(lot); return { lot, index, gap: !sideOk(lot) ? Infinity : Math.hypot(Math.max(0, lot.i0 * 2 - chosen.x, chosen.x - (lot.i0 + lot.nx) * 2), Math.max(0, base - chosen.y, chosen.y - roof), Math.max(0, lot.j0 * 2 - chosen.z, chosen.z - (lot.j0 + lot.nz) * 2)) }; }).filter(entry => entry.gap <= chosen.r).sort((a, b) => a.gap - b.gap)[0];
     let sphere = chosen;
     if (struck) { const { structure, units } = unitsOf(struck.index); let best = null, far = Infinity; units.forEach((up, unit) => { if (!up) return; const at = unitAt(structure, unit), gap = Math.hypot(at.x - chosen.x, at.y - chosen.y, at.z - chosen.z); if (gap < far) { far = gap; best = at; } }); if (best && far > chosen.r / 2) sphere = { ...best, r: chosen.r }; }
@@ -590,6 +615,7 @@ export async function strandDemo(novelDir, options) {
     if (!parts.length && !under.length) return;
     group.version++; notes.hits++; notes.impacts.sphere++;
     const [main = { lot: -1 }, ...more] = parts, round = value => Math.round(value * 10) / 10;
+    layers?.hit(event.id);
     hits.set(event.id, { ...main, more, under, strength: Math.round(strength * 100) / 100, point: { x: sphere.x, y: sphere.y, z: sphere.z }, box: { x: box.x, y: box.y, z: box.z }, sphere: { x: round(sphere.x), y: round(sphere.y), z: round(sphere.z), r: sphere.r } });
   };
   // The macro view: the strand's places and their ancestors in the place tree; and who migrated between places, scene by scene.
@@ -1439,6 +1465,8 @@ export async function strandDemo(novelDir, options) {
    */
   const undergroundView = () => {
     const halls = world.source.underground?.halls ?? [], cellOf = key => { const { ci, cj } = W.chunkOf(key); return [ci, cj]; };
+    // With layers by strand (M17c) the picture is of every strand's underground together, each hole at its own moment.
+    const damage = layers?.underAll() ?? world.underDamage;
     return {
       halls: halls.map(hall => {
         const b = U.boundsOf(hall), pillars = [];
@@ -1447,12 +1475,12 @@ export async function strandDemo(novelDir, options) {
         const stairs = hall.kind === 'corridor' ? hall.up.map(([x, z]) => { const [sx, sz] = W.streetNear(world, x, z, 30) ?? [x, z]; return [sx, sz, x, z]; }) : undefined;
         return { id: hall.id, kind: hall.kind, label: hall.label, area: hall.area, depth: hall.depth, height: hall.height, boxes: hall.boxes, bores: hall.bores, pillars, ...(stairs ? { stairs } : {}), ...(hall.street ? { street: true } : {}), ...(hall.virtual ? { virtual: true } : {}), ...(hall.layer ? { layer: hall.layer } : {}) };
       }),
-      piles: [...world.underDamage.piles].flatMap(([index, cells]) => [...cells].map(([key, height]) => [...cellOf(key), W.levelOf(halls[index].depth), height])),
-      dents: [...world.underDamage.dents].map(([key, depth]) => [...cellOf(key), depth]),
+      piles: [...damage.piles].flatMap(([index, cells]) => [...cells].map(([key, height]) => [...cellOf(key), W.levelOf(halls[index].depth), height])),
+      dents: [...damage.dents].map(([key, depth]) => [...cellOf(key), depth]),
       // Holes blows broke in the ground skin (terrain-levels §8.4): [i, j, the hall's index, its floor's level, when]; and the
       // marks blows left on the deep layer's hard ceiling (§8.6): [x, y, z, r metres, when] (when: the moment, as a chunk's).
-      breaches: [...world.underDamage.breaches].map(([key, hall]) => [...cellOf(key), hall, W.levelOf(halls[hall].depth), brokenAt.get(key) ?? null]),
-      marks: world.underDamage.marks.map(mark => [mark.x, mark.y, mark.z, mark.r, brokenAt.get(mark) ?? null]),
+      breaches: [...damage.breaches].map(([key, hall]) => [...cellOf(key), hall, W.levelOf(halls[hall].depth), brokenAt.get(key) ?? null]),
+      marks: damage.marks.map(mark => [mark.x, mark.y, mark.z, mark.r, brokenAt.get(mark) ?? null]),
       // The ways between the layers (terrain-levels §3.4): [foot x, foot y, foot z, top x, top z, 2 a launch / 1 a lift / 0 stairs].
       ways: [...allWays.values()],
       awake: [...awake.keys()],
@@ -1516,7 +1544,7 @@ export async function strandDemo(novelDir, options) {
     const plan = meetings.get(key), target = plan.targets?.[person];
     return target == null || !at ? { kind: 'stay' } : walkTo(scene, event, person, at, target, seed, plan.label);
   };
-  mover.start = async args => { live(); moment = `${args.scene.id}|start`; if (byIndex.get(args.scene.id) > story) { story = byIndex.get(args.scene.id); applyEarlier(); } const boxed = await firstStart(args); let at = boxed ?? start(args); const free = buried(at); if (free != null) { at = [free, at[1]]; notes.underground.escaped = (notes.underground.escaped ?? 0) + 1; } wake(at?.[0]); if (boxed) begun.set(`${args.scene.id}|${args.handoff.person}`, boxed); where.set(args.handoff.person, { place: args.scene.placeId, at }); return at; };
+  mover.start = async args => { live(); if (enteredScene !== args.scene.id) enterScene(args.scene.id); moment = `${args.scene.id}|start`; if (byIndex.get(args.scene.id) > story) { story = byIndex.get(args.scene.id); applyEarlier(); } const boxed = await firstStart(args); let at = boxed ?? start(args); const free = buried(at); if (free != null) { at = [free, at[1]]; notes.underground.escaped = (notes.underground.escaped ?? 0) + 1; } wake(at?.[0]); if (boxed) begun.set(`${args.scene.id}|${args.handoff.person}`, boxed); where.set(args.handoff.person, { place: args.scene.placeId, at }); return at; };
   // `pace` (seconds): each moment held that long before the next is played, so a live view shows every event.
   const hold = () => new Promise(done => setTimeout(done, options.pace * 1000));
   mover.act = async args => {
@@ -1670,12 +1698,30 @@ export async function strandDemo(novelDir, options) {
           from: Object.fromEntries((timeline.handoffs.get(scene.id) ?? []).map(handoff => [handoff.person, handoff.from ? (handoff.samePlace ? 'stays' : 'arrives') : 'enters'])),
           objects: placedObjects.get(scene.id) ?? [],
           trace: traces.get(`${scene.id}|start`) ?? null,
+          // The strand's layer it was played in, and the hits before it that its strand had not seen (M17c): not drawn in it.
+          ...(layers?.playedIn(scene.id) ? { strand: layers.playedIn(scene.id), unseen: layers.unseen(scene.id) } : {}),
           events: scene.events.map((event, index) => ({ id: event.id, actors: event.actors ?? [], text: clean(event.text), ...(event.camera ? { camera: event.camera } : {}), spots: pins(middle(standing(index))), hit: hits.get(event.id) ?? null, hitThings: hitThings.get(event.id) ?? null, moves: scene.cast.map(person => moves.get(`${scene.id}|${event.id}|${person}`)).filter(Boolean).map(denseMove), trace: traces.get(`${scene.id}|${index}`) ?? null })) };
       }),
     };
   };
   // The terrain stage (worldOnly) starts no scene: starting one reaches the ground round its people, and a place the terrain
   // has not built yet stood as an island of empty ground (the user, 2026-11-02); nothing is loaded, every building a shell.
+  // The world's layers by strand (M17c), when the strands are the group builder's (docs/v2/strands.md §3: each strand's
+  // `splitFrom`, `into` and `intoAt`). A lot of two strands that unite stands where it stands in both, then settles: what
+  // lost its load path by the two together falls (structure.ts); rubble lies where either left it.
+  if (layered(strandsHere)) {
+    const mergeLot = (index, first, second) => {
+      const lot = world.lots[index], structure = (shared.structures[index] ??= structureOf(lot));
+      const unitsOf = side => { const units = side.units ? side.units.slice() : intact(structure); if (side.standing) for (let cell = 0; cell < structure.cells; cell++) if (!side.standing[cell]) units[cell] = 0; return units; };
+      const a = unitsOf(first), b = unitsOf(second), both = a.map((up, unit) => (up && b[unit] ? 1 : 0)), { standing: after } = settle(structure, both);
+      const rubble = first.rubble || second.rubble ? Uint8Array.from({ length: lot.skeleton.cells.length }, (_, cell) => (first.rubble?.[cell] || second.rubble?.[cell] ? 1 : 0)) : undefined;
+      return { units: after, standing: skeletonStanding(structure, after), rubble };
+    };
+    layers = strandLayers({ forks: strandsHere.forks, forkOf: strandsHere.forkOf, rankOf: id => strandsHere.layer.get(id), mergeLot, state: {
+      lot: index => ({ units: shared.units[index], standing: shared.standing[index], rubble: shared.rubble[index] }),
+      setLot: (index, lot) => { shared.units[index] = lot.units; shared.standing[index] = lot.standing; shared.rubble[index] = lot.rubble; },
+      things: () => shared.things, under: () => world.underDamage, setUnder: damage => { world.underDamage = damage; } } });
+  }
   const { scenes: runs } = options.worldOnly ? { scenes: Object.fromEntries(chosen.map(scene => [scene.id, { starts: {}, events: [] }])) } : await walkTimeline(timeline, chosen, mover, { concurrency: 1, version: WALK_SEED });
   const data = assemble(runs);
   if (options.live) options.live(snapshot(true), data);
@@ -1683,7 +1729,7 @@ export async function strandDemo(novelDir, options) {
   // line's starts, handed on so the loop plays forward card by card on the same world (no export again, no replay): it adds
   // its cards to the chosen scenes, its moves to `moves` and its positions to `runs`, streams the world in with `reach`, and
   // calls `assemble` for the page as far as it has played.
-  if (options.engine) await options.engine({ roadInputs: { roads: landscapes.flatMap(entry => entry.roads ?? []), highways: Object.values(terrain?.highways ?? {}).filter(highway => highway.lines?.length) }, world, W, graphOf, cost, reach, solve, onFoot, portalsNear, DEEP, deepAt, beamCeiling, sampleWalk, T, kappa, lambda, runs, moves, chosen, assemble, snapshot, names: inputs.names, hits, hitSphere, wake, standThing, liftThing });
+  if (options.engine) await options.engine({ roadInputs: { roads: landscapes.flatMap(entry => entry.roads ?? []), highways: Object.values(terrain?.highways ?? {}).filter(highway => highway.lines?.length) }, world, W, graphOf, cost, reach, solve, onFoot, portalsNear, DEEP, deepAt, beamCeiling, sampleWalk, T, kappa, lambda, runs, moves, chosen, assemble, snapshot, names: inputs.names, hits, hitSphere, wake, standThing, liftThing, enter: enterScene, layers });
   return data;
 }
 

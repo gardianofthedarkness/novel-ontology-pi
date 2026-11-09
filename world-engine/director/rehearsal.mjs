@@ -16,6 +16,7 @@ import { worldLog } from '../log/world-log.mjs';
 import { backAndForth } from '../log/back-and-forth.mjs';
 import { REVISION_LIMIT, smoothRun } from '../smoother/smoother.mjs';
 import { smoothBlasts } from '../smoother/blasts.mjs';
+import { restrandRun, summary as restrandSummary } from '../smoother/restrand.mjs';
 import { checkAll } from '../laws/laws.mjs';
 import { playedLine, speakersOf } from '../laws/check-run.mjs';
 import { segmentWorld } from './segments.mjs';
@@ -72,6 +73,9 @@ export function measure(record) {
     gateUnit: record.gate?.unit ?? null, stretches: (record.stretches ?? []).length,
     firedBy: count((record.stretches ?? []).flatMap(entry => entry.fired ?? [])), foundBy: count((record.stretches ?? []).flatMap(entry => Object.entries(entry.found ?? {}).filter(([, n]) => n > 0).map(([id]) => id))),
     leadsChanged: count(record.scenes.flatMap(scene => (scene.leads ?? []).filter(entry => entry.lead !== entry.gate).map(entry => `${entry.gate} → ${entry.lead}`))), cost: record.cost ?? null,
+    // The world's layers by strand (milestones M17c): the layers the run left, the strands begun (as a copy of the strands
+    // their people left, or fresh), the unions made, and the scenes played with another strand's hits unseen.
+    layers: record.layers ? { left: record.layers.layers.length, begun: record.layers.log.filter(entry => entry.kind === 'begin').length, copied: record.layers.log.filter(entry => entry.kind === 'begin' && entry.from.length).length, unions: record.layers.log.filter(entry => entry.kind === 'union').length, hits: record.layers.hits, scenesWithUnseen: record.scenes.filter(scene => scene.layer?.unseen?.length).length } : null,
   };
 }
 
@@ -118,6 +122,8 @@ if (process.argv[1] === fileURLToPath(import.meta.url)) {
     if (values.logs) { await mkdir(resolve(values.logs), { recursive: true }); await writeFile(join(resolve(values.logs), `pass-${pass}.jsonl`), passLog.map(row => JSON.stringify(row)).join("\n")); await writeFile(join(resolve(values.logs), `pass-${pass}.record.json`), JSON.stringify(record)); }
     { const movement = backAndForth({ log: passLog, record }); passes.at(-1).backAndForth = { talk: movement.talk, roundTrips: { count: movement.roundTrips.count, throughTalk: movement.roundTrips.throughTalk, kinds: movement.roundTrips.kinds }, regrouped: record.scenes.reduce((n, scene) => n + (scene.regrouped?.length ?? 0), 0) }; }
     passes.at(-1).broken = Object.fromEntries(lawsNow.map(law => [law.law, law.violations.length]));
+    // M17d: the pass re-stranded (the groups read off where its people stood, against the text's strands). Nothing written.
+    passes.at(-1).restrand = await restrandRun(novelDir, { run: `rehearsal-${pass}`, script: segScript, smoothed: smoothedNow.smoothed, only: record.scenes.map(entry => entry.scene) }).then(again => restrandSummary(again.report), error => ({ error: String(error.message ?? error) }));
     passes.at(-1).brokenExamples = Object.fromEntries(lawsNow.filter(law => law.violations.length).map(law => [law.law, law.violations.slice(0, 20)]));
     smoothing = smoothedNow.smoothed;
     // L18: the run's blasts smoothed (when and how big), applied so on the next pass.
