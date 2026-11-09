@@ -239,7 +239,7 @@ const tieBreak = (seed: string, id: string) => skeletonStream(seed, id)() * 1e-3
  * nearest what its kind needs; a building that needs more than any lot gives borrows a whole free block instead.
  */
 export function borrowLots(fabric: Fabric, region: { circle?: Circle; road?: string }, kind: string, taken: Set<string>, seed: string): { lots: string[]; block?: string } | null {
-  const [low, high] = BUILDING_AREA[kind] ?? BUILDING_AREA.office, target = Math.sqrt(low * high), fit = (area: number) => Math.abs(Math.log(area / target));
+  const areas = setting<Record<string, [number, number]>>("fill.buildingArea"), [low, high] = areas[kind] ?? areas.office, target = Math.sqrt(low * high), fit = (area: number) => Math.abs(Math.log(area / target));
   const inRegion = (lot: Lot) => (!region.circle || inCircle(lot.centre, region.circle)) && (!region.road || lot.frontage.road === region.road);
   const free = fabric.lots.filter((lot) => inRegion(lot) && !taken.has(lot.id));
   const single = free.filter((lot) => lot.area >= low * 0.7).sort((a, b) => fit(a.area) + tieBreak(seed, a.id) - fit(b.area) - tieBreak(seed, b.id))[0];

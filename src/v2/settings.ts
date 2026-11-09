@@ -11,9 +11,10 @@
  * A key a layer may not set (the schema's `layers`), an unknown key, or a value of the wrong shape or out of its range
  * is refused when the layer is read. Pure reads: nothing here writes.
  */
-import { existsSync, readFileSync } from "node:fs";
+import { existsSync, readFileSync, statSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
+import { checkOps } from "./world/fillOps.js";
 
 export type Layer = "universe" | "book" | "place";
 export interface Entry { default: unknown; unit: string; meaning: string; used: string[]; layers: Layer[]; kind: "hard" | "knob" | "physics" | "structure" | "presentation"; range?: [number, number]; wired?: boolean }
@@ -59,6 +60,7 @@ export function problemsOf(key: string, value: unknown, layer?: Layer): string[]
     if (typeof base === "number") { if (typeof given !== "number" || Number.isNaN(given)) out.push(`${path} must be a number`); return; }
     if (typeof base !== typeof given) out.push(`${path} must be a ${typeof base}`);
   };
+  if (key === "fill.ops") return [...out, ...checkOps(value)];
   walk(key, entry.default, value);
   if (entry.range && typeof value === "number" && (value < entry.range[0] || value > entry.range[1])) out.push(`${key} = ${value} is outside ${entry.range[0]}–${entry.range[1]} ${entry.unit}`);
   return out;
@@ -103,13 +105,59 @@ export function resolveSetting(key: string, scope: Scope = {}): { value: unknown
   return { value, from };
 }
 
-/** A setting's value: the default when no scope is given (what the code ran on before the schema). */
-export function setting<T = unknown>(key: string, scope: Scope = {}): T { return resolveSetting(key, scope).value as T; }
+/**
+ * The book a process works on, so a module's own constants take the book's and its universe's layers (milestones M8c):
+ * NOVEL_SETTINGS_BOOK (a novel folder, or "none"), else the first argument that is a novel folder (one holding stage/ or
+ * ontology/: the director's, a rehearsal's, the transport step's, a novel command's). A place's own layer applies only
+ * where the code passes the place (the fill, the expressway).
+ */
+let active: Scope | null = null;
+function detectScope(): Scope {
+  const env = process.env.NOVEL_SETTINGS_BOOK;
+  if (env === "none") return {};
+  if (env) return { book: resolve(env) };
+  for (const arg of process.argv.slice(2)) {
+    if (!arg || arg.startsWith("-")) continue;
+    const path = resolve(arg);
+    try { if (statSync(path).isDirectory() && (existsSync(join(path, "stage")) || existsSync(join(path, "ontology")))) return { book: path }; } catch { /* not a folder */ }
+  }
+  return {};
+}
+export function activeScope(): Scope { return (active ??= detectScope()); }
+/** Work on another book from now on (a module's constants read before keep the scope they had). */
+export function useScope(scope: Scope) { active = scope; announced.clear(); }
+const announced = new Set<string>();
+function withActive(scope: Scope): Scope {
+  const base = activeScope();
+  return { universe: scope.universe ?? (scope.book ? null : base.universe ?? null), book: scope.book ?? base.book ?? null, place: scope.place ?? null };
+}
+
+/** A setting's value: the defaults under the active book's layers, or a given scope's (a place's with `place`). */
+export function setting<T = unknown>(key: string, scope: Scope = {}): T {
+  const at = withActive(scope), layers = layersOf(at).filter(({ data }) => data.values && Object.keys(data.values).length);
+  for (const { file } of layers) if (!announced.has(file)) { announced.add(file); console.error(`settings: overrides from ${file} (novel settings diff <novel-dir>)`); }
+  return resolveSetting(key, at).value as T;
+}
+
+/** Every override in force for a scope (for a run's record): layer, place, key, value. */
+export function overridesOf(scope: Scope = {}): { layer: Layer; place: string | null; key: string; value: unknown; table: boolean; file: string }[] {
+  const at = withActive(scope), out: { layer: Layer; place: string | null; key: string; value: unknown; table: boolean; file: string }[] = [];
+  const top: Scope = { ...at, place: null };
+  for (const { layer, file, data } of layersOf(top)) {
+    for (const [key, value] of Object.entries(data.values ?? {})) out.push({ layer, place: null, key, value, table: false, file });
+    for (const [key, value] of Object.entries(data.tables ?? {})) out.push({ layer, place: null, key, value, table: true, file });
+    for (const [place, own] of Object.entries(data.places ?? {})) {
+      for (const [key, value] of Object.entries(own.values ?? {})) out.push({ layer: "place", place, key, value, table: false, file });
+      for (const [key, value] of Object.entries(own.tables ?? {})) out.push({ layer: "place", place, key, value, table: true, file });
+    }
+  }
+  return out;
+}
 
 const tableCache = new Map<string, unknown>();
 /** A table (a whole configuration file) with its layers merged over it. */
-export function table<T = unknown>(name: string, scope: Scope = {}): T {
-  const entry = schema().tables[name];
+export function table<T = unknown>(name: string, given: Scope = {}): T {
+  const entry = schema().tables[name], scope = withActive(given);
   if (!entry) throw new Error(`no table ${name} in ${SCHEMA_FILE}`);
   if (!tableCache.has(name)) tableCache.set(name, readJson(join(ROOT, entry.file)));
   let value = tableCache.get(name);

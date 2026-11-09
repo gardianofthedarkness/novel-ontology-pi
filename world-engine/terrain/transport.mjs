@@ -13,6 +13,7 @@ import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { parseArgs } from 'node:util';
 
+import { setting } from '../../dist/src/v2/settings.js';
 const repository = resolve(dirname(fileURLToPath(import.meta.url)), '..', '..'), load = (path) => import(pathToFileURL(`${repository}/${path}`).href);
 async function replace(file, body) { const temporary = `${file}.${process.pid}.tmp`; await writeFile(temporary, body, { mode: 0o644 }); await rename(temporary, file); }
 
@@ -54,7 +55,7 @@ export async function terrainTransport(novelDir, { rebuild = false, dry = false,
   for (const city of cities) {
     const inputs = cityInputs(data, city.id);
     if (!inputs || inputs.districts.length < 2) { summary.push({ city: city.id, built: false, why: 'fewer than two districts' }); continue; }
-    const t0 = Date.now(), keep = kept[city.id] ?? null, record = HW.planHighway({ ...inputs, keep, at });
+    const t0 = Date.now(), keep = kept[city.id] ?? null, record = HW.planHighway({ ...inputs, keep, at, knobs: setting('highway.knobs', { book: novelDir, place: city.id }) });
     // A city whose districts never pay for a link (no story between them) keeps no highway: nothing stored or logged.
     if (!record.links.length) { summary.push({ city: city.id, op: 'none', links: 0, notLinked: record.notLinked }); log(`transport: ${city.id}: no link pays (${record.notLinked.length} hubs)`); continue; }
     out[city.id] = record;

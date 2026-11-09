@@ -88,6 +88,7 @@
         <button id="cuts" aria-pressed="false" title="Follow through the photographer's cuts (else a steady view of each card's people)">Cuts</button>
         <button id="jev" aria-pressed="false" title="Show what Jev decided at this moment">Jev trace</button>
         <button id="smooth" aria-pressed="false" title="Smooth: walks round their corners and ease in and out; the camera follows on the replay's own time">Smooth</button>
+        <button id="models" aria-pressed="true" title="Models: things with a model of their own (written as code) drawn as it; off, the plain shapes">Models</button>
         <input type="range" id="seek" min="0" max="1000" value="0" aria-label="Position in the strand">
         <span class="count" id="count"></span>
       </div>
@@ -1074,6 +1075,14 @@ function planOf(lot) {
 /** The artistic shells: a baked model (positions as base64 Int16 × step, indices as Uint16), stood on its base and centred. */
 const bytes = (text) => Uint8Array.from(atob(text), (c) => c.charCodeAt(0)).buffer, shells = new Map();
 function shellOf(name) {
+  if (!shells.has(name) && String(name).startsWith("scad:")) {
+    // A landmark written as code (novel model; milestones M11): its mesh as a shell, the lot's plan scaling it.
+    const mesh = MODELS_ON ? data.scadModels?.[name.slice(5)] : null;
+    if (!mesh) return null;
+    const geometry = scadGeometry(name.slice(5), mesh).clone(); geometry.deleteAttribute("color"); geometry.computeBoundingBox();
+    const edges = new THREE.EdgesGeometry(geometry, 25); geometry.userData.shared = true; edges.userData.shared = true;
+    shells.set(name, { fill: geometry, edges, size: geometry.boundingBox.getSize(new THREE.Vector3()) });
+  }
   if (!shells.has(name)) {
     const model = data.models?.[name], geometry = new THREE.BufferGeometry();
     if (!model) return null;
@@ -1399,6 +1408,19 @@ crowdShape.userData.shared = true;
 // size. Rotors spin (spinners, turned each frame).
 const VEHICLE_DIMS = { "a car": [4.5, 1.5, 1.9], "a van or a truck": [6.5, 2.6, 2.4], "a bus": [11, 3, 2.5], "a train or a carriage": [20, 3.4, 3], "a motorbike or a bicycle": [2, 1.1, 0.7], "a helicopter": [12, 3.5, 3], "an aircraft": [35, 8, 30], "a drone": [0.6, 0.25, 0.6], "a boat": [9, 2.5, 3] };
 const spinners = [];
+/** Models as code: on unless turned off (the Models button, ?models=off), remembered in this browser. */
+const MODELS_ON = (() => { if (new URLSearchParams(location.search).get("models") === "off") return false; try { return localStorage.getItem("strand-models") !== "0"; } catch { return true; } })();
+const scadLook = new THREE.MeshStandardMaterial({ vertexColors: true, flatShading: true, roughness: 0.8, metalness: 0.05 }), scadGeometries = new Map();
+/** A model's mesh (Y-up positions, triangles, a colour a triangle) as a geometry standing on y = 0, centred on x and z. */
+function scadGeometry(id, mesh) {
+  if (scadGeometries.has(id)) return scadGeometries.get(id);
+  const position = new Float32Array(mesh.t.length * 3), colour = new Float32Array(mesh.t.length * 3);
+  mesh.t.forEach((v, i) => { position.set([mesh.p[v * 3], mesh.p[v * 3 + 1], mesh.p[v * 3 + 2]], i * 3); const f = Math.floor(i / 3); colour.set([mesh.c[f * 3] / 255, mesh.c[f * 3 + 1] / 255, mesh.c[f * 3 + 2] / 255], i * 3); });
+  const geometry = new THREE.BufferGeometry(); geometry.setAttribute("position", new THREE.BufferAttribute(position, 3)); geometry.setAttribute("color", new THREE.BufferAttribute(colour, 3));
+  geometry.computeBoundingBox(); const box = geometry.boundingBox; geometry.translate(-(box.min.x + box.max.x) / 2, -box.min.y, -(box.min.z + box.max.z) / 2); geometry.computeVertexNormals();
+  geometry.userData.shared = true; scadGeometries.set(id, geometry); return geometry;
+}
+window.__models = () => ({ on: MODELS_ON, models: Object.keys(data.scadModels ?? {}).length, drawn: scadGeometries.size });
 function vehicleForm(kind, model, fill, edges) {
   const dims = VEHICLE_DIMS[kind];
   if (!dims && !model) return null;
@@ -1407,7 +1429,16 @@ function vehicleForm(kind, model, fill, edges) {
   const box = (w, h, d, x, y, z, parent) => part(new THREE.BoxGeometry(w, h, d), x, y, z, parent);
   const wheel = (r, w, x, z) => part(new THREE.CylinderGeometry(r, r, w, 14).rotateX(Math.PI / 2), x, r, z);
   const spin = (group, axis, speed) => { spinners.push({ group, axis, speed }); return group; };
-  const shell = model ? shellOf(model) : null;
+  // A model of its own (novel model write|put; src/v2/models; milestones M10e): its coloured mesh, unit-sized like a
+  // shell, the pawn or the thing scaling it to the model's own size. The Models button turns them off.
+  const own = MODELS_ON && String(model ?? "").startsWith("scad:") ? data.scadModels?.[model.slice(5)] : null;
+  if (own) {
+    const body = new THREE.Group(), geometry = scadGeometry(model.slice(5), own);
+    body.add(new THREE.Mesh(geometry, scadLook), new THREE.LineSegments(new THREE.EdgesGeometry(geometry, 35), edges)); inner.add(body);
+    inner.scale.set(1 / Math.max(0.05, own.size[0]), 1 / Math.max(0.05, own.size[1]), 1 / Math.max(0.05, own.size[2])); return form;
+  }
+  if (!dims && String(model ?? "").startsWith("scad:")) return null;
+  const shell = model && !String(model).startsWith("scad:") ? shellOf(model) : null;
   if (shell) {
     // The kit's cars lie along z: turned to lie along x, scaled to unit size.
     const body = new THREE.Group(); body.add(new THREE.Mesh(shell.fill, fill), new THREE.LineSegments(shell.edges, edges)); body.rotation.y = Math.PI / 2; inner.add(body);
@@ -1843,6 +1874,23 @@ let decor = () => {};
     const strips = new THREE.InstancedMesh(new THREE.BoxGeometry(1, 0.1, 1), new THREE.MeshBasicMaterial({ color: 0x1d4a60, transparent: true, opacity: terrainStage ? 0.55 : 0.35, depthWrite: false }), roads.length);
     roads.forEach(([ax, az, bx, bz, width], i) => { q.setFromAxisAngle(up, -Math.atan2(bz - az, bx - ax)); m.compose(new THREE.Vector3((ax + bx) / 2, -0.2, (az + bz) / 2), q, new THREE.Vector3(Math.hypot(bx - ax, bz - az), 1, width)); strips.setMatrixAt(i, m); });
     world.add(strips);
+  }
+  // What the place's fill operators put down (fill.ops; src/v2/world/fillOps.ts; milestones M8c): [kind, x, z, turn], one
+  // instanced mesh a kind, plain shapes at their real sizes.
+  const props = (data.landscapes ?? []).flatMap((entry) => entry.props ?? []);
+  if (props.length) {
+    const PROP_LOOK = {
+      tree: [new THREE.ConeGeometry(2.2, 6, 7).translate(0, 5, 0), 0x3f8f5a], "street-light": [new THREE.BoxGeometry(0.25, 7, 0.25).translate(0, 3.5, 0), 0xc8d6e0],
+      bench: [new THREE.BoxGeometry(1.8, 0.5, 0.6).translate(0, 0.45, 0), 0x8a6a4a], bin: [new THREE.CylinderGeometry(0.35, 0.3, 0.9, 8).translate(0, 0.45, 0), 0x5a6a72],
+      car: [new THREE.BoxGeometry(4.4, 1.5, 1.8).translate(0, 0.75, 0), 0x7a8fa8], bollard: [new THREE.CylinderGeometry(0.15, 0.15, 0.9, 6).translate(0, 0.45, 0), 0x9aa4ad],
+    };
+    for (const [kind, [geometry, color]] of Object.entries(PROP_LOOK)) {
+      const own = props.filter(([what]) => what === kind);
+      if (!own.length) continue;
+      const mesh = new THREE.InstancedMesh(geometry, new THREE.MeshStandardMaterial({ color, roughness: 0.85 }), own.length);
+      own.forEach(([, x, z, turn], i) => { q.setFromAxisAngle(up, -(turn ?? 0)); m.compose(new THREE.Vector3(x, 0, z), q, new THREE.Vector3(1, 1, 1)); mesh.setMatrixAt(i, m); });
+      mesh.userData.props = kind; world.add(mesh);
+    }
   }
   // A city's expressway (world-engine/world/highways.mjs, kept by the terrain's transport step): decks on piers over the
   // street, ramps sloping down to it, tunnels as a line on the ground over where they run. Vehicles drive it on the road
@@ -2838,6 +2886,8 @@ function continueTo({ scene, event, camera: cam = null, speed: pace = 2, follow:
 
 $("smooth").setAttribute("aria-pressed", String(SMOOTH));
 $("smooth").addEventListener("click", () => setSmooth(!SMOOTH));
+$("models").setAttribute("aria-pressed", String(MODELS_ON));
+$("models").addEventListener("click", () => { try { localStorage.setItem("strand-models", MODELS_ON ? "0" : "1"); } catch {} location.reload(); });
 $("play").addEventListener("click", () => { playing = !playing; $("play").textContent = playing ? "⏸ Pause" : "▶ Play"; });
 $("follow").addEventListener("click", () => { follow = !follow; $("follow").setAttribute("aria-pressed", String(follow)); if (!follow) controls.target.set(0, 4, 0); });
 $("cuts").setAttribute("aria-pressed", String(cuts)); $("cuts").addEventListener("click", () => { cuts = !cuts; cameraSegment = null; $("cuts").setAttribute("aria-pressed", String(cuts)); });

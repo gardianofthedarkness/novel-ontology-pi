@@ -73,6 +73,8 @@ const librarySkill = `${repo}/skills/novel-library/SKILL.md`;
 const portraitSkill = `${repo}/skills/novel-portraits/SKILL.md`;
 let portraitSkillRead = false;
 const stageSkill = `${repo}/skills/novel-stage/SKILL.md`;
+// Models as code and the world generator's settings (milestones M10f): after the reading, before the terrain loop.
+const modelsSkill = `${repo}/skills/novel-models/SKILL.md`;
 let stageSkillRead = false;
 const librarySchema = `${repo}/skills/novel-library/references/organization.md`;
 const libraryReads = new Map();
@@ -131,6 +133,7 @@ try {
   }
   const manifest = { version: 1, purpose: interactive ? 'Wait for user messages. Process only assigned unapplied blocks using the installed skill; applied prefix remains immutable. Held semantic facts are not verified canon.' : 'Process assigned unapplied source blocks; validate this attempt independently of the already-applied prefix. Processing completion is distinct from held semantic facts.', startedAt: startedAt.toISOString(), deadline: new Date(deadline).toISOString(), limits: job.limits, volumes };
   manifest.portraits = { skill: portraitSkill, command: 'novel album assign <workspace>', check: 'novel album assign <workspace> --check', stage: 'after full-volume extraction and application', visualInput: false };
+  manifest.models = { skill: modelsSkill, commands: ['novel model nominate <workspace>', 'novel model list <workspace>', 'novel model brief <workspace> <thing>', 'novel model write <workspace> <thing>|--all', 'novel model put <workspace> <thing> <file.scad>', 'novel model bind <workspace>', 'novel settings show|explain|set|diff <workspace> ...'], stage: 'after the reading, before the terrain loop', canon: 'none: a model or a setting is a look' };
   manifest.animation = { skill: stageSkill, commands: ['novel stage scale <workspace>', 'novel stage architecture <workspace>', 'novel stage objects <workspace> --max-calls N', 'novel stage movement <workspace> --max-calls N', 'novel stage prep <workspace>', 'novel sim pick <workspace> --auto N --max-calls N', 'novel sim run <workspace> --auto N', 'novel stage show <workspace>', 'novel sim show <workspace>'], stage: 'last: prep runs once every other checklist step is done', canon: 'only the objects packet, through review' };
   if (job.library) {
     const libraryLockPath = `${job.library.directory}.pi-review.lock`;
@@ -173,7 +176,7 @@ try {
   const sourcePaths = [skill, causalityReference, `${repo}/skills/novel-ontology/references/repair.md`, `${repo}/skills/novel-ontology/references/semantic-review.md`, `${repo}/skills/novel-ontology/references/analysis.md`, `${repo}/skills/novel-ontology/references/review.md`, manifestPath, 'NOVEL_JOB.json', ...volumes.flatMap((volume) => volume.blocks.map((block) => block.evidence)),
     // Each book's stored original (read-only; evidence pages still come from the block files).
     ...volumes.map((volume) => `${volume.workspace}/source/${volume.input.split('/').at(-1)}`)];
-  sourcePaths.push(portraitSkill, stageSkill);
+  sourcePaths.push(portraitSkill, stageSkill, modelsSkill);
   if (libraryAccess) sourcePaths.push(librarySkill, librarySchema);
   const scopes = volumes.map((volume) => ({ novel: volume.workspace, input: volume.input, album: volume.album, library: libraryAccess?.config, skill, sourcePaths, blockIds: volume.blocks.map((block) => block.id), maxBlocks: volume.maxBlocks, reviewProtocol: 'review-v1' }));
   let queue = Promise.resolve();

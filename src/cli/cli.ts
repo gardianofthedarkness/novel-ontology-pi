@@ -68,6 +68,8 @@ import { SIM_USAGE, simPick, simRun, simShow, simStrands, simTerrain } from "./c
 import { sourceGrep, sourceSimilar } from "./commands/extract/sourceCommands.js";
 import { worldAnswer, worldBatch, worldPool } from "./commands/extract/worldCommands.js";
 import { castAsk, castMerge, castReview, castSheet, castShow, sky } from "./commands/extract/castCommands.js";
+import { settingsDiff, settingsExplain, settingsSet, settingsShow, settingsUnset } from "./commands/extract/settingsCommands.js";
+import { modelBind, modelBrief, modelCheck, modelList, modelNominate, modelParts, modelPut, modelShow, modelUse, modelWrite } from "./commands/extract/modelCommands.js";
 import { readingShow, sourceEpub, worldApply, worldCanon, worldHeld, worldLogShow, worldUndo } from "./commands/extract/worldReviewCommands.js";
 import { STAGE_USAGE, stageArchitecture, stageLandscape, stageLines, stageMovement, stageObjects, stagePrep, stageScale, stageShow } from "./commands/extract/stageCommands.js";
 import { TIMEPLACE_USAGE, timeplaceAfterApprove, timeplaceRun, timeplaceShow, timeplaceStrands, timeplaceTree } from "./commands/extract/timeplaceCommands.js";
@@ -159,6 +161,21 @@ const COMMANDS: Record<string, string> = {
   "novel world apply <novel-dir>": "The main agent's answers into the pins the director plays by, under the laws (what they turn back returns to the pool)",
   "novel cast show|merge|sheet|ask|review <novel-dir> …": "The cast's review: the cast and their ability sheets (show [<char>]); two entries made one person in the reading, its views, the ontology and the universe's sheets (merge <keep> <merged> --reason t [--reading <data.json>]... [--dry]); one person's ability sheet (sheet <char> --sheet '<JSON>' | --none --reason t [--evidence <ids>]); two people raised as one for the agent (ask <a> <b> --why t); the cast's questions in batches in the world's review pool (review [--size N] [--least-cards N] [--send <console-dir>]), answered with novel world answer, done by novel world apply",
   "novel sky build|show <novel-dir> [--dry] [--cache <dir>]": "The story sky: each unit's time of day and weather into sky.json beside the reading the director plays (build: Jev, cents, cached; --dry counts only); show: what it holds",
+  "novel settings show <novel-dir> [<prefix>] [--place <id>] [--changed]": "The world generator's settings (config/world.schema.json) as they resolve for a book: defaults < universe < book < place, each with where it came from",
+  "novel settings explain <key|table>": "A setting's meaning, unit, range, kind, which layers may set it, where it is used and when a change takes effect",
+  "novel settings set <novel-dir> <key> '<JSON>' [--place <id>] [--layer universe|book] [--table] --why <text> [--before]": "Check a value against the schema, write it to its layer, log why; --before takes the book's new before snapshot (a full rerun restores the latest)",
+  "novel settings unset <novel-dir> <key> [--place <id>] [--layer universe|book] [--table] --why <text> [--before]": "Take an override out: the value falls back to the layer below",
+  "novel settings diff <novel-dir> [--from <snapshot-id>]": "Every override in force, or what changed in the settings files since a snapshot",
+  "novel model nominate <novel-dir> [--reading <data.json>] [--top N]": "Rank the book's things (scenes, sentences, kind); the important, well-described ones get a model of their own, the rest a warehouse part (no model call)",
+  "novel model list <novel-dir> [--state todo|made|failed|part]": "The nominated things and their models' state",
+  "novel model brief <novel-dir> <thing>": "What a writer needs for one thing: its lines, kind, the reading's size, the contract and its checks",
+  "novel model write <novel-dir> <thing> | --all [--limit N]": "The work model writes the model as OpenSCAD code, checked; the check's problems go back to it (work model, a few cents a book)",
+  "novel model put <novel-dir> <thing> <file.scad|-> [--by <who>]": "Your own model code, held to the same contract",
+  "novel model check <novel-dir> <thing> | --all": "Check kept models again against the contract as it stands (OpenSCAD, manifold-3d) and update their records; no model call",
+  "novel model show <novel-dir> <thing>": "A model's code and record",
+  "novel model use <novel-dir> <thing> kit:<module>|pack:<model> [--why <text>]": "Bind a thing to a warehouse part instead of writing one",
+  "novel model bind <novel-dir> [--limit N]": "The work model binds each thing that takes a part to the closest kit part (gkNextEngine's SCAD kits, MIT), rendered and checked",
+  "novel model parts '<kind>'": "The kit parts a kind of thing may take, with their sizes (for choosing by hand)",
   "novel world canon <novel-dir> [--run <id>]": "What a director run settled into canon by its gates: presence, place, speakers, where each person is, strands (undoable)",
   "novel world undo <novel-dir> --run <id>": "A director run's writes to canon taken back, each record to what it replaced",
   "novel reading <novel-dir> card|scene|line <id>": "The v2 reading of a card, a scene or a line: kinds, speakers and how sure, people, place and time, with the text (read-only)",
@@ -788,6 +805,40 @@ async function main(): Promise<void> {
     if (sub === "sheet") { if (!positional[3]) throw new Error("Usage: novel cast sheet <novel-dir> <char> --sheet '<JSON>' | --none --reason <text> [--evidence <ids>]"); out(await castSheet(novelDir, positional[3], { sheet: flag(positional, "--sheet"), none: positional.includes("--none"), reason: flag(positional, "--reason"), evidence: flag(positional, "--evidence") }), pretty); return; }
     if (sub === "ask") { if (!positional[3] || !positional[4]) throw new Error("Usage: novel cast ask <novel-dir> <a> <b> --why <text>"); out(await castAsk(novelDir, positional[3], positional[4], flag(positional, "--why")), pretty); return; }
     out(await castReview(novelDir, { size: number("--size"), least: number("--least-cards"), send: flag(positional, "--send") }), pretty);
+    return;
+  }
+
+  if (cmd === "model") {
+    const novelDir = positional[2], usage = "Usage: novel model nominate|list|brief|write|put|check|use|show <novel-dir> ... (novel help)";
+    if (sub === "parts") { if (!novelDir) throw new Error("novel model parts '<kind>' (e.g. 'a small weapon')"); out(await modelParts(novelDir), pretty); return; }
+    if (!["nominate", "list", "brief", "write", "put", "check", "use", "show", "bind"].includes(sub ?? "") || !novelDir) throw new Error(usage);
+    if (sub === "bind") { out(await modelBind(novelDir, { limit: flag(positional, "--limit") === undefined ? undefined : Number(flag(positional, "--limit")) }), pretty); return; }
+    const thing = positional[3] && !positional[3].startsWith("--") ? positional[3] : undefined, number = (name: string) => { const value = flag(positional, name); return value === undefined ? undefined : Number(value); };
+    if (sub === "nominate") { out(await modelNominate(novelDir, { reading: flag(positional, "--reading"), top: number("--top") }), pretty); return; }
+    if (sub === "list") { out(await modelList(novelDir, { state: flag(positional, "--state") }), pretty); return; }
+    if (sub === "write") { if (!thing && !positional.includes("--all")) throw new Error("novel model write <novel-dir> <thing> | --all [--limit N]"); out(await modelWrite(novelDir, thing ?? null, { all: positional.includes("--all"), limit: number("--limit") }), pretty); return; }
+    if (sub === "check") { if (!thing && !positional.includes("--all")) throw new Error("novel model check <novel-dir> <thing> | --all"); out(await modelCheck(novelDir, thing ?? null), pretty); return; }
+    if (!thing) throw new Error(usage);
+    if (sub === "brief") { out(await modelBrief(novelDir, thing), pretty); return; }
+    if (sub === "put") { if (!positional[4]) throw new Error("novel model put <novel-dir> <thing> <file.scad|->"); out(await modelPut(novelDir, thing, positional[4], { by: flag(positional, "--by") }), pretty); return; }
+
+    if (sub === "use") { if (!positional[4]) throw new Error("novel model use <novel-dir> <thing> kit:<module>|pack:<model>"); out(await modelUse(novelDir, thing, positional[4], { why: flag(positional, "--why") }), pretty); return; }
+    out(await modelShow(novelDir, thing), pretty);
+    return;
+  }
+
+  if (cmd === "settings") {
+    const usage = "Usage: novel settings show <novel-dir> [<prefix>] [--place <id>] [--changed] | explain <key> | set <novel-dir> <key> '<JSON>' [--place <id>] [--layer universe|book] [--table] --why <text> [--before] | unset <novel-dir> <key> [...] --why <text> | diff <novel-dir> [--from <snapshot>]";
+    if (sub === "explain") { if (!positional[2]) throw new Error(usage); out(settingsExplain(positional[2]), pretty); return; }
+    const novelDir = positional[2];
+    if (!["show", "set", "unset", "diff"].includes(sub ?? "") || !novelDir) throw new Error(usage);
+    const layer = flag(positional, "--layer") as "universe" | "book" | undefined, place = flag(positional, "--place"), why = flag(positional, "--why");
+    if (layer && !["universe", "book"].includes(layer)) throw new Error("--layer is universe or book (a place is --place <id>)");
+    const common = { place, layer, why, before: positional.includes("--before"), isTable: positional.includes("--table") };
+    if (sub === "show") { const prefix = positional[3] && !positional[3].startsWith("--") ? positional[3] : undefined; out(await settingsShow(novelDir, { prefix, place, changed: positional.includes("--changed") }), pretty); return; }
+    if (sub === "set") { if (!positional[3] || positional[4] === undefined) throw new Error(usage); out(await settingsSet(novelDir, positional[3], positional[4], common), pretty); return; }
+    if (sub === "unset") { if (!positional[3]) throw new Error(usage); out(await settingsUnset(novelDir, positional[3], common), pretty); return; }
+    out(await settingsDiff(novelDir, { from: flag(positional, "--from") }), pretty);
     return;
   }
 

@@ -143,6 +143,21 @@
    ],
    "kind": "knob"
   },
+  "fill.ops": {
+   "default": [],
+   "unit": "operators",
+   "meaning": "What a place's fill scatters besides its buildings (trees, street lights, benches, bins, parked cars, bollards): a list of operators scatter (on open ground, along streets, in plazas), line (along roads of a level, every so many metres) and ring (round a point); never inside a building or on a carriageway.",
+   "used": [
+    "src/v2/world/fillOps.ts applyOps",
+    "world-engine/world/export-strand-demo.mjs props"
+   ],
+   "layers": [
+    "universe",
+    "book",
+    "place"
+   ],
+   "kind": "knob"
+  },
   "landscape.peak": {
    "default": 600,
    "unit": "m",
@@ -1405,6 +1420,45 @@
    ],
    "kind": "presentation",
    "wired": false
+  },
+  "models.nominate": {
+   "default": {
+    "ownScenes": 2,
+    "ownMentions": 3,
+    "top": 40
+   },
+   "unit": "scenes, sentences, count",
+   "meaning": "Which things get a model of their own: seen in at least ownScenes scenes or named in at least ownMentions sentences (a kind that can have one), at most top a book; the rest bind to a warehouse part.",
+   "used": [
+    "src/v2/models/models.ts nominate nominateBuildings"
+   ],
+   "layers": [
+    "universe",
+    "book"
+   ],
+   "kind": "knob"
+  },
+  "models.contract": {
+   "default": {
+    "ground": 0.05,
+    "groundShare": 0.05,
+    "touch": 0.15,
+    "touchShare": 0.02,
+    "sizeFactor": 3,
+    "triangles": 20000,
+    "tries": 3,
+    "primitives": 60,
+    "fn": 24
+   },
+   "unit": "m, ratio, count",
+   "meaning": "The contract a model is checked against: its lowest point within max(ground, groundShare × its height) of z = 0; every piece within max(touch, touchShare × its longest side) of the body (else it floats); its longest side within sizeFactor of the reading's; at most triangles; written in at most tries; at most primitives shapes and $fn.",
+   "used": [
+    "src/v2/models/contract.ts"
+   ],
+   "layers": [
+    "universe"
+   ],
+   "kind": "hard"
   }
  },
  "tables": {
@@ -1498,6 +1552,96 @@
     "universe",
     "book"
    ]
+  }
+ },
+ "groups": {
+  "grid": {
+   "about": "The walk grid itself.",
+   "after": "Everything is rebuilt and every kept node id moves: not settable."
+  },
+  "body": {
+   "about": "Human scale.",
+   "after": "The next director run."
+  },
+  "fill": {
+   "about": "The city fill: streets, blocks, lots, footprints.",
+   "after": "The world built for a run (the fill, its buildings, the walk graph): takes effect at the next run or rehearsal; no Jev question is asked again."
+  },
+  "landscape": {
+   "about": "Landscape and street kinds, their limits and their open ground.",
+   "after": "The world built for a run (the fill, its buildings, the walk graph): takes effect at the next run or rehearsal; no Jev question is asked again."
+  },
+  "layers": {
+   "about": "The deep underground, the air layer and space.",
+   "after": "The world built for a run (the fill, its buildings, the walk graph): takes effect at the next run or rehearsal; no Jev question is asked again."
+  },
+  "tall": {
+   "about": "How tall buildings are grown.",
+   "after": "The world built for a run (the fill, its buildings, the walk graph): takes effect at the next run or rehearsal; no Jev question is asked again."
+  },
+  "underground": {
+   "about": "The ground in depth bands, halls and what bores through it.",
+   "after": "The world built for a run (the fill, its buildings, the walk graph): takes effect at the next run or rehearsal; no Jev question is asked again. Jev’s depth answers are kept."
+  },
+  "place": {
+   "about": "Places on the canvas before anything is built.",
+   "after": "Terrain spawning (novel sim terrain <novel> --spawn --from <level> --run) uses them when it places areas: rerun spawning from the level they touch; the world built from kept terrain does not change."
+  },
+  "spawn": {
+   "about": "Borrowing and spawning areas.",
+   "after": "Terrain spawning, as for place."
+  },
+  "view": {
+   "about": "What Jev is shown when asked.",
+   "after": "The next question of that kind; answers already kept are not asked again."
+  },
+  "buildings": {
+   "about": "Buildings the text names.",
+   "after": "The world built for a run (the fill, its buildings, the walk graph): takes effect at the next run or rehearsal; no Jev question is asked again."
+  },
+  "walk": {
+   "about": "Walking costs and speeds.",
+   "after": "The world built for a run (the fill, its buildings, the walk graph): takes effect at the next run or rehearsal; no Jev question is asked again."
+  },
+  "roads": {
+   "about": "The road graph vehicles drive.",
+   "after": "The next director run (the road graph is built for each run)."
+  },
+  "highway": {
+   "about": "The expressway.",
+   "after": "The expressway is laid once by the terrain’s transport step and kept: rerun node world-engine/terrain/transport.mjs <novel> --rebuild for knobs and cost; the ramps’ pull on buildings applies at the next run."
+  },
+  "laws": {
+   "about": "The physics laws’ numbers.",
+   "after": "The laws’ verdicts at the next director run, and the smoother after it."
+  },
+  "talk": {
+   "about": "Talk distances (L6).",
+   "after": "The laws, the director’s gathering and the smoother at the next run."
+  },
+  "smoother": {
+   "about": "The smoother (W5b).",
+   "after": "The smoother after the next run."
+  },
+  "occupation": {
+   "about": "Who is on the stage (the smoother’s occupation).",
+   "after": "The smoother after the next run."
+  },
+  "crowd": {
+   "about": "Crowds as a field.",
+   "after": "The next director run."
+  },
+  "director": {
+   "about": "The director’s own reaches and thresholds.",
+   "after": "The next director run."
+  },
+  "replay": {
+   "about": "The replay clock.",
+   "after": "The director’s card timing at the next run; the player keeps its own copies (not wired yet)."
+  },
+  "models": {
+   "about": "Models as code (milestones M10).",
+   "after": "The next novel model nominate or write; models already made are kept."
   }
  }
 }

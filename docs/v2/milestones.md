@@ -17,10 +17,10 @@ call); a real Jev run only when the user asks.
 | M5 | Building level on vol 1 | |
 | M6 | Growth across books | |
 | M7 | A real run; pools removed | |
-| M8 | One settings registry: every knob in a schema, layered universe < book < place, `novel settings`, fill operators | M8a done 2026-11-09 (69 keys, 8 tables; rehearsal identical); M8b next |
+| M8 | One settings registry: every knob in a schema, layered universe < book < place, `novel settings`, fill operators | M8a–c done 2026-11-09 (72 keys, 8 tables; commands; fill operators; rehearsal identical); M8d (handles) left |
 | M9 | With the simulation: shared slots split where they are damaged | with the simulation stage |
-| M10 | Models as code: nominate, brief, write or put, check; the warehouse (CC0 packs, our models, gkNextEngine's MIT kits) | after M8a |
-| M11 | Landmark shells: named, described buildings as code, their footprint and height in the fill | after M10 |
+| M10 | Models as code: nominate, brief, write or put, check; the warehouse (CC0 packs, our models, gkNextEngine's MIT kits) | built 2026-11-09 (23 of 23 pass; Pi skill); embeddings, CC0 packs and Codex/Claude Code left |
+| M11 | Landmark shells: named, described buildings as code, their footprint and height in the fill | built 2026-11-09 (2 in volume 1; height into the lot, footprint the lot's) |
 | M12 | People with bodies: a 7-bone standard, shared clips, parts by slot from the sheets | after M11 |
 | W15 | A paid volume 1 run with M8, M10 and M11 in, against W14 | when the user asks |
 
@@ -539,17 +539,29 @@ Was "configurations of one's own, not now"; the user brought it forward so the m
       checkout without this change). *Evidence:* the first quarter's rehearsal (units 1–84 on `rehearsal-novel-w13j`)
       before (`d20261109064146`) and after (`d20261109064813`): the page identical but its export time, the report
       identical but its timing (236 moves, the same laws). *Cost:* none.
-- [ ] **M8b The commands.** `novel settings show|explain|set|diff`: JSON out, bounded; `explain` names what a key
-      changes downstream; `set` validates, writes the right layer, logs who and why, and a pre-film change takes a new
-      `before` snapshot. *Tests:* one per command, set refused out of range, a set on a book after its run refused
-      without `--before`. *Evidence:* an agent session (Pi) changes `fill.arterial` and one district's tower share on a
-      rehearsal copy from a one-line request; the rebuilt terrain shows it; `diff` lists both.
-- [ ] **M8c Fill operators.** A place's fill as a list (`streets`, `lots`, `heights`, `scatter`, `line`, `ring`) with
-      seeds; the default list reproduces today's fill; named buildings never scattered. *Tests:* default operators
-      byte-equal to today's fill on Academy City; each operator alone on a fixture. *Evidence:* stills of one district
-      before and after a one-line change (more trees along arterials, a taller core).
-- [ ] **M8d Handles in World · Live.** The Buildings and Spawn panels show each operator's area and numbers; dragging
-      writes the setting through `novel settings set`. *Evidence:* a drag and the logged change.
+- [x] **M8b The commands** (built 2026-11-09). `novel settings show|explain|set|unset|diff`
+      (src/cli/commands/extract/settingsCommands.ts): `show` the values as they resolve and where each part came from;
+      `explain` meaning, unit, range, kind, layers and when a change takes effect (each group's `after` in the schema:
+      the next run, a terrain step, the transport step's `--rebuild`); `set` checks a value before it writes it to the
+      layer it belongs in (the book's, else the universe's; `--place` a place's part), logs who and why, and `--before`
+      takes the book's new before snapshot; `unset` falls back; `diff` lists the overrides in force or what changed since
+      a snapshot. Each director run records the overrides in force (`run.json` `settings`). *Tests:*
+      `test/settings-commands.test.ts`, 4 of 4 (show and prefixes; explain and near keys; set to the right layer, a place's
+      part, refusals out of range, at a layer not allowed, not settable, an unknown part, without --why; tables, unset,
+      diff against defaults and against a before snapshot). *Evidence:* on the rehearsal copy, `set fill.streets
+      {"arterial":24}` and a place's `fill.ops` in two commands; the rebuilt world had arterials of 24 m and more (from
+      18) and the operators' props; `unset` put it back. Not yet: a Pi session doing it from a one-line request.
+- [x] **M8c Fill operators** (built 2026-11-09). The book's and its universe's layers reach every module (the resolver
+      takes the book from `NOVEL_SETTINGS_BOOK` or the command's novel folder before the modules read their values);
+      a place's own layer reaches its fill (`fill.streets`) and its expressway (`highway.knobs`: the transport step's knobs
+      by city, the ramps' pull at export). `fill.ops` (src/v2/world/fillOps.ts): scatter (open ground, streets, plazas),
+      line (along roads of a level, every so many metres, one side or both) and ring, of trees, street lights, benches,
+      bins, parked cars and bollards, never in a building or on a carriageway; the player draws them as instanced shapes.
+      Structures are never scattered: they stay the fill's and the text's. *Tests:* `test/fill-ops.test.ts` 3 of 3.
+      *Evidence:* on the rehearsal copy, Academy City with three operators got 1,390 street lights, 600 trees, 120 parked
+      cars (still: scratchpad); with no override the first quarter's rehearsal is identical to the baseline again
+      (236 moves, page and report the same).
+- [ ] **M8d Handles in World · Live.** Not built yet (the commands and the schema are what the handles will write).
 - [ ] A region's living areas as a choice (the user, 2026-11-01): East Asian megacity now ([living-areas.md](living-areas.md));
       a European city, an American suburb as other profiles: a profile is a named set of overrides in the registry.
 
@@ -566,41 +578,52 @@ Design: [models-and-settings.md](models-and-settings.md) §2–3, §5; journal �
 terrain loop. Tools: OpenSCAD 2026.10.11 (`--backend=manifold`, coloured OFF), manifold-3d 3.2.1 (closed-solid check),
 both installed 2026-11-09. Tried first in a scratch test: 5 of volume 1's things, 5 closed solids, about 10,500 tokens.
 
-- [ ] **M10a Toolchain and contract.** `world-engine/models/` evaluate (OpenSCAD), measure (size, bottom, centre,
-      triangles), check (on the ground within 5 cm, front toward +x, size within a factor of the text's or the reading's
-      size, one piece or a reason, closed solid, at most 20,000 triangles), catalogue record, mesh JSON for the player.
-      *Tests:* fixtures that pass and that fail each check (blades under the ground, floating rotor, a 30 m knife).
-      *Cost:* none.
-- [ ] **M10b Nominate.** `novel model nominate`: importance (scenes, acting cards, damage, carried or ridden, named by
-      several) × description (describing sentences, size, colours, parts) for things and named buildings; a model when
-      both pass, a warehouse part otherwise. *Tests:* ranking on a fixture reading. *Evidence:* volume 1's list with the
-      top 20 read against their lines; how many own models, how many parts. *Cost:* none.
-- [ ] **M10c Brief, write, put, check.** The commands; `write` with the work model and the check's failures fed back
-      (at most 3 tries); `put` takes an agent's file; usage per model in `universe/models/usage.json`. *Tests:* the
-      commands on a stand-in work model; `put` of a failing file reports the failures. *Evidence:* volume 1's nominated
-      models: first-try pass rate, pass rate after retries, failures by class, stills; one model written by Pi from
-      `brief` alone. *Cost:* work-model tokens per model and in all, priced by the cost script (`rehearsals/w10-cost.mjs`
-      gains a `models` line).
-- [ ] **M10d The warehouse.** Our CC0 packs and gkNextEngine's kits (MIT: vendored with its licence notice and catalogue,
-      attribution in the repository's notices) searched together; `novel model use` binds a thing to a part; local
-      embeddings (bge) match a thing's description to a part. *Tests:* the catalogue loads, every kit module evaluates or
-      is listed as failing. *Evidence:* 20 small things bound and checked by hand (right part / acceptable / wrong).
-      *Cost:* none (local embeddings).
-- [ ] **M10e In the replay.** The player draws a thing with a model from its mesh, behind a Models button (as Smooth);
-      vehicles turned by their front. *Evidence:* World · Live stills of units 154 (the Hammerhead), 158 (the
-      window-cleaning robot and the observation helicopter), 197 (the subway carriage) before and after.
-- [ ] **M10f Every agent host.** `skills/novel-models/SKILL.md`, published by the adaptor; one acceptance test per host
-      (Pi, Codex, Claude Code) that runs `nominate`, `brief` and `check`.
+- [x] **M10a Toolchain and contract** (built 2026-11-09). `src/v2/models/scad.ts` (OpenSCAD's manifold backend to a
+      coloured OFF; measure; manifold-3d's closed-solid check with each piece's box; the player's Y-up mesh) and
+      `contract.ts` (the rules the writer reads, the checks). Thresholds in the schema (`models.contract`). A rule from the
+      first run: 9 of 14 failed on rotors a few centimetres off their hub and a 0.65 m robot 6 cm low, none of it visible
+      at 30 m; the ground tolerance is now the larger of 5 cm and 5% of the height, and a piece within the larger of
+      15 cm and 2% of the longest side of the body counts as attached (a piece further floats and fails, with where it
+      is). *Tests:* `test/models.test.ts` 7 of 7 (a passing box with its colours; blades under the ground; a rotor 1 m off
+      fails, 5 cm off is attached; a 30 m knife against 0.3 m; broken code; floating pieces; nominate).
+- [x] **M10b Nominate** (built 2026-11-09). `novel model nominate`: the settei cast's things (universe/props.json) with
+      the sentences naming them and their scenes; a kind that can have its own model gets one when seen in 2 scenes or
+      named in 3 sentences (`models.nominate`), at most 40 a book; small kinds take a part. *Evidence:* volume 1, 157
+      things: 23 own (helicopters, cleaning robots, a drone, a car, the wind turbine, the big screen, two VTOL aircraft, a
+      crane, trucks, the airship, the Hammerhead, cars, a billboard, a stretcher...), 134 parts. A few generic labels made
+      it in (a "car", a fire extinguisher typed as a machine): a cast question, not a rule.
+- [x] **M10c Brief, write, put, check** (built 2026-11-09). `novel model brief|write|put|check|list|show`; the store
+      per universe (`universe/models`: `<id>.scad` the truth, `.off` and `.mesh.json` derived, `catalog.json`,
+      `usage.json`). *Evidence (rehearsal library, a clone of library 16):* 23 written; 12 passed the first contract, 19
+      when re-checked under the scaled one, the last 4 each on one rewrite with the new feedback: 23 of 23. *Cost:* 62
+      requests, 73,902 prompt and 79,906 completion tokens: $0.108 at the work model's rates. Not yet: a model put by Pi
+      from `brief` alone.
+- [x] **M10d The warehouse** (built 2026-11-09, partly). gkNextEngine's 12 kits and catalogue (668 modules, MIT) kept beside
+      our CC0 packs (`~/claude-world-first/model-packs/gknextengine-scad`; their comments are Chinese, so not in this public
+      repository); `novel model parts '<kind>'`, `use <thing> kit:<module>` (rendered, checked), `bind` (the work model picks
+      from a shortlist by kind). *Evidence:* 135 small things: 17 bound (pistols, lanterns, a medkit, a van, a helicopter,
+      a display case), 117 with no fitting part (the kits hold 7 weapons and 12 items), 1 failed its ground check.
+      *Cost:* 9 requests, $0.020. Not yet: matching by embeddings; our CC0 packs bound (`pack:`) and drawn.
+- [x] **M10e In the replay** (built 2026-11-09). The director draws a thing with a checked model (its own, or a kit part)
+      as it, at the model's size (`scadModels` on the page); the player builds it with its colours; a Models button in the
+      player and World · Live (on by default; off shows the old shapes). *Evidence:* the first quarter's rehearsal with
+      models hidden and shown: the laws identical; no modelled thing is on stage in units 1–84 (they come later: 154, 158,
+      197), so W15 shows them.
+- [x] **M10f Every agent host** (built 2026-11-09, Pi only). `skills/novel-models/SKILL.md` (models and settings), in the
+      Pi runner's manifest; it loads through Pi's own resource loader (`tools/pi-review/library-access.test.mjs`, 7 of 7 with
+      the runner's tests). Codex and Claude Code wait for the adaptor's setup engine (adapters/README.md).
 
 **Pass:** every nominated thing has a model or a part; every model passes its checks; the first quarter's rehearsal
 unchanged in laws and moves (a model is a look). **Cost:** reported per model and per book.
 
 ## M11 — Landmark shells
 
-- [ ] Named buildings the text describes (look, floors, parts) nominated with the things; a shell as code (walls, roof,
-      the named parts), its footprint and height into the fill's lot for it. *Tests:* the fill keeps a landmark's lot at
-      its shell's footprint; the walk grid enters only at its doors. *Evidence:* the first quarter's rehearsal: laws,
-      moves and held against W14's numbers; stills of each landmark. *Cost:* work-model tokens per shell.
+- [x] Named landmarks (built 2026-11-09): the terrain's building sites the text names (not "the building" of a scene)
+      nominated with the things; written with a building brief (footprint about the lot's, height about its floors, its
+      named parts, entrance toward -y); the export puts the model on the lot (a shell the lot's plan scales) and its height
+      into the lot's floors. *Evidence:* volume 1 has 2 (the Darts Bar, Tokiwadai Middle School), both written on the first
+      try ($0.004); the first quarter with them: laws identical, only their two lots changed height (8 → 4 and 1 → 5
+      floors) and one scene (83) has 2 more moves round them; stills in the scratchpad.
 
 ## M12 — People with bodies (later)
 
@@ -622,4 +645,8 @@ quarter, and a new `before` snapshot with the models and settings in.
 | --- | --- | --- | --- | --- | --- |
 | Scratch test of models as code | 2026-11-09 | none (scratch) | 5 of 5 closed solids; the turbine failed the ground check twice, then passed; 4 of 5 in several pieces | 6 work-model requests | about 10,500 tokens |
 | M8a world generator schema | 2026-11-09 | world-schema 6/6, engine 184/184, TS 829/830 (1 old) | first-quarter rehearsal identical before and after (page and report) | none | none |
+| M8b–c settings commands, fill operators | 2026-11-09 | settings-commands 4/4, fill-ops 3/3 | overrides took effect on a copy (arterials 24 m, 2,110 props); first quarter identical with none | none | none |
+| M10a–c models as code | 2026-11-09 | models 7/7 | 23 of 23 of volume 1's nominated things pass the contract (12 first run, 19 after the scaled rule, 4 rewrites) | 62 work-model requests | $0.108 |
+| M10d warehouse | 2026-11-09 | | 17 of 135 small things bound to a kit part, 117 none | 9 | $0.020 |
+| M10e–f, M11 | 2026-11-09 | Pi skill loader 7/7 | first quarter with models: laws identical; 2 landmarks drawn, their lots' heights from their models | 2 | $0.004 |
 

@@ -1,6 +1,6 @@
 import { stageStream as skeletonStream } from "./stream.js";
 import { setting, table } from "../settings.js";
-import { centroid, materialize, type Building, type Fabric, type FillStyle, type Lot, type Point, type Road } from "./cityFill.js";
+import { centroid, materialize, type Building, type Fabric, type FillParams, type FillStyle, type Lot, type Point, type Road } from "./cityFill.js";
 
 /**
  * Landscapes: what a place's ground looks like, by type. Jev picks the type (modern skyscrapers, a commercial
@@ -65,7 +65,8 @@ export const streetsFor = (patch: Patch, p: Point = [patch.x, patch.z]) => { con
  */
 const LANDSCAPE_TABLE = table<{ types: Record<LandscapeType, Omit<Kind, "building"> & { building: [number, string][] } > }>("terrain.landscapes").types;
 const stepsRule = (steps: [number, string][]) => (floors: number) => { let type = steps[0][1]; for (const [from, kind] of steps) if (floors >= from) type = kind; return type; };
-export const LANDSCAPES: Record<LandscapeType, Kind> = Object.fromEntries(Object.entries(LANDSCAPE_TABLE).map(([type, kind]) => [type, { ...kind, building: stepsRule(kind.building) }])) as Record<LandscapeType, Kind>;
+const kindsOf = (types: typeof LANDSCAPE_TABLE) => Object.fromEntries(Object.entries(types).map(([type, kind]) => [type, { ...kind, building: stepsRule(kind.building) }])) as Record<LandscapeType, Kind>;
+export const LANDSCAPES: Record<LandscapeType, Kind> = kindsOf(LANDSCAPE_TABLE);
 
 /**
  * A manifold: how a part's heights spread over its ground round the median Jev gives it (the user's calls, 2026-10-31:
@@ -632,16 +633,17 @@ export function landscapeStyle(landscape: Landscape): FillStyle {
 /** landmarks: a stadium's bowl, a plaza's fountain; plazas: open squares (a centre and radius). */
 export interface LandscapeFill { fabric: Fabric; owner: Record<string, string>; walls: [Point, Point][]; keeps: Building[]; landmarks: Building[]; plazas: { x: number; z: number; r: number }[]; radius: number; waters: Road[] }
 /** A place's ground filled from its landscape (and a window of it, when given): the fabric, which patch owns each lot, and castles' walls and keeps. */
-export function fillLandscape(landscape: Landscape, window?: { x0: number; z0: number; x1: number; z1: number }): LandscapeFill {
+/** A place's fill; `scope.place` gives the place's own layer of the world generator schema (fill.streets; milestones M8c). */
+export function fillLandscape(landscape: Landscape, window?: { x0: number; z0: number; x1: number; z1: number }, scope: { place?: string | null } = {}): LandscapeFill {
   // The other layers (docs/v2/terrain-levels.md §3.5): their patches are no part of the surface's fill (they claim, cut and
   // lend nothing there); their buildings join the landmarks on their own floors (layerBuildings).
   if (landscape.patches.some((patch) => patch.plane)) {
     const surface = landscape.patches.filter((patch) => !patch.plane);
-    const filled: LandscapeFill = surface.length ? fillLandscape({ ...landscape, patches: surface }, window) : { fabric: { roads: [], blocks: [], lots: [], buildings: [] }, owner: {}, walls: [], keeps: [], landmarks: [], plazas: [], radius: 0, waters: [] };
+    const filled: LandscapeFill = surface.length ? fillLandscape({ ...landscape, patches: surface }, window, scope) : { fabric: { roads: [], blocks: [], lots: [], buildings: [] }, owner: {}, walls: [], keeps: [], landmarks: [], plazas: [], radius: 0, waters: [] };
     filled.landmarks.push(...layerBuildings(landscape, window));
     return filled;
   }
-  const radius = circleOf(landscape), fabric = materialize({ seed: landscape.seed, r0: radius, r: radius }, window, undefined, landscapeStyle(landscape));
+  const radius = circleOf(landscape), fabric = materialize({ seed: landscape.seed, r0: radius, r: radius }, window, setting<FillParams>("fill.streets", { place: scope.place ?? null }), landscapeStyle(landscape));
   const owner = Object.fromEntries(fabric.lots.map((lot) => [lot.id, ownerOfLot(landscape, lot)!.id]));
   const walls: [Point, Point][] = [], keeps: Building[] = [], landmarks: Building[] = [], plazas: { x: number; z: number; r: number }[] = [], waters: Road[] = [];
   for (const patch of landscape.patches) {
