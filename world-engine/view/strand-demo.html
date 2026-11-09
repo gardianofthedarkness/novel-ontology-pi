@@ -1411,7 +1411,9 @@ const VEHICLE_DIMS = { "a car": [4.5, 1.5, 1.9], "a van or a truck": [6.5, 2.6, 
 const spinners = [];
 /** Models as code: on unless turned off (the Models button, ?models=off), remembered in this browser. */
 const MODELS_ON = (() => { if (new URLSearchParams(location.search).get("models") === "off") return false; try { return localStorage.getItem("strand-models") !== "0"; } catch { return true; } })();
-const scadLook = new THREE.MeshStandardMaterial({ vertexColors: true, flatShading: true, roughness: 0.8, metalness: 0.05 }), scadGeometries = new Map();
+// A model's mesh is drawn in the world's own ink (a thing's fill and edge lines, the user, 2026-11-09: "match the art style
+// automatically ... keep it out of the work model context"): its colours are read for the record and never shown.
+const scadGeometries = new Map();
 /** A model's mesh (Y-up positions, triangles, a colour a triangle) as a geometry standing on y = 0, centred on x and z. */
 function scadGeometry(id, mesh) {
   if (scadGeometries.has(id)) return scadGeometries.get(id);
@@ -1435,7 +1437,7 @@ function vehicleForm(kind, model, fill, edges) {
   const own = MODELS_ON && String(model ?? "").startsWith("scad:") ? data.scadModels?.[model.slice(5)] : null;
   if (own) {
     const body = new THREE.Group(), geometry = scadGeometry(model.slice(5), own);
-    body.add(new THREE.Mesh(geometry, scadLook), new THREE.LineSegments(new THREE.EdgesGeometry(geometry, 35), edges)); inner.add(body);
+    body.add(new THREE.Mesh(geometry, fill), new THREE.LineSegments(new THREE.EdgesGeometry(geometry, 25), edges)); inner.add(body);
     inner.scale.set(1 / Math.max(0.05, own.size[0]), 1 / Math.max(0.05, own.size[1]), 1 / Math.max(0.05, own.size[2])); return form;
   }
   if (!dims && String(model ?? "").startsWith("scad:")) return null;
@@ -1886,7 +1888,7 @@ let decor = () => {};
     const PROP_LOOK = Object.fromEntries(Object.entries({ tree: [8, "3f8f5a"], "street-light": [7, "c8d6e0"], bench: [0.7, "8a6a4a"], bin: [0.9, "5a6a72"], car: [1.5, "7a8fa8"], bollard: [0.9, "9aa4ad"] }).map(([kind, [h, c]]) => { const [height, colour] = look(kind, h, c); return [kind, [shape[kind](height), colour]]; }));
     // A kind drawn as a warehouse part where its landscape names one (fill.props; milestones M10i): the part's mesh from
     // scadModels, instanced like the plain shape, scaled where the part is in kit units; the Models button turns it off.
-    const groups = new Map();
+    const groups = new Map(), partFill = new THREE.MeshBasicMaterial({ color: 0x2b86c4, transparent: true, opacity: 0.2, depthWrite: false });
     for (const entry of data.landscapes ?? []) for (const prop of entry.props ?? []) {
       const [kind] = prop, slot = MODELS_ON ? entry.propModels?.[kind] : null, id = slot && String(slot.model ?? "").startsWith("scad:") ? slot.model.slice(5) : null, part = id && data.scadModels?.[id] ? id : null;
       const key = `${kind}|${part ?? ""}`;
@@ -1895,10 +1897,13 @@ let decor = () => {};
     }
     for (const { kind, part, scale, items } of groups.values()) {
       if (!PROP_LOOK[kind] && !part) continue;
-      const geometry = part ? scadGeometry(part, data.scadModels[part]) : PROP_LOOK[kind][0], material = part ? scadLook : new THREE.MeshStandardMaterial({ color: PROP_LOOK[kind][1], roughness: 0.85 });
-      const mesh = new THREE.InstancedMesh(geometry, material, items.length);
-      items.forEach(([, x, z, turn], i) => { q.setFromAxisAngle(up, -(turn ?? 0)); m.compose(new THREE.Vector3(x, 0, z), q, new THREE.Vector3(scale, scale, scale)); mesh.setMatrixAt(i, m); });
+      // A part stands in the city's own ink (a lot shell's blue fill, pale edge lines): street furniture, not a thing of the story.
+      const geometry = part ? scadGeometry(part, data.scadModels[part]) : PROP_LOOK[kind][0], material = part ? partFill : new THREE.MeshStandardMaterial({ color: PROP_LOOK[kind][1], roughness: 0.85 });
+      const mesh = new THREE.InstancedMesh(geometry, material, items.length), matrices = [];
+      items.forEach(([, x, z, turn], i) => { q.setFromAxisAngle(up, -(turn ?? 0)); m.compose(new THREE.Vector3(x, 0, z), q, new THREE.Vector3(scale, scale, scale)); mesh.setMatrixAt(i, m); if (part) matrices.push(m.clone()); });
       mesh.userData.props = kind; if (part) mesh.userData.part = part; world.add(mesh);
+      // A part's edge lines, instanced with it: the same ink as a thing of the story.
+      if (part) { const lines = instancedEdges(new THREE.EdgesGeometry(geometry, 25), matrices, 0x8fd6ff, 0.55); lines.lines.userData.props = kind; world.add(lines.lines); }
     }
   }
   // A city's expressway (world-engine/world/highways.mjs, kept by the terrain's transport step): decks on piers over the
@@ -1914,13 +1919,16 @@ let decor = () => {};
       }
       const geometry = new THREE.BufferGeometry(); geometry.setAttribute("position", new THREE.Float32BufferAttribute(pos, 3)); geometry.computeVertexNormals(); return geometry;
     };
-    const deckLook = new THREE.MeshStandardMaterial({ color: 0x9aa7b4, roughness: 0.9, side: THREE.DoubleSide }), rampLook = new THREE.MeshStandardMaterial({ color: 0xd9a54a, roughness: 0.9, side: THREE.DoubleSide });
-    const tunnelLook = new THREE.MeshBasicMaterial({ color: 0xa87ae0, transparent: true, opacity: 0.55, depthWrite: false, side: THREE.DoubleSide });
+    // The expressway in the world's own ink (the user, 2026-11-09: the highway did not match the art style): a lot shell's
+    // translucent blue for its decks and piers, pale edge lines, the ramps' lines warm so a way up reads as one.
+    const deckLook = new THREE.MeshBasicMaterial({ color: 0x2b86c4, transparent: true, opacity: 0.16, depthWrite: false, side: THREE.DoubleSide }), deckEdge = new THREE.LineBasicMaterial({ color: 0x8fd6ff, transparent: true, opacity: 0.6 }), rampEdge = new THREE.LineBasicMaterial({ color: 0xffd36e, transparent: true, opacity: 0.7 });
+    const tunnelLook = new THREE.MeshBasicMaterial({ color: 0x8a7ad6, transparent: true, opacity: 0.35, depthWrite: false, side: THREE.DoubleSide });
+    const inked = (geometry, fillMat, edgeMat) => { const group = new THREE.Group(); group.add(new THREE.Mesh(geometry, fillMat), new THREE.LineSegments(new THREE.EdgesGeometry(geometry, 12), edgeMat)); return group; };
     const piers = [], pier = new THREE.BoxGeometry(2.2, 1, 2.2).translate(0, 0.5, 0);
-    for (const deck of highway.decks ?? []) { world.add(new THREE.Mesh(ribbon(deck, 17, () => up), deckLook)); for (let n = 0; n < deck.length; n += 8) piers.push(deck[n]); }
-    if (piers.length) { const columns = new THREE.InstancedMesh(pier, deckLook, piers.length); piers.forEach(([x, z], i) => { m.compose(new THREE.Vector3(x, 0, z), q.identity(), new THREE.Vector3(1, up - 0.4, 1)); columns.setMatrixAt(i, m); }); world.add(columns); }
+    for (const deck of highway.decks ?? []) { world.add(inked(ribbon(deck, 17, () => up), deckLook, deckEdge)); for (let n = 0; n < deck.length; n += 8) piers.push(deck[n]); }
+    if (piers.length) { const matrices = piers.map(([x, z]) => new THREE.Matrix4().compose(new THREE.Vector3(x, 0, z), q.identity(), new THREE.Vector3(1, up - 0.4, 1))), columns = new THREE.InstancedMesh(pier, deckLook, piers.length); matrices.forEach((matrix, i) => columns.setMatrixAt(i, matrix)); world.add(columns); world.add(instancedEdges(new THREE.EdgesGeometry(pier, 12), matrices, 0x8fd6ff, 0.45).lines); }
     for (const line of highway.tunnels ?? []) world.add(new THREE.Mesh(ribbon(line, 6, () => 0.25), tunnelLook));
-    for (const ramp of highway.ramps ?? []) for (const leg of ramp.legs) world.add(new THREE.Mesh(ribbon(leg, 7, (n) => Math.max(0.3, leg[n][2])), ramp.under ? tunnelLook : rampLook));
+    for (const ramp of highway.ramps ?? []) for (const leg of ramp.legs) world.add(ramp.under ? new THREE.Mesh(ribbon(leg, 7, (n) => Math.max(0.3, leg[n][2])), tunnelLook) : inked(ribbon(leg, 7, (n) => Math.max(0.3, leg[n][2])), deckLook, rampEdge));
   }
 }
 // The terrain's shapes (docs/v2/world-engine-v2.md §2.0.17): each shape Jev kept stands as a hologram where its part is now,

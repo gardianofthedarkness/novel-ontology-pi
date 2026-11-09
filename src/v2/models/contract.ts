@@ -20,7 +20,7 @@ export function contractText(c: ContractSettings = contractSettings()): string {
     "- Its real size: from the lines when they give it, else a typical one for such a thing.",
     "- One module named thing() holds the whole object; the file ends with the call thing(); and has no other top-level geometry.",
     `- Only cube, sphere, cylinder, polyhedron, hull, union, difference, intersection, translate, rotate, scale, mirror, color, linear_extrude, rotate_extrude, for, let, module, function. $fn at most ${c.fn}; at most ${c.primitives} shapes.`,
-    "- Colour every part with color([r, g, b]) (0 to 1). Low-poly and stylised, with a clear silhouette seen from 30 to 100 m away.",
+    "- Low-poly, with a clear silhouette seen from 30 to 100 m away. No colours or textures are needed: the world draws every model in its own style.",
     "- One piece: every part overlaps the part it hangs on by a few centimetres (a rotor on its mast, a wheel on its axle); nothing floats.",
     "- Rotors, blades and propellers are modelled still, as thin boxes; swept blades must stay above the ground (a tall enough tower or mast).",
     "- Reply with the code only: no fences, no prose.",

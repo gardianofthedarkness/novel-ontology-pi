@@ -386,3 +386,12 @@ reports the commands run and the settings written. In the pipeline it runs after
 `--place`); the pass run with no hint on volume 1 (M14c in the milestones): 240 s, 52 commands, the book's look, the
 city's fill and nine places' overrides from the sentences alone, 502 turbines in the world built after it. The context
 for volume 1 is 20 KB of JSON at `--top 4` (26 places); the agent narrows with `--place` where it wants more.
+
+### 9.7 One ink (the user, 2026-11-09)
+
+"The highway and the model built by work model doesn't automatically match the existing art style of our frontend. We
+need to make it automatic and keep it out of the work model context let the model do its modelling and we match the
+destructability and the art style automatically in the warehouse." So: the writer models geometry; the contract asks
+for no colour and no style; the world draws every part in its own ink at draw time (a thing's gold or a lot's blue,
+always with edge lines), the highway too. Destruction is the engine's (structure cells, a lot's skeleton), never a
+skin's, so a written model breaks as a baked one does. Left for later: a skin that loses its part over a broken cell.

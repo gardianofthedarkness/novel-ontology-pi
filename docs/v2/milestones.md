@@ -744,6 +744,17 @@ write (about $0.1 for 60 modules). Steps, each with evidence and cost in design 
       `models.furniture` (`config/furniture.json`, 17 room kinds, moved out of rooms.mjs); the export puts `hallModels`
       and `propLooks` on the page and the player reads them. 78 keys, 9 tables. *Evidence:* schema 6/6 (every default
       valid, every key read), engine 184/184; an override of each seen on a page: not yet. *Cost:* none.
+- [x] **M13h One ink for every part, and the highway** (built 2026-11-09; the user: "the highway and the model built by
+      work model doesn't automatically match the existing art style of our frontend. We need to make it automatic and
+      keep it out of the work model context"). A model's colours are read for its record and never shown: every
+      warehouse part is drawn in the frontend's own ink at draw time: a thing or a vehicle in the thing's gold fill and
+      edge lines, street furniture and shells in a lot's translucent blue with pale edge lines (instanced lines for the
+      thousands of parts a fill puts down); the expressway's decks, piers and ramps likewise, the ramps' lines warm.
+      The flat vertex-colour material is gone. The contract no longer asks the writer for colours or a style: it models,
+      the world draws. Destructibility was already the engine's, not the skin's (a big thing's structure cells, a lot's
+      skeleton swapped in for its shell when a structural hit lands), so a modelled thing breaks as the others do; what
+      no skin does yet, baked or written, is lose the part over a broken cell. *Evidence:* volume 1's city with the look
+      pass's 502 turbines before and after (stills in the scratchpad); models 7/7, warehouse 7/7. *Cost:* none.
 - [x] **Recall by name, free** (built 2026-11-09, with M10h): `find` matches a part's name, label or reference exactly
       first; a written model is `own:<label's slug>`. *Evidence:* `test/warehouse.test.ts` (a model named at birth found
       with `exact: true` by its label, by slug and by id). *Cost:* none.
