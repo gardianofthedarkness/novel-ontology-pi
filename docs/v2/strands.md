@@ -6,7 +6,69 @@
 > before the cross-book carry (M16) and the first volume 2 run (W16).
 
 Built 2026-11-09 (M17a–d, the user: "I agree let's build it"): the builder (§3), the run on it, a world layer per strand
-(§4), re-stranding a run after smoothing (§5). §2 is what it measured on volume 1.
+(§4), re-stranding a run after smoothing (§5). §2 is what it measured on volume 1. **§0 revises the split rule** (planned
+as M17e–g): the scale is no longer set; strands split and unite by interaction.
+
+## 0. Revision: the scale comes from the context (the user, 2026-11-09, after M17a–d)
+
+> "The stranding system should be dynamically scaled not building or street specific. As long as the group splits on
+> different things and no longer interact with each other on semantic scale, they become two strands. When they
+> reunited the strands become one. Whether scale is building street what ever depends on the context." — the user,
+> 2026-11-09, on M17 as built.
+
+M17a–d decide a split by place: two envelopes apart at a fixed scale (the setting `strands.envelope`, a district). The
+revision decides it by interaction, and the envelope is read from where the strand happens:
+
+1. **A unit's group is the people acting in it**: acting, speaking or spoken to (the unit's `evidence`), not the cast
+   held in view. People held in view ride along and neither split nor unite strands. As built, the group is the whole
+   present list (held for 30 lines), which pulls every split straight back into the main strand.
+2. **A split** is part of a strand's group acting in a unit while the rest of that group is next told acting in a unit
+   where none of these people is in view: they are doing different things and no longer interact. No place scale
+   enters. Two rooms of one building and two ends of the city are alike.
+3. **A union** is a unit where people of two or more strands act. Someone of another strand merely held in view does not
+   unite them.
+4. **The envelope is read, not set**: the smallest place holding the strand's units over its stretch, at whatever scale
+   those places are (room, building, street, district, city). Physics stays per strand (§4) whatever the overlap; the
+   envelope is what the page and the cross-book registry show.
+5. **A unit is one group in the text**: the reading's cut is its own semantic boundary. 24 units of volume 1 have acting
+   people in two groups no card links (16 one after another, 8 interleaved, most one person a line or two from the
+   other); they are reported as a check, not split.
+6. **In a run**, a unit's acting people are clustered by where they stood: people within earshot (`talk.earshot`, 25 m)
+   chain into one group, and people the text has interacting in the unit (one card, or one event) stay one group at any
+   distance, the distance reported as a run fault. A cluster out of reach and not linked is a sub-unit (`~2`), as in M17d.
+
+The links are the cards' (people acting, speaking or spoken to in one card) and the script's events (their actors).
+
+**Measured with a prototype** (volume 1, library 16, read only):
+
+| Strands of volume 1 | Strands | Splits | Unions | Open at the end |
+| --- | --- | --- | --- | --- |
+| v1 lanes | 28 | | | |
+| M17a, district scale | 2 | 0 | 1 | 1 |
+| By interaction, the text | 21 | 20 | 17 | 4 |
+| By interaction, the W15 run | 31 | 25 | 20 | 11 |
+
+- **The text's shape.** The main strand (145 units, 12 to 286 with gaps); a second line from it at unit 68 that goes on
+  to 165 and comes back at 169 (60 units); a third from 83 to 156, back at 217 (15 units); the group of 32–38, into the
+  main at 66; and a string of short ones, many of one person for one to three units (someone alone doing something else
+  while the others are told), each back in the main or in another strand. Of the 4 open at the end, one is unit 1 with
+  nobody acting in it (to fold into the first strand when built).
+- **The scale by context.** Of the text's 21: 2 in a room, 2 in a building, 2 in a street, 1 in a district and 14 at the
+  city, the last because the text places most units only at the city's scale. A run's built sites give finer ones.
+- **The run against the text.** 20 strands are in both. The run adds 11: six are people standing more than 25 m from
+  their unit's group without interacting with it (in units 52, 95, 127, 163 and 221), five are units split from the
+  main differently because someone stood apart. The text has one (unit 236) the run keeps in the main.
+- **A new run fault.** In 16 units the run stood 54 pairs of people the text has interacting more than 25 m apart (13
+  units, 43 pairs at 50 m); the widest group spans 183 m. This goes in the inspection beside the moved units.
+
+**What it changes in what is built:**
+- M17a: the walk's place tests become the interaction tests; the setting `strands.envelope` goes; `envelopes()` stays
+  for the envelope read from the places and the stated-time conflict check.
+- M17b: the director's units keep one strand each; a rehearsal measures the change.
+- M17c: unchanged, keyed by strand; more strands are more layers, cheap while copy-on-write.
+- M17d: `runUnits` groups by distance and the text's links, not by site envelopes; `--envelope` goes; the report gains
+  the pairs the text has interacting that stood beyond earshot.
+- M16 reads the open strands by interaction.
 
 ## 1. The definition
 
@@ -22,7 +84,8 @@ Three rules follow:
 
 1. **A split** is a sub-group performing in another envelope while the rest of the group stays. A person stepping into
    another room, another building, another street of the same envelope is not a split: the strand goes on, with that
-   person elsewhere inside it.
+   person elsewhere inside it. *(As built in M17a; superseded by §0: a split is a sub-group that no longer interacts
+   with the rest, at whatever scale.)*
 2. **A union** is a scene whose people were last in two or more strands: the text has the groups together, which *is*
    the statement that their time is the same. From that scene on they are one strand, with both histories: the larger
    strand (most scenes) keeps its id; the others close into it (`unites`), and their world layers merge into its own.
@@ -207,6 +270,7 @@ What W15 taught:
 
 ## 6. What is next
 
-M16 (across books, per strand) builds on these: the registry reads `open` and the people from the strands file (the
-run's when there is one), the carry keeps the open strands' layers. Then W16, the first volume 2 run, on the user's go.
+M17e–g (§0, strands by interaction) first, on the user's go. Then M16 (across books, per strand) builds on these: the
+registry reads `open` and the people from the strands file (the run's when there is one), the carry keeps the open
+strands' layers. Then W16, the first volume 2 run, on the user's go.
 Open from M17: the layer gaps listed in §4; why W15 played the 28 moved units away from their places.

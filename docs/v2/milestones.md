@@ -25,7 +25,7 @@ call); a real Jev run only when the user asks.
 | M13 | All SCAD: quantised page meshes, vehicles and furniture from the kits, a building kit of our own, the baked packs retired, every remaining baked choice a layered setting (design §9) | items M13a–g listed 2026-11-09; M13g begun |
 | M15 | Interaction sheets: what a part does (solid, layer, seats, crash degree and radius, what it becomes when broken), defaults by kind, overrides per book; the engine's use of them (design §11) | M15a–d built 2026-11-09: sheets, standing vehicles in the walk graph, a text crash sized by the sheet, the wreck pinned where it fell |
 | M14 | The look pass: the world generator set from the text, top down the place tree, hooked after the reading and before the terrain loop (design §10) | built and proved with no hint 2026-11-09 (volume 1: 502 turbines from the text alone); M14d the pipeline hook and volume 2 end to end left |
-| M17 | Strands as groups in envelopes: one builder for the book and the director, splits only across envelopes, unions kept, physics a layer per strand, re-strand after smoothing (docs/v2/strands.md) | M17a–d built 2026-11-09: volume 1 is 2 strands at the district scale (28 before), a world layer per strand, W15 re-stranded (4 strands in the run, 28 units played away from their places) |
+| M17 | Strands as groups in envelopes: one builder for the book and the director, splits only across envelopes, unions kept, physics a layer per strand, re-strand after smoothing (docs/v2/strands.md) | M17a–d built 2026-11-09: volume 1 is 2 strands at the district scale (28 before), a world layer per strand, W15 re-stranded (4 strands in the run, 28 units played away from their places). Revised the same day (M17e–g planned): split and unite by interaction, the scale read from the context; prototype 21 strands in the text, 31 in W15 |
 | M16 | Across books per strand: a strand registry (open, continued), shares and damage by strand, damage kept into the universe and replayed out of it (design §4.5) | items M16a–e listed 2026-11-09 after the review before volume 2 |
 | W15 | A paid volume 1 run with M8, M10 and M11 in, against W14 | done 2026-11-09 (about $0.34 with the models and a crashed attempt) |
 | W16 | A paid volume 2 run on the universe of volume 1, M16 in force | when the user asks |
@@ -844,6 +844,20 @@ Built 2026-11-09 (the user: "I agree let's build it"); the rules as built and th
       each apart from the main and back into it, all from units the text places only at the city's scale); 28 units
       played in another district than their place (126–129, 165, 189–196, 202–216), cause not yet investigated. Street
       and building scales over-strand a run (14 and 20). First quarter with a stand-in: the text 1, the run 2.
+
+Revised the same day (strands.md §0; the user: "As long as the group splits on different things and no longer interact
+with each other on semantic scale, they become two strands ... Whether scale is building street what ever depends on the
+context"). Prototype on volume 1: the text 21 strands by interaction (20 splits, 17 unions), the W15 run 31.
+
+- [ ] **M17e The builder by interaction**: a unit's group is its acting people (`evidence`); a split is part of a group
+      acting while the rest is next told out of its view; a union is people of two strands acting in one unit; the
+      envelope read from the strand's places; `strands.envelope` removed from the schema, settings and strand builder;
+      tests in `test/v2-group-strands.test.ts` rewritten for the rules.
+- [ ] **M17f Re-strand by interaction**: `runUnits` clusters a unit's acting people by distance (earshot) and keeps the
+      text's interacting people together at any distance; the report gains the interacting pairs that stood beyond
+      earshot; `--envelope` removed; tests.
+- [ ] **M17g Measured**: the first-quarter rehearsal before and after; W15 re-stranded to the scratchpad (never written
+      to library 16); strands.md §0 rewritten as built.
 
 ## M16 — Across books, per strand (the user, 2026-11-09)
 
