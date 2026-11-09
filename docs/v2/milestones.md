@@ -847,11 +847,15 @@ Built 2026-11-09 (the user: "I agree let's build it"); the rules as built and th
 
 Revised the same day (strands.md §0; the user: "As long as the group splits on different things and no longer interact
 with each other on semantic scale, they become two strands ... Whether scale is building street what ever depends on the
-context"). Prototype on volume 1: the text 21 strands by interaction (20 splits, 17 unions), the W15 run 31.
+context"). Prototype on volume 1: the text 21 strands by interaction (20 splits, 17 unions), the W15 run 31. With a
+latency of 40 lines (the user: "strand lands only when we see they seperate long enough"): the text 10, the run 15,
+every text strand in the run.
 
 - [ ] **M17e The builder by interaction**: a unit's group is its acting people (`evidence`); a split is part of a group
       acting while the rest is next told out of its view; a union is people of two strands acting in one unit; the
-      envelope read from the strand's places; `strands.envelope` removed from the schema, settings and strand builder;
+      envelope read from the strand's places; a latency (`strands.latency`, 40 lines by default: a strand seen apart
+      for fewer lines folds into the strand it left, after the walk; strands.md §0.1); `strands.envelope` removed from
+      the schema, settings and strand builder;
       tests in `test/v2-group-strands.test.ts` rewritten for the rules.
 - [ ] **M17f Re-strand by interaction**: `runUnits` clusters a unit's acting people by distance (earshot) and keeps the
       text's interacting people together at any distance; the report gains the interacting pairs that stood beyond

@@ -61,7 +61,50 @@ The links are the cards' (people acting, speaking or spoken to in one card) and 
 - **A new run fault.** In 16 units the run stood 54 pairs of people the text has interacting more than 25 m apart (13
   units, 43 pairs at 50 m); the widest group spans 183 m. This goes in the inspection beside the moved units.
 
+### 0.1 Latency: a strand lands only when they are seen apart long enough (the user, 2026-11-09)
+
+> "Can you add a latency such that strand lands only when we see they seperate long enough and test it out?"
+
+7. **Latency.** After the walk, a strand that left another (or a new group that joins one) and is seen apart for fewer
+   than `strands.latency` lines (the lines told on its own units; a sub-unit is told beside its unit) folds back: its
+   units go to the strand it left (they never really left it), a new group's to the strand it joins, else to the one
+   being told. Shortest first, until none is left; the folded strand's links are renamed to the one it folded into. The
+   default is **40 lines**, about four units (a unit's lines: median 10, p90 41; volume 1 has 5,202).
+   A short separation then shares one world layer: a blast while they are briefly apart is seen by both.
+
+Two ways of applying it were tried and set aside. **Counting all the story told between the split and the reunion**
+folds almost nothing below 120 lines and never folds a strand that never comes back (a person who stood apart for one
+unit and does not act again). **Refusing the split inside the walk and walking again** cascades: refusing the one-person
+split of unit 70 put that unit on the main strand, the walk then took the main strand's other people for the rest of its
+group, and the second line (units 68–165, 60 units) was read as reuniting with the main at unit 72 and folded away.
+Folding after the walk keeps every split and union the full walk found.
+
+Measured by the lines seen on the strand (prototype; volume 1, library 16, read only):
+
+| Latency (lines) | Text: strands | splits | unions | Run W15: strands | splits | unions | Text strands also in the run |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| 0 | 21 | 17 | 17 | 31 | 20 | 20 | 20 |
+| 10 | 18 | 14 | 15 | 25 | 16 | 16 | 16 |
+| 20 | 13 | 10 | 11 | 20 | 13 | 14 | 13 |
+| 30 | 11 | 8 | 9 | 17 | 10 | 11 | 11 |
+| **40** | **10** | **8** | **8** | **15** | **9** | **9** | **10** |
+| 60 | 10 | 8 | 8 | 13 | 9 | 9 | 10 |
+| 80 | 9 | 7 | 7 | 10 | 8 | 8 | 9 |
+| 120 | 6 | 4 | 4 | 7 | 5 | 5 | 6 |
+
+- **At 40 lines the text is stable** (the same 10 strands up to 60): the main; the opening group of units 2–11; the group
+  of 32–38; the second line 68–165 (back at 169); the third line 83–156 (back at 217); 130–136 (from the second line,
+  into the third at 140); 146–150 (from both, into the main at 151); 187–200 (back at 201); 245–247 (back at 250); and
+  unit 1 with nobody acting (to fold into the first strand when built). Folded: eleven short ones, 3 to 30 lines, each
+  one or two people for one to three units, all into the main except one into 187–200.
+- **Every text strand is in the run at 40 lines.** The run's 5 more are 4 people standing out of reach of their group
+  without interacting in long units (52 twice, 127, 163; each seen 40 lines or more because the unit is long, and never
+  acting again) and a group of 220–225 (7 units, 3 people) the run kept apart. They are run findings for the inspection.
+- **Past 80 lines real lines fold**: at 120 the 187–200 and 245–247 groups go, at 160 the 130–136 group.
+
 **What it changes in what is built:**
+- M17e also: the setting `strands.latency` (lines, default 40) and the fold after the walk, for the text and the run
+  alike; the strands file keeps each folded strand (`folded`: its units, its lines, where it went) for the review.
 - M17a: the walk's place tests become the interaction tests; the setting `strands.envelope` goes; `envelopes()` stays
   for the envelope read from the places and the stated-time conflict check.
 - M17b: the director's units keep one strand each; a rehearsal measures the change.
