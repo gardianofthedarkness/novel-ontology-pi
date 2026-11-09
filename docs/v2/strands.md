@@ -166,9 +166,60 @@ Measured with the next-segment latency (prototype; library 16, read only):
   is one beat, a quick exchange of actions is several, and a long unit of narration is none. With beats a strand of
   short scenes where the group talks again lands; with 40 lines it folds unless the telling runs on.
 
+### 0.4 Read against the text (the user, 2026-11-09)
+
+> "Can you do the stats again with reunion and actually look at the texts to figure out if it make sense?"
+
+Every split, union and fold of the rules of §0–0.3 (splits by interaction, the next-segment latency, reunion on a
+shared beat, the strand begun first keeping its id) was read in the book's own lines (privately; nothing of the text
+is copied here). Of the 13 strands besides the main, 6 were right and 7 were wrong. Two causes, both fixed in the
+prototype and measured:
+
+9. **A group is the people acting together, not everyone held in view.** As in §0 the group was refreshed with
+   everyone in view on the strand, so a person held in view at one unit and acting much later elsewhere made the people
+   here "leave". This made the second line of units 68–165 (people held in view at unit 66 acting later at 70 and 83),
+   split one side of a fight in two (unit 170: the third person was only held in view at 169 and acts at 181), and cut
+   one fight at 183 and 187 (a person who acted at 182 acts next at 204).
+10. **The rest is apart only when its next appearance is out of view of the people here.** The rest's next *action*
+   skipped units where it is in view with them: in units 213–216 everyone is in one room, but one person's next action
+   is at 218, so 213 and 214 split off.
+
+With both, reunion by a shared beat and reunion by acting in one unit give the same unions on volume 1 (the case of
+unit 151, §0.3, falls inside one strand: a capture, the captive carried by the captor).
+
+| Rules | Text strands | Splits | Unions | Folded | W15 run strands | Text strands also in the run |
+| --- | --- | --- | --- | --- | --- | --- |
+| §0–0.3 | 14 | 11 | 12 | 7 | 15 | 13 |
+| and 9: the group is the people acting | 10 | 7 | 8 | 2 | 11 | 10 |
+| **and 10: the rest's next appearance** | **8** | **5** | **6** | **2** | **9** | **8** |
+
+The 8 text strands, read:
+
+| Strand | Units | What the text does | Verdict |
+| --- | --- | --- | --- |
+| unit 1 | 1 | opening narration, nobody acts | an artifact: fold into the first strand when built |
+| the main | 225 | | |
+| 12–23 | 12 | one of two people escapes alone, meets a third, whose chase follows; back when the third meets the one left behind (24) | right; the union closes the whole strand at 24 though the escaper arrives at 26 |
+| 32–38 | 7 | another pair in another place | right; joins everyone at 66 |
+| 83–156 | 15 | an interlude in a closed room, then that pair's own line | right; joined by 130 at 140, into the main at 217 |
+| 130–136 | 7 | two people leave the others and meet a stranger | right; into 83 at 140 where they meet |
+| 146–168 | 16 | a group that leaves both lines; one of them is taken captive and carried off (150–161) | right; into the main at 169, in a fight |
+| 166–171 | 3 | one person alone, then turning on someone in a fight | right, but the union lands at 175: the reading has no shared card at 171, where the fight begins |
+
+Folded, both right: unit 70 (one person walking into a shop with the group) and unit 197 (a one-unit cutaway of an
+explosion). The run's one more strand, 220–225, is one scene in the text: the run stood one person more than 25 m from
+the others (a run fault, already counted in §0).
+
+**Left as it is, for the user:** an interlude not cut in with the main (units 244–248: a schemer and a partner in
+another place, then a third person at a computer; the schemer faces the main group at 250) stays on the main. Under the
+rules a split needs the rest told meanwhile, and nobody else is told between 244 and 249. It is a different group doing
+a different thing, but no other strand runs beside it, so no physics can collide.
+
 **What it changes in what is built:**
-- M17e also: the setting `strands.latency` (lines, default 40) and the fold after the walk, for the text and the run
-  alike; the strands file keeps each folded strand (`folded`: its units, its lines, where it went) for the review.
+- M17e: rules 1–10; the group is the people acting together (rule 9); the split test reads the rest's next appearance
+  (rule 10); the union keeps the id of the strand begun first; the latency is the next-segment beat (§0.2), the fold
+  after the walk; a strand of nobody folds into the first. The strands file keeps each folded strand (`folded`: its
+  units, its beats, where it went) for the review.
 - M17a: the walk's place tests become the interaction tests; the setting `strands.envelope` goes; `envelopes()` stays
   for the envelope read from the places and the stated-time conflict check.
 - M17b: the director's units keep one strand each; a rehearsal measures the change.
