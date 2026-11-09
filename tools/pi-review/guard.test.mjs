@@ -316,3 +316,28 @@ test('Pi may pace a simulation run for the live view, within 0.5–5 s a moment,
   assert.ok(!ok(`novel sim run ${book} --strand world --force`));
   assert.ok(!ok(`novel sim pick ${book} --strand world --max-calls 60 --pace 2`));
 });
+
+test('settings, warehouse and model commands pass for the assigned book, with a why where something is written and the user\'s OK for a download', () => {
+  const packs = `${process.env.NOVEL_MODEL_PACKS ?? `${process.env.HOME}/claude-world-first/model-packs`}`;
+  for (const command of [
+    `novel settings show '${novel}'`, `novel settings show '${novel}' fill --changed`, `novel settings show '${novel}' --place loc_000001`, 'novel settings explain fill.streets',
+    `novel settings set '${novel}' fill.streets '{"arterial":24}' --why 'wider arterials'`, `novel settings set '${novel}' fill.ops '[]' --place loc_000001 --why 'none here' --before`,
+    `novel settings unset '${novel}' fill.streets --why 'back'`, `novel settings diff '${novel}'`, `novel settings diff '${novel}' --from vol-1/0017-before`,
+    `novel settings profile save '${novel}' old-town --why 'a look'`, `novel settings profile apply '${novel}' old-town --why 'the look' --before`, `novel settings profile list '${novel}'`,
+    'novel warehouse list', 'novel warehouse list --source kit', `novel warehouse list '${novel}'`, `novel warehouse find 'pine tree'`, `novel warehouse find 'pine tree' --kind 'a small weapon' --top 5 '${novel}'`,
+    'novel warehouse show kit:cw_nature_pine', `novel warehouse use kit:cw_nature_pine for prop:tree '${novel}' --why 'pines'`, `novel warehouse use kit:cw_veh_bus for 'vehicle:a bus' '${novel}' --why 'buses' --before`,
+    `novel warehouse use kit:cw_bldg_house for use:house '${novel}' --why 'houses' --floors 1 3`,
+    `novel warehouse fetch mykit https://github.com/x/y --licence MIT --ok 'yes, fetch it' --why 'more trees' --path assets/scad --limit 50`, 'novel warehouse refresh mykit',
+    `novel warehouse add mykit '${packs}/mykit' --licence CC0-1.0 --why 'a kit on disk'`,
+    `novel model nominate '${novel}'`, `novel model list '${novel}' --state todo`, `novel model brief '${novel}' 'the van'`, `novel model write '${novel}' --all --limit 5`, `novel model check '${novel}' --all`,
+    `novel model use '${novel}' 'the van' kit:cw_veh_van --why 'a van'`, `novel model bind '${novel}'`, `novel model parts 'a small weapon'`,
+  ]) assert.equal(authorize(command).kind, 'cli', command);
+  assert.equal(authorize(`novel warehouse use kit:cw_nature_pine for prop:tree '${novel}' --why 'pines'`).label, 'novel warehouse use');
+  for (const command of [
+    `novel settings set '${novel}' fill.streets '{"arterial":24}'`, `novel settings set /tmp/other fill.streets '{}' --why x`, `novel settings show /tmp/other`, `novel settings set '${novel}' fill.streets '{}' --why x --output /tmp/leak`,
+    `novel settings profile apply '${novel}' old-town`, `novel warehouse fetch mykit https://github.com/x/y --licence MIT --why 'no ok'`, `novel warehouse fetch mykit http://github.com/x/y --licence MIT --ok yes --why w`,
+    `novel warehouse add mykit /tmp/other --licence MIT --why w`, `novel warehouse use kit:cw_nature_pine for lamp:tree '${novel}' --why w`, `novel warehouse use kit:cw_nature_pine for prop:tree /tmp/other --why w`,
+    `novel warehouse use kit:cw_nature_pine for prop:tree '${novel}'`, `novel warehouse find 'tree' --top 500`, `novel model put '${novel}' 'the van' /tmp/van.scad`, `novel model write /tmp/other --all`,
+    `novel model use '${novel}' 'the van' van`, `novel warehouse list --source 'kit; env'`,
+  ]) assert.throws(() => authorize(command), command);
+});

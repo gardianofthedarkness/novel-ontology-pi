@@ -60,6 +60,9 @@ const FORMS = {
   stage: 'novel stage show <book> | scale <book> [--no-jev] | landscape <book> [--no-jev] | architecture <book> [--no-jev] | objects <book> [--max-calls N] [--no-jev] | movement <book> [--max-calls N] [--no-jev] | prep <book>  (read mode; objects and landscape propose review packets; prep only once everything else is done)',
   em: 'novel em show|sweep <book> [--limit 1-200]  (identity matches it raises are reviewed with novel review)', calendar: 'novel calendar show|build <book> | novel calendar show|build <library> --universe <id>  (year questions are reviewed with novel review)', fix: 'novel fix <operation> <book> … --reason "…"  (references/repair.md)',
   graph: 'novel graph build <book>/ontology', album: 'novel album list|portraits <book>', library: 'novel library … <library>  (novel-library skill)',
+  settings: "novel settings show <book> [<prefix>] [--place <id>] [--changed] | explain <key> | set <book> <key> '<JSON>' [--place <id>] [--layer universe|book] [--table] --why <text> [--before] | unset <book> <key> [...] --why <text> | diff <book> [--from <snapshot>] | profile save|apply|list <book> [<name>] --why <text> [--before]  (novel-models skill)",
+  warehouse: "novel warehouse list [--source <name>] [<book>] | find '<words>' [--kind '<kind>'] [--category <c>] [--size <m>] [--source <name>] [--top N] [<book>] | show <source>:<part> [<book>] | use <source>:<part> for <slot> <book> --why <text> [--place <id>] [--before] [--floors a b] | fetch <name> <https-url> --licence <SPDX> --ok '<the user's words>' --why <text> [--path <folder>] [--limit <MB>] | refresh <name> | add <name> <folder under the packs root> --licence <SPDX> --why <text>  (novel-models skill; a download only with the user's OK)",
+  model: "novel model nominate <book> [--top N] | list <book> [--state todo|made|failed|part] | brief <book> <thing> | write <book> <thing>|--all [--limit N] | check <book> <thing>|--all | show <book> <thing> | use <book> <thing> <source>:<part> [--why <text>] | bind <book> [--limit N] | parts '<kind>'  (novel-models skill)",
   help: 'novel help', config: 'novel config',
 };
 const READS = "Reads: cat NOVEL_JOB.json, cat <skill/reference path>, wc -l <source or evidence file>, sed -n 'A,Bp' <file> (at most 150 lines per page).";
@@ -388,6 +391,54 @@ function permit(command, scope) {
   if (verb === 'search') valid = operation === novel && (tokens.length === 3 || tokens.length === 5 && tokens[3] === '--limit' && /^\d+$/.test(tokens[4]) && Number(tokens[4]) >= 1 && Number(tokens[4]) <= 30);
   if (verb === 'inspect') valid = operation === novel && tokens.length === 2;
   if (verb === 'timeline') valid = operation === 'list' && tokens.length === 3 && tokens[2] === novel;
+  // The world generator's settings (novel settings; milestones M8d), the model warehouse (novel warehouse; M10g–i) and models
+  // as code (novel model; M10): the assigned book's only; a why wherever something is written; a download only with the
+  // user's OK; a folder registered only under the packs root. Flags come in pairs or as switches, each at most once.
+  if (verb === 'settings' || verb === 'warehouse' || verb === 'model') {
+    const text = (value, most = 400) => typeof value === 'string' && value.trim().length > 0 && !value.startsWith('-') && Buffer.byteLength(value) <= most;
+    const KEY = /^[a-z][\w.]{1,60}$/i, REF = /^[a-z][a-z0-9_-]*:[\p{L}\p{N}._-]{1,120}$/u, SLOT = /^(prop|vehicle|kind|use|role):[\p{L}\p{N} .-]{1,60}$/u, PLACE = /^[\w:-]{1,80}$/, NAME = /^[a-z][a-z0-9_-]{0,31}$/, INT = (most) => (value) => /^\d+$/.test(value ?? '') && Number(value) >= 1 && Number(value) <= most;
+    const packsRoot = `${process.env.NOVEL_MODEL_PACKS ?? `${process.env.HOME ?? ''}/claude-world-first/model-packs`}/`;
+    // The flags after `from`: pairs whose value passes its check, switches that take none; unknown or repeated ones fail.
+    const flagsIn = (list, from, pairs, switches = []) => { const out = new Map(); for (let i = from; i < list.length; i++) { const name = list[i]; if (out.has(name)) return null; if (switches.includes(name)) { out.set(name, true); continue; } if (!(name in pairs)) return null; const value = list[i + 1]; if (value === undefined || !pairs[name](value)) return null; out.set(name, value); i++; } return out; };
+    const flagsOf = (from, pairs, switches = []) => flagsIn(tokens, from, pairs, switches);
+    const why = (flags) => !!flags && text(flags.get('--why'));
+    if (verb === 'settings') {
+      const common = { '--place': (v) => PLACE.test(v), '--layer': (v) => ['universe', 'book'].includes(v), '--why': (v) => text(v) };
+      if (operation === 'explain') valid = tokens.length === 3 && KEY.test(tokens[2]);
+      else if (operation === 'show') { const prefix = tokens[3] && !tokens[3].startsWith('--') ? 1 : 0; valid = tokens[2] === novel && (!prefix || KEY.test(tokens[3])) && !!flagsOf(3 + prefix, { '--place': (v) => PLACE.test(v) }, ['--changed']); }
+      else if (operation === 'set') { const flags = flagsOf(5, common, ['--table', '--before']); valid = tokens[2] === novel && KEY.test(tokens[3] ?? '') && typeof tokens[4] === 'string' && Buffer.byteLength(tokens[4]) <= 65536 && why(flags); }
+      else if (operation === 'unset') { const flags = flagsOf(4, common, ['--table', '--before']); valid = tokens[2] === novel && KEY.test(tokens[3] ?? '') && why(flags); }
+      else if (operation === 'diff') valid = tokens[2] === novel && !!flagsOf(3, { '--from': (v) => /^[\w/-]{1,80}$/.test(v) });
+      else if (operation === 'profile') { const what = tokens[2], named = ['save', 'apply'].includes(what); const flags = flagsOf(named ? 5 : 4, { '--why': (v) => text(v) }, ['--before']); valid = ['save', 'apply', 'list'].includes(what) && tokens[3] === novel && (!named || (/^[a-z0-9][a-z0-9_-]{0,47}$/i.test(tokens[4] ?? '') && why(flags))) && (named || tokens.length === 4); }
+    }
+    if (verb === 'warehouse') {
+      const url = (v) => /^https:\/\/[\w.-]+\/[^\s'"]*$/.test(v), licence = (v) => /^[\w.+-]{2,40}$/.test(v), kind = (v) => ['scad', 'gltf'].includes(v), unit = (v) => ['m', 'kit'].includes(v), json = (v) => Buffer.byteLength(v) <= 4096;
+      // list, find and show may end with the assigned book; the flags are read before it.
+      const end = tokens.at(-1) === novel ? tokens.length - 1 : tokens.length, head = tokens.slice(0, end);
+      if (operation === 'list') valid = !!flagsIn(head, 2, { '--source': (v) => NAME.test(v) });
+      else if (operation === 'find') valid = text(tokens[2], 200) && !!flagsIn(head, 3, { '--kind': (v) => text(v, 60), '--category': (v) => /^[\w-]{1,40}$/.test(v), '--size': (v) => /^\d+(\.\d+)?$/.test(v), '--source': (v) => NAME.test(v), '--top': INT(200) });
+      else if (operation === 'show') valid = REF.test(tokens[2] ?? '') && head.length === 3;
+      else if (operation === 'use') {
+        // --floors a b takes two values: taken out before the pairs are read.
+        const at = tokens.indexOf('--floors'), floors = at >= 0 ? tokens.slice(at + 1, at + 3) : null, list = at >= 0 ? [...tokens.slice(0, at), ...tokens.slice(at + 3)] : tokens;
+        valid = REF.test(tokens[2] ?? '') && tokens[3] === 'for' && SLOT.test(tokens[4] ?? '') && tokens[5] === novel && (!floors || (floors.length === 2 && floors.every(INT(200)))) && why(flagsIn(list, 6, { '--why': (v) => text(v), '--place': (v) => PLACE.test(v) }, ['--before']));
+      }
+      else if (operation === 'fetch') { const flags = flagsOf(4, { '--licence': licence, '--ok': (v) => text(v), '--why': (v) => text(v), '--path': (v) => /^[\w./-]{1,200}$/.test(v) && !v.includes('..'), '--limit': INT(2000), '--kind': kind, '--allowed-by': (v) => text(v), '--categories': json, '--unit': unit }); valid = NAME.test(tokens[2] ?? '') && url(tokens[3] ?? '') && why(flags) && text(flags.get('--ok')) && licence(flags.get('--licence') ?? ''); }
+      else if (operation === 'refresh') valid = tokens.length === 3 && NAME.test(tokens[2]);
+      else if (operation === 'add') { const flags = flagsOf(4, { '--licence': licence, '--why': (v) => text(v), '--from': url, '--kind': kind, '--allowed-by': (v) => text(v), '--categories': json, '--unit': unit }); valid = NAME.test(tokens[2] ?? '') && typeof tokens[3] === 'string' && tokens[3].startsWith(packsRoot) && !tokens[3].includes('..') && why(flags) && licence(flags.get('--licence') ?? ''); }
+    }
+    if (verb === 'model') {
+      const thing = (v) => text(v, 120);
+      if (operation === 'parts') valid = tokens.length === 3 && text(tokens[2], 60);
+      else if (operation === 'nominate') valid = tokens[2] === novel && !!flagsOf(3, { '--top': INT(200) });
+      else if (operation === 'list') valid = tokens[2] === novel && !!flagsOf(3, { '--state': (v) => ['todo', 'made', 'failed', 'part'].includes(v) });
+      else if (operation === 'bind') valid = tokens[2] === novel && !!flagsOf(3, { '--limit': INT(500) });
+      else if (operation === 'write' || operation === 'check') valid = tokens[2] === novel && ((tokens[3] === '--all' && !!flagsOf(4, { '--limit': INT(500) })) || (thing(tokens[3]) && (tokens.length === 4 || (operation === 'write' && !!flagsOf(4, { '--limit': INT(500) })))));
+      else if (operation === 'brief' || operation === 'show') valid = tokens[2] === novel && thing(tokens[3]) && tokens.length === 4;
+      else if (operation === 'use') valid = tokens[2] === novel && thing(tokens[3]) && REF.test(tokens[4] ?? '') && !!flagsOf(5, { '--why': (v) => text(v) });
+      else valid = false;
+    }
+  }
   if (!valid) throw new Error('Command outside this block/workspace CLI allowlist; no shell, direct file writes, credential access, or auto-approve');
-  return { kind: 'cli', args: tokens, label: `novel ${verb}${['album', 'calendar', 'changeset', 'em', 'fix', 'graph', 'timeline'].includes(verb) ? ` ${operation}` : ''}` };
+  return { kind: 'cli', args: tokens, label: `novel ${verb}${['album', 'calendar', 'changeset', 'em', 'fix', 'graph', 'timeline', 'settings', 'warehouse', 'model'].includes(verb) ? ` ${operation}` : ''}` };
 }

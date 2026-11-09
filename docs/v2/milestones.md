@@ -625,6 +625,12 @@ both installed 2026-11-09. Tried first in a scratch test: 5 of volume 1's things
 - [x] **M10f Every agent host** (built 2026-11-09, Pi only). `skills/novel-models/SKILL.md` (models and settings), in the
       Pi runner's manifest; it loads through Pi's own resource loader (`tools/pi-review/library-access.test.mjs`, 7 of 7 with
       the runner's tests). Codex and Claude Code wait for the adaptor's setup engine (adapters/README.md).
+      *Found by the volume 2 console test (2026-11-09, the user: "see if the pi console is able to efficiently retrieve
+      context to modify the configurations files"):* Pi read the manifest and the skill in 30 s and then had every
+      `novel settings` and `novel warehouse` command refused: the scoped CLI's guard (`tools/pi-review/guard.mjs`) knew
+      none of `settings`, `warehouse` or `model`, so the skill's commands were never runnable from Pi. Added, scoped to
+      the assigned book, a why wherever something is written, a download only with the user's `--ok`, a folder
+      registered only under the packs root (`guard.test.mjs`, 21 of 21).
 - [x] **M10g The warehouse registry** (built 2026-11-09) (the user, 2026-11-09; design §8.3). One registry of sources outside any library
       (`~/claude-world-first/model-packs/warehouse.json`), each with its kind (a SCAD kit or a glTF folder), path,
       licence and URL; a catalogue per source in gkNextEngine's record shape, built by us: a SCAD kit's modules
