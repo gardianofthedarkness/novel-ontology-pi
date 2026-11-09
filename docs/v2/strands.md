@@ -102,6 +102,36 @@ Measured by the lines seen on the strand (prototype; volume 1, library 16, read 
   acting again) and a group of 220–225 (7 units, 3 people) the run kept apart. They are run findings for the inspection.
 - **Past 80 lines real lines fold**: at 120 the 187–200 and 245–247 groups go, at 160 the 130–136 group.
 
+### 0.2 Latency by the new group's next dialogue or action (the user, 2026-11-09)
+
+> "Try latency by next dialogue or action happens for the new group"
+
+The same fold after the walk, measured in **beats** instead of lines: a beat is one conversation (a dialogue card; every
+spoken line of volume 1 is inside one) or one action outside a conversation, with one of the unit's acting people of the
+strand taking part (acting, speaking or spoken to). Volume 1 has 456 (212 conversations, 204 actions outside one; a
+beat running across units counts in each). Three readings of "next" were tested (prototype; library 16, read only):
+
+| Lands when the new group has | Text: strands | splits | unions | Run W15: strands | splits | unions | Text strands also in the run |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| one beat while apart | 21 | 17 | 17 | 31 | 20 | 20 | 20 of 21 |
+| **two beats: the one that shows them apart, then the next** | **17** | **13** | **14** | **24** | **13** | **14** | **16 of 17** |
+| three beats | 14 | 10 | 11 | 22 | 11 | 12 | 14 of 14 |
+| one beat in a unit after the split unit | 15 | 11 | 12 | 22 | 11 | 12 | 14 of 15 |
+| (for comparison) 40 lines seen apart, §0.1 | 10 | 8 | 8 | 15 | 9 | 9 | 10 of 10 |
+
+- **One beat folds nothing**: a split begins with someone acting, so every split strand has one.
+- **Two beats** (the plainest reading of "the next dialogue or action"): folds the four text strands of one person, one
+  unit and one beat (units 70, 236, 248, 273). Kept, where 40 lines folds them: one person alone for 166–167 and 171;
+  the pairs of 170 and 172, 183–185, 213 and 215, 238–239 and 242; 214 and 241; 197. Each has a second conversation or
+  action while apart, often within 15 to 30 lines. The run lacks one (170, which it splits from 172) and adds 8: the
+  people standing out of reach of their group in units 52 (twice), 95, 127, 163 and 221, unit 172 on its own, and the
+  group of 220–225.
+- **One beat after the split unit** folds also 183–185 and 245–247, whose beats all fall in their first unit (their
+  later units have the people acting in narration only).
+- **Beats against lines.** Beats follow what the group does, lines follow how long the telling is: a long conversation
+  is one beat, a quick exchange of actions is several, and a long unit of narration is none. With beats a strand of
+  short scenes where the group talks again lands; with 40 lines it folds unless the telling runs on.
+
 **What it changes in what is built:**
 - M17e also: the setting `strands.latency` (lines, default 40) and the fold after the walk, for the text and the run
   alike; the strands file keeps each folded strand (`folded`: its units, its lines, where it went) for the review.
