@@ -1,4 +1,4 @@
-# v3: the map reimagined
+# v3: a workbench for novels, the map reimagined
 
 Started 2026-11-10 from v2 (branch `v2`, which is the legacy version from now on), on the user's word: "We should make
 this phase v3, a new branch from v2. V2 now is from now on our legacy version. In v3 we reimagine how our map is built."
@@ -8,6 +8,7 @@ for every move) could not hold it; its run was stopped (W16).
 
 | Document | What it is |
 | --- | --- |
+| [plan.md](plan.md) | The plan: a workbench for novels (the book as source, the ontology as symbols, the world as live preview, the harnesses as a side panel), smaller Jev loops with an agent keeping the long view, tests by a second Claude Code session |
 | [render-units.md](render-units.md) | The first design: the map as render units, each the largest space the story plays in without a break, with its own scale |
 
 v2's documents (docs/v2/) stay as the record of what is built: the reading, strands, the carry across books, the casts,
