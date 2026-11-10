@@ -61,3 +61,10 @@ test('a book\'s last run that can be kept: its page and its smoothing both there
   await writeFile(join(novel, 'stage', 'world', 'smoothed', 'd20261109081436.json'), '{}');
   assert.equal(await lastRun(novel), 'd20261109081436');
 });
+
+test('a step asks the models directly: the host\'s local observer is left out, the models pinned', async () => {
+  const { stepEnvironment } = await import('./volume.mjs');
+  const env = stepEnvironment({ HOME: '/nowhere', JEV_ENDPOINT: 'http://127.0.0.1:51234/jev', WORK_LLM_BASE_URL: 'http://127.0.0.1:51234/v1', TYPESAFE_API_KEY: 'k', JEV_MODEL: 'jev-1.13.0' });
+  assert.deepEqual([env.JEV_ENDPOINT, env.WORK_LLM_BASE_URL, env.TYPESAFE_API_KEY, env.JEV_MODEL, env.WORK_LLM_MODEL], [undefined, undefined, 'k', 'jev-1.14.0', 'deepseek-chat']);
+  assert.equal(stepEnvironment({ JEV_ENDPOINT: 'https://example.test/jev' }).JEV_ENDPOINT, 'https://example.test/jev', 'another endpoint stays');
+});

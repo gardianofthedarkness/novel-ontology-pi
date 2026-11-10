@@ -47,7 +47,11 @@ export async function lastRun(novelDir) {
 /** A step's environment: the caller's (the keys come from the host), the models volume 1 was made with, the portrait venv. */
 export function stepEnvironment(env = process.env) {
   const venv = join(env.HOME ?? '', 'claude-world-first', 'portrait-venv', 'bin', 'python');
-  return { ...env, JEV_MODEL: 'jev-1.14.0', WORK_LLM_PROVIDER: 'deepseek', WORK_LLM_MODEL: 'deepseek-chat', ...(!env.NOVEL_PORTRAIT_PYTHON && existsSync(venv) ? { NOVEL_PORTRAIT_PYTHON: venv } : {}) };
+  const out = { ...env, JEV_MODEL: 'jev-1.14.0', WORK_LLM_PROVIDER: 'deepseek', WORK_LLM_MODEL: 'deepseek-chat', ...(!env.NOVEL_PORTRAIT_PYTHON && existsSync(venv) ? { NOVEL_PORTRAIT_PYTHON: venv } : {}) };
+  // The host's model observer (a local proxy for Pi's own commands, its live view) refuses requests over 4 MB (terrain's
+  // pictures) and ends with the host: a step asks Jev and the work model directly.
+  for (const key of ['JEV_ENDPOINT', 'WORK_LLM_BASE_URL']) if (/^http:\/\/(127\.0\.0\.1|localhost)[:/]/.test(out[key] ?? '')) delete out[key];
+  return out;
 }
 const node = (script, ...args) => ({ program: process.execPath, args: [join(repository, script), ...args] });
 const cli = (...args) => node('dist/src/cli/cli.js', ...args);
