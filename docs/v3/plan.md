@@ -152,6 +152,34 @@ My proposal for its shape (to confirm):
 Needs before building: the user's OK for the downloads (Electron and its packager, about 200 MB), and later the
 Developer ID if it is shared.
 
+### 1.5a The console's layout (P3, the user, 2026-11-10)
+
+> "In p3, let's first start with user experience. Our design Principle can follow vscode, panels other than the left repo
+> structure and the main body which is displaying the file itself is all foldable. We can inherit the styling from v1 in
+> terms of colour and design. Then, like the worktree system in vscode, we can build the strand view in a side panel. We
+> can connect to existing sessions from all agent adapters we have in adaptors and put it in like a chat panel like in
+> vscode. We can have a character view and place view as well. The idea is still, like in v2 design doc, time is
+> oriented tree (calender, place is uniriented tree, characters and objects are movables relative two those two trees.
+> Strands is a visualization if that relationship" — the user
+
+| Area | Always there or foldable | What it holds |
+| --- | --- | --- |
+| Library (left) | always | folders, universes, books, chapters, scenes |
+| The book (middle) | always | the reader |
+| Side bar (right) | foldable as a whole, and each view in it | **Characters**: people and things (movables) and each one's path: where and when it is, scene by scene. **Places**: the place tree (unoriented: containment only), each place with who was there and when. **Strands**. **Record** and **Problems** of what is open |
+| Chat (far right) | foldable | the agent hosts' existing sessions (the adapters: Claude Code, Codex, Pi, Gemini CLI and the others the registry adds), read and continued in place |
+| The bar's buttons | | fold or open the side bar, the chat; day or night (v1's two palettes) |
+
+**The world model, as the views show it** (docs/v2/world-model.md): time is an **ordered tree** (the calendar: story ›
+year › day › part of day), places an **unordered tree** (what holds what), characters and things are **movables**, each at a
+place at a time. A **strand** is a group of movables that stay together; strands split when the group parts and unite
+when it meets again. The Strands view draws exactly that relationship, as a source-control graph draws branches: time runs
+down by the calendar's nodes, each strand is a lane, each scene a point on its lane labelled with its place, and lanes fork
+and join where the strands split and unite. Tapping a point opens its scene in the book; tapping a movable shows its path
+in Characters; tapping a place opens it in Places.
+
+Styling: v1's World · Live palette, deep navy with a cyan accent and Jev's gold (night), and its "day" palette.
+
 ### 1.6 VS Code, set aside (2026-11-10)
 
 Tried on 2026-11-10: the extension worked in the desktop editor (the tree, hover, definitions, references, the reader,
@@ -207,7 +235,7 @@ form trips it, and whether its result holds against the text.
 | P0 | this plan, corrected by the user | |
 | P1 (built 2026-11-10) | any folder as a library (workspace.md), the novel server, the `novel folder` commands, the reader (reader.md), one-click readings (reading.md); first shown in VS Code, which is set aside (§1.6) | both books read in it; a test session arranges a folder and answers citation questions against the text |
 | P2 (built 2026-11-10) | the console app as a DMG (§1.5, console.md): open folders, the library, one-click readings with the keys, the reader with its notes, records and references, problems | the DMG's app driven on both volumes; a stand-in reading run by its own runtime |
-| P3 | the rest of v1's console in the app: the agent's panel, the review's batches, settings, the warehouse, and World · Live's page as the interim world view | a test session does a look pass from the app's panel |
+| P3 (started 2026-11-10: the layout built, console.md §5) | the console's layout (§1.5a: foldable side bar and chat, v1's palettes; Characters, Places and Strands views; the agent hosts' sessions in the chat), then the rest of v1's console: the review's batches, settings, the warehouse, and World · Live's page as the interim world view | the views on both volumes, against the reading; a session of each installed host continued from the chat; a test session does a look pass from the app |
 | P4 | the render protocol and the Unity world client (§1.4), launched and driven by the console | volume 1's city drawn from the protocol, frames a second against the web page; a line in the reader moves the world |
 | P5 | the unit finder (render-units.md) and small Jev loops with the agent setting each step's length (§2) | volume 2's units against its 25 crossings; errors per step against W15's |
 | P6 | volume 2 again, on v3 | the run W16 could not finish |

@@ -20,7 +20,10 @@ const profile = mkdtempSync(join(tmpdir(), "novel-console-")), secrets = join(pr
 writeFileSync(join(profile, "libraries.json"), JSON.stringify({ folders }));
 const port = 9400 + Math.floor(Math.random() * 400);
 const binary = packaged ? join(resolve(packaged), "Contents", "MacOS", "Novel Console") : join(appDir, "node_modules", "electron", "dist", "Electron.app", "Contents", "MacOS", "Electron");
-const child = spawn(binary, [...(packaged ? [] : [appDir]), `--remote-debugging-port=${port}`], { stdio: ["ignore", "ignore", "pipe"], env: { ...process.env, NOVEL_CONSOLE_DATA: profile, NOVEL_SECRETS_DIR: secrets, TYPESAFE_API_KEY: "", WORK_LLM_API_KEY: "", ELECTRON_RUN_AS_NODE: "" } });
+// A stand-in for the agents' command: the chat's send is tested without touching any real session.
+const standIn = join(profile, "agent-stand-in.sh");
+writeFileSync(standIn, "#!/bin/sh\necho '{\"result\":\"stand-in reply\"}'\n", { mode: 0o700 });
+const child = spawn(binary, [...(packaged ? [] : [appDir]), `--remote-debugging-port=${port}`], { stdio: ["ignore", "ignore", "pipe"], env: { ...process.env, NOVEL_CONSOLE_DATA: profile, NOVEL_SECRETS_DIR: secrets, NOVEL_CONSOLE_AGENT_COMMAND: standIn, TYPESAFE_API_KEY: "", WORK_LLM_API_KEY: "", ELECTRON_RUN_AS_NODE: "" } });
 let errors = ""; child.stderr.on("data", (chunk) => { errors += chunk; });
 const wait = (ms) => new Promise((done) => setTimeout(done, ms));
 const until = async (probe, what, most = 30000) => { for (const start = Date.now(); ;) { const value = await probe().catch(() => null); if (value) return value; if (Date.now() - start > most) throw new Error(`Timed out waiting for ${what}`); await wait(250); } };
@@ -59,17 +62,54 @@ try {
     const notes = await until(() => run(`(() => { const d = document.getElementById("reader").contentDocument; const h = [...d.querySelectorAll("#notes h2")].map((x) => x.textContent); return h.length ? h : null; })()`), "the notes", 20000);
     step("notes", { line: tapped, sections: notes });
     await picture("2-reader");
-    const cast = await until(() => run(`(() => { const items = document.querySelectorAll("#panel-body li[data-entity]"); return items.length ? items.length : null; })()`), "the cast");
-    await run(`document.querySelector("#panel-body li[data-entity]").click()`);
-    const record = await until(() => run(`(() => { const r = document.querySelector("#panel-body .record h1"); const refs = document.querySelectorAll("#panel-body li[data-line]").length; return r && refs ? { title: r.textContent.length > 0, references: refs } : null; })()`), "the record", 20000);
-    step("panel", { cast, record });
-    await picture("3-record");
-    // A reference in the panel moves the reader.
-    await run(`document.querySelectorAll("#panel-body li[data-line]")[5]?.click()`);
-    await wait(1500);
-    await run(`document.querySelector('.tabs button[data-tab="problems"]').click()`);
-    const problems = await until(() => run(`(() => { const body = document.getElementById("panel-body"); return /problem|No problems/.test(body.textContent) && !/Reading the problems/.test(body.textContent) ? document.querySelectorAll("#panel-body li").length : null; })()`), "the problems", 20000).catch(() => -1);
-    step("problems", { listed: problems });
+    // The side bar's views: characters (a path), places (the tree and a place's scenes), strands (the graph).
+    const characters = await until(() => run(`document.querySelectorAll("#v-characters li[data-char]").length || null`), "the characters", 30000);
+    await run(`document.querySelector("#v-characters li[data-char]").click()`);
+    const path = await until(() => run(`document.querySelectorAll("#v-characters .path li").length || null`), "a character's path", 10000);
+    const places = await run(`document.querySelectorAll("#v-places .prow").length`);
+    await run(`document.querySelector("#v-places .prow").click()`);
+    const placeScenes = await until(() => run(`document.querySelectorAll("#v-places .scene-row").length || null`), "a place's scenes", 10000);
+    const strands = await run(`({ rows: document.querySelectorAll("#v-strands .grow-row").length, days: document.querySelectorAll("#v-strands .day-row").length, legend: document.querySelectorAll("#v-strands .legend button").length })`);
+    step("views", { characters, path, places, placeScenes, strands });
+    await picture("3-views");
+    // A strand row moves the reader; a character's record opens the Record view.
+    await run(`document.querySelectorAll("#v-strands .grow-row")[40]?.click()`);
+    await run(`document.querySelector("#v-characters [data-record]").click()`);
+    const record = await until(() => run(`(() => { const r = document.querySelector("#v-record .record h1"); const refs = document.querySelectorAll("#v-record [data-line]").length; return r && refs ? { references: refs } : null; })()`), "the record", 20000);
+    await run(`document.querySelector('.view[data-view="problems"] .view-head').click()`);
+    const problems = await until(() => run(`(() => { const t = document.getElementById("v-problems").textContent; return /Reading the problems/.test(t) ? null : document.querySelectorAll("#v-problems [data-line]").length; })()`), "the problems", 20000).catch(() => -1);
+    step("record and problems", { record, problems });
+    // Folding: a view, the side bar, and back; day.
+    await run(`document.querySelector('.view[data-view="places"] .view-head').click()`);
+    const folded = await run(`document.querySelector('.view[data-view="places"]').classList.contains("folded")`);
+    await run(`document.getElementById("t-side").click()`);
+    const sideHidden = await run(`getComputedStyle(document.getElementById("side")).display === "none" && document.getElementById("reader").getBoundingClientRect().width > 600`);
+    await run(`document.getElementById("t-side").click()`);
+    await run(`document.getElementById("t-daylight").click()`);
+    const day = await run(`document.documentElement.dataset.daylight`);
+    await wait(500);
+    const readerDay = await run(`document.getElementById("reader").contentDocument.documentElement.dataset.theme`);
+    step("folding and day", { viewFolded: folded, sideHiddenReaderWide: sideHidden, day, readerDay });
+    await picture("4-day");
+    await run(`document.getElementById("t-daylight").click()`);
+    await run(`document.querySelector('.view[data-view="places"] .view-head').click()`);
+    // The chat: the agent hosts and their sessions; a message through a stand-in command (no real session is touched).
+    await run(`document.getElementById("t-chat").click()`);
+    const hosts = await until(() => run(`(() => { const b = [...document.querySelectorAll("#hosts button")]; return b.length ? b.map((x) => [x.dataset.host, Number(x.querySelector(".k").textContent)]) : null; })()`), "the agent hosts", 30000);
+    const claude = hosts.find(([id, n]) => id === "claude-code" && n > 0);
+    let chat = { hosts };
+    if (claude) {
+      await run(`document.querySelector('#hosts [data-host="claude-code"]').click()`);
+      await run(`document.querySelector("#chat-body [data-session]").click()`);
+      const messages = await until(() => run(`document.querySelectorAll("#chat-body .msg").length || null`), "a session's messages", 20000);
+      const compose = await run(`!document.getElementById("compose").hidden`);
+      await run(`(() => { document.getElementById("compose-text").value = "stand-in test message"; document.getElementById("compose").requestSubmit(); })()`);
+      await until(() => run(`!document.getElementById("pending") || /Not sent/.test(document.getElementById("pending").textContent) ? true : null`), "the stand-in reply", 20000);
+      const sent = await run(`!document.querySelector("#chat-body .pending")`);
+      chat = { hosts, messages, compose, sentThroughStandIn: sent };
+    }
+    step("chat", chat);
+    await picture("5-chat");
   }
 
   // A book with no reading: its play button with no keys opens the keys dialog (nothing is started).

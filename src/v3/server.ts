@@ -15,6 +15,7 @@ import { recordOf, type OutlineNode, type Span } from "./book.js";
 import { folderTree, scanFolder } from "./folder.js";
 import { readerBook, readerDocument, readerLine, readerPortrait } from "./reader.js";
 import { keyStatus, readingStatus, setKey, startReading, stopReading } from "./reading.js";
+import { worldView } from "./world.js";
 import { NovelWorkspace, type OpenBook } from "./workspace.js";
 
 type Json = Record<string, unknown>;
@@ -86,6 +87,7 @@ export class NovelServer {
       case "novel/stopReading": return stopReading(this.ws.folder, String(params.id));
       // For a console's panels: every line that refers to an entry (across the universe), a book's problems.
       case "novel/refs": return this.ws.refs(String(params.id), String(params.entity), { limit: Number(params.limit ?? 200), from: Number(params.from ?? 0), universe: params.universe !== false });
+      case "novel/world": return worldView(this.ws, String(params.id));
       case "novel/bookProblems": return this.ws.problems(String(params.id), { limit: Number(params.limit ?? 500) });
       case "novel/record": {
         const open = await this.ws.book(String(params.id)), symbol = open.index?.symbol(String(params.entity));

@@ -20,6 +20,8 @@ for (const name of readdirSync(join(repository, "dist")).filter((name) => name !
 mkdirSync(join(out, "experiments", "v2"), { recursive: true });
 for (const name of readdirSync(join(repository, "experiments", "v2")).filter((name) => name.endsWith(".mjs") && !name.endsWith(".test.mjs"))) copy(`experiments/v2/${name}`);
 copy("config");
+mkdirSync(join(out, "world-engine", "director"), { recursive: true });
+copy("world-engine/director/segments.mjs");
 copy("apps/reader/reader.html");
 writeFileSync(join(out, "package.json"), JSON.stringify({ name: "novel-console-backend", private: true, type: "module" }, null, 2));
 

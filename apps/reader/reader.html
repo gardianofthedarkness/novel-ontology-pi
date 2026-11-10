@@ -16,10 +16,17 @@
   --mono: var(--vscode-editor-font-family, ui-monospace, "SF Mono", Menlo, monospace);
 }
 @media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) {
-  --bg: #14151a; --surface: #1b1d23; --ink: #ebe9e3; --muted: #a29e97; --line: #2d3037; --chip: #262930; --sel: #e8c46a; --warn: #fb923c;
+  --bg: #08111a; --surface: #0b1620; --ink: #d9e3ea; --muted: #8aa0b0; --line: #1d3442; --chip: #0f2230; --sel: #ffd36e; --warn: #fb923c;
   --spoken: #79aae6; --thought: #b597e4; --fact: #dfac55; --action: #ef7f66; --environment: #6bc493; --narration: #a8a59f;
   --person: #ef79a7; --place: #4ec2c8; --thing: #d29a62; --time: #a2a2ff; --slot: #99a0aa; --concept: #9fcd6a; color-scheme: dark;
 } }
+/* The console says day or night (its own switch): v1's palettes. */
+:root[data-theme="dark"] {
+  --bg: #08111a; --surface: #0b1620; --ink: #d9e3ea; --muted: #8aa0b0; --line: #1d3442; --chip: #0f2230; --sel: #ffd36e; --warn: #fb923c;
+  --spoken: #79aae6; --thought: #b597e4; --fact: #dfac55; --action: #ef7f66; --environment: #6bc493; --narration: #a8a59f;
+  --person: #ef79a7; --place: #4ec2c8; --thing: #d29a62; --time: #a2a2ff; --slot: #99a0aa; --concept: #9fcd6a; color-scheme: dark;
+}
+:root[data-theme="light"] { --bg: #eef3f7; --surface: #f6f9fc; --ink: #13212b; --muted: #4f6575; --line: #b8cad8; --chip: #e4edf4; --sel: #a86f00; }
 /* In the editor, its own theme decides. */
 body.vscode-light { --bg: var(--vscode-editor-background); --surface: var(--vscode-sideBar-background, #f3f3f3); --ink: var(--vscode-editor-foreground); --muted: var(--vscode-descriptionForeground); --line: var(--vscode-panel-border, #e3ddd0); --chip: var(--vscode-badge-background, #eee9de); }
 body.vscode-dark, body.vscode-high-contrast {
@@ -162,6 +169,7 @@ window.addEventListener("message", (event) => {
   const message = event.data || {};
   if (message.reply !== undefined && waiting.has(message.reply)) { const entry = waiting.get(message.reply); waiting.delete(message.reply); if (message.error) entry.reject(new Error(message.error)); else entry.resolve(message.result); return; }
   if (message.type === "reveal" && message.sentence) reveal(message.sentence, true);
+  if (message.type === "theme" && (message.mode === "light" || message.mode === "dark")) document.documentElement.dataset.theme = message.mode;
 });
 
 let book = null, textOf = new Map(), orderOf = new Map(), chapterAt = new Map(), selected = null;

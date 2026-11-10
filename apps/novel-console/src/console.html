@@ -1,8 +1,8 @@
 <!doctype html>
-<html lang="en">
+<html lang="en" data-daylight="night">
 <head>
 <meta charset="utf-8">
-<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self' data:; frame-src app:; connect-src 'self'">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; frame-src app:; connect-src 'self'">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Novel Console</title>
 <link rel="stylesheet" href="console.css">
@@ -13,14 +13,19 @@
   <div class="crumb" id="crumb"></div>
   <div class="grow"></div>
   <button id="keys" class="ghost" title="The model keys a reading needs">Keys <span class="dot" id="dot-jev" title="Jev"></span><span class="dot" id="dot-work" title="Work model"></span></button>
-  <button id="add" class="primary">Add a folder…</button>
+  <button id="add" class="ghost">Add a folder…</button>
+  <span class="sep"></span>
+  <button id="t-daylight" class="icon" title="Day or night">◐</button>
+  <button id="t-side" class="icon toggle" aria-pressed="true" title="Show or hide the side bar (⌘B)">▤</button>
+  <button id="t-chat" class="icon toggle" aria-pressed="false" title="Show or hide the chat (⌘I)">✦</button>
 </header>
-<div class="body">
-  <aside class="side" aria-label="Libraries">
-    <div class="side-head"><span>Libraries</span><button id="refresh" class="icon" title="Look for new books in every folder">↻</button></div>
+<div class="work" id="work">
+  <aside class="library" aria-label="Libraries">
+    <div class="pane-head"><span>Library</span><button id="refresh" class="icon small" title="Look for new books in every folder">↻</button></div>
     <div id="tree" class="tree" role="tree"></div>
   </aside>
-  <main class="main">
+  <div class="split" data-split="library" aria-hidden="true"></div>
+  <main class="book">
     <section id="welcome" class="welcome">
       <h1>Read any novel on this Mac</h1>
       <p>Add a folder: every EPUB and text file in it, and in the folders inside it, is found. Your files are never moved or changed; what the console learns is kept in a hidden <code>.novel</code> folder beside them.</p>
@@ -28,19 +33,29 @@
         <li><b>Add a folder</b> of books.</li>
         <li><b>Keys</b>: Jev's and the work model's. They stay in this Mac's secure store.</li>
         <li>Press <b>▶</b> beside a book to read it (about $0.35 a volume). It runs on its own; you can close the window.</li>
-        <li>Open the book: sentences coloured by kind, names marked, and every record of a sentence you tap.</li>
+        <li>Open the book. The side bar shows its characters, places and strands; the chat holds your agents' sessions.</li>
       </ol>
       <button class="primary big" id="add-2">Add a folder…</button>
     </section>
     <iframe id="reader" title="Reader" hidden></iframe>
   </main>
-  <aside class="panel" id="panel" aria-label="The book's people, places and problems">
-    <nav class="tabs" role="tablist">
-      <button role="tab" data-tab="cast" aria-selected="true">Cast</button>
-      <button role="tab" data-tab="problems" aria-selected="false">Problems</button>
-      <button role="tab" data-tab="record" aria-selected="false">Record</button>
-    </nav>
-    <div id="panel-body" class="panel-body"><p class="muted">Open a book that has a reading to see its people, places and things.</p></div>
+  <div class="split" data-split="side" aria-hidden="true"></div>
+  <aside class="side" id="side" aria-label="The book's world">
+    <section class="view" data-view="characters"><header class="view-head"><span class="chev">▾</span><b>Characters</b><span class="count" id="n-characters"></span><span class="grow"></span><span class="seg" id="char-kind"><button data-kind="people" aria-pressed="true">People</button><button data-kind="things" aria-pressed="false">Things</button><button data-kind="unnamed" aria-pressed="false">Unnamed</button></span></header><div class="view-body" id="v-characters"></div></section>
+    <section class="view" data-view="places"><header class="view-head"><span class="chev">▾</span><b>Places</b><span class="count" id="n-places"></span></header><div class="view-body" id="v-places"></div></section>
+    <section class="view" data-view="strands"><header class="view-head"><span class="chev">▾</span><b>Strands</b><span class="count" id="n-strands"></span></header><div class="view-body" id="v-strands"></div></section>
+    <section class="view folded" data-view="record"><header class="view-head"><span class="chev">▸</span><b>Record</b><span class="count" id="n-record"></span></header><div class="view-body" id="v-record"></div></section>
+    <section class="view folded" data-view="problems"><header class="view-head"><span class="chev">▸</span><b>Problems</b><span class="count" id="n-problems"></span></header><div class="view-body" id="v-problems"></div></section>
+  </aside>
+  <div class="split" data-split="chat" aria-hidden="true"></div>
+  <aside class="chat" id="chat" aria-label="Agent sessions">
+    <div class="pane-head"><span>Chat</span><span class="grow"></span><button id="chat-back" class="icon small" title="All sessions" hidden>‹</button><button id="chat-refresh" class="icon small" title="Look for sessions again">↻</button></div>
+    <div class="hosts" id="hosts" role="tablist"></div>
+    <div class="chat-body" id="chat-body"></div>
+    <form class="compose" id="compose" hidden>
+      <textarea id="compose-text" rows="3" placeholder="Message this session (⌘↵ to send)"></textarea>
+      <div class="compose-row"><span class="muted" id="compose-note"></span><button class="primary" id="compose-send" type="submit">Send</button></div>
+    </form>
   </aside>
 </div>
 <footer class="status"><span id="status">Ready.</span><span class="grow"></span><span id="readings"></span></footer>

@@ -64,12 +64,36 @@ with volume 1's EPUB: §4.
 | --- | --- |
 | the DMG | 173 MB (Apple Silicon) |
 | the app | 371 MB on disk |
-| a stand-in reading of volume 1's EPUB by the packed app's own runtime | done: 12 steps, 7,302 questions to the stand-in, none to the work model; the process ended by itself |
+| a stand-in reading of volume 1's EPUB by the packed app's own runtime (0.1.0) | done: 12 steps, 7,302 questions to the stand-in, none to the work model; the process ended by itself |
 
-## 5. Not yet
+## 5. The layout (P3's first part, 0.2.0)
+
+Built to plan.md §1.5a (the user, 2026-11-10: "panels other than the left repo structure and the main body ... is all
+foldable ... like the worktree system in vscode, we can build the strand view in a side panel ... connect to existing
+sessions from all agent adapters ... a character view and place view"):
+
+| Area | What it does |
+| --- | --- |
+| Library, book | always there; the library's width drags |
+| Side bar (⌘B) | five views, each folding to its header, the open ones sharing the height: **Characters** (people, things, the unnamed; a movable's path scene by scene in story order, runs at one place on one strand joined, each stop with its strand's colour and its time; a stop opens its scene), **Places** (the place tree, unordered, each place with how many scenes are in it and under it; a place lists its people and its scenes), **Strands** (a graph like a source-control graph: time runs down by the calendar's days, each strand a lane in its own colour, a split drawn from the lane it left, a union dashed into the lane it joins, a scene in the past hollow; a scene opens in the book; a strand's chip dims the others), **Record**, **Problems** |
+| Chat (⌘I) | the hosts the adapter registry lists (src/adapters/hosts.ts), each with its sessions on this Mac, newest first; a session's last messages; continued in place where the host's command can resume it (Claude Code, with `claude -p --resume`, in the session's own folder). Codex (no command installed), Gemini CLI (resumes only by an index in its project) and Pi (its console host's) are read only; Cursor and Muse keep no sessions here |
+| Day or night | v1's World · Live palettes; the reader follows |
+| Remembered | each pane's open state, each view's fold, the widths, the palette |
+
+The views come from one server answer, `novel/world` (src/v3/world.ts): the reading's time tree, its place tree, each
+scene with who and what is present, its time node and its place, and the strands, built with the director's own
+builders (readingScript, segmentWorld, strandsFile) from the reading alone. Volume 1: 286 scenes, 131 places, 100
+movables, 3 strands, in 0.1 s; volume 2: 348 scenes, 138 places, 143 movables, 11 strands, in 0.15 s.
+
+Sessions found on this Mac (2026-11-10): Pi 37, Codex 40, Claude Code 6, Gemini CLI 2, Cursor 0, Muse 0. The driver
+continues a session only through a stand-in command (`NOVEL_CONSOLE_AGENT_COMMAND`), so no real session is touched in a
+test.
+
+## 6. Not yet
 
 - An icon of its own (the app shows Electron's).
-- The rest of v1's console (P3): the agent's panel, the review's batches, settings, the warehouse, World · Live.
+- The rest of v1's console (P3): the review's batches, settings, the warehouse, World · Live.
+- Continuing Codex, Gemini and Pi sessions from the chat; starting a new session there.
 - Keys stay in `~/.config/novel-ontology/secrets.json` (mode 600), shared with the `novel` commands; the Keychain (plan.md
   §1.5) is not used yet.
 - Intel Macs: the DMG is for Apple Silicon only.

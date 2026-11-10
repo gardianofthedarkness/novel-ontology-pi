@@ -68,7 +68,7 @@ const serverOf = (folder) => {
 const listing = () => libraries().map((folder) => ({ path: folder, name: path.basename(folder), exists: fs.existsSync(folder) }));
 
 // What a page may ask the server: the novel requests, never a key's entry (that goes through setKeys below).
-const ALLOWED = new Set(["novel/scan", "novel/tree", "novel/book", "novel/cast", "novel/document", "novel/record", "novel/refs", "novel/bookProblems",
+const ALLOWED = new Set(["novel/scan", "novel/tree", "novel/book", "novel/cast", "novel/document", "novel/record", "novel/refs", "novel/bookProblems", "novel/world",
   "novel/read", "novel/readDocument", "novel/readLine", "novel/readPortrait", "novel/locate", "novel/sentenceAt", "novel/startReading", "novel/reading", "novel/stopReading"]);
 const reading = () => import(pathToFileURL(path.join(backend, "dist", "src", "v3", "reading.js")).href);
 
@@ -97,6 +97,12 @@ ipcMain.handle("setKeys", async (event, keys) => {
   for (const which of ["jev", "work"]) if (typeof keys?.[which] === "string" && keys[which].trim()) module.setKey(which, keys[which]);
   return module.keyStatus();
 });
+// The chat panel: the agent hosts the adapter registry lists, their sessions here, a message sent on into one.
+const agents = require("./agents.js");
+const registry = async () => { try { return (await import(pathToFileURL(path.join(backend, "dist", "src", "adapters", "hosts.js")).href)).listAgentHosts(); } catch { return []; } };
+ipcMain.handle("agents", async () => agents.hosts(await registry()));
+ipcMain.handle("transcript", (event, key) => agents.transcript(key));
+ipcMain.handle("sendToSession", (event, key, text) => agents.send(key, text));
 ipcMain.handle("reveal", (event, folder) => { if (libraries().includes(folder)) shell.showItemInFolder(folder); });
 ipcMain.handle("version", () => ({ app: app.getVersion(), electron: process.versions.electron, backend: app.isPackaged ? "bundled" : backend }));
 
