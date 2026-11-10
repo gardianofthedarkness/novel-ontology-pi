@@ -18,3 +18,16 @@ test("a book's world: scenes with who is present where, its places and its stran
   assert.equal(await worldView(new NovelWorkspace(folder), "keeper-1.txt").then((again) => again.scenes.length), 5);
   await assert.rejects(worldView(new NovelWorkspace(folder), "keeper-2.txt"), /no reading/);
 });
+
+test("the console's search: lines that hold the words, and the names that hold them", async () => {
+  const { NovelServer } = await import("../src/v3/server.js");
+  const { folder, one } = await shelf();
+  await scanFolder(folder); await universeAdd(folder, "The Lighthouse"); await putBook(folder, "keeper-1.txt", "the-lighthouse"); await linkReading(folder, "keeper-1.txt", one.novel);
+  const server = new NovelServer(folder);
+  const found = await server.handle("novel/search", { id: "keeper-1.txt", query: "rope" }) as { total: number; lines: { line: string; text: string; chapterTitle: string }[]; names: unknown[] };
+  assert.equal(found.total, 2); assert.ok(found.lines.every((hit) => /rope/i.test(hit.text)));
+  assert.equal(found.lines[0].chapterTitle, "Chapter 2 The Storm");
+  const named = await server.handle("novel/search", { id: "keeper-1.txt", query: "reyes" }) as { names: { label: string }[] };
+  assert.deepEqual(named.names.map((name) => name.label), ["Captain Reyes"]);
+  assert.deepEqual(await server.handle("novel/search", { id: "keeper-1.txt", query: "  " }), { query: "", total: 0, lines: [], names: [] });
+});

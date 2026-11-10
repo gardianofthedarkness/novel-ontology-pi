@@ -56,6 +56,97 @@ document.addEventListener("keydown", (event) => {
   if (event.key === "i") { event.preventDefault(); show("chat", true); }
 });
 
+
+// ---------- The left strip (as VS Code's): Library, Outline, Search, Readings; the active icon folds the left panel. ----------
+const LEFT_TITLES = { library: "Library", outline: "Outline", search: "Search", readings: "Readings" };
+let leftView = remember.get("left", "library"), searchTimer = null, lastSearch = null;
+const leftOpen = () => !$("work").classList.contains("no-left");
+function setLeft(open) { $("work").classList.toggle("no-left", !open); remember.set("leftOpen", open); markLeft(); }
+function markLeft() { for (const button of document.querySelectorAll("#leftbar [data-left]")) button.classList.toggle("active", leftOpen() && button.dataset.left === leftView); }
+function showLeft(view, toggle = false) {
+  if (toggle && leftOpen() && leftView === view) { setLeft(false); return; }
+  leftView = view; remember.set("left", view);
+  for (const section of document.querySelectorAll(".left-view")) section.classList.toggle("active", section.dataset.left === view);
+  $("left-title").textContent = LEFT_TITLES[view]; $("refresh").hidden = view !== "library";
+  if (!leftOpen()) setLeft(true); else markLeft();
+  renderLeft(view);
+  if (view === "search") setTimeout(() => $("search-text").focus(), 0);
+}
+function renderLeft(view = leftView) {
+  if (view === "library") render();
+  if (view === "outline") renderOutline();
+  if (view === "search") renderSearch();
+  if (view === "readings") renderReadings();
+}
+for (const button of document.querySelectorAll("#leftbar [data-left]")) button.addEventListener("click", () => showLeft(button.dataset.left, true));
+document.querySelector('#leftbar [data-left-action="keys"]').addEventListener("click", () => enterKeys());
+$("left-fold").addEventListener("click", () => setLeft(false));
+
+/** The open book's chapters, scenes and cards; a part opens where it starts. */
+async function renderOutline() {
+  const body = $("l-outline");
+  if (!current) { body.innerHTML = `<p class="empty">Open a book to see its chapters, scenes and cards.</p>`; return; }
+  const book = current.book, folder = current.folder;
+  if (!book.detail) { body.innerHTML = `<p class="empty">Reading the outline…</p>`; book.detail = await ask(folder, "novel/book", { id: book.id }).catch(() => ({ chapters: [] })); if (current?.book !== book) return; }
+  const detail = book.detail, rows = [];
+  const walk = (parts, depth, key) => {
+    for (const part of parts) {
+      const own = `${key}|${part.id}`, open = expanded.has(`outline:${own}`), kids = part.children?.length ?? 0;
+      rows.push(node({ depth, chev: kids ? open : null, icon: part.kind === "chapter" ? "§" : part.kind === "scene" ? "◦" : "·", name: part.label, nameClass: part.kind === "chapter" ? "book" : "", desc: part.detail || (kids ? String(kids) : ""),
+        onClick: (event) => { if (event.target.closest(".chev")) { toggle(`outline:${own}`); renderOutline(); return; } goTo(folder, book, detail.uri, part.range); } }));
+      if (open && kids) walk(part.children, depth + 1, own);
+    }
+  };
+  walk(detail.chapters, 0, book.id);
+  body.replaceChildren(...rows);
+  if (!rows.length) body.innerHTML = `<p class="empty">No chapters.</p>`;
+}
+
+/** Words in the open book's lines, and names that hold them. */
+async function renderSearch() {
+  const body = $("l-search"), query = $("search-text").value.trim();
+  if (!current) { body.innerHTML = `<p class="empty">Open a book to search it.</p>`; return; }
+  if (!current.book.reading) { body.innerHTML = `<p class="empty">This book has no reading yet; search works on read books.</p>`; return; }
+  if (!query) { body.innerHTML = `<p class="empty">Type a word or a name.</p>`; $("left-title").textContent = "Search"; return; }
+  if (lastSearch?.key === `${current.key}|${query}`) return paintSearch(body, lastSearch.found, query);
+  const at = current, found = await ask(at.folder, "novel/search", { id: at.id, query, limit: 300 }).catch((error) => ({ error: error.message }));
+  if (current !== at || $("search-text").value.trim() !== query) return;
+  lastSearch = { key: `${at.key}|${query}`, found };
+  paintSearch(body, found, query);
+}
+function paintSearch(body, found, query) {
+  if (found.error) { body.innerHTML = `<p class="empty">${esc(found.error)}</p>`; return; }
+  $("left-title").textContent = `Search · ${found.total}`;
+  const mark = (text) => { const at = text.toLowerCase().indexOf(query.toLowerCase()); return at < 0 ? esc(text) : `${esc(text.slice(0, at))}<mark>${esc(text.slice(at, at + query.length))}</mark>${esc(text.slice(at + query.length))}`; };
+  body.innerHTML = `${found.names.length ? `<div class="chips" style="margin-bottom:8px">${found.names.map((n) => `<button class="chip" data-entity="${esc(n.id)}" title="${n.references} lines">${esc(n.label)}</button>`).join("")}</div>` : ""}${found.lines.map((hit) => `<div class="ref hit" data-line="${esc(hit.line)}"><span class="line">${mark(hit.text)}</span><small>${esc(hit.chapterTitle)} · scene ${hit.scene}</small></div>`).join("")}${found.total > found.lines.length ? `<p class="empty">The first ${found.lines.length} of ${found.total} lines.</p>` : found.total ? "" : `<p class="empty">No line holds “${esc(query)}”.</p>`}`;
+}
+$("search-text").addEventListener("input", () => { clearTimeout(searchTimer); searchTimer = setTimeout(renderSearch, 250); });
+$("search-form").addEventListener("submit", (event) => { event.preventDefault(); renderSearch(); });
+$("l-search").addEventListener("click", (event) => {
+  const entity = event.target.closest("[data-entity]")?.dataset.entity; if (entity) { showRecord(entity); return; }
+  const line = event.target.closest("[data-line]")?.dataset.line; if (line) reveal(line);
+});
+
+/** Every book's reading: running, done, failed or stopped; the books not read yet; the keys. */
+async function renderReadings() {
+  const body = $("l-readings"), keys = await host.keys().catch(() => ({}));
+  const all = libs.flatMap((lib) => bookList(trees.get(lib.path) ?? { universes: [], unsorted: [] }).map((book) => ({ lib, book })));
+  const withJob = all.filter(({ book }) => book.job), unread = all.filter(({ book }) => !book.reading && !book.job && !book.missing && !book.unread);
+  const label = { running: "reading…", done: "read", failed: "failed", stopped: "stopped" };
+  body.innerHTML = `<div class="keyrow"><span>Jev <span class="dot${keys.jev ? " on" : ""}"></span></span><span>Work model <span class="dot${keys.work ? " on" : ""}"></span></span><span class="grow"></span><button class="chip" data-keys="1">Enter keys</button></div>
+    ${withJob.length ? withJob.map(({ lib, book }) => `<div class="job"><span class="t">${esc(book.title)}</span><small><span class="state-${esc(book.job.state)}">${esc(label[book.job.state] ?? book.job.state)}</span>${book.job.now ? ` · ${esc(book.job.now)}` : ""} · ${book.job.steps} steps · about $${book.job.estimate}</small>${book.job.error ? `<small class="state-failed">${esc(book.job.error)}</small>` : ""}<div class="chips">${book.job.state === "running" ? `<button class="chip" data-stop="${esc(lib.path)}|${esc(book.id)}">Stop</button>` : book.reading ? `<button class="chip" data-open="${esc(lib.path)}|${esc(book.id)}">Open</button>` : `<button class="chip" data-run="${esc(lib.path)}|${esc(book.id)}">Run again</button>`}</div></div>`).join("") : `<p class="empty">No reading has been run in these folders yet.</p>`}
+    ${unread.length ? `<h4 class="mini" style="margin:12px 0 4px;text-transform:uppercase;letter-spacing:.05em">Not read yet · ${unread.length}</h4>${unread.map(({ lib, book }) => `<div class="ref"><span class="line">${esc(book.title)}</span><small>${Math.round(book.chars / 1000)}k characters · about $${(book.chars * 0.35 / 125000).toFixed(2)} · <button class="chip" data-run="${esc(lib.path)}|${esc(book.id)}">▶ Read</button></small></div>`).join("")}` : ""}`;
+  const runningNow = withJob.filter(({ book }) => book.job.state === "running").length, badge = $("badge-readings");
+  badge.hidden = !runningNow; badge.textContent = String(runningNow);
+}
+$("l-readings").addEventListener("click", (event) => {
+  if (event.target.closest("[data-keys]")) { enterKeys().then(() => renderReadings()); return; }
+  const pick = (name) => { const value = event.target.closest(`[data-${name}]`)?.dataset[name]; if (!value) return null; const at = value.lastIndexOf("|"), folder = value.slice(0, at), id = value.slice(at + 1); return { folder, book: books.get(`${folder}|${id}`) }; };
+  const run = pick("run"); if (run?.book) { runReading(run.folder, run.book).then(() => renderReadings()); return; }
+  const stop = pick("stop"); if (stop?.book) { stopReading(stop.folder, stop.book).then(() => renderReadings()); return; }
+  const open = pick("open"); if (open?.book) openBook(open.folder, open.book, null);
+});
+
 // ---------- The library. ----------
 async function load(folder) {
   try { const tree = await ask(folder, "novel/tree"); trees.set(folder, tree); for (const book of bookList(tree)) books.set(`${folder}|${book.id}`, book); }
@@ -147,7 +238,7 @@ function openBook(folder, book, at) {
   $("crumb").textContent = book.title;
   world = null; record = null; selectedChar = null; selectedPlace = null; strandFocus = null; debugLine = null;
   const badge = $("badge-problems"); badge.hidden = !book.problems; badge.textContent = book.problems > 99 ? "99+" : String(book.problems || "");
-  render(); loadWorld(); renderView(activeView);
+  lastSearch = null; render(); loadWorld(); renderView(activeView); if (leftView !== "library") renderLeft();
 }
 function closeBook() { $("dock").hidden = true; current = null; world = null; $("reader").hidden = true; $("reader").src = "about:blank"; $("welcome").hidden = false; $("crumb").textContent = ""; renderView(activeView); }
 const reveal = (sentence) => { if (current && sentence) $("reader").contentWindow.postMessage({ type: "reveal", sentence }, "*"); };
@@ -487,6 +578,7 @@ function follow() {
       else if (now === "failed") say(`The reading of ${book.title} failed: ${book.job.error ?? "see its log in .novel"}`, true);
     }
   }
+  if (leftView === "readings") renderReadings(); else { const badge = $("badge-readings"); badge.hidden = !running.size; badge.textContent = String(running.size); }
   $("readings").textContent = running.size ? `${running.size} reading${running.size === 1 ? "" : "s"} running` : "";
   if (running.size && !following) following = setInterval(async () => { for (const lib of libs) await load(lib.path); render(); follow(); }, 3000);
   if (!running.size && following) { clearInterval(following); following = null; }
@@ -503,4 +595,6 @@ daylight(remember.get("daylight", "night"));
 for (const [which, key] of [["library", "--lib-w"], ["panel", "--panel-w"]]) { const width = remember.get(`width:${which}`, null); if (width) $("work").style.setProperty(key, `${width}px`); }
 if (!TITLES[activeView]) activeView = "strands";
 show(activeView); setPanel(remember.get("panel", true));
+if (!LEFT_TITLES[leftView]) leftView = "library";
+showLeft(leftView); setLeft(remember.get("leftOpen", true));
 refresh().then(keyDots).then(() => { $("welcome").hidden = Boolean(current); renderView(activeView); });

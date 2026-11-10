@@ -88,6 +88,15 @@ export class NovelServer {
       // For a console's panels: every line that refers to an entry (across the universe), a book's problems.
       case "novel/refs": return this.ws.refs(String(params.id), String(params.entity), { limit: Number(params.limit ?? 200), from: Number(params.from ?? 0), universe: params.universe !== false });
       case "novel/world": return worldView(this.ws, String(params.id));
+      // Words in a book's lines, and the names of its people, places and things that hold them (the console's Search).
+      case "novel/search": {
+        const open = await this.ws.book(String(params.id)), index = open.index, needle = String(params.query ?? "").trim().toLowerCase(), limit = Math.min(500, Number(params.limit ?? 200));
+        if (!needle || !index) return { query: needle, total: 0, lines: [], names: [] };
+        const hits = index.lines.filter((line) => line.text.toLowerCase().includes(needle));
+        const title = (chapter: number) => open.book.chapters[chapter]?.title ?? (chapter === 0 ? "Front matter" : `Section ${chapter + 1}`);
+        const names = index.symbols.filter((symbol) => symbol.names.some((name) => name.toLowerCase().includes(needle))).map((symbol) => ({ id: symbol.id, label: symbol.label, category: symbol.category, unnamed: symbol.unnamed, references: index.references(symbol.id).length })).sort((a, b) => b.references - a.references).slice(0, 40);
+        return { query: needle, total: hits.length, names, lines: hits.slice(0, limit).map((line) => ({ line: line.id, text: line.text, chapterTitle: title(line.chapter), scene: line.scene + 1 })) };
+      }
       case "novel/bookProblems": return this.ws.problems(String(params.id), { limit: Number(params.limit ?? 500) });
       case "novel/record": {
         const open = await this.ws.book(String(params.id)), symbol = open.index?.symbol(String(params.entity));

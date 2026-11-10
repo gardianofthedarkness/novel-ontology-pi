@@ -74,7 +74,8 @@ should be foldable into a debugging icon. Then, flatten each individual view int
 
 | Area | What it does |
 | --- | --- |
-| Library, book | always there; the library's width drags; the book shows the reader alone |
+| Left icon strip | as VS Code's on its left (the user, 2026-11-10: "where is the left hand side icons to switch left panels like vscode?"): **Library** (folders, universes, books, chapters, scenes), **Outline** (the open book's chapters, scenes and cards; a part opens where it starts), **Search** (the words in the open book's lines, highlighted, with chapter and scene; the names that hold them, each opening its record), **Readings** (every book's reading: running with its step, done, failed with why, stopped; the books not read yet with ▶; the keys' state), and the keys at its foot; the active icon pressed again folds the left panel |
+| Book | always there; the reader alone |
 | Icon strip (right edge) | as VS Code's activity bar: one icon per view, one view at a time in the panel beside it; the active icon pressed again folds the panel (⌘B too); ⌘I opens the chat. Icons: Characters, Places, Strands, Record, Problems (with the book's count), Reading details (a mark when a line is tapped), Chat |
 | Characters | people, things, the unnamed; a movable's path scene by scene in story order, runs at one place on one strand joined, each stop in its strand's colour with its time; a stop opens its scene |
 | Places | the place tree, unordered, each place with how many scenes are in it and under it; a place lists its people and its scenes |
@@ -90,7 +91,7 @@ scene with who and what is present, its time node and its place, and the strands
 builders (readingScript, segmentWorld, strandsFile) from the reading alone. Volume 1: 286 scenes, 131 places, 100
 movables, 3 strands, in 0.1 s; volume 2: 348 scenes, 138 places, 143 movables, 11 strands, in 0.15 s.
 
-Driven from the 0.3.2 DMG: volume 1's graph has 286 nodes, 3 lanes, 3 fork and join curves and 3 tip labels; volume 2's
+Driven from the 0.4.0 DMG (the left strip: volume 1's outline 6 chapters, a search for its most present person 94 lines with each match marked, the readings view, the left panel folded and back); volume 1's graph has 286 nodes, 3 lanes, 3 fork and join curves and 3 tip labels; volume 2's
 has 348 nodes, 10 lanes, 12 curves and 10 tip labels; every lane's line ends on a node; one view shows at a time; the reader's own notes are hidden and the debug icon
 is marked when a line is tapped; folding the panel widens the book. Sessions found on this Mac: Pi 37, Codex 40, Claude
 Code 6, Gemini CLI 2. A session is continued in a test only through a stand-in command (`NOVEL_CONSOLE_AGENT_COMMAND`).

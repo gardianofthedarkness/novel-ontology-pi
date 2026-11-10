@@ -68,7 +68,7 @@ const serverOf = (folder) => {
 const listing = () => libraries().map((folder) => ({ path: folder, name: path.basename(folder), exists: fs.existsSync(folder) }));
 
 // What a page may ask the server: the novel requests, never a key's entry (that goes through setKeys below).
-const ALLOWED = new Set(["novel/scan", "novel/tree", "novel/book", "novel/cast", "novel/document", "novel/record", "novel/refs", "novel/bookProblems", "novel/world",
+const ALLOWED = new Set(["novel/scan", "novel/tree", "novel/book", "novel/cast", "novel/document", "novel/record", "novel/refs", "novel/bookProblems", "novel/world", "novel/search",
   "novel/read", "novel/readDocument", "novel/readLine", "novel/readPortrait", "novel/locate", "novel/sentenceAt", "novel/startReading", "novel/reading", "novel/stopReading"]);
 const reading = () => import(pathToFileURL(path.join(backend, "dist", "src", "v3", "reading.js")).href);
 

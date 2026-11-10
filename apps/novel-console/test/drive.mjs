@@ -93,6 +93,22 @@ try {
     await icon("problems");
     const problems = await until(() => run(`(() => { const t = document.getElementById("v-problems").textContent; return /Reading the problems/.test(t) ? null : { listed: document.querySelectorAll("#v-problems [data-line]").length }; })()`), "the problems", 20000).catch(() => -1);
     step("record and problems", { record, problems });
+    // The left strip: the outline, a search (a name from the book), the readings; the active icon folds the left panel.
+    const left = (view) => run(`document.querySelector('#leftbar [data-left="${view}"]').click()`);
+    await left("outline");
+    const outline = await until(() => run(`document.querySelectorAll("#l-outline .node").length || null`), "the outline", 20000);
+    const name = await run(`document.querySelector("#v-characters li[data-char] .nm")?.textContent ?? ""`);
+    await left("search");
+    await run(`(() => { const input = document.getElementById("search-text"); input.value = ${JSON.stringify("__NAME__")}.replace("__NAME__", document.querySelector("#v-characters li[data-char] .nm")?.textContent ?? ""); input.dispatchEvent(new Event("input")); })()`);
+    const search = await until(() => run(`(() => { const lines = document.querySelectorAll("#l-search .hit").length; return lines ? { lines, names: document.querySelectorAll("#l-search [data-entity]").length, marked: document.querySelectorAll("#l-search mark").length } : null; })()`), "the search", 20000);
+    await picture("6-search");
+    await left("readings");
+    const readings = await until(() => run(`(() => { const t = document.getElementById("l-readings"); return t.querySelector(".keyrow") ? { jobs: t.querySelectorAll(".job").length, notRead: t.querySelectorAll("[data-run]").length } : null; })()`), "the readings", 10000);
+    await left("readings");
+    const leftFolded = await run(`getComputedStyle(document.getElementById("left")).display === "none"`);
+    await left("library");
+    const leftBack = await run(`getComputedStyle(document.getElementById("left")).display !== "none" && document.querySelectorAll("#tree .node").length > 0`);
+    step("left strip", { outline, searchedFor: name.length > 0, search, readings, leftFolded, leftBack });
     // The active icon folds the panel; again, it opens; day.
     await icon("problems");
     const folded = await run(`getComputedStyle(document.getElementById("panel")).display === "none" && document.getElementById("reader").getBoundingClientRect().width > 700`);
