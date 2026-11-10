@@ -887,22 +887,32 @@ reads a file the director's runs never write), and the W15 run's 24 blasts inclu
 own fill or non-nominated buildings inside nominated districts. The user's call: clear per strand, not per book ("what if
 the next book returned to a non finished strand?"); the policy as rewritten is design §4.5. Builds on M17 (the strands themselves).
 
-- [ ] **M16a The strand registry** (`experiments/v2/strands.mjs --universe <dir>`): every fork of the book in
-      `universe/strands.json` (book, fork, scenes, people by name, the last scene's place and chapter); `open` read from
-      the last scenes' text by the work model for the forks that reach the last chapter (volume 1 has four: the main
-      strand of 229 scenes, an epilogue of 3 people, one that merges back, one with nobody), by position with no work
-      model; `continues` to an earlier book's open fork that shares a person, with the reason. `novel strands show|set`
-      for the main agent's override.
-- [ ] **M16b Shares and damage by strand**: `Share.strand` and `damaged[].strand`; `inForce(slot, book, carried)` in
-      place of `sharersIn(slot, book)` in the spawn, the tree and the tenants (carried: the forks this book continues,
-      through the chain); the spawn's `--from` reset lets go of this book's only, as now.
-- [ ] **M16c Damage into the universe** (`world-engine/world/keep-damage.mjs <novel-dir> --run <id>`): the run's damage
-      records to their slots, the sphere relative to the lot, with the lot's fingerprint (§4.5.1).
-- [ ] **M16d Damage out of the universe**: the export replays the damage in force on each lot as it stands, beside
-      `applyEarlier` (§4.5.2); volume 1's lot 370 (loc_000010) the first case.
-- [ ] **M16e Proof**: volume 1's forks registered and W15's damage kept; volume 2's world built after its terrain shows
-      loc_000010's lot broken and the station hall whole (a non-nominated building, struck by a strand the work model
-      reads as closed), or broken too if it reads volume 1's main strand as open.
+Revised 2026-11-09 after M17e (the user: "At the reading stage of each book, we need to determine if we are inheriting
+any strands from last book or not. If inherit, we preserve the destructions. If not, we close the strand, and destruction
+is recovered for the new book"; design §4.5). Volume 1 leaves one strand open, the main (both side lines closed into it
+at 169 and 217), so volume 2's question is one: does it inherit the main strand.
+
+- [ ] **M16a The strand registry at a book's end** (`universe/strands.json`): the book's strands (the run's re-strand
+      when the book has a run, else the text's), each with its people by name, its last group (who acts in its last
+      segments), its last place and story time, and whether it is open at the end (not closed by a union, not a
+      flashback); a strand closed into another inside the book recorded with the one it joined.
+- [ ] **M16b Inherit or close, at the next book's reading** (`novel strands inherit <novel-dir>`, run after the book's
+      strands are built): each strand the last book left open is inherited by a strand of the new book whose group, in
+      its first segments, has someone of the candidate's last group (by name), checked by the work model on the
+      candidate's last lines and that strand's first lines; otherwise closed. Recorded with the reason; `novel strands
+      set` for the main agent's override. Inherited strands are the new book's, candidates again at its end; closed
+      ones stay closed.
+- [ ] **M16c Damage into the universe by strand** (`world-engine/world/keep-damage.mjs <novel-dir> --run <id>`): the
+      run's damage records to their slots with the strand they happened in (a strand closed by a union mapped to the one
+      it joined), the sphere relative to the lot, with the lot's fingerprint (§4.5.1).
+- [ ] **M16d Damage out of the universe**: when the engine builds a book's world, the damage in force is replayed on each
+      lot as it stands: every nominated slot's, and a non-nominated building's only when its strand is inherited
+      (through the chain); a closed strand's buildings stand whole (§4.5.2); volume 1's lot 370 (loc_000010) the first
+      nominated case.
+- [ ] **M16e Proof**: volume 1's strands registered and W15's damage kept; then, unpaid, a stand-in for volume 2's
+      opening both ways: inherited (the station hall and the other non-nominated buildings W15 broke stay broken) and
+      closed (they stand whole), loc_000010's lot broken either way. Volume 2's own reading and the decision on it come
+      with its paid reading, on the user's go.
 
 *Caches, from the same review.* Per book, and empty for a new book: `vol-N/cache-{faculties,in-use,rides,set-dresser,sky,
 stills,voices}`, `stage/director/cache`, `cache-work`, `stage/terrain/cache`. The universe's, carried on purpose:

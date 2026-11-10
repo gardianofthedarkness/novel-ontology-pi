@@ -194,21 +194,25 @@ should be per strand, not per book ... what if the next book returned to a non f
 - **A nominated place is permanent.** Its slot is its own for good: never cleared, never given to another name; its name
   returns to it in every later book, with what happened to it: every book's damage to its own lot is kept, and stands
   again when the world is built (§4.5.2).
-- **A strand's shares and damage live as long as the strand.** An unnamed mention's share, and the damage done to a slot
-  that only unnamed mentions used, belong to the strand they happened in (the timeline's fork, `stage/world/strands.json`).
-  A strand that is *resolved* when its book ends is closed: when the next book starts, its slots are free and whole
-  again, spare slots for that book's mentions to borrow (an earlier book's spare dwelling district is waiting for a later
-  book's dwelling district). A strand the book leaves *open* (its story breaks off: a cliffhanger, a side story left
-  hanging) stays in force: the next book's strand that continues it finds the same slots shared and the same buildings
-  broken.
-- **Open, and continued.** Whether a strand that reaches its book's last chapter is open or resolved is read from the
-  text of its last scenes by the work model when the book's strands are built (`experiments/v2/strands.mjs --universe`);
-  with no work model, a strand that holds the book's final scene, or ends in nothing (`to: []`) in the last chapter,
-  counts as open. A later book's strand continues an earlier open strand when the two share a person (by name; the one
-  sharing most people), recorded with its reason in the universe's strand registry (`universe/strands.json`). The main
-  agent may override either judgement (`novel strands`).
-- **In force in a book:** the book's own shares and damage, those of every earlier strand it continues (through the
-  chain), and every nominated slot's damage. Everything else of earlier books is history: kept in the registry by book
+- **A strand's shares and damage live as long as the strand.** An unnamed mention's share, and the damage done to a
+  building that is not nominated (a slot only unnamed mentions used, the landscape's own buildings that carry a slot),
+  belong to the strand they happened in (the timeline's fork: strands by interaction, docs/v2/strands.md §0.7; the run's
+  own strands when the book has a run, `stage/world/restrand/<run>.json`). A strand closed into another inside its book
+  (a union) lives on in the strand it joined, with its damage.
+- **Inherited or closed, decided at the next book's reading** (the user, 2026-11-09: "The reason we do strands is
+  because we need to determine when to preserve destruction of non nominated buildings and when not to. At the reading
+  stage of each book, we need to determine if we are inheriting any strands from last book or not. If inherit, we
+  preserve the destructions. If not, we close the strand, and destruction is recovered for the new book"). The
+  candidates are the strands the last book leaves open at its end (not closed by a union, not a flashback). When the
+  next book is read, each candidate is either **inherited** (a strand of the new book carries it on: its shares stand and
+  its buildings stay broken) or **closed** (its slots are free and whole again for the new book). The evidence: a strand
+  of the new book whose group, in its first segments, has someone of the candidate's last group (by name), checked by
+  the work model on the candidate's last lines and that strand's first lines ("does this go on from that?"), recorded
+  with its reason in the universe's strand registry (`universe/strands.json`). The main agent may override it (`novel
+  strands`). Only the last book's open strands are candidates: an inherited strand is a strand of the new book, a
+  candidate again at its end; a closed one stays closed.
+- **In force in a book:** the book's own shares and damage, those of every strand it inherits (through the chain of
+  books), and every nominated slot's damage. Everything else of earlier books is history: kept in the registry by book
   and strand, out of force.
 
 The universe's registry (`universe/terrain.json`) keeps every slot with its type, its owner name (permanent), its
