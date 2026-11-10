@@ -1108,12 +1108,20 @@ export async function strandDemo(novelDir, options) {
   // landscape has changed since (another fingerprint) is not that building any more. Derived view data, never canon.
   const damageLog = JSON.parse(await readFile(`${novelDir}/stage/simulation/world.json`, 'utf8').catch(() => 'null'));
   const sameLine = entry => entry.strand?.from === options.from && entry.strand?.to === options.to && (entry.strand?.fork ?? null) === (options.fork ?? null);
-  let pending = (damageLog?.entries ?? []).filter(entry => !sameLine(entry) && Number.isFinite(entry.story)).sort((a, b) => a.story - b.story), story = -Infinity;
+  // Earlier books' damage in force in this book (carry.mjs; docs/v2/borrow-and-spawn.md §4.5; the user, 2026-11-09: "If
+  // inherit, we preserve the destructions. If not, we close the strand, and destruction is recovered for the new book"):
+  // every nominated building's, and another's only when its strand reached this book through inherited strands. They
+  // stand before the book's first scene. NOVEL_CARRY_AS shows another book's carry (a proof's view).
+  const carried = await (await import('./carry.mjs')).damageInForce(novelDir, { as: process.env.NOVEL_CARRY_AS || null }).catch(() => ({ entries: [] }));
+  const carriedEntries = carried.entries.map(entry => ({ ...entry, carried: true, label: `kept from ${entry.book}`, strand: { id: entry.strand, from: null, to: null, fork: entry.book }, story: -1e15 }));
+  let pending = [...carriedEntries, ...(damageLog?.entries ?? []).filter(entry => !sameLine(entry) && Number.isFinite(entry.story))].sort((a, b) => a.story - b.story), story = -Infinity;
   const earlier = [];
   notes.earlier = { log: damageLog?.version ?? null, applied: 0, stale: 0 };
+  notes.carried = { book: carried.book ?? null, inForce: carriedEntries.length, nominated: carriedEntries.filter(entry => entry.nominated).length };
   const applyEarlier = () => {
     pending = pending.filter(entry => {
-      if (entry.story >= story) return true;
+      // An earlier book's damage stands before this book begins: as soon as its lot stands, whatever the story's place.
+      if (!entry.carried && entry.story >= story) return true;
       const index = world.lots.findIndex(lot => lot.source === entry.building);
       if (index < 0) return true;
       const lot = world.lots[index];
@@ -1318,7 +1326,7 @@ export async function strandDemo(novelDir, options) {
       lots: world.lots.map(lot => ({ i0: lot.i0, j0: lot.j0, nx: lot.nx, nz: lot.nz, floors: lot.floors, height: lot.height, label: lot.label, role: lot.role, source: lot.source, place: lot.place, born: lot.born, cells: [...lot.skeleton.cells].join('') })),
       broken, hits: [...hits.entries()].map(([id, hit]) => ({ event: id, sphere: hit.sphere ?? null, point: hit.point })), earlier: earlier.map(({ lot, strand, scene: from, story: at }) => ({ lot, strand, scene: from, story: at })),
       landscapes: landscapes.map(entry => ({ place: entry.place, buildings: entry.buildings, ids: entry.source.buildings.map(b => b.id), roads: entry.roads })), dropped: [...world.dropped],
-      notes: { chunks: world.chunks.size, lots: world.lots.length, nodes: world.cells.length / 3, applied: notes.earlier.applied, build: notes.build, ground: scene ? groundLine(scene.placeId) : '' } };
+      notes: { chunks: world.chunks.size, lots: world.lots.length, nodes: world.cells.length / 3, applied: notes.earlier.applied, carried: notes.carried, build: notes.build, ground: scene ? groundLine(scene.placeId) : '' } };
   };
   let lastLive = 0;
   const live = (final = false, now = false) => { if (!options.live || (!final && !now && Date.now() - lastLive < 300)) return; lastLive = Date.now(); options.live(snapshot(final), now ? assemble(partialRuns(), moment) : null); };

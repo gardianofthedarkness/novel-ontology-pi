@@ -892,27 +892,34 @@ any strands from last book or not. If inherit, we preserve the destructions. If 
 is recovered for the new book"; design §4.5). Volume 1 leaves one strand open, the main (both side lines closed into it
 at 169 and 217), so volume 2's question is one: does it inherit the main strand.
 
-- [ ] **M16a The strand registry at a book's end** (`universe/strands.json`): the book's strands (the run's re-strand
-      when the book has a run, else the text's), each with its people by name, its last group (who acts in its last
-      segments), its last place and story time, and whether it is open at the end (not closed by a union, not a
-      flashback); a strand closed into another inside the book recorded with the one it joined.
-- [ ] **M16b Inherit or close, at the next book's reading** (`novel strands inherit <novel-dir>`, run after the book's
-      strands are built): each strand the last book left open is inherited by a strand of the new book whose group, in
-      its first segments, has someone of the candidate's last group (by name), checked by the work model on the
-      candidate's last lines and that strand's first lines; otherwise closed. Recorded with the reason; `novel strands
-      set` for the main agent's override. Inherited strands are the new book's, candidates again at its end; closed
-      ones stay closed.
-- [ ] **M16c Damage into the universe by strand** (`world-engine/world/keep-damage.mjs <novel-dir> --run <id>`): the
-      run's damage records to their slots with the strand they happened in (a strand closed by a union mapped to the one
-      it joined), the sphere relative to the lot, with the lot's fingerprint (§4.5.1).
-- [ ] **M16d Damage out of the universe**: when the engine builds a book's world, the damage in force is replayed on each
-      lot as it stands: every nominated slot's, and a non-nominated building's only when its strand is inherited
-      (through the chain); a closed strand's buildings stand whole (§4.5.2); volume 1's lot 370 (loc_000010) the first
-      nominated case.
-- [ ] **M16e Proof**: volume 1's strands registered and W15's damage kept; then, unpaid, a stand-in for volume 2's
-      opening both ways: inherited (the station hall and the other non-nominated buildings W15 broke stay broken) and
-      closed (they stand whole), loc_000010's lot broken either way. Volume 2's own reading and the decision on it come
-      with its paid reading, on the user's go.
+Built 2026-11-09 (the user: "Yes, build M16"), in world-engine/world/carry.mjs and `novel strands
+register|inherit|set|keep|show` (src/cli/commands/extract/strandCommands.ts); tests: `world/carry.test.mjs` (7).
+
+- [x] **M16a The strand registry at a book's end** (`novel strands register <novel-dir> [--run <id>]`): the run's
+      re-strand when the book has one, else the text's; each strand's scenes, people and first and last groups by name
+      (the first and last three segments with anyone acting), its area, open or closed into another. Volume 1 from W15:
+      5 strands, one open (the main).
+- [x] **M16b Inherit or close** (`novel strands inherit <novel-dir> [--work]`): each open strand of the book registered
+      last before is inherited by the new strand whose first group shares the most names with its last group, the work
+      model checking the two passages with `--work`; else closed. `novel strands set` overrides. Volume 1's main strand
+      ends with seven people together (the protagonist, the nun, the tiny god, the attacker, two magicians, the magic
+      god): a book that opens with any of them inherits it.
+- [x] **M16c Damage into the universe** (`novel strands keep <novel-dir> --run <id>`): `universe/damage.json`, exact
+      parts by building (§4.5.1). W15: 33 buildings, 1 nominated.
+- [x] **M16d Damage out of the universe**: the export replays the damage in force as the buildings stand (§4.5.2). A
+      director run had never applied earlier damage at all (the replay waited for a story position only the old
+      walker set); carried damage now applies when its building stands.
+- [x] **M16e Proof** (unpaid, on the rehearsal copy; library 16 only read): volume 1 registered from W15 and its damage
+      kept; a stand-in volume 2 decided both ways and the first quarter rehearsed with its carry:
+
+  | Stand-in volume 2 | Decision | In force | Replayed in the quarter's world |
+  | --- | --- | --- | --- |
+  | opens with volume 1's first three (none of the main's last group) | the main closed | 1 of 33 (lot 370, nominated) | 1 |
+  | opens with volume 1's last 30 units | the main inherited | 33 of 33 | 29, on 20 buildings (4 never streamed in) |
+
+  A rehearsal with no carry plays as before (211 of 214 measures, the rest run times). Volume 2's own decision comes
+  after its paid reading, on the user's go: `novel strands register` for volume 1 on the live library first (W15 kept
+  with `novel strands keep`), then `novel strands inherit` on volume 2.
 
 *Caches, from the same review.* Per book, and empty for a new book: `vol-N/cache-{faculties,in-use,rides,set-dresser,sky,
 stills,voices}`, `stage/director/cache`, `cache-work`, `stage/terrain/cache`. The universe's, carried on purpose:

@@ -68,6 +68,7 @@ import { SIM_USAGE, simPick, simRun, simShow, simStrands, simTerrain } from "./c
 import { sourceGrep, sourceSimilar } from "./commands/extract/sourceCommands.js";
 import { worldAnswer, worldBatch, worldPool } from "./commands/extract/worldCommands.js";
 import { castAsk, castMerge, castReview, castSheet, castShow, sky } from "./commands/extract/castCommands.js";
+import { strandsInherit, strandsKeep, strandsRegister, strandsSet, strandsShow } from "./commands/extract/strandCommands.js";
 import { settingsDiff, settingsExplain, settingsProfileApply, settingsProfileList, settingsProfileSave, settingsSet, settingsShow, settingsUnset } from "./commands/extract/settingsCommands.js";
 import { warehouseAdd, warehouseFetch, warehouseFind, warehouseInteract, warehouseList, warehouseRefresh, warehouseShow, warehouseUse } from "./commands/extract/warehouseCommands.js";
 import { lookContext } from "./commands/extract/lookCommands.js";
@@ -161,6 +162,7 @@ const COMMANDS: Record<string, string> = {
   "novel world log <novel-dir> --scene|--person|--card <id> [--run <id>]": "The world log of the last director run: who was where, moves, meetings, blasts, and the laws' verdicts (read-only)",
   "novel world held <novel-dir> [--run <id>] [--budget N]": "A director run's held items (what the laws could not settle, and the user's notes) into the review pool, one batch per scene by reach",
   "novel world apply <novel-dir>": "The main agent's answers into the pins the director plays by, under the laws (what they turn back returns to the pool)",
+  "novel strands register|inherit|set|keep|show <novel-dir> …": "What a book carries into the next, per strand (docs/v2/borrow-and-spawn.md §4.5): the book's strands at its end into the universe's registry (register [--run <id>]); at the next book's reading each open strand of the last book inherited (its damage to buildings that are not nominated stays) or closed (they stand whole) (inherit [--work] [--dry]); the main agent's override (set <strand key> inherited|closed --why t [--into <key>]); a run's damage into the universe building by building (keep --run <id>); the registry and the damage in force (show)",
   "novel cast show|merge|sheet|ask|review <novel-dir> …": "The cast's review: the cast and their ability sheets (show [<char>]); two entries made one person in the reading, its views, the ontology and the universe's sheets (merge <keep> <merged> --reason t [--reading <data.json>]... [--dry]); one person's ability sheet (sheet <char> --sheet '<JSON>' | --none --reason t [--evidence <ids>]); two people raised as one for the agent (ask <a> <b> --why t); the cast's questions in batches in the world's review pool (review [--size N] [--least-cards N] [--send <console-dir>]), answered with novel world answer, done by novel world apply",
   "novel sky build|show <novel-dir> [--dry] [--cache <dir>]": "The story sky: each unit's time of day and weather into sky.json beside the reading the director plays (build: Jev, cents, cached; --dry counts only); show: what it holds",
   "novel settings show <novel-dir> [<prefix>] [--place <id>] [--changed]": "The world generator's settings (config/world.schema.json) as they resolve for a book: defaults < universe < book < place, each with where it came from",
@@ -804,6 +806,17 @@ async function main(): Promise<void> {
     if (!text) throw new Error(`Usage: novel source ${sub} <novel-dir> <${sub === "grep" ? "regex" : "text"}> [--limit N]`);
     if (!Number.isInteger(limit) || limit < 1 || limit > 50) throw new Error("--limit must be a whole number from 1 to 50.");
     out(await (sub === "grep" ? sourceGrep(novelDir, text, limit) : sourceSimilar(novelDir, text, limit)), pretty);
+    return;
+  }
+
+  if (cmd === "strands") {
+    const novelDir = positional[2], usage = "Usage: novel strands register <novel-dir> [--run <id>] [--reading <data.json>] [--dry] | inherit <novel-dir> [--reading <data.json>] [--work] [--dry] | set <novel-dir> <strand key> inherited|closed --why <text> [--into <key>] | keep <novel-dir> --run <id> [--dry] | show <novel-dir>";
+    if (!["register", "inherit", "set", "keep", "show"].includes(sub ?? "") || !novelDir || novelDir.startsWith("--")) throw new Error(usage);
+    if (sub === "register") { out(await strandsRegister(novelDir, { run: flag(positional, "--run"), reading: flag(positional, "--reading"), dry: positional.includes("--dry") }), pretty); return; }
+    if (sub === "inherit") { out(await strandsInherit(novelDir, { reading: flag(positional, "--reading"), work: positional.includes("--work"), dry: positional.includes("--dry") }), pretty); return; }
+    if (sub === "set") { const why = flag(positional, "--why"); if (!positional[3] || !positional[4] || !why) throw new Error(usage); out(await strandsSet(novelDir, positional[3], positional[4], why, flag(positional, "--into")), pretty); return; }
+    if (sub === "keep") { const run = flag(positional, "--run"); if (!run) throw new Error(usage); out(await strandsKeep(novelDir, { run, dry: positional.includes("--dry") }), pretty); return; }
+    out(await strandsShow(novelDir), pretty);
     return;
   }
 

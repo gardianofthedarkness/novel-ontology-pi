@@ -11,7 +11,8 @@
  * snapshot names them and never copies them. Nothing is deleted: a restore first snapshots what it replaces (a guard).
  *
  *   <library>/                              one universe
- *     universe/                             what its books share: pools.json, terrain.json, maps/, abilities.json, props.json
+ *     universe/                             what its books share: pools.json, terrain.json, maps/, abilities.json, props.json,
+ *                                           strands.json (each book's strands, inherited or closed), damage.json (kept damage)
  *     vol-<n>/novel/                        a book's workspace
  *       source/                             its text: never snapshotted or exported (each user brings their own, checked
  *                                           by ontology/source.json's sha256)
@@ -67,7 +68,7 @@ export function libraryPaths(root: string) {
   };
   return {
     root: dir,
-    universe: { dir: universe, pools: join(universe, "pools.json"), terrain: join(universe, "terrain.json"), maps: join(universe, "maps"), abilities: join(universe, "abilities.json"), props: join(universe, "props.json") },
+    universe: { dir: universe, pools: join(universe, "pools.json"), terrain: join(universe, "terrain.json"), maps: join(universe, "maps"), abilities: join(universe, "abilities.json"), props: join(universe, "props.json"), strands: join(universe, "strands.json"), damage: join(universe, "damage.json") },
     snapshots: { dir: snapshots, index: join(snapshots, "index.json"), objects: join(snapshots, "objects"), object: (hash: string) => join(snapshots, "objects", hash.slice(0, 2), hash), lock: join(snapshots, ".lock") },
     book,
   };

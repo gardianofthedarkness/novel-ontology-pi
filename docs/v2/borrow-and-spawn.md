@@ -220,21 +220,25 @@ sharers and damage by book and strand (history; only what is in force counts), t
 its kept offset. Within a book nothing changes: the world is one simulation, and a building broken in one strand is a
 ruin for every later scene (§2.8, option A).
 
-#### 4.5.1 What a run leaves: damage into the universe
+#### 4.5.1 What a run leaves: damage into the universe (built, M16c)
 
-A run's world log (`stage/world/log/<run>.jsonl`, `kind: damage`: the lot, the sphere, the strength, the strand and the
-scene) is kept into the universe when the run is the book's (`node world-engine/world/keep-damage.mjs <novel-dir> --run
-<id>`). Each struck lot is traced to its slot: a slot's own building (`<city>:slot:...`) to that slot; a building of an
-unnamed share's area (`unnamed:<mention>:...`) to the slot the mention shares in that book; the landscape's own fill
-(`<city>:B...`) has no slot and is not kept. The slot's `damaged` gets `{ book, strand, scene, within, sphere (relative
-to the lot), strength, lot: { nx, nz, floors } }`.
+A book's run is kept into the universe when it is the book's (`novel strands keep <novel-dir> --run <id>`,
+world-engine/world/carry.mjs): from the run's page, each blast's parts (the lot struck and those it reached, `hit` and
+`hit.more`), building by building, exactly as they broke (the units blasted and fallen, the cells destroyed and fell).
+Each entry in `universe/damage.json` has the book, the run, the scene and its place in the story, the strand it happened
+in (the registry's strand that holds the scene), the building's lasting source and fingerprint (`manifold`), its slot
+(the lot's source with the city's prefix off, up to the nearest slot the registry knows) and whether it is nominated
+(that slot owned by a named place). A book kept again replaces its own entries. The landscape's own fill buildings are
+kept too (no slot, never nominated): they are buildings the next book would otherwise find whole. W15: 33 buildings,
+one nominated (lot 370, loc_000010's), on the main strand and the faller's line that rejoined it.
 
-#### 4.5.2 What the next book finds: damage out of the universe
+#### 4.5.2 What the next book finds: damage out of the universe (built, M16d)
 
-When the engine builds the world for a book, the damage in force is replayed on each lot the moment it stands (beside
-`applyEarlier`, the export's hook for the other story lines' damage): the sphere at the same offset of the same lot, the
-same strength, through the machinery a blast uses. A lot whose size has changed since (another fingerprint) is not that
-building any more and is left whole, counted stale.
+When the engine builds a book's world (export-strand-demo.mjs), the damage in force (`damageInForce`: §4.5's rule) goes
+to the export's earlier-damage replay (`applyEarlier`) as entries that stand before the book begins: each is applied
+the moment its building stands, through the same exact parts, whatever the story's place. A building whose lot has
+changed since (another fingerprint) is not that building any more and is left whole, counted stale. The world's notes
+carry how many were in force (`carried`). `NOVEL_CARRY_AS=<book>` shows another book's carry, for proofs.
 
 ## 5. The configuration files
 
