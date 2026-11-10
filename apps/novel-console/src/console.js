@@ -1,53 +1,59 @@
 "use strict";
-// The console's window (docs/v3/plan.md §1.5a): the library and the book are always there; the side bar (Characters, Places,
-// Strands, Record, Problems: each folds) and the chat fold. Time is an ordered tree, places an unordered one, characters and
-// things are movables at a place at a time, and the strands draw that. Everything comes from window.novelHost (preload.js).
+// The console's window (docs/v3/plan.md §1.5a): the library and the book are always there; every other view sits behind an
+// icon on the right-hand strip, one at a time, the panel folding when its icon is pressed again (as VS Code's activity bar).
+// Time is an ordered tree, places an unordered one, characters and things movables at a place at a time; the Strands view
+// draws that as a git graph. The reading's details of a line (Jev's and the reading's records) are the debug view's.
 const host = window.novelHost;
 const $ = (id) => document.getElementById(id);
 const esc = (text) => String(text ?? "").replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
 const remember = { get(key, fallback) { try { const value = localStorage.getItem(`console:${key}`); return value === null ? fallback : JSON.parse(value); } catch { return fallback; } }, set(key, value) { try { localStorage.setItem(`console:${key}`, JSON.stringify(value)); } catch {} } };
+const pct = (value) => (typeof value === "number" ? `${Math.round(value * 100)}%` : "");
 
-let libs = [], current = null, world = null, record = null, selectedChar = null, selectedPlace = null, strandFocus = null;
+let libs = [], current = null, world = null, record = null, selectedChar = null, selectedPlace = null, strandFocus = null, debugLine = null;
 const trees = new Map(), books = new Map(), expanded = new Set(), running = new Map(), worlds = new Map();
 const ask = (folder, method, params) => host.ask(folder, method, params);
 const say = (text, bad = false) => { $("status").textContent = text; $("status").className = bad ? "err" : ""; };
 const bookList = (tree) => [...tree.universes.flatMap((universe) => universe.books), ...tree.unsorted];
 
-// ---------- Layout: day and night, the side bar and the chat, the views' folds, the splitters. ----------
+// ---------- Layout: day and night, the icon strip and its panel, the splitters. ----------
+const TITLES = { characters: "Characters", places: "Places", strands: "Strands", record: "Record", problems: "Problems", debug: "Reading details", chat: "Chat" };
+let activeView = remember.get("view", "strands");
+const counts = {};
 function daylight(mode) {
   document.documentElement.dataset.daylight = mode; remember.set("daylight", mode);
   $("reader").contentWindow?.postMessage({ type: "theme", mode: mode === "day" ? "light" : "dark" }, "*");
 }
-function pane(name, open) {
-  const work = $("work"), cls = name === "side" ? "no-side" : "no-chat";
-  work.classList.toggle(cls, !open); $(name === "side" ? "t-side" : "t-chat").setAttribute("aria-pressed", String(open)); remember.set(`pane:${name}`, open);
-  if (name === "chat" && open && !hostsLoaded) loadHosts();
+const panelOpen = () => !$("work").classList.contains("no-panel");
+function setPanel(open) { $("work").classList.toggle("no-panel", !open); remember.set("panel", open); markActivity(); }
+function markActivity() { for (const button of document.querySelectorAll("#activity button")) button.classList.toggle("active", panelOpen() && button.dataset.view === activeView); }
+/** An icon pressed: its view in the panel; pressed again when it shows, the panel folds. */
+function show(view, toggle = false) {
+  if (toggle && panelOpen() && activeView === view) { setPanel(false); return; }
+  activeView = view; remember.set("view", view);
+  for (const section of document.querySelectorAll(".panel-view")) section.classList.toggle("active", section.dataset.view === view);
+  $("panel-title").textContent = TITLES[view]; $("panel-count").textContent = counts[view] ?? "";
+  if (!panelOpen()) setPanel(true); else markActivity();
+  if (view === "debug") $("badge-debug").hidden = true;
+  if (view === "chat" && !hostsLoaded) loadHosts(); else renderView(view);
 }
-const paneOpen = (name) => !$("work").classList.contains(name === "side" ? "no-side" : "no-chat");
-function fold(view, folded) {
-  const section = document.querySelector(`.view[data-view="${view}"]`);
-  section.classList.toggle("folded", folded); section.querySelector(".chev").textContent = folded ? "▸" : "▾";
-  const folds = remember.get("folds", {}); folds[view] = folded; remember.set("folds", folds);
-  if (!folded) renderView(view);
-}
-for (const head of document.querySelectorAll(".view-head")) head.addEventListener("click", (event) => { if (event.target.closest(".seg")) return; const view = head.parentElement.dataset.view; fold(view, !head.parentElement.classList.contains("folded")); });
+const setCount = (view, text) => { counts[view] = text; if (activeView === view) $("panel-count").textContent = text ?? ""; };
+for (const button of document.querySelectorAll("#activity button")) button.addEventListener("click", () => show(button.dataset.view, true));
+$("panel-fold").addEventListener("click", () => setPanel(false));
 for (const split of document.querySelectorAll(".split")) {
   split.addEventListener("pointerdown", (event) => {
-    const which = split.dataset.split, work = $("work"), start = event.clientX, style = getComputedStyle(work), key = { library: "--lib-w", side: "--side-w", chat: "--chat-w" }[which];
-    const from = parseFloat(style.getPropertyValue(key)) || 300, sign = which === "library" ? 1 : -1;
+    const which = split.dataset.split, work = $("work"), start = event.clientX, key = which === "library" ? "--lib-w" : "--panel-w";
+    const from = parseFloat(getComputedStyle(work).getPropertyValue(key)) || 320, sign = which === "library" ? 1 : -1;
     split.classList.add("dragging"); split.setPointerCapture(event.pointerId);
-    const move = (e) => { const width = Math.max(200, Math.min(720, from + sign * (e.clientX - start))); work.style.setProperty(key, `${width}px`); };
+    const move = (e) => work.style.setProperty(key, `${Math.max(220, Math.min(760, from + sign * (e.clientX - start)))}px`);
     const up = () => { split.classList.remove("dragging"); split.removeEventListener("pointermove", move); remember.set(`width:${which}`, parseFloat(getComputedStyle(work).getPropertyValue(key))); };
     split.addEventListener("pointermove", move); split.addEventListener("pointerup", up, { once: true });
   });
 }
-$("t-side").addEventListener("click", () => pane("side", !paneOpen("side")));
-$("t-chat").addEventListener("click", () => pane("chat", !paneOpen("chat")));
 $("t-daylight").addEventListener("click", () => daylight(document.documentElement.dataset.daylight === "day" ? "night" : "day"));
 document.addEventListener("keydown", (event) => {
   if (!event.metaKey || event.altKey || event.shiftKey) return;
-  if (event.key === "b") { event.preventDefault(); pane("side", !paneOpen("side")); }
-  if (event.key === "i") { event.preventDefault(); pane("chat", !paneOpen("chat")); }
+  if (event.key === "b") { event.preventDefault(); setPanel(!panelOpen()); if (panelOpen()) show(activeView); }
+  if (event.key === "i") { event.preventDefault(); show("chat", true); }
 });
 
 // ---------- The library. ----------
@@ -139,10 +145,11 @@ function openBook(folder, book, at) {
   $("welcome").hidden = true; $("reader").hidden = false;
   $("reader").src = `app://console/reader?id=${encodeURIComponent(book.id)}${at ? `&at=${encodeURIComponent(at)}` : ""}`;
   $("crumb").textContent = book.title;
-  world = null; record = null; selectedChar = null; selectedPlace = null; strandFocus = null;
-  render(); loadWorld(); renderAll();
+  world = null; record = null; selectedChar = null; selectedPlace = null; strandFocus = null; debugLine = null;
+  const badge = $("badge-problems"); badge.hidden = !book.problems; badge.textContent = book.problems > 99 ? "99+" : String(book.problems || "");
+  render(); loadWorld(); renderView(activeView);
 }
-function closeBook() { current = null; world = null; $("reader").hidden = true; $("reader").src = "about:blank"; $("welcome").hidden = false; $("crumb").textContent = ""; renderAll(); }
+function closeBook() { current = null; world = null; $("reader").hidden = true; $("reader").src = "about:blank"; $("welcome").hidden = false; $("crumb").textContent = ""; renderView(activeView); }
 const reveal = (sentence) => { if (current && sentence) $("reader").contentWindow.postMessage({ type: "reveal", sentence }, "*"); };
 async function goTo(folder, book, uri, range) {
   if (!book.reading) { say(`${book.title} has no reading yet: press ▶ to read it.`); return; }
@@ -158,6 +165,7 @@ window.addEventListener("message", async (event) => {
     catch (error) { event.source.postMessage({ reply: message.id, error: error.message }, "*"); }
     return;
   }
+  if (message.type === "selected") { debugLine = message.sentence; if (panelOpen() && activeView === "debug") renderView("debug"); else $("badge-debug").hidden = false; }
   if (message.type === "record" || message.type === "references") showRecord(message.entity);
   if (message.type === "error") say(`Reader: ${message.message}`, true);
 });
@@ -166,18 +174,17 @@ window.addEventListener("message", async (event) => {
 async function loadWorld() {
   const at = current; if (!at) return;
   const cached = worlds.get(at.key);
-  if (cached) { world = cached; renderAll(); return; }
-  try { const value = await ask(at.folder, "novel/world", { id: at.id }); worlds.set(at.key, value); if (current === at) { world = value; renderAll(); } }
-  catch (error) { if (current === at) { world = { error: error.message }; renderAll(); } }
+  if (cached) { world = cached; renderView(activeView); return; }
+  try { const value = await ask(at.folder, "novel/world", { id: at.id }); worlds.set(at.key, value); if (current === at) { world = value; renderView(activeView); } }
+  catch (error) { if (current === at) { world = { error: error.message }; renderView(activeView); } }
 }
-const views = ["characters", "places", "strands", "record", "problems"];
-const isOpen = (view) => paneOpen("side") && !document.querySelector(`.view[data-view="${view}"]`).classList.contains("folded");
-function renderAll() { for (const view of views) renderView(view); }
 function renderView(view) {
+  if (view === "chat") return;
   const body = $(`v-${view}`);
   if (view === "record") return renderRecord(body);
   if (view === "problems") return renderProblems(body);
-  if (!current) { body.innerHTML = `<p class="empty">Open a book that has a reading.</p>`; $(`n-${view}`).textContent = ""; return; }
+  if (view === "debug") return renderDebug(body);
+  if (!current) { body.innerHTML = `<p class="empty">Open a book that has a reading.</p>`; setCount(view, ""); return; }
   if (!world) { body.innerHTML = `<p class="empty">Reading the book's world…</p>`; return; }
   if (world.error) { body.innerHTML = `<p class="empty">${esc(world.error)}</p>`; return; }
   if (view === "characters") renderCharacters(body);
@@ -189,18 +196,21 @@ const dayOf = (scene) => { const nodes = timeOf(); for (let at = nodes.get(scene
 const whenOf = (scene) => (scene.when ? scene.when.split(" › ").slice(1).join(" ") : "—") + (scene.flashback ? " (past)" : "");
 const placeName = (id) => { if (!id) return "—"; const place = world.places.find((entry) => entry.id === id); return place ? place.label : id; };
 const nameOf = (id) => world.movables[id]?.[0] ?? id;
-const laneColor = (lane) => `var(--lane-${(lane ?? 0) % 10})`;
+const laneColor = (n) => `var(--lane-${(n ?? 0) % 10})`;
 const storyScenes = () => { if (!world.story) world.story = [...world.scenes].sort((a, b) => (a.story ?? 1e9) - (b.story ?? 1e9) || a.index - b.index); return world.story; };
+/** Each strand's colour: by the order strands first appear in story time. */
+const strandColors = () => { if (!world.colors) { const first = new Map(); storyScenes().forEach((scene, n) => { if (scene.strand && !first.has(scene.strand)) first.set(scene.strand, n); }); world.colors = new Map([...first].sort((a, b) => a[1] - b[1]).map(([id], n) => [id, n])); } return world.colors; };
+const colorOf = (strand) => laneColor(strandColors().get(strand) ?? 0);
 
 function renderCharacters(body) {
   const kind = remember.get("charKind", "people");
   for (const button of document.querySelectorAll("#char-kind button")) button.setAttribute("aria-pressed", String(button.dataset.kind === kind));
-  const counts = new Map();
-  for (const scene of world.scenes) { for (const id of scene.present) counts.set(id, (counts.get(id) ?? 0) + 1); for (const thing of scene.things) counts.set(thing.id, (counts.get(thing.id) ?? 0) + 1); }
+  const tally = new Map();
+  for (const scene of world.scenes) { for (const id of scene.present) tally.set(id, (tally.get(id) ?? 0) + 1); for (const thing of scene.things) tally.set(thing.id, (tally.get(thing.id) ?? 0) + 1); }
   const fits = ([, [, category, unnamed]]) => (kind === "people" ? category === "person" && !unnamed : kind === "things" ? category !== "person" && !unnamed : Boolean(unnamed));
-  const list = Object.entries(world.movables).filter(fits).sort((a, b) => (counts.get(b[0]) ?? 0) - (counts.get(a[0]) ?? 0)).slice(0, 400);
-  $("n-characters").textContent = String(Object.keys(world.movables).length);
-  body.innerHTML = list.length ? `<ul class="rows">${list.map(([id, [label, category, unnamed]]) => `<li data-char="${esc(id)}" class="${selectedChar === id ? "on" : ""}"><span class="nm ${unnamed ? "unnamed" : `c-${esc(category)}`}">${esc(label)}</span><span class="n">${counts.get(id) ?? 0} scenes</span></li>${selectedChar === id ? pathOf(id) : ""}`).join("")}</ul>` : `<p class="empty">None in this book.</p>`;
+  const list = Object.entries(world.movables).filter(fits).sort((a, b) => (tally.get(b[0]) ?? 0) - (tally.get(a[0]) ?? 0)).slice(0, 400);
+  setCount("characters", String(Object.keys(world.movables).length));
+  body.innerHTML = list.length ? `<ul class="rows">${list.map(([id, [label, category, unnamed]]) => `<li data-char="${esc(id)}" class="${selectedChar === id ? "on" : ""}"><span class="nm ${unnamed ? "unnamed" : `c-${esc(category)}`}">${esc(label)}</span><span class="n">${tally.get(id) ?? 0} scenes</span></li>${selectedChar === id ? pathOf(id) : ""}`).join("")}</ul>` : `<p class="empty">None in this book.</p>`;
   const on = body.querySelector("li.on"); if (on) on.scrollIntoView({ block: "nearest" });
 }
 /** A movable's path: scene by scene in story order, runs at the same place on the same strand joined. */
@@ -210,9 +220,9 @@ function pathOf(id) {
     if (!scene.present.includes(id) && !scene.things.some((thing) => thing.id === id)) continue;
     const last = steps.at(-1);
     if (last && last.place === scene.place && last.strand === scene.strand) { last.count++; continue; }
-    steps.push({ place: scene.place, strand: scene.strand, lane: scene.lane, first: scene, count: 1 });
+    steps.push({ place: scene.place, strand: scene.strand, first: scene, count: 1 });
   }
-  return `<li style="display:block;cursor:default;padding:0"><div class="chips" style="margin:2px 0 4px 20px"><button class="chip" data-record="${esc(id)}">Record and every line</button><span class="mini">${steps.length} ${steps.length === 1 ? "stop" : "stops"}</span></div><ul class="path">${steps.map((step) => `<li data-sentence="${esc(step.first.first)}" title="${esc(step.first.when ?? "")}"><span class="lane" style="--lc:${laneColor(step.lane)}"></span><span class="where">${esc(placeName(step.place))}${step.count > 1 ? ` <span class="mini">× ${step.count}</span>` : ""}</span><span class="when">${esc(whenOf(step.first))}</span></li>`).join("")}</ul></li>`;
+  return `<li style="display:block;cursor:default;padding:0"><div class="chips" style="margin:2px 0 4px 20px"><button class="chip" data-record="${esc(id)}">Record and every line</button><span class="mini">${steps.length} ${steps.length === 1 ? "stop" : "stops"}</span></div><ul class="path">${steps.map((step) => `<li data-sentence="${esc(step.first.first)}" title="${esc(step.first.when ?? "")}"><span class="lane" style="--lc:${colorOf(step.strand)}"></span><span class="where">${esc(placeName(step.place))}${step.count > 1 ? ` <span class="mini">× ${step.count}</span>` : ""}</span><span class="when">${esc(whenOf(step.first))}</span></li>`).join("")}</ul></li>`;
 }
 $("v-characters").addEventListener("click", (event) => {
   const sentence = event.target.closest("[data-sentence]")?.dataset.sentence; if (sentence) { reveal(sentence); return; }
@@ -220,7 +230,7 @@ $("v-characters").addEventListener("click", (event) => {
   const id = event.target.closest("[data-char]")?.dataset.char; if (!id) return;
   selectedChar = selectedChar === id ? null : id; renderView("characters");
 });
-for (const button of document.querySelectorAll("#char-kind button")) button.addEventListener("click", (event) => { event.stopPropagation(); remember.set("charKind", button.dataset.kind); renderView("characters"); });
+for (const button of document.querySelectorAll("#char-kind button")) button.addEventListener("click", () => { remember.set("charKind", button.dataset.kind); renderView("characters"); });
 
 function renderPlaces(body) {
   const children = new Map(), at = new Map(), all = new Map(world.places.map((place) => [place.id, place]));
@@ -233,7 +243,7 @@ function renderPlaces(body) {
     const kids = (children.get(place.id) ?? []).length, opened = open[place.id];
     return `<li><div class="prow ${selectedPlace === place.id ? "on" : ""}" data-place="${esc(place.id)}"><span class="chev" data-fold="${esc(place.id)}">${kids ? (opened ? "▾" : "▸") : ""}</span><span class="nm ${place.unnamed ? "unnamed" : "c-place"}">${esc(place.label)}</span><span class="sc">${esc(place.scale ?? "")}</span><span class="n">${total.get(place.id)}</span></div>${kids && opened ? branch(place.id) : ""}</li>`;
   }).join("")}</ul>`;
-  $("n-places").textContent = String(world.places.length);
+  setCount("places", String(world.places.length));
   body.innerHTML = branch("") + (selectedPlace ? placeDetail(selectedPlace, children) : "");
   body.dataset.open = JSON.stringify(open);
 }
@@ -241,72 +251,129 @@ function placeDetail(id, children) {
   const inside = new Set([id]); const add = (p) => { for (const child of children.get(p) ?? []) { inside.add(child.id); add(child.id); } }; add(id);
   const scenes = storyScenes().filter((scene) => inside.has(scene.place));
   const people = new Map(); for (const scene of scenes) for (const who of scene.present) people.set(who, (people.get(who) ?? 0) + 1);
-  return `<div class="detail"><h4>${esc(placeName(id))} · ${scenes.length} scenes</h4><div class="chips">${[...people].sort((a, b) => b[1] - a[1]).slice(0, 24).map(([who, n]) => `<button class="chip" data-char-open="${esc(who)}">${esc(nameOf(who))} ${n}</button>`).join("")}</div>${scenes.slice(0, 80).map((scene) => `<div class="scene-row" data-sentence="${esc(scene.first)}"><span><span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:${laneColor(scene.lane)}"></span> <span class="mini">${esc(whenOf(scene))}</span> ${scene.place !== id ? `<span class="c-place">${esc(placeName(scene.place))}</span>` : ""}</span><span class="mini">${esc(scene.present.slice(0, 5).map(nameOf).join(", "))}${scene.present.length > 5 ? ` +${scene.present.length - 5}` : ""}</span></div>`).join("")}</div>`;
+  return `<div class="detail"><h4>${esc(placeName(id))} · ${scenes.length} scenes</h4><div class="chips">${[...people].sort((a, b) => b[1] - a[1]).slice(0, 24).map(([who, n]) => `<button class="chip" data-char-open="${esc(who)}">${esc(nameOf(who))} ${n}</button>`).join("")}</div>${scenes.slice(0, 80).map((scene) => `<div class="scene-row" data-sentence="${esc(scene.first)}"><span><span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:${colorOf(scene.strand)}"></span> <span class="mini">${esc(whenOf(scene))}</span> ${scene.place !== id ? `<span class="c-place">${esc(placeName(scene.place))}</span>` : ""}</span><span class="mini">${esc(scene.present.slice(0, 5).map(nameOf).join(", "))}${scene.present.length > 5 ? ` +${scene.present.length - 5}` : ""}</span></div>`).join("")}</div>`;
 }
 $("v-places").addEventListener("click", (event) => {
   const sentence = event.target.closest("[data-sentence]")?.dataset.sentence; if (sentence) { reveal(sentence); return; }
-  const who = event.target.closest("[data-char-open]")?.dataset.charOpen; if (who) { selectedChar = who; fold("characters", false); renderView("characters"); return; }
+  const who = event.target.closest("[data-char-open]")?.dataset.charOpen; if (who) { selectedChar = who; show("characters"); return; }
   const folder = event.target.closest("[data-fold]")?.dataset.fold, body = $("v-places"), open = JSON.parse(body.dataset.open || "{}");
   if (folder) { open[folder] = !open[folder]; remember.set(`places:${current.key}`, open); renderView("places"); return; }
   const id = event.target.closest("[data-place]")?.dataset.place; if (!id) return;
   selectedPlace = selectedPlace === id ? null : id; renderView("places");
 });
 
+/**
+ * Strands as a git graph: time runs down, scene by scene in story order. Each strand keeps one lane for its life (lanes
+ * are reused once a strand has ended, the leftmost free first); a strand that split from others curves out of their
+ * lanes at its first scene, a strand that rejoins curves (dashed) into the lane it joins at the scene where it joined;
+ * a ref label marks where a strand begins and where it joins another. A scene in the past is a hollow node.
+ */
 function renderStrands(body) {
-  const scenes = storyScenes(), told = world.strands.filter((strand) => !strand.past), lanes = Math.max(1, ...world.strands.map((strand) => strand.lane + 1));
-  const rowOf = new Map(scenes.map((scene, n) => [scene.id, n])), span = new Map();
-  for (const strand of world.strands) { const rows = strand.scenes.map((id) => rowOf.get(id)).filter((n) => n !== undefined); if (rows.length) span.set(strand.id, [Math.min(...rows), Math.max(...rows)]); }
-  const byId = new Map(world.strands.map((strand) => [strand.id, strand])), W = 12, gw = lanes * W + 8;
-  const x = (lane) => 6 + lane * W;
-  $("n-strands").textContent = String(told.length);
-  let day = null, html = `<div class="legend">${told.map((strand) => `<button data-strand="${esc(strand.id)}" aria-pressed="${strandFocus === strand.id}" style="--lc:${laneColor(strand.lane)}" title="${esc(strand.people.map(nameOf).join(", "))}"><i></i>${esc(strand.people.slice(0, 2).map(nameOf).join(", ") || "—")}${strand.people.length > 2 ? ` +${strand.people.length - 2}` : ""} · ${strand.scenes.length}${strand.open ? "" : strand.into ? " → joins" : ""}</button>`).join("")}</div><div class="graph" style="--gw:${gw}px">`;
-  scenes.forEach((scene, r) => {
-    const today = dayOf(scene);
-    if (today && today !== day) { day = today; html += `<div class="day-row">${esc(today)}</div>`; }
-    let svg = "";
-    for (const strand of world.strands) {
-      const [from, to] = span.get(strand.id) ?? [-1, -1]; if (r < from || r > to) continue;
-      const cx = x(strand.lane), color = laneColor(strand.lane);
-      if (r > from) svg += `<line x1="${cx}" y1="0" x2="${cx}" y2="11" stroke="${color}" stroke-width="2"/>`;
-      if (r < to) svg += `<line x1="${cx}" y1="11" x2="${cx}" y2="22" stroke="${color}" stroke-width="2"/>`;
-      if (r === from) for (const parent of strand.splitFrom) { const p = byId.get(parent); if (p) svg += `<path d="M${x(p.lane)} 0 C ${x(p.lane)} 8, ${cx} 4, ${cx} 11" fill="none" stroke="${color}" stroke-width="2"/>`; }
-      if (r === to && strand.into) { const target = byId.get(strand.into); if (target) svg += `<path d="M${cx} 11 C ${cx} 18, ${x(target.lane)} 14, ${x(target.lane)} 22" fill="none" stroke="${color}" stroke-width="2" stroke-dasharray="3 2"/>`; }
+  const scenes = storyScenes(), RH = 24, W = 16, rowOf = new Map(scenes.map((scene, n) => [scene.id, n]));
+  const spans = new Map();
+  for (const strand of world.strands) { const rows = strand.scenes.map((id) => rowOf.get(id)).filter((n) => n !== undefined).sort((a, b) => a - b); if (rows.length) spans.set(strand.id, rows); }
+  const byId = new Map(world.strands.map((strand) => [strand.id, strand])), live = world.strands.filter((strand) => spans.has(strand.id)).sort((a, b) => spans.get(a.id)[0] - spans.get(b.id)[0]);
+  const joinRow = (strand) => (strand.into && strand.intoAt && rowOf.has(strand.intoAt) ? rowOf.get(strand.intoAt) : strand.into ? spans.get(strand.id).at(-1) + 1 : null);
+  const lane = new Map(), busy = [];
+  for (const strand of live) {
+    const rows = spans.get(strand.id), from = rows[0] - (strand.splitFrom.length ? 1 : 0), to = Math.max(rows.at(-1), joinRow(strand) ?? 0);
+    let column = busy.findIndex((until) => until < from); if (column < 0) column = busy.length;
+    busy[column] = to; lane.set(strand.id, column);
+  }
+  const lanes = Math.max(1, busy.length), gw = lanes * W + 12, x = (id) => 10 + (lane.get(id) ?? 0) * W, y = (row) => row * RH + RH / 2;
+  const told = live.filter((strand) => !strand.past);
+  setCount("strands", String(told.length));
+  let svg = "";
+  for (const strand of live) {
+    const rows = spans.get(strand.id), color = colorOf(strand.id), cx = x(strand.id), dim = strandFocus && strandFocus !== strand.id ? ' opacity="0.25"' : "";
+    svg += `<line x1="${cx}" y1="${y(rows[0])}" x2="${cx}" y2="${y(rows.at(-1))}" stroke="${color}" stroke-width="2"${dim}/>`;
+    for (const parent of strand.splitFrom) {
+      const p = byId.get(parent); if (!p || !spans.has(p.id)) continue;
+      const before = spans.get(p.id).filter((row) => row < rows[0]).at(-1) ?? rows[0] - 1, px = x(p.id), y0 = y(Math.max(0, before)), y1 = y(rows[0]);
+      svg += `<path d="M${px} ${y0} C ${px} ${y0 + (y1 - y0) * 0.6}, ${cx} ${y1 - (y1 - y0) * 0.6}, ${cx} ${y1}" fill="none" stroke="${color}" stroke-width="2"${dim}/>`;
     }
-    const lane = scene.lane ?? 0, own = laneColor(lane);
-    svg += scene.flashback ? `<circle cx="${x(lane)}" cy="11" r="4" fill="var(--panel)" stroke="${own}" stroke-width="2"/>` : `<circle cx="${x(lane)}" cy="11" r="4" fill="${own}"/>`;
-    const dim = strandFocus && scene.strand !== strandFocus ? " dim" : "";
-    html += `<div class="grow-row${dim}" data-sentence="${esc(scene.first)}" title="${esc(`${scene.id} · ${scene.when ?? ""}`)}"><svg width="${gw}" height="22" viewBox="0 0 ${gw} 22">${svg}</svg><span class="txt"><span class="pl">${esc(placeName(scene.place))}</span><span class="pp">${esc(scene.present.slice(0, 3).map(nameOf).join(", "))}${scene.present.length > 3 ? ` +${scene.present.length - 3}` : ""}</span></span></div>`;
+    const join = joinRow(strand);
+    if (strand.into && join !== null && byId.has(strand.into)) {
+      const tx = x(strand.into), y0 = y(rows.at(-1)), y1 = y(Math.min(join, scenes.length - 1));
+      svg += `<path d="M${cx} ${y0} C ${cx} ${y0 + (y1 - y0) * 0.6}, ${tx} ${y1 - (y1 - y0) * 0.6}, ${tx} ${y1}" fill="none" stroke="${color}" stroke-width="2" stroke-dasharray="4 3"${dim}/>`;
+    }
+  }
+  const joinsAt = new Map(); for (const strand of live) if (strand.into && strand.intoAt) (joinsAt.get(strand.intoAt) ?? joinsAt.set(strand.intoAt, []).get(strand.intoAt)).push(strand);
+  const startsAt = new Map(live.map((strand) => [spans.get(strand.id)[0], strand]));
+  const endsAt = new Map(); for (const strand of live) if (strand.into) endsAt.set(spans.get(strand.id).at(-1), strand);
+  const who = (strand) => `${strand.people.slice(0, 2).map(nameOf).join(", ") || "—"}${strand.people.length > 2 ? ` +${strand.people.length - 2}` : ""}`;
+  let day = null, rowsHtml = "";
+  scenes.forEach((scene, r) => {
+    const color = colorOf(scene.strand), cx = scene.strand && lane.has(scene.strand) ? x(scene.strand) : 10, dim = strandFocus && scene.strand !== strandFocus;
+    const merge = joinsAt.has(scene.id);
+    svg += scene.flashback ? `<circle cx="${cx}" cy="${y(r)}" r="4.5" fill="var(--panel)" stroke="${color}" stroke-width="2"${dim ? ' opacity="0.25"' : ""}/>` : merge ? `<circle cx="${cx}" cy="${y(r)}" r="6" fill="var(--panel)" stroke="${color}" stroke-width="2"/><circle cx="${cx}" cy="${y(r)}" r="3" fill="${color}"/>` : `<circle cx="${cx}" cy="${y(r)}" r="4.5" fill="${color}"${dim ? ' opacity="0.25"' : ""}/>`;
+    const today = dayOf(scene), dayTag = today && today !== day ? `<span class="day">${esc(today)}</span>` : ""; if (today) day = today;
+    const start = startsAt.get(r), end = endsAt.get(r);
+    const refs = `${start && !start.past ? `<span class="sref" style="--lc:${colorOf(start.id)}" title="${esc(start.people.map(nameOf).join(", "))}">${esc(who(start))}</span>` : ""}${end ? `<span class="sref join" style="--lc:${colorOf(end.id)}">→ ${esc(who(byId.get(end.into) ?? end))}</span>` : ""}`;
+    rowsHtml += `<div class="srow${dim ? " dim" : ""}" data-sentence="${esc(scene.first)}" title="${esc(`${scene.id} · ${scene.when ?? ""}`)}">${dayTag}${refs}<span class="pl">${esc(placeName(scene.place))}</span><span class="pp">${esc(scene.present.slice(0, 3).map(nameOf).join(", "))}${scene.present.length > 3 ? ` +${scene.present.length - 3}` : ""}</span></div>`;
   });
-  body.innerHTML = `${html}</div>`;
+  const legend = `<div class="legend">${told.map((strand) => `<button data-strand="${esc(strand.id)}" aria-pressed="${strandFocus === strand.id}" style="--lc:${colorOf(strand.id)}" title="${esc(strand.people.map(nameOf).join(", "))}"><i></i>${esc(who(strand))} · ${strand.scenes.length}${strand.open ? "" : strand.into ? " → joins" : ""}</button>`).join("")}</div>`;
+  body.innerHTML = `${legend}<div class="sgraph" style="--gw:${gw}px;--rh:${RH}px"><svg width="${gw}" height="${scenes.length * RH}" viewBox="0 0 ${gw} ${scenes.length * RH}">${svg}</svg><div class="srows">${rowsHtml}</div></div>`;
 }
 $("v-strands").addEventListener("click", (event) => {
   const strand = event.target.closest("[data-strand]")?.dataset.strand; if (strand) { strandFocus = strandFocus === strand ? null : strand; renderView("strands"); return; }
   const sentence = event.target.closest("[data-sentence]")?.dataset.sentence; if (sentence) reveal(sentence);
 });
 
+// ---------- The reading's details of a line: Jev's and the reading's records (the debug view). ----------
+async function renderDebug(body) {
+  if (!current) { body.innerHTML = `<p class="empty">Open a book that has a reading.</p>`; return; }
+  if (!debugLine) { body.innerHTML = `<p class="empty">Tap a sentence in the book: its kind and how sure the reading is, who says or does it, the names and descriptions in it and whom they mean, its times, what EM listed from it, its cards, facts and problems.</p>`; setCount("debug", ""); return; }
+  const id = debugLine, at = current;
+  body.innerHTML = `<p class="empty">Reading the records…</p>`;
+  const line = await ask(at.folder, "novel/readLine", { id: at.id, sentence: id }).catch((error) => ({ error: error.message }));
+  if (debugLine !== id || current !== at) return;
+  if (line.error) { body.innerHTML = `<p class="empty">${esc(line.error)}</p>`; return; }
+  setCount("debug", id);
+  const kind = line.kind?.kind ?? "narration";
+  const chip = (entity, label, cls = "") => `<button class="chip ${cls}" data-entity="${esc(entity)}" title="Open the record">${esc(label)}</button>`;
+  const who = (title, w) => (w ? `<li>${title}: ${w.id ? chip(w.id, w.label) : esc(w.label)} <small>${pct(w.confidence)}${w.settled ? "" : " · a guess"}${w.via ? ` · through "${esc(w.via)}"` : ""}</small></li>` : "");
+  const section = (title, rows) => (rows.length ? `<h5>${title}</h5><ul>${rows.join("")}</ul>` : "");
+  body.innerHTML = `<div class="dbg">
+    <div class="head"><span>${esc(line.chapter)}${line.scene ? ` · scene ${line.scene.index + 1} <small>${esc(line.scene.type)}</small>` : ""}</span><code>${esc(id)}</code></div>
+    <div class="k-${esc(kind)}"><div class="quote">${esc(line.text)}</div>
+      <div><span class="kind">${esc(kind)}</span> <small>${pct(line.kind?.confidence)} sure${typeof line.kind?.turn === "number" ? ` · turn ${line.kind.turn}` : ""}</small></div>
+      <div style="display:grid;gap:2px;margin-top:4px">${(line.kind?.top ?? []).map(([name, share]) => `<div class="bar k-${esc(name)}"><span>${esc(name)}</span><i style="width:${Math.round(share * 100)}%"></i><span>${pct(share)}</span></div>`).join("")}</div></div>
+    ${line.role ? section(line.role.kind === "action" ? "Who does it" : "Who says it", [who(line.role.kind === "action" ? "Does it" : "Says it", line.role.who), who("To", line.role.to)].filter(Boolean)) : ""}
+    ${section("People, places and things", line.references.map((r) => `<li>${chip(r.entity, r.label, `c-${r.category}`)} <small>${esc(r.how.join(", "))}${r.confidence !== null ? ` · ${pct(r.confidence)}` : ""}${r.settled ? "" : " · a guess"}${r.via ? ` · through "${esc(r.via)}"` : ""}</small></li>`))}
+    ${section("Descriptions", line.descriptions.map((d) => `<li>${esc(d.text)} → ${d.entity ? chip(d.entity, d.label ?? d.entity) : "<small>no one settled</small>"} <small>${esc(d.type ?? "")} ${pct(d.confidence)}</small></li>`))}
+    ${section("Times", line.times.map((t) => `<li>${esc(t.text)} <small>${esc([t.role, t.gloss].filter(Boolean).join(" · "))} ${pct(t.confidence)}</small></li>`))}
+    ${section("Listed by EM", line.listed.map((l) => `<li>${esc(l.text)} <small>→ ${esc(l.outcome ?? "?")}${l.type ? ` · ${esc(l.type)}` : ""}</small></li>`))}
+    ${section("Cards", line.cards.map((c) => `<li><b class="k-${esc(c.kind)}" style="color:var(--k)">${esc(c.kind)}</b> <span class="cf">${esc(c.id)}</span> <small>${c.lines} ${c.lines === 1 ? "line" : "lines"}${c.home ? ` · ${esc(c.home)}` : ""}</small>${c.people.length ? `<br><small>${c.people.map((p) => `${esc(p.label)} (${esc(p.how.join(", "))})`).join("; ")}</small>` : ""}</li>`))}
+    ${section("Facts", line.facts.map((f) => `<li><span class="cf">${esc(f.id)}</span>${f.about.length ? ` <small>about ${esc(f.about.join(", "))}</small>` : ""}</li>`))}
+    ${section("Problems", line.problems.map((p) => `<li class="warn">${esc(p)}</li>`))}
+    ${section("Notes", line.notes.map((n) => `<li>${esc(n.text)} <small>${esc((n.at ?? "").slice(0, 16).replace("T", " "))}</small></li>`))}
+  </div>`;
+}
+$("v-debug").addEventListener("click", (event) => { const entity = event.target.closest("[data-entity]")?.dataset.entity; if (entity) showRecord(entity); });
+
 // ---------- Record and problems. ----------
-function showRecord(entity) { record = entity; if (!paneOpen("side")) pane("side", true); fold("record", false); }
+function showRecord(entity) { record = entity; show("record"); }
 async function renderRecord(body) {
-  if (!current || !record) { body.innerHTML = `<p class="empty">Tap a name in the reader's notes, or "Record and every line" under a character, to see the record and every line that refers to it.</p>`; $("n-record").textContent = ""; return; }
+  if (!current || !record) { body.innerHTML = `<p class="empty">Tap a name in the reading details, or "Record and every line" under a character, to see the record and every line that refers to it.</p>`; setCount("record", ""); return; }
   const entity = record, at = current;
   body.innerHTML = `<p class="empty">Reading the record…</p>`;
   const link = await ask(at.folder, "novel/record", { id: at.id, entity }).catch(() => null);
   const doc = link ? await ask(at.folder, "novel/document", { uri: link.uri }).catch(() => null) : null;
   const refs = await ask(at.folder, "novel/refs", { id: at.id, entity, limit: 200 }).catch(() => null);
   if (record !== entity || current !== at) return;
-  $("n-record").textContent = link?.label ?? "";
+  setCount("record", link?.label ?? "");
   const lines = (refs?.books ?? []).map((book) => `<h4 class="mini" style="margin:12px 0 4px;text-transform:uppercase;letter-spacing:.05em">${esc(book.title)} · ${book.references} lines${book.more ? ` (first ${book.shown.length})` : ""}</h4>${book.shown.map((r) => `<div class="ref" data-line="${esc(r.line)}" data-book="${esc(book.book)}"><span class="line">${esc(r.text ?? r.line)}</span><small>${esc(r.chapterTitle ?? "")} · scene ${r.scene} · ${esc((r.how ?? []).join(", "))}${r.confidence !== undefined ? ` · ${Math.round(r.confidence * 100)}%` : ""}</small></div>`).join("")}`).join("");
   body.innerHTML = `<div class="record">${markdown(doc?.text ?? `# ${entity}`)}</div>${lines}`;
 }
 async function renderProblems(body) {
-  if (!current) { body.innerHTML = `<p class="empty">Open a book that has a reading.</p>`; $("n-problems").textContent = ""; return; }
-  if (!isOpen("problems")) { const known = current.book.problems; $("n-problems").textContent = known ? String(known) : ""; return; }
+  if (!current) { body.innerHTML = `<p class="empty">Open a book that has a reading.</p>`; setCount("problems", ""); return; }
   const at = current;
   body.innerHTML = `<p class="empty">Reading the problems…</p>`;
   const found = await ask(at.folder, "novel/bookProblems", { id: at.id, limit: 500 }).catch((error) => ({ error: error.message }));
   if (current !== at) return;
   if (found.error) { body.innerHTML = `<p class="empty">${esc(found.error)}</p>`; return; }
-  $("n-problems").textContent = String(found.total);
+  setCount("problems", String(found.total));
   body.innerHTML = found.problems.length ? found.problems.map((p) => `<div class="ref" data-line="${esc(p.line)}"><span class="problem">${esc(p.message)}</span><small>${esc(p.chapterTitle ?? "")}${p.scene ? ` · scene ${p.scene}` : ""}</small></div>`).join("") : `<p class="empty">No problems in this book's reading.</p>`;
 }
 function markdown(text) {
@@ -333,6 +400,7 @@ async function loadHosts() {
   hostsLoaded = true; $("chat-body").innerHTML = `<p class="note">Looking for sessions…</p>`;
   try { hostList = await host.agents(); } catch (error) { $("chat-body").innerHTML = `<p class="note">${esc(error.message)}</p>`; return; }
   if (!hostList.some((entry) => entry.id === chosenHost)) chosenHost = (hostList.find((entry) => entry.sessions.length) ?? hostList[0])?.id ?? null;
+  setCount("chat", String(hostList.reduce((sum, entry) => sum + entry.sessions.length, 0)));
   renderHosts(); if (openSession) showSession(openSession); else renderSessions();
 }
 function renderHosts() { $("hosts").innerHTML = hostList.map((entry) => `<button role="tab" data-host="${esc(entry.id)}" aria-selected="${entry.id === chosenHost}">${esc(entry.name)}<span class="k">${entry.sessions.length}</span></button>`).join(""); }
@@ -349,7 +417,7 @@ async function showSession(key) {
   $("chat-body").innerHTML = `<p class="note">Reading the session…</p>`;
   let transcript; try { transcript = await host.transcript(key); } catch (error) { $("chat-body").innerHTML = `<p class="note">${esc(error.message)}</p>`; return; }
   if (openSession !== key) return;
-  $("chat-body").innerHTML = `<p class="note"><b>${esc(session?.title ?? "")}</b><br>${esc(entry?.name ?? "")} · ${esc(session?.cwd ?? "")} · the last ${transcript.messages.length} messages</p>${transcript.messages.map((message) => `<div class="msg ${message.role === "user" ? "user" : "assistant"}">${esc(message.text.length > 4000 ? `${message.text.slice(0, 4000)}…` : message.text)}${message.tools ? `<span class="tools">${message.tools} tool ${message.tools === 1 ? "call" : "calls"}</span>` : ""}</div>`).join("")}`;
+  $("chat-body").innerHTML = `<p class="note"><b>${esc(session?.title ?? "")}</b><br>${esc(entry?.name ?? "")} · ${esc(session?.cwd ?? "")} · the last ${transcript.messages.length} messages</p>${transcript.messages.map((message) => `<div class="msg ${message.role === "user" ? "user" : "assistant"}">${message.text.trim() ? esc(message.text.length > 4000 ? `${message.text.slice(0, 4000)}…` : message.text) : ""}${message.tools ? `<span class="tools">${message.tools} tool ${message.tools === 1 ? "call" : "calls"}</span>` : ""}</div>`).join("")}`;
   $("chat-body").scrollTop = $("chat-body").scrollHeight;
   $("compose").hidden = !entry?.continues;
   $("compose-note").textContent = entry?.continues ? `Sent with ${entry.name}'s own command, in ${session?.cwd ? session.cwd.split("/").pop() : "its folder"}.` : "";
@@ -418,9 +486,9 @@ $("keys").addEventListener("click", enterKeys);
 $("refresh").addEventListener("click", async () => { say("Looking for new books…"); await refresh(true); say("Up to date."); });
 window.addEventListener("focus", () => refresh());
 
-// Start as it was left: day or night, the panes, the folds and the widths.
+// Start as it was left: day or night, the panel and its view, the widths.
 daylight(remember.get("daylight", "night"));
-for (const [which, key] of [["library", "--lib-w"], ["side", "--side-w"], ["chat", "--chat-w"]]) { const width = remember.get(`width:${which}`, null); if (width) $("work").style.setProperty(key, `${width}px`); }
-for (const [view, folded] of Object.entries(remember.get("folds", {}))) { const section = document.querySelector(`.view[data-view="${view}"]`); if (section) { section.classList.toggle("folded", folded); section.querySelector(".chev").textContent = folded ? "▸" : "▾"; } }
-pane("side", remember.get("pane:side", true)); pane("chat", remember.get("pane:chat", false));
-refresh().then(keyDots).then(() => { $("welcome").hidden = Boolean(current); renderAll(); });
+for (const [which, key] of [["library", "--lib-w"], ["panel", "--panel-w"]]) { const width = remember.get(`width:${which}`, null); if (width) $("work").style.setProperty(key, `${width}px`); }
+if (!TITLES[activeView]) activeView = "strands";
+show(activeView); setPanel(remember.get("panel", true));
+refresh().then(keyDots).then(() => { $("welcome").hidden = Boolean(current); renderView(activeView); });

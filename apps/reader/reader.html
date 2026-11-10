@@ -110,6 +110,9 @@ body.nospeakers .who { display: none; }
 .warn { color: var(--warn); }
 .cf { font: 10.5px var(--mono); color: var(--muted); }
 
+/* In the console the notes are its debug view: the book alone here. */
+body.console .layout { grid-template-columns: minmax(0, 1fr); }
+body.console #notes { display: none; }
 @media (max-width: 620px) {
   .layout { grid-template-columns: minmax(0, 1fr); }
   #book { padding: 14px 16px 60vh; }
@@ -164,6 +167,7 @@ const ask = (method, params) => new Promise((resolve, reject) => {
 });
 const tell = (message) => vscode?.postMessage({ ...message, book: BOOT.id });
 addEventListener("error", (event) => tell({ type: "error", message: String(event.message || event.error) }));
+if (BOOT?.host === "console") document.body.classList.add("console");
 addEventListener("unhandledrejection", (event) => tell({ type: "error", message: String(event.reason?.message || event.reason) }));
 window.addEventListener("message", (event) => {
   const message = event.data || {};
@@ -314,6 +318,8 @@ const showNotes = async (id) => {
   for (const old of document.querySelectorAll("#book .s.sel")) old.classList.remove("sel");
   for (const piece of document.querySelectorAll(`#book .s[data-id="${CSS.escape(id)}"]`)) piece.classList.add("sel");
   selected = id; save({ at: id });
+  // In the console the records of a line are its debug view's, beside the book (the user, 2026-11-10: "foldable into a debugging icon").
+  if (BOOT.host === "console") { tell({ type: "selected", sentence: id }); return; }
   if (book.mode !== "reading") { box.innerHTML = `<p class="empty">This book has no reading linked, so there are no records.</p>`; return; }
   box.innerHTML = `<p class="empty">Reading the records…</p>`;
   const line = await ask("novel/readLine", { sentence: id }).catch((error) => ({ error: error.message }));

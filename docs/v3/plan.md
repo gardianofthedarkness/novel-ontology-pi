@@ -166,7 +166,7 @@ Developer ID if it is shared.
 | --- | --- | --- |
 | Library (left) | always | folders, universes, books, chapters, scenes |
 | The book (middle) | always | the reader |
-| Side bar (right) | foldable as a whole, and each view in it | **Characters**: people and things (movables) and each one's path: where and when it is, scene by scene. **Places**: the place tree (unoriented: containment only), each place with who was there and when. **Strands**. **Record** and **Problems** of what is open |
+| Panel (right), behind an icon strip | foldable: one view at a time, each behind its icon (as VS Code's activity bar; the user, on 0.2.0) | **Characters**: people and things (movables) and each one's path: where and when it is, scene by scene. **Places**: the place tree (unoriented: containment only), each place with who was there and when. **Strands**. **Record** and **Problems** of what is open |
 | Chat (far right) | foldable | the agent hosts' existing sessions (the adapters: Claude Code, Codex, Pi, Gemini CLI and the others the registry adds), read and continued in place |
 | The bar's buttons | | fold or open the side bar, the chat; day or night (v1's two palettes) |
 
@@ -235,7 +235,7 @@ form trips it, and whether its result holds against the text.
 | P0 | this plan, corrected by the user | |
 | P1 (built 2026-11-10) | any folder as a library (workspace.md), the novel server, the `novel folder` commands, the reader (reader.md), one-click readings (reading.md); first shown in VS Code, which is set aside (§1.6) | both books read in it; a test session arranges a folder and answers citation questions against the text |
 | P2 (built 2026-11-10) | the console app as a DMG (§1.5, console.md): open folders, the library, one-click readings with the keys, the reader with its notes, records and references, problems | the DMG's app driven on both volumes; a stand-in reading run by its own runtime |
-| P3 (started 2026-11-10: the layout built, console.md §5) | the console's layout (§1.5a: foldable side bar and chat, v1's palettes; Characters, Places and Strands views; the agent hosts' sessions in the chat), then the rest of v1's console: the review's batches, settings, the warehouse, and World · Live's page as the interim world view | the views on both volumes, against the reading; a session of each installed host continued from the chat; a test session does a look pass from the app |
+| P3 (started 2026-11-10: the layout built and reshaped to an icon strip, a git-graph Strands view and a debug view, console.md §5) | the console's layout (§1.5a: foldable side bar and chat, v1's palettes; Characters, Places and Strands views; the agent hosts' sessions in the chat), then the rest of v1's console: the review's batches, settings, the warehouse, and World · Live's page as the interim world view | the views on both volumes, against the reading; a session of each installed host continued from the chat; a test session does a look pass from the app |
 | P4 | the render protocol and the Unity world client (§1.4), launched and driven by the console | volume 1's city drawn from the protocol, frames a second against the web page; a line in the reader moves the world |
 | P5 | the unit finder (render-units.md) and small Jev loops with the agent setting each step's length (§2) | volume 2's units against its 25 crossings; errors per step against W15's |
 | P6 | volume 2 again, on v3 | the run W16 could not finish |

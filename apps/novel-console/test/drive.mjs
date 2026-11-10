@@ -11,7 +11,7 @@ import { fileURLToPath } from "node:url";
 
 const here = dirname(fileURLToPath(import.meta.url)), appDir = resolve(here, "..");
 const argv = process.argv.slice(2), flag = (name) => { const at = argv.indexOf(name); return at >= 0 ? argv.splice(at, 2)[1] : null; };
-const packaged = flag("--app"); flag("--shots");
+const packaged = flag("--app"), pick = Number(flag("--book") ?? 1) - 1; flag("--shots");
 const shotsDir = (() => { const at = process.argv.indexOf("--shots"); return at >= 0 ? resolve(process.argv[at + 1]) : null; })();
 const folders = (argv[0] ?? "").split(",").filter(Boolean).map((folder) => resolve(folder));
 if (!folders.length) { console.error("usage: node test/drive.mjs <folder>[,<folder>…] [--app <path to .app>] [--shots <dir>]"); process.exit(2); }
@@ -48,53 +48,64 @@ try {
   await picture("1-library");
 
   // A book with a reading: the reader, a spoken line's notes, the cast, a record.
-  const opened = await run(`(() => { const row = [...document.querySelectorAll("#tree .node")].find((node) => /entries/.test(node.querySelector(".desc").textContent)); if (!row) return null; row.click(); return row.querySelector(".name").textContent; })()`);
+  const opened = await run(`(() => { const row = [...document.querySelectorAll("#tree .node")].filter((node) => /entries/.test(node.querySelector(".desc").textContent))[${pick}]; if (!row) return null; row.click(); return row.querySelector(".name").textContent; })()`);
   if (opened) {
     // The book opens on its first page (an EPUB's cover and plates); the reader is then sent to a spoken line, as the panel does.
     await until(() => run(`document.getElementById("reader").contentDocument?.getElementById("status")?.textContent.includes("documents loaded") || null`), "the reader's first page", 60000);
-    const spoken = await run(`(async () => { const lib = (await window.novelHost.libraries())[0].path; const tree = await window.novelHost.ask(lib, "novel/tree"); const book = [...tree.universes.flatMap((u) => u.books), ...tree.unsorted].find((b) => b.reading); const view = await window.novelHost.ask(lib, "novel/read", { id: book.id }); return Object.keys(view.speakers).filter((id) => view.kinds[id] === "spoken")[30]; })()`);
+    const spoken = await run(`(async () => { const lib = (await window.novelHost.libraries())[0].path; const tree = await window.novelHost.ask(lib, "novel/tree"); const book = [...tree.universes.flatMap((u) => u.books), ...tree.unsorted].filter((b) => b.reading)[${pick}]; const view = await window.novelHost.ask(lib, "novel/read", { id: book.id }); return Object.keys(view.speakers).filter((id) => view.kinds[id] === "spoken")[30]; })()`);
     await run(`document.getElementById("reader").contentWindow.postMessage({ type: "reveal", sentence: ${JSON.stringify(spoken)} }, "*")`);
     await until(() => run(`document.getElementById("reader").contentDocument?.querySelectorAll("#book .s").length > 20`), "the reader's sentences", 90000);
     const counts = await run(`(() => { const d = document.getElementById("reader").contentDocument; return { sentences: d.querySelectorAll("#book .s").length, marks: d.querySelectorAll("#book .m").length, speakers: d.querySelectorAll("#book .who").length, pictures: d.querySelectorAll("#book img.epub").length, status: d.getElementById("status").textContent.length }; })()`);
     step("reader", counts);
     // A spoken line with a speaker, tapped.
     const tapped = await run(`(() => { const d = document.getElementById("reader").contentDocument; const who = [...d.querySelectorAll("#book .who")][3] ?? d.querySelector("#book .who"); const line = who?.nextElementSibling; if (!line) return null; line.scrollIntoView({ block: "center" }); line.click(); return line.dataset.id; })()`);
-    const notes = await until(() => run(`(() => { const d = document.getElementById("reader").contentDocument; const h = [...d.querySelectorAll("#notes h2")].map((x) => x.textContent); return h.length ? h : null; })()`), "the notes", 20000);
-    step("notes", { line: tapped, sections: notes });
-    await picture("2-reader");
-    // The side bar's views: characters (a path), places (the tree and a place's scenes), strands (the graph).
+    // The line's details are the debug view's (the reader shows only the book).
+    const readerNotesHidden = await run(`getComputedStyle(document.getElementById("reader").contentDocument.getElementById("notes")).display === "none"`);
+    const badge = await until(() => run(`!document.getElementById("badge-debug").hidden || null`), "the debug icon's mark", 10000).catch(() => false);
+    const icon = (view) => run(`document.querySelector('#activity [data-view="${view}"]').click()`);
+    await icon("debug");
+    const notes = await until(() => run(`(() => { const h = [...document.querySelectorAll("#v-debug h5")].map((x) => x.textContent); return h.length ? h : null; })()`), "the line's details", 20000);
+    step("notes", { line: tapped, readerNotesHidden, debugMarked: Boolean(badge), sections: notes });
+    await picture("2-debug");
+    // One view at a time behind each icon: characters (a path), places (the tree and a place's scenes), strands (the graph).
+    await icon("characters");
     const characters = await until(() => run(`document.querySelectorAll("#v-characters li[data-char]").length || null`), "the characters", 30000);
     await run(`document.querySelector("#v-characters li[data-char]").click()`);
     const path = await until(() => run(`document.querySelectorAll("#v-characters .path li").length || null`), "a character's path", 10000);
-    const places = await run(`document.querySelectorAll("#v-places .prow").length`);
+    const oneAtATime = await run(`[...document.querySelectorAll(".panel-view")].filter((v) => getComputedStyle(v).display !== "none").length`);
+    await icon("places");
+    const places = await until(() => run(`document.querySelectorAll("#v-places .prow").length || null`), "the places", 10000);
     await run(`document.querySelector("#v-places .prow").click()`);
     const placeScenes = await until(() => run(`document.querySelectorAll("#v-places .scene-row").length || null`), "a place's scenes", 10000);
-    const strands = await run(`({ rows: document.querySelectorAll("#v-strands .grow-row").length, days: document.querySelectorAll("#v-strands .day-row").length, legend: document.querySelectorAll("#v-strands .legend button").length })`);
-    step("views", { characters, path, places, placeScenes, strands });
-    await picture("3-views");
-    // A strand row moves the reader; a character's record opens the Record view.
-    await run(`document.querySelectorAll("#v-strands .grow-row")[40]?.click()`);
+    await icon("strands");
+    const strands = await until(() => run(`(() => { const rows = document.querySelectorAll("#v-strands .srow").length; return rows ? { rows, nodes: document.querySelectorAll("#v-strands svg circle").length, curves: document.querySelectorAll("#v-strands svg path").length, refs: document.querySelectorAll("#v-strands .sref").length, legend: document.querySelectorAll("#v-strands .legend button").length } : null; })()`), "the strands", 10000);
+    step("views", { oneAtATime, characters, path, places, placeScenes, strands });
+    await picture("3-strands");
+    // Where a strand forks off and where one rejoins.
+    await run(`(() => { const refs = [...document.querySelectorAll("#v-strands .srow .sref:not(.join)")]; (refs[2] ?? refs[1] ?? refs[0])?.scrollIntoView({ block: "center" }); })()`);
+    await wait(300);
+    await picture("3b-fork");
+    // A strand row moves the reader; a character's record; the problems.
+    await run(`document.querySelectorAll("#v-strands .srow")[40]?.click()`);
+    await icon("characters");
     await run(`document.querySelector("#v-characters [data-record]").click()`);
     const record = await until(() => run(`(() => { const r = document.querySelector("#v-record .record h1"); const refs = document.querySelectorAll("#v-record [data-line]").length; return r && refs ? { references: refs } : null; })()`), "the record", 20000);
-    await run(`document.querySelector('.view[data-view="problems"] .view-head').click()`);
-    const problems = await until(() => run(`(() => { const t = document.getElementById("v-problems").textContent; return /Reading the problems/.test(t) ? null : document.querySelectorAll("#v-problems [data-line]").length; })()`), "the problems", 20000).catch(() => -1);
+    await icon("problems");
+    const problems = await until(() => run(`(() => { const t = document.getElementById("v-problems").textContent; return /Reading the problems/.test(t) ? null : { listed: document.querySelectorAll("#v-problems [data-line]").length }; })()`), "the problems", 20000).catch(() => -1);
     step("record and problems", { record, problems });
-    // Folding: a view, the side bar, and back; day.
-    await run(`document.querySelector('.view[data-view="places"] .view-head').click()`);
-    const folded = await run(`document.querySelector('.view[data-view="places"]').classList.contains("folded")`);
-    await run(`document.getElementById("t-side").click()`);
-    const sideHidden = await run(`getComputedStyle(document.getElementById("side")).display === "none" && document.getElementById("reader").getBoundingClientRect().width > 600`);
-    await run(`document.getElementById("t-side").click()`);
+    // The active icon folds the panel; again, it opens; day.
+    await icon("problems");
+    const folded = await run(`getComputedStyle(document.getElementById("panel")).display === "none" && document.getElementById("reader").getBoundingClientRect().width > 700`);
+    await icon("strands");
+    const reopened = await run(`getComputedStyle(document.getElementById("panel")).display !== "none"`);
     await run(`document.getElementById("t-daylight").click()`);
-    const day = await run(`document.documentElement.dataset.daylight`);
     await wait(500);
-    const readerDay = await run(`document.getElementById("reader").contentDocument.documentElement.dataset.theme`);
-    step("folding and day", { viewFolded: folded, sideHiddenReaderWide: sideHidden, day, readerDay });
+    const day = await run(`[document.documentElement.dataset.daylight, document.getElementById("reader").contentDocument.documentElement.dataset.theme]`);
+    step("folding and day", { foldedReaderWide: folded, reopened, day });
     await picture("4-day");
     await run(`document.getElementById("t-daylight").click()`);
-    await run(`document.querySelector('.view[data-view="places"] .view-head').click()`);
     // The chat: the agent hosts and their sessions; a message through a stand-in command (no real session is touched).
-    await run(`document.getElementById("t-chat").click()`);
+    await icon("chat");
     const hosts = await until(() => run(`(() => { const b = [...document.querySelectorAll("#hosts button")]; return b.length ? b.map((x) => [x.dataset.host, Number(x.querySelector(".k").textContent)]) : null; })()`), "the agent hosts", 30000);
     const claude = hosts.find(([id, n]) => id === "claude-code" && n > 0);
     let chat = { hosts };
@@ -105,11 +116,11 @@ try {
       const compose = await run(`!document.getElementById("compose").hidden`);
       await run(`(() => { document.getElementById("compose-text").value = "stand-in test message"; document.getElementById("compose").requestSubmit(); })()`);
       await until(() => run(`!document.getElementById("pending") || /Not sent/.test(document.getElementById("pending").textContent) ? true : null`), "the stand-in reply", 20000);
-      const sent = await run(`!document.querySelector("#chat-body .pending")`);
-      chat = { hosts, messages, compose, sentThroughStandIn: sent };
+      chat = { hosts, messages, compose, sentThroughStandIn: await run(`!document.querySelector("#chat-body .pending")`) };
     }
     step("chat", chat);
     await picture("5-chat");
+    await icon("strands");
   }
 
   // A book with no reading: its play button with no keys opens the keys dialog (nothing is started).

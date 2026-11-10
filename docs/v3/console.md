@@ -66,28 +66,34 @@ with volume 1's EPUB: §4.
 | the app | 371 MB on disk |
 | a stand-in reading of volume 1's EPUB by the packed app's own runtime (0.1.0) | done: 12 steps, 7,302 questions to the stand-in, none to the work model; the process ended by itself |
 
-## 5. The layout (P3's first part, 0.2.0)
+## 5. The layout (P3's first part; 0.3.0)
 
-Built to plan.md §1.5a (the user, 2026-11-10: "panels other than the left repo structure and the main body ... is all
-foldable ... like the worktree system in vscode, we can build the strand view in a side panel ... connect to existing
-sessions from all agent adapters ... a character view and place view"):
+Built to plan.md §1.5a, then reshaped on the user's word (2026-11-10, on 0.2.0): "It would be nice if we can build strands
+like real strands, forking and reunion like how vscode visualize git. Next, entire section of jev and all these stuff
+should be foldable into a debugging icon. Then, flatten each individual view into the right hand side icons like vscode."
 
 | Area | What it does |
 | --- | --- |
-| Library, book | always there; the library's width drags |
-| Side bar (⌘B) | five views, each folding to its header, the open ones sharing the height: **Characters** (people, things, the unnamed; a movable's path scene by scene in story order, runs at one place on one strand joined, each stop with its strand's colour and its time; a stop opens its scene), **Places** (the place tree, unordered, each place with how many scenes are in it and under it; a place lists its people and its scenes), **Strands** (a graph like a source-control graph: time runs down by the calendar's days, each strand a lane in its own colour, a split drawn from the lane it left, a union dashed into the lane it joins, a scene in the past hollow; a scene opens in the book; a strand's chip dims the others), **Record**, **Problems** |
-| Chat (⌘I) | the hosts the adapter registry lists (src/adapters/hosts.ts), each with its sessions on this Mac, newest first; a session's last messages; continued in place where the host's command can resume it (Claude Code, with `claude -p --resume`, in the session's own folder). Codex (no command installed), Gemini CLI (resumes only by an index in its project) and Pi (its console host's) are read only; Cursor and Muse keep no sessions here |
+| Library, book | always there; the library's width drags; the book shows the reader alone |
+| Icon strip (right edge) | as VS Code's activity bar: one icon per view, one view at a time in the panel beside it; the active icon pressed again folds the panel (⌘B too); ⌘I opens the chat. Icons: Characters, Places, Strands, Record, Problems (with the book's count), Reading details (a mark when a line is tapped), Chat |
+| Characters | people, things, the unnamed; a movable's path scene by scene in story order, runs at one place on one strand joined, each stop in its strand's colour with its time; a stop opens its scene |
+| Places | the place tree, unordered, each place with how many scenes are in it and under it; a place lists its people and its scenes |
+| Strands | a git graph: one drawing, time running down scene by scene in story order; each strand one lane for its life (lanes reused once a strand ends), in its own colour; a strand that split from others curves out of their lanes at its first scene, with a label of its people; a strand that rejoins curves (dashed) into the lane it joins at the scene where it joined, marked as a merge node, with a "→ …" label; a scene in the past is hollow; days tagged where they change; a strand's chip dims the others; a row opens its scene |
+| Reading details (the debug icon) | Jev's and the reading's records of the line tapped in the book: kind and how sure, the top kinds, who says or does it and to whom, references, descriptions, times, EM's listing, cards, facts, problems, notes. The reader no longer shows them itself in the console |
+| Record, Problems | as before |
+| Chat | the hosts the adapter registry lists (src/adapters/hosts.ts), each with its sessions on this Mac, newest first; a session's last messages (runs of tool calls joined); continued in place where the host's command can resume it (Claude Code, `claude -p --resume`, in the session's own folder). Codex, Gemini CLI and Pi are read only; Cursor and Muse keep no sessions here |
 | Day or night | v1's World · Live palettes; the reader follows |
-| Remembered | each pane's open state, each view's fold, the widths, the palette |
+| Remembered | the panel's state and view, the widths, the palette |
 
 The views come from one server answer, `novel/world` (src/v3/world.ts): the reading's time tree, its place tree, each
 scene with who and what is present, its time node and its place, and the strands, built with the director's own
 builders (readingScript, segmentWorld, strandsFile) from the reading alone. Volume 1: 286 scenes, 131 places, 100
 movables, 3 strands, in 0.1 s; volume 2: 348 scenes, 138 places, 143 movables, 11 strands, in 0.15 s.
 
-Sessions found on this Mac (2026-11-10): Pi 37, Codex 40, Claude Code 6, Gemini CLI 2, Cursor 0, Muse 0. The driver
-continues a session only through a stand-in command (`NOVEL_CONSOLE_AGENT_COMMAND`), so no real session is touched in a
-test.
+Driven from the 0.3.0 DMG: volume 1's graph has 3 lanes' strands with 3 fork and join curves and 5 labels; volume 2's has
+10 strands told, 12 curves and 15 labels; one view shows at a time; the reader's own notes are hidden and the debug icon
+is marked when a line is tapped; folding the panel widens the book. Sessions found on this Mac: Pi 37, Codex 40, Claude
+Code 6, Gemini CLI 2. A session is continued in a test only through a stand-in command (`NOVEL_CONSOLE_AGENT_COMMAND`).
 
 ## 6. Not yet
 
