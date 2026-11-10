@@ -65,6 +65,7 @@ const until = async (probe, what, most = 30000) => { for (const start = Date.now
 let socket, seq = 0;
 const pending = new Map();
 const send = (method, params = {}) => new Promise((done, fail) => { const id = ++seq; pending.set(id, { done, fail }); socket.send(JSON.stringify({ id, method, params })); });
+const host = (expression) => run(expression);
 const run = async (expression) => { const reply = await send("Runtime.evaluate", { expression, awaitPromise: true, returnByValue: true }); if (reply.exceptionDetails) throw new Error(reply.exceptionDetails.exception?.description ?? reply.exceptionDetails.text); return reply.result.value; };
 const picture = async (name) => { if (!shotsDir) return; mkdirSync(shotsDir, { recursive: true }); const { data } = await send("Page.captureScreenshot", { format: "png" }); writeFileSync(join(shotsDir, `${name}.png`), Buffer.from(data, "base64"), { mode: 0o600 }); };
 
@@ -205,7 +206,10 @@ try {
   }
 
   // A book with no reading: its play button with no keys opens the keys dialog (nothing is started).
-  const play = await run(`(() => { const button = document.querySelector("#tree .act.run"); if (!button) return false; button.click(); return true; })()`);
+  // Only with no keys: with keys entered, a play button starts a paid reading, which is the user's button, never a test's.
+  const keyed = await host(`novelHost.keys().then((keys) => Boolean(keys.jev || keys.work))`);
+  const play = !keyed && await run(`(() => { const button = [...document.querySelectorAll("#tree .act.run")].find((item) => item.textContent.trim() === "\u25b6"); if (!button) return false; button.click(); return true; })()`);
+  if (keyed) step("play without keys", { skipped: "keys are entered: a play button would start a paid reading" });
   if (play) {
     const dialog = await until(() => run(`document.getElementById("keys-dialog").open || null`), "the keys dialog", 10000).catch(() => false);
     const states = await run(`[document.getElementById("state-jev").textContent, document.getElementById("state-work").textContent]`);
