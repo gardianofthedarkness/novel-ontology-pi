@@ -49,7 +49,7 @@ code { font: 12px var(--mono); }
 .dot.on { background: var(--ok); }
 
 /* The work area: library | book | the panel | the icon strip (VS Code's activity bar, on the right). */
-.work { --lib-w: 280px; --panel-w: 380px; --left: var(--lib-w) 4px; --right: 4px var(--panel-w); display: grid; grid-template-columns: 44px var(--left) minmax(0, 1fr) var(--right); min-height: 0; }
+.work { --lib-w: 340px; --panel-w: 380px; --left: var(--lib-w) 4px; --right: 4px var(--panel-w); display: grid; grid-template-columns: 44px var(--left) minmax(0, 1fr) var(--right); min-height: 0; }
 .work.no-panel { --right: 0 0; }
 .work.no-left { --left: 0 0; }
 .work.no-left .library, .work.no-left [data-split="library"] { display: none; }

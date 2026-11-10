@@ -68,7 +68,7 @@ const serverOf = (folder) => {
 const listing = () => libraries().map((folder) => ({ path: folder, name: path.basename(folder), exists: fs.existsSync(folder) }));
 
 // What a page may ask the server: the novel requests, never a key's entry (that goes through setKeys below).
-const ALLOWED = new Set(["novel/scan", "novel/tree", "novel/book", "novel/cast", "novel/document", "novel/record", "novel/refs", "novel/bookProblems", "novel/world", "novel/search",
+const ALLOWED = new Set(["novel/scan", "novel/tree", "novel/book", "novel/cast", "novel/document", "novel/record", "novel/refs", "novel/bookProblems", "novel/world", "novel/search", "novel/basicStep", "novel/basic", "novel/series", "novel/arrange",
   "novel/read", "novel/readDocument", "novel/readLine", "novel/readPortrait", "novel/locate", "novel/sentenceAt", "novel/startReading", "novel/reading", "novel/stopReading"]);
 const reading = () => import(pathToFileURL(path.join(backend, "dist", "src", "v3", "reading.js")).href);
 
@@ -76,14 +76,24 @@ ipcMain.handle("libraries", () => listing());
 ipcMain.handle("addLibrary", async (event, given) => {
   let folder = given;
   if (!folder) {
-    const picked = await dialog.showOpenDialog(BrowserWindow.fromWebContents(event.sender), { title: "Add a folder of books", buttonLabel: "Add", properties: ["openDirectory", "createDirectory"] });
+    const picked = await dialog.showOpenDialog(BrowserWindow.fromWebContents(event.sender), { title: "Add a folder of books", buttonLabel: "Add", defaultPath: app.getPath("documents"), properties: ["openDirectory", "createDirectory"] });
     if (picked.canceled || !picked.filePaths[0]) return listing();
     folder = picked.filePaths[0];
   }
   folder = path.resolve(folder);
   if (!libraries().includes(folder)) keep([...libraries(), folder]);
-  const server = serverOf(folder); await server.ready; await server.request("novel/scan");
+  // A folder the console opens picks up EPUBs by itself; text files come in one by one (Import).
+  const server = serverOf(folder); await server.ready; await server.request("novel/scan", { found: ["epub"] });
   return listing();
+});
+ipcMain.handle("importText", async (event, folder) => {
+  if (!libraries().includes(folder)) throw new Error("That folder is not one of the console's libraries.");
+  const picked = await dialog.showOpenDialog(BrowserWindow.fromWebContents(event.sender), { title: "Import text files as books", buttonLabel: "Import", defaultPath: folder, properties: ["openFile", "multiSelections"], filters: [{ name: "Text", extensions: ["txt", "md"] }] });
+  if (picked.canceled || !picked.filePaths.length) return null;
+  const outside = picked.filePaths.filter((file) => path.relative(folder, file).startsWith(".."));
+  if (outside.length) throw new Error(`Only files inside ${path.basename(folder)} can be imported (${outside.length} were outside it).`);
+  const server = serverOf(folder); await server.ready;
+  return server.request("novel/import", { paths: picked.filePaths.map((file) => path.relative(folder, file)) });
 });
 ipcMain.handle("removeLibrary", (event, folder) => { servers.get(folder)?.stop(); servers.delete(folder); keep(libraries().filter((entry) => entry !== folder)); return listing(); });
 ipcMain.handle("ask", async (event, folder, method, params) => {

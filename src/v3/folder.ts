@@ -51,7 +51,13 @@ export interface FolderFile {
 export interface ReadingLink { novel: string; data: string; sourceSha256: string; sameText: boolean }
 export interface FolderBook { file: string; title?: string; reading?: ReadingLink }
 export interface FolderUniverse { id: string; name: string; why?: string; books: FolderBook[] }
-export interface FolderState { version: 1; files: FolderFile[]; universes: FolderUniverse[] }
+export interface FolderState {
+  version: 1; files: FolderFile[]; universes: FolderUniverse[];
+  /** The kinds a scan picks up by itself (a folder the console opens: EPUBs only); none set: EPUBs and text files. */
+  found?: ("epub" | "text")[];
+  /** Text files brought in one by one (the console's Import), picked up whatever `found` says. */
+  imported?: string[];
+}
 
 const sha = (bytes: string | Buffer) => createHash("sha256").update(bytes).digest("hex");
 const statePath = (folder: string) => join(folder, STATE_DIR, STATE_FILE);
@@ -72,20 +78,23 @@ async function saveState(folder: string, state: FolderState): Promise<void> {
   await rename(draft, target);
 }
 
-async function listFiles(folder: string): Promise<{ path: string; size: number; mtimeMs: number }[]> {
-  const found: { path: string; size: number; mtimeMs: number }[] = [];
+async function listFiles(folder: string, found: ("epub" | "text")[] = ["epub", "text"], imported: string[] = []): Promise<{ path: string; size: number; mtimeMs: number }[]> {
+  const take = new Set(imported);
+  const list: { path: string; size: number; mtimeMs: number }[] = [];
   const walk = async (directory: string): Promise<void> => {
     for (const entry of (await readdir(directory, { withFileTypes: true })).sort((a, b) => a.name.localeCompare(b.name))) {
       if (entry.name.startsWith(".")) continue;
       const full = join(directory, entry.name);
       if (entry.isDirectory()) { if (!SKIP.has(entry.name)) await walk(full); continue; }
       if (!entry.isFile() || !(extname(entry.name).toLowerCase() in KINDS)) continue;
+      const path = slash(relative(folder, full));
+      if (!found.includes(KINDS[extname(entry.name).toLowerCase()]) && !take.has(path)) continue;
       const info = await stat(full);
-      found.push({ path: slash(relative(folder, full)), size: info.size, mtimeMs: Math.round(info.mtimeMs) });
+      list.push({ path, size: info.size, mtimeMs: Math.round(info.mtimeMs) });
     }
   };
   await walk(folder);
-  return found;
+  return list;
 }
 
 const chaptersOf = (text: string): FolderChapter[] => splitChapters(text).map((chapter) => ({ title: chapter.title, start: chapter.startOffset, end: chapter.endOffset }));
@@ -119,8 +128,11 @@ export interface ScanReport { folder: string; files: number; added: string[]; ch
  * in a universe follows its path), files that moved (the same bytes at another path), files that are gone (kept as missing
  * while a universe holds them, dropped otherwise). A file whose size and time are unchanged is not read again.
  */
-export async function scanFolder(folder: string): Promise<ScanReport> {
-  const root = resolve(folder), state = await loadState(root), listed = await listFiles(root);
+export async function scanFolder(folder: string, options: { found?: ("epub" | "text")[] } = {}): Promise<ScanReport> {
+  const root = resolve(folder), state = await loadState(root);
+  // The first scan of a folder may say what it picks up by itself (the console: EPUBs only); later scans keep it.
+  if (options.found && !state.found && !state.files.length) state.found = options.found;
+  const listed = await listFiles(root, state.found, state.imported);
   const before = new Map(state.files.map((file) => [file.path, file])), held = new Set(state.universes.flatMap((universe) => universe.books.map((book) => book.file)));
   const report: ScanReport = { folder: root, files: 0, added: [], changed: [], moved: [], missing: [], gone: [], unread: [], unsorted: 0, universes: state.universes.length };
   const now: FolderFile[] = [], byId = new Map<string, FolderFile>(), replaced = new Map<string, string>();
@@ -153,6 +165,20 @@ export async function scanFolder(folder: string): Promise<ScanReport> {
   report.unsorted = now.filter((file) => !file.missing && !file.unread && !placed.has(file.id)).length;
   await saveState(root, state);
   return report;
+}
+
+/** Text files brought into the folder's books one by one (a scan picks them up from then on). Paths inside the folder. */
+export async function importFiles(folder: string, paths: string[]): Promise<ScanReport> {
+  const root = resolve(folder), state = await loadState(root), wanted = new Set(state.imported ?? []);
+  for (const path of paths) {
+    const full = resolve(root, path), rel = slash(relative(root, full));
+    if (rel.startsWith("..") || isAbsolute(rel)) throw new NovelError(`${path} is not inside ${root}.`, { aspect: "path", code: "FOLDER_CANNOT_READ" });
+    if (KINDS[extname(rel).toLowerCase()] !== "text") throw new NovelError(`${path} is not a text file (.txt or .md).`, { aspect: "usage", code: "INVALID_ARGUMENT" });
+    wanted.add(rel);
+  }
+  state.imported = [...wanted];
+  await saveState(root, state);
+  return scanFolder(root);
 }
 
 const slug = (name: string, taken: Set<string>): string => {

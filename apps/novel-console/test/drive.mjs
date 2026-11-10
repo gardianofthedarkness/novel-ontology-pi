@@ -11,6 +11,7 @@ import { fileURLToPath } from "node:url";
 
 const here = dirname(fileURLToPath(import.meta.url)), appDir = resolve(here, "..");
 const argv = process.argv.slice(2), flag = (name) => { const at = argv.indexOf(name); return at >= 0 ? argv.splice(at, 2)[1] : null; };
+const arrange = argv.includes("--arrange"); if (arrange) argv.splice(argv.indexOf("--arrange"), 1);
 const packaged = flag("--app"), pick = Number(flag("--book") ?? 1) - 1; flag("--shots");
 const shotsDir = (() => { const at = process.argv.indexOf("--shots"); return at >= 0 ? resolve(process.argv[at + 1]) : null; })();
 const folders = (argv[0] ?? "").split(",").filter(Boolean).map((folder) => resolve(folder));
@@ -45,7 +46,16 @@ try {
   // The libraries' trees.
   const tree = await until(() => run(`(() => { const rows = [...document.querySelectorAll("#tree .node")]; return rows.some((row) => row.querySelector(".book")) ? rows.map((row) => ({ name: row.querySelector(".name").textContent, desc: row.querySelector(".desc").textContent, cls: row.className, play: Boolean(row.querySelector(".act.run")) })) : null; })()`), "the libraries' books");
   step("tree", { libraries: tree.filter((row) => row.cls.includes("lib")).length, books: tree.filter((row) => row.desc && !row.cls.includes("lib") && !row.cls.includes("group")).length, playButtons: tree.filter((row) => row.play).length });
+  // The basic layer (no model): every book's row says its chapters, lines and dialogue; the series found are offered.
+  const basic = await until(() => run(`(() => { const rows = [...document.querySelectorAll("#tree .node")]; const read = rows.filter((row) => /% spoken/.test(row.querySelector(".desc").textContent)).length; const series = rows.filter((row) => row.querySelector(".act") && row.querySelector(".act").textContent === "Arrange").length; return read && (series || !/Basic layer: /.test(document.getElementById("status").textContent)) ? { booksWithBasic: read, seriesFound: series, status: document.getElementById("status").textContent.replace(/[^\x20-\x7e]/g, "?") } : null; })()`), "the basic layer", 120000).catch(() => null);
+  step("basic layer", basic ?? { booksWithBasic: 0 });
   await picture("1-library");
+  if (arrange && basic?.seriesFound) {
+    await run(`[...document.querySelectorAll("#tree .node")].find((row) => row.querySelector(".act")?.textContent === "Arrange").querySelector(".act").click()`);
+    const universes = await until(() => run(`(() => { const n = [...document.querySelectorAll("#tree .node")].filter((row) => row.querySelector(".ic")?.textContent === "◎" && /books?$/.test(row.querySelector(".desc").textContent)).length; return n || null; })()`), "the arranged universe", 20000);
+    step("arranged", { universes });
+    await picture("1b-arranged");
+  }
 
   // A book with a reading: the reader, a spoken line's notes, the cast, a record.
   const opened = await run(`(() => { const row = [...document.querySelectorAll("#tree .node")].filter((node) => /entries/.test(node.querySelector(".desc").textContent))[${pick}]; if (!row) return null; row.click(); return row.querySelector(".name").textContent; })()`);

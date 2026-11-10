@@ -141,8 +141,14 @@ $("l-readings").addEventListener("click", (event) => {
 });
 
 // ---------- The library. ----------
+const firstScans = new Set();
 async function load(folder) {
-  try { const tree = await ask(folder, "novel/tree"); trees.set(folder, tree); for (const book of bookList(tree)) books.set(`${folder}|${book.id}`, book); }
+  try {
+    let tree = await ask(folder, "novel/tree");
+    // A folder never scanned (or whose .novel is gone): scanned once, EPUBs only, as a folder the console opens.
+    if (!tree.universes.length && !tree.unsorted.length && !firstScans.has(folder)) { firstScans.add(folder); say(`Looking for books in ${folder.split("/").pop()}…`); await ask(folder, "novel/scan", { found: ["epub"] }); tree = await ask(folder, "novel/tree"); }
+    trees.set(folder, tree); for (const book of bookList(tree)) books.set(`${folder}|${book.id}`, book);
+  }
   catch (error) { trees.set(folder, { error: error.message, universes: [], unsorted: [] }); }
 }
 async function refresh(scan = false) {
@@ -150,6 +156,28 @@ async function refresh(scan = false) {
   for (const lib of libs) { if (!lib.exists) continue; if (scan) await ask(lib.path, "novel/scan").catch(() => {}); await load(lib.path); if (!expanded.has(lib.path) && !expanded.has(`closed:${lib.path}`)) expanded.add(lib.path); }
   $("welcome").hidden = Boolean(current);
   render(); follow();
+  for (const lib of libs) if (lib.exists) basicLayer(lib.path);
+}
+// The basic layer (no model): every book of a folder read for its title, series, volume, chapters, lines, dialogue and
+// name-like spans, a few books at a time so the console keeps answering; then the series found among books not arranged.
+const basicRunning = new Set(), seriesOf = new Map();
+async function basicLayer(folder) {
+  if (basicRunning.has(folder)) return;
+  basicRunning.add(folder);
+  try {
+    for (let step = 0; step < 500; step++) {
+      const result = await ask(folder, "novel/basicStep", { most: 3 }).catch(() => null);
+      if (!result) break;
+      if (result.done.length || result.failed.length) say(`Basic layer: ${result.total - result.left} of ${result.total} books in ${folder.split("/").pop()}`);
+      if (!result.left) { if (step > 0) say(`Basic layer done: ${result.total} books in ${folder.split("/").pop()}${result.failed.length ? `, ${result.failed.length} could not be read` : ""}.`); break; }
+    }
+    seriesOf.set(folder, await ask(folder, "novel/series").catch(() => []));
+    await load(folder); render();
+  } finally { basicRunning.delete(folder); }
+}
+async function arrangeSeries(folder, series) {
+  try { const made = await ask(folder, "novel/arrange", { name: series.name, files: series.books.map((book) => book.file) }); say(`${series.name}: a universe of ${made.books} books, in volume order.`); seriesOf.set(folder, await ask(folder, "novel/series").catch(() => [])); await load(folder); render(); }
+  catch (error) { say(error.message, true); }
 }
 function node({ depth = 0, chev = null, icon = "", name = "", nameClass = "", desc = "", action = null, cls = "", title = "", onClick = null }) {
   const row = document.createElement("div");
@@ -162,12 +190,14 @@ function node({ depth = 0, chev = null, icon = "", name = "", nameClass = "", de
 function actionButton(label, cls, title, run) { const button = document.createElement("button"); button.className = `act ${cls}`; button.innerHTML = label; button.title = title; button.addEventListener("click", (event) => { event.stopPropagation(); run(); }); return button; }
 function bookRow(folder, book, depth) {
   const key = `${folder}|${book.id}`, job = book.job, reading = job?.state === "running", open = expanded.has(key);
-  const desc = book.missing ? "missing" : book.unread ? "not readable" : reading ? `reading… ${job.now ?? ""}` : book.reading ? `${book.symbols} entries${book.problems ? ` · ${book.problems} problems` : ""}` : job?.state === "failed" ? "reading failed" : job?.state === "stopped" ? "reading stopped" : `${Math.round(book.chars / 1000)}k characters`;
+  const basic = book.basic && !book.basic.failed ? book.basic : null;
+  const basicDesc = basic ? `${book.chapters} ch · ${(basic.lines / 1000).toFixed(1)}k lines · ${basic.spoken}% spoken` : `${Math.round(book.chars / 1000)}k characters`;
+  const desc = book.missing ? "missing" : book.unread ? "not readable" : reading ? `reading… ${job.now ?? ""}` : book.reading ? `${book.symbols} entries${book.problems ? ` · ${book.problems} problems` : ""}` : job?.state === "failed" ? "reading failed" : job?.state === "stopped" ? "reading stopped" : basicDesc;
   let action = null;
   if (reading) action = actionButton(`<span class="spin"></span>`, "", "Reading. Press to stop it (what it asked stays cached).", () => stopReading(folder, book));
   else if (!book.reading && !book.missing && !book.unread) action = actionButton("▶", "run", `Read this book with Jev and the work model (about $${(book.chars * 0.35 / 125000).toFixed(2)})`, () => runReading(folder, book));
   const row = node({ depth, chev: book.missing ? null : open, icon: book.reading ? "📖" : "📄", name: book.title, nameClass: "book", desc, action, cls: current?.key === key ? "current" : "",
-    title: `${book.path}${job?.error ? `\nLast reading ${job.state}: ${job.error}` : ""}`,
+    title: `${book.path}${basic ? `\n${[basic.author, basic.language].filter(Boolean).join(" · ")}${basic.volume !== null ? ` · volume ${basic.volume}` : ""}\n${basic.chapters} chapters · ${basic.lines} lines · ${basic.spoken}% in quotes · ${basic.pictures} pictures${basic.names.length ? `\nNames by pattern: ${basic.names.join(", ")}` : ""}` : ""}${book.copies?.length ? `\nAlso at: ${book.copies.join(", ")}` : ""}${job?.error ? `\nLast reading ${job.state}: ${job.error}` : ""}`,
     onClick: (event) => { if (event.target.closest(".chev")) { toggle(key); return; } if (book.reading) openBook(folder, book, null); else { toggle(key); say(`${book.title} has no reading yet: press ▶ to read it.`); } } });
   const rows = [row];
   if (open && !book.missing) {
@@ -197,6 +227,12 @@ function render() {
       tree.append(node({ depth: 1, chev: uOpen, icon: "◎", name: universe.name, nameClass: "book", desc: `${universe.books.length} ${universe.books.length === 1 ? "book" : "books"}`, onClick: () => toggle(`closed:${key}`) }));
       if (uOpen) for (const book of universe.books) tree.append(...bookRow(lib.path, book, 2));
     }
+    const found = seriesOf.get(lib.path) ?? [];
+    if (found.length) {
+      tree.append(node({ depth: 1, name: `Series found · ${found.length}`, cls: "group", title: "Books whose titles name one series, the volume taken out (the basic layer, no model)" }));
+      for (const series of found) tree.append(node({ depth: 2, icon: "◎", name: series.name, nameClass: "book", desc: `${series.books.length} books · volumes ${series.books.map((book) => book.volume ?? "?").join(", ")}`, title: series.books.map((book) => book.title).join("\n"),
+        action: actionButton("Arrange", "", `Make "${series.name}" a universe, its books in volume order`, () => arrangeSeries(lib.path, series)) }));
+    }
     if (data.unsorted.length) { tree.append(node({ depth: 1, name: `Not arranged · ${data.unsorted.length}`, cls: "group" })); for (const book of data.unsorted) tree.append(...bookRow(lib.path, book, 2)); }
     if (!data.universes.length && !data.unsorted.length) tree.append(node({ depth: 1, name: "No EPUB or text files here.", cls: "group" }));
   }
@@ -204,7 +240,8 @@ function render() {
 }
 const toggle = (key) => { if (expanded.has(key)) expanded.delete(key); else expanded.add(key); render(); };
 async function libraryMenu(lib) {
-  const choice = await chooser(lib.name, lib.path, [["Show in Finder", "reveal"], ["Remove from the console", "remove"]]);
+  const choice = await chooser(lib.name, lib.path, [["Import a text file…", "import"], ["Show in Finder", "reveal"], ["Remove from the console", "remove"]]);
+  if (choice === "import") { try { const report = await host.importText(lib.path); if (report) { say(`Imported: ${report.added.length} new ${report.added.length === 1 ? "book" : "books"}.`); await load(lib.path); render(); basicLayer(lib.path); } } catch (error) { say(error.message, true); } }
   if (choice === "reveal") host.reveal(lib.path);
   if (choice === "remove") { libs = await host.removeLibrary(lib.path); trees.delete(lib.path); if (current?.folder === lib.path) closeBook(); render(); }
 }

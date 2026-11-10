@@ -6,6 +6,7 @@ contextBridge.exposeInMainWorld("novelHost", {
   libraries: () => ipcRenderer.invoke("libraries"),
   addLibrary: (folder) => ipcRenderer.invoke("addLibrary", folder),
   removeLibrary: (folder) => ipcRenderer.invoke("removeLibrary", folder),
+  importText: (folder) => ipcRenderer.invoke("importText", folder),
   ask: (folder, method, params) => ipcRenderer.invoke("ask", folder, method, params),
   keys: () => ipcRenderer.invoke("keys"),
   setKeys: (keys) => ipcRenderer.invoke("setKeys", keys),

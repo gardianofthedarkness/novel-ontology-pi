@@ -12,7 +12,9 @@
 import { join } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { recordOf, type OutlineNode, type Span } from "./book.js";
-import { folderTree, scanFolder } from "./folder.js";
+import { folderTree, importFiles, scanFolder } from "./folder.js";
+import { basicStep, readBasic, seriesSuggestions } from "./basic.js";
+import { putBook, universeAdd } from "./folder.js";
 import { readerBook, readerDocument, readerLine, readerPortrait } from "./reader.js";
 import { keyStatus, readingStatus, setKey, startReading, stopReading } from "./reading.js";
 import { worldView } from "./world.js";
@@ -67,7 +69,21 @@ export class NovelServer {
       }
       case "initialized": case "textDocument/didChange": case "textDocument/didClose": case "$/cancelRequest": case "$/setTrace": case "workspace/didChangeConfiguration": case "workspace/didChangeWatchedFiles": return null;
       case "shutdown": return null;
-      case "novel/scan": return scanFolder(this.ws.folder);
+      case "novel/scan": return scanFolder(this.ws.folder, Array.isArray(params.found) ? { found: params.found as ("epub" | "text")[] } : {});
+      // The basic layer (docs/v3/basic.md): a few books at a time, so the server answers between them; a book's own;
+      // series among the books not arranged; a series made a universe, its books in volume order; text files imported.
+      case "novel/basicStep": return basicStep(this.ws.folder, Number(params.most ?? 3));
+      case "novel/basic": { const state = await this.ws.current(); const file = state.files.find((entry) => entry.id === params.id || entry.path === params.id); return file ? readBasic(this.ws.folder, file.id) : null; }
+      case "novel/series": return seriesSuggestions(this.ws.folder);
+      case "novel/arrange": {
+        const name = String(params.name ?? "").trim(), files = (params.files as string[] | undefined) ?? [];
+        if (!name || !files.length) throw new Error("A universe needs a name and its books.");
+        const state = await this.ws.current(), existing = state.universes.find((universe) => universe.name === name);
+        const id = existing?.id ?? (await universeAdd(this.ws.folder, name, { why: "a series found by its titles (the basic layer)" }) as { universe: string }).universe;
+        for (const file of files) await putBook(this.ws.folder, file, id);
+        return { universe: id, books: files.length };
+      }
+      case "novel/import": return importFiles(this.ws.folder, (params.paths as string[] | undefined) ?? []);
       case "novel/tree": return this.tree();
       case "novel/book": return this.bookTree(String(params.id));
       case "novel/cast": return this.castOf(String(params.id), params as { query?: string; category?: string; limit?: number });
@@ -186,10 +202,12 @@ export class NovelServer {
     const tree = await folderTree(this.ws.folder) as { universes: { books: Json[] }[]; unsorted: Json[] };
     const state = await this.ws.current(), byId = new Map(state.files.map((file) => [file.id, file]));
     const dress = async (entry: Json) => {
-      const open = entry.missing || entry.unread ? null : await this.ws.book(String(entry.id)).catch(() => null), file = byId.get(String(entry.id));
-      entry.uri = open ? bookUri(this.ws.folder, open) : null;
+      const open = entry.missing || entry.unread || !entry.reading ? null : await this.ws.book(String(entry.id)).catch(() => null), file = byId.get(String(entry.id));
+      entry.uri = open ? bookUri(this.ws.folder, open) : file && !file.missing && !file.unread ? (file.kind === "epub" ? `${SCHEME}:/book/${file.id}/${safe(String(entry.title ?? file.title))}.txt` : pathToFileURL(join(this.ws.folder, file.path)).href) : null;
       entry.fileUri = file && !file.missing ? pathToFileURL(join(this.ws.folder, file.path)).href : null;
       entry.problems = open?.index?.problems.length ?? 0;
+      const basic = await readBasic(this.ws.folder, String(entry.id)) as (Awaited<ReturnType<typeof readBasic>> & { failed?: string }) | null;
+      entry.basic = basic ? (basic.failed ? { failed: basic.failed } : { author: basic.author, language: basic.language, series: basic.series, volume: basic.volume, chapters: basic.chapters, lines: basic.lines, spoken: basic.lines ? Math.round((basic.spoken / basic.lines) * 100) : 0, pictures: basic.pictures, names: basic.names.slice(0, 8).map((name) => name.name) }) : null;
       entry.symbols = open?.index?.symbols.filter((symbol) => !symbol.unnamed).length ?? 0;
       const job = entry.missing ? null : await readingStatus(this.ws.folder, String(entry.id)).catch(() => null);
       entry.job = job ? { state: job.state, now: job.now ?? null, steps: job.steps.length, estimate: job.estimate, error: job.error ?? null } : null;
