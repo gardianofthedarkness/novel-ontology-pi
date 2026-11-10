@@ -14,3 +14,5 @@ __pycache__/
 # Obsidian (docs/ is a vault): per-user state stays local
 docs/.obsidian/*
 !docs/.obsidian/app.json
+apps/novel-console/build/
+apps/novel-console/release/

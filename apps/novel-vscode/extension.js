@@ -107,7 +107,7 @@ class Readers {
   html(webview, boot) {
     const nonce = require("node:crypto").randomBytes(16).toString("base64").replace(/[^A-Za-z0-9]/g, "");
     const csp = `default-src 'none'; img-src data: ${webview.cspSource}; style-src 'unsafe-inline'; script-src 'nonce-${nonce}';`;
-    return fs.readFileSync(path.join(__dirname, "media", "reader.html"), "utf8").replace("__CSP__", csp).replace(/__NONCE__/g, nonce)
+    return fs.readFileSync(path.join(__dirname, "..", "reader", "reader.html"), "utf8").replace("__CSP__", csp).replace(/__NONCE__/g, nonce)
       .replace("/*BOOT*/null", JSON.stringify(boot).replace(/</g, "\\u003c"));
   }
   open(id, title, at) {

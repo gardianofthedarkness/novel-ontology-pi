@@ -84,6 +84,9 @@ export class NovelServer {
       case "novel/startReading": return startReading(this.ws.folder, String(params.id));
       case "novel/reading": return readingStatus(this.ws.folder, String(params.id));
       case "novel/stopReading": return stopReading(this.ws.folder, String(params.id));
+      // For a console's panels: every line that refers to an entry (across the universe), a book's problems.
+      case "novel/refs": return this.ws.refs(String(params.id), String(params.entity), { limit: Number(params.limit ?? 200), from: Number(params.from ?? 0), universe: params.universe !== false });
+      case "novel/bookProblems": return this.ws.problems(String(params.id), { limit: Number(params.limit ?? 500) });
       case "novel/record": {
         const open = await this.ws.book(String(params.id)), symbol = open.index?.symbol(String(params.entity));
         return symbol ? { uri: entityUri(open, symbol.id, symbol.label), label: symbol.label } : null;

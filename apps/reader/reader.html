@@ -6,7 +6,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Read</title>
 <style>
-/* The reader (docs/v3/reader.md): World · Live's Read panel and the reading's inspection page, in the editor. */
+/* The reader (docs/v3/reader.md): World · Live's Read panel and the reading's inspection page, in the console. */
 :root {
   --bg: #f6f4ee; --surface: #fffdf7; --ink: #1e1d1a; --muted: #6b675f; --line: #e3ddd0; --chip: #eee9de; --sel: #c9a227; --warn: #c2410c;
   --spoken: #2b66a6; --thought: #7a4dab; --fact: #9c6810; --action: #bf3f28; --environment: #2b8253; --narration: #6c6963;
@@ -103,7 +103,7 @@ body.nospeakers .who { display: none; }
 .warn { color: var(--warn); }
 .cf { font: 10.5px var(--mono); color: var(--muted); }
 
-@media (max-width: 760px) {
+@media (max-width: 620px) {
   .layout { grid-template-columns: minmax(0, 1fr); }
   #book { padding: 14px 16px 60vh; }
   #notes { position: fixed; inset: auto 0 0 0; top: auto; height: 46vh; border-left: 0; border-top: 1px solid var(--line); box-shadow: 0 -6px 18px rgb(0 0 0 / .15); z-index: 6; }
@@ -137,7 +137,13 @@ body.nospeakers .who { display: none; }
 <script nonce="__NONCE__">
 "use strict";
 const BOOT = /*BOOT*/null;
-const vscode = typeof acquireVsCodeApi === "function" ? acquireVsCodeApi() : null;
+// The host: VS Code's webview API, or the console's frame (messages to the window holding it, state in the page's
+// storage). Either answers the same requests through the novel server.
+const vscode = typeof acquireVsCodeApi === "function" ? acquireVsCodeApi() : window.parent !== window ? {
+  postMessage: (message) => window.parent.postMessage(message, "*"),
+  getState: () => { try { return JSON.parse(localStorage.getItem(`reader:${BOOT.id}`) || "{}"); } catch { return {}; } },
+  setState: (value) => { try { localStorage.setItem(`reader:${BOOT.id}`, JSON.stringify(value)); } catch {} },
+} : null;
 const $ = (id) => document.getElementById(id);
 const esc = (text) => String(text ?? "").replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
 const pct = (value) => (typeof value === "number" ? `${Math.round(value * 100)}%` : "");
@@ -309,7 +315,7 @@ const showNotes = async (id) => {
   const quote = document.createElement("div"); quote.className = "quote"; quote.textContent = line.text; markWords(quote, id);
   box.innerHTML = `
     <div class="head"><span>${esc(line.chapter)}${line.scene ? ` · scene ${line.scene.index + 1} <small>${esc(line.scene.type)}</small>` : ""}</span><code>${esc(id)}</code>
-      ${vscode ? `<button class="link" data-show="${esc(id)}">Show in text</button>` : ""}<button class="x" aria-label="Close" data-close>×</button></div>
+      ${vscode && BOOT.host !== "console" ? `<button class="link" data-show="${esc(id)}">Show in text</button>` : ""}<button class="x" aria-label="Close" data-close>×</button></div>
     <div class="k-${esc(kind)}" style="--k: var(--${esc(kind)})">${quote.outerHTML}
       <div><span class="kind">${esc(kind)}</span> <small>${pct(line.kind?.confidence)} sure${line.kind?.turn !== null && line.kind?.turn !== undefined ? ` · turn ${line.kind.turn}` : ""}</small></div>
       <div class="bars">${(line.kind?.top ?? []).map(([name, share]) => `<div class="bar k-${esc(name)}"><span>${esc(name)}</span><i style="width:${Math.round(share * 100)}%"></i><span>${pct(share)}</span></div>`).join("")}</div></div>

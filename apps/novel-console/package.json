@@ -1,0 +1,39 @@
+{
+  "name": "novel-console",
+  "productName": "Novel Console",
+  "version": "0.1.0",
+  "description": "A console for reading novels: any folder of books on the Mac as a library, readings with one click, the reader with its marks and notes.",
+  "private": true,
+  "license": "MIT",
+  "main": "src/main.js",
+  "scripts": {
+    "start": "electron .",
+    "backend": "node scripts/backend.mjs",
+    "pack": "node scripts/backend.mjs && electron-builder --mac dir --arm64",
+    "dmg": "npm run pack && node scripts/dmg.mjs",
+    "test": "node test/drive.mjs"
+  },
+  "devDependencies": {
+    "electron": "44.9.3",
+    "electron-builder": "26.18.0"
+  },
+  "build": {
+    "appId": "dev.novel-ontology.console",
+    "productName": "Novel Console",
+    "directories": {
+      "output": "release"
+    },
+    "files": [
+      "src/**",
+      "package.json"
+    ],
+    "asar": true,
+    "mac": {
+      "target": [
+        "dir"
+      ],
+      "category": "public.app-category.books",
+      "identity": null
+    }
+  }
+}

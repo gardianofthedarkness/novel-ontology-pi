@@ -1,0 +1,59 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self' data:; frame-src app:; connect-src 'self'">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Novel Console</title>
+<link rel="stylesheet" href="console.css">
+</head>
+<body>
+<header class="top">
+  <div class="brand">Novel Console</div>
+  <div class="crumb" id="crumb"></div>
+  <div class="grow"></div>
+  <button id="keys" class="ghost" title="The model keys a reading needs">Keys <span class="dot" id="dot-jev" title="Jev"></span><span class="dot" id="dot-work" title="Work model"></span></button>
+  <button id="add" class="primary">Add a folder…</button>
+</header>
+<div class="body">
+  <aside class="side" aria-label="Libraries">
+    <div class="side-head"><span>Libraries</span><button id="refresh" class="icon" title="Look for new books in every folder">↻</button></div>
+    <div id="tree" class="tree" role="tree"></div>
+  </aside>
+  <main class="main">
+    <section id="welcome" class="welcome">
+      <h1>Read any novel on this Mac</h1>
+      <p>Add a folder: every EPUB and text file in it, and in the folders inside it, is found. Your files are never moved or changed; what the console learns is kept in a hidden <code>.novel</code> folder beside them.</p>
+      <ol>
+        <li><b>Add a folder</b> of books.</li>
+        <li><b>Keys</b>: Jev's and the work model's. They stay in this Mac's secure store.</li>
+        <li>Press <b>▶</b> beside a book to read it (about $0.35 a volume). It runs on its own; you can close the window.</li>
+        <li>Open the book: sentences coloured by kind, names marked, and every record of a sentence you tap.</li>
+      </ol>
+      <button class="primary big" id="add-2">Add a folder…</button>
+    </section>
+    <iframe id="reader" title="Reader" hidden></iframe>
+  </main>
+  <aside class="panel" id="panel" aria-label="The book's people, places and problems">
+    <nav class="tabs" role="tablist">
+      <button role="tab" data-tab="cast" aria-selected="true">Cast</button>
+      <button role="tab" data-tab="problems" aria-selected="false">Problems</button>
+      <button role="tab" data-tab="record" aria-selected="false">Record</button>
+    </nav>
+    <div id="panel-body" class="panel-body"><p class="muted">Open a book that has a reading to see its people, places and things.</p></div>
+  </aside>
+</div>
+<footer class="status"><span id="status">Ready.</span><span class="grow"></span><span id="readings"></span></footer>
+<div id="toast" class="toast" hidden></div>
+<dialog id="keys-dialog">
+  <form method="dialog" id="keys-form">
+    <h2>Model keys</h2>
+    <p class="muted">A reading asks Jev and the work model. Their keys are kept in this Mac's secure store (<code>~/.config/novel-ontology</code>, readable only by you), never shown again. Leave a field empty to keep the key that is set.</p>
+    <label>Jev (TypeSafe) <span class="state" id="state-jev"></span><input type="password" id="key-jev" autocomplete="off" spellcheck="false"></label>
+    <label>Work model (DeepSeek) <span class="state" id="state-work"></span><input type="password" id="key-work" autocomplete="off" spellcheck="false"></label>
+    <div class="row"><button value="cancel" class="ghost">Cancel</button><button id="keys-save" class="primary" value="save">Save</button></div>
+  </form>
+</dialog>
+<script src="console.js"></script>
+</body>
+</html>
