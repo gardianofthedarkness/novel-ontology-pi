@@ -554,8 +554,12 @@ export async function direct(novelDir, { reading, readingPath = null, prefilm = 
         // The way may leave the 40 m round the walk (a basement's stair at the far end of its building, a mall's entrance):
         // where a walk from here reaches the target within a wider square, the walk is solved again with that much room.
         if (!path && field.part && field.part.local[from[0]] >= 0) {
-          const f0 = W.nodePos(world, from[0]), wide = Math.round(Math.min(...targets.slice(0, 8).map(id => { const t = W.nodePos(world, id); return Math.hypot(t.x - f0.x, t.z - f0.z); })) + UNDER_SEARCH + 16), reach = E.onFoot(from[0], wide, how);
-          if (targets.some(id => reach.has(id))) { field = E.solve(scene.placeId, key, targets, how, from[0], wide, layer); path = E.sampleWalk(built.graph, field, from[0], from[1], seeded(key)); if (path) { walk.widened = wide; if (asking) asking.widened = (asking.widened ?? 0) + 1; } }
+          // The wider square is as wide as the walk: between two cities it is too large for the street grid (W16's unit
+          // 201), and then the walk is not widened (it goes on as one with no way found).
+          try {
+            const f0 = W.nodePos(world, from[0]), wide = Math.round(Math.min(...targets.slice(0, 8).map(id => { const t = W.nodePos(world, id); return Math.hypot(t.x - f0.x, t.z - f0.z); })) + UNDER_SEARCH + 16), reach = E.onFoot(from[0], wide, how);
+            if (targets.some(id => reach.has(id))) { field = E.solve(scene.placeId, key, targets, how, from[0], wide, layer); path = E.sampleWalk(built.graph, field, from[0], from[1], seeded(key)); if (path) { walk.widened = wide; if (asking) asking.widened = (asking.widened ?? 0) + 1; } }
+          } catch (error) { if (!(error instanceof RangeError)) throw error; walk.notWidened = (walk.notWidened ?? 0) + 1; }
         }
         // Standing in a sliver of ground the buildings wall in (a cell or two between two footprints, W12's unit 169): no
         // way of going leaves it, so they step out to the nearest ground a walk leaves from, within 8 m, and go from there.
