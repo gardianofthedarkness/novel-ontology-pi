@@ -884,15 +884,21 @@ Volume 2's run (W16) was stopped by the user: the book travels between countries
 scales with "region" for everything above a city, one canvas for every ground, and a walk for every move. Measured: 158
 places, 19 at the root, 9 grounds, 25 crossings between grounds of which 19 share no ancestor.
 
-- [ ] **M18a A place is a size and a kind**: size bands (log10 metres) and free kinds in place of the six scales; the
-      law by size; bands as labels (`config/places/bands.json`).
-- [ ] **M18b The tree grows**: up when a larger place appears; loose roots joined by world knowledge or the text, else a
-      virtual holder; one place across books in the universe.
-- [ ] **M18c Grounds and maps**: a canvas and a terrain per ground; places above the grounds as maps.
-- [ ] **M18d Journeys between grounds** in the director, at the band of the common ancestor.
-- [ ] **M18e Generators by band and kind** (config/terrain/).
-- [ ] **M18f Measured**: volume 1 rehearsed the same (one ground); volume 2's places read again and joined; then its
-      terrain per ground and W16 again, on the user's go.
+Revised the same day (the user: "We need a relative scale that works with any setting ... This could be done by agent
+terrain config design stage"): no metres above the body, no real-world geography; each universe has its own ladder of
+layers, designed by the agent from the text.
+
+- [ ] **M18a The ladder**: the universe's layers (`universe/places.json`), anchored at the body, each relative to the
+      one below (how many it holds, how far across, how long to cross and by what); rank and the law by layer; the
+      digest's referents from the ladder.
+- [ ] **M18b The world pass, the agent's**: `novel places context|layer|put|ground <book>`, checked (ratios, holders,
+      grounds joined, a why each), virtual holders for loose places; a step of `novel volume` before the look pass; the
+      guard and the novel-volume skill.
+- [ ] **M18c One place across books**: the universe's places by name; a later book's pass extends the ladder.
+- [ ] **M18d Grounds and maps**: a canvas and a terrain per ground; levels inside by the ladder; places above as maps.
+- [ ] **M18e Journeys between grounds** in the director, on the common ancestor's layer.
+- [ ] **M18f Measured**: volume 1 rehearsed the same; volume 2's world pass, terrain per ground, and W16 again on the
+      user's go.
 
 ## M16 — Across books, per strand (the user, 2026-11-09)
 
