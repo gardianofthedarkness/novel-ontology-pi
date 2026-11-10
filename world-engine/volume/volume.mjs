@@ -44,6 +44,11 @@ export async function lastRun(novelDir) {
   return ok.at(-1) ?? null;
 }
 
+/** A step's environment: the caller's (the keys come from the host), the models volume 1 was made with, the portrait venv. */
+export function stepEnvironment(env = process.env) {
+  const venv = join(env.HOME ?? '', 'claude-world-first', 'portrait-venv', 'bin', 'python');
+  return { ...env, JEV_MODEL: 'jev-1.14.0', WORK_LLM_PROVIDER: 'deepseek', WORK_LLM_MODEL: 'deepseek-chat', ...(!env.NOVEL_PORTRAIT_PYTHON && existsSync(venv) ? { NOVEL_PORTRAIT_PYTHON: venv } : {}) };
+}
 const node = (script, ...args) => ({ program: process.execPath, args: [join(repository, script), ...args] });
 const cli = (...args) => node('dist/src/cli/cli.js', ...args);
 
@@ -151,7 +156,7 @@ export async function execute(novelDir, ids, { log = () => {} } = {}) {
         const out = await open(join(at.logs, `${id}.out`), n ? 'a' : 'w'), err = await open(join(at.logs, `${id}.err`), n ? 'a' : 'w');
         await out.write(`== ${new Date().toISOString()} ${basename(command.args[0])} ${command.args.slice(1).map(arg => (arg.startsWith('/') ? basename(arg) : arg)).join(' ')}\n`);
         const code = await new Promise(done => {
-          const child = spawn(command.program, command.args, { cwd: repository, env: { ...process.env, JEV_MODEL: 'jev-1.14.0', WORK_LLM_PROVIDER: 'deepseek', WORK_LLM_MODEL: 'deepseek-chat' }, stdio: ['ignore', out.fd, err.fd] });
+          const child = spawn(command.program, command.args, { cwd: repository, env: stepEnvironment(), stdio: ['ignore', out.fd, err.fd] });
           child.on('exit', code => done(code ?? 1)); child.on('error', () => done(1));
         });
         await out.close(); await err.close();
