@@ -90,7 +90,9 @@ export const STEPS = [
   { id: 'look', paid: true, who: 'pi', why: 'YOUR step: the look pass (novel-models skill): models for the book\'s things, settings for how its places look; then `novel volume done <workspace> look --why <text>`',
     done: () => false },
   { id: 'sky', paid: true, why: 'time of day and weather by unit (12 or so Jev questions)',
-    done: at => existsSync(join(at.reading, 'sky.json')), commands: async at => [cli('sky', 'build', at.novel)] },
+    done: at => existsSync(join(at.reading, 'sky.json')), commands: async at => [cli('sky', 'build', at.novel)],
+    // novel sky build writes beside the reading the workspace's manifest names (the reading's run); the director plays the book's.
+    after: async at => { const made = join(at.readingRun, 'v2', 'sky.json'); if (existsSync(made)) await cp(made, join(at.reading, 'sky.json')); } },
   { id: 'transport', paid: true, why: 'vehicles\' models and owners into the universe (a few Jev questions)',
     done: () => false, commands: async at => [node('experiments/v2/transport.mjs', at.novel, at.data, '--universe', at.universe)] },
   { id: 'terrain', paid: true, why: 'the places built, city to street (~150 Jev questions; 15–30 minutes)',
