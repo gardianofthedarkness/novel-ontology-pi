@@ -62,7 +62,7 @@ try {
     // The line's details are the debug view's (the reader shows only the book).
     const readerNotesHidden = await run(`getComputedStyle(document.getElementById("reader").contentDocument.getElementById("notes")).display === "none"`);
     const badge = await until(() => run(`!document.getElementById("badge-debug").hidden || null`), "the debug icon's mark", 10000).catch(() => false);
-    const icon = (view) => run(`document.querySelector('#activity [data-view="${view}"]').click()`);
+    const icon = (view) => run(`document.querySelector('#leftbar [data-left="${view}"]').click()`);
     await icon("debug");
     const notes = await until(() => run(`(() => { const h = [...document.querySelectorAll("#v-debug h5")].map((x) => x.textContent); return h.length ? h : null; })()`), "the line's details", 20000);
     step("notes", { line: tapped, readerNotesHidden, debugMarked: Boolean(badge), sections: notes });
@@ -72,7 +72,7 @@ try {
     const characters = await until(() => run(`document.querySelectorAll("#v-characters li[data-char]").length || null`), "the characters", 30000);
     await run(`document.querySelector("#v-characters li[data-char]").click()`);
     const path = await until(() => run(`document.querySelectorAll("#v-characters .path li").length || null`), "a character's path", 10000);
-    const oneAtATime = await run(`[...document.querySelectorAll(".panel-view")].filter((v) => getComputedStyle(v).display !== "none").length`);
+    const oneAtATime = await run(`[...document.querySelectorAll(".left-view")].filter((v) => getComputedStyle(v).display !== "none").length`);
     await icon("places");
     const places = await until(() => run(`document.querySelectorAll("#v-places .prow").length || null`), "the places", 10000);
     await run(`document.querySelector("#v-places .prow").click()`);
@@ -109,19 +109,20 @@ try {
     await left("library");
     const leftBack = await run(`getComputedStyle(document.getElementById("left")).display !== "none" && document.querySelectorAll("#tree .node").length > 0`);
     step("left strip", { outline, searchedFor: name.length > 0, search, readings, leftFolded, leftBack });
-    // The active icon folds the panel; again, it opens; day.
-    await icon("problems");
-    const folded = await run(`getComputedStyle(document.getElementById("panel")).display === "none" && document.getElementById("reader").getBoundingClientRect().width > 700`);
+    // The active icon folds the left panel; again, it opens; the right side is the chat alone; day.
+    await icon("problems"); await icon("problems");
+    const folded = await run(`getComputedStyle(document.getElementById("left")).display === "none" && document.getElementById("reader").getBoundingClientRect().width > 700`);
     await icon("strands");
-    const reopened = await run(`getComputedStyle(document.getElementById("panel")).display !== "none"`);
+    const reopened = await run(`getComputedStyle(document.getElementById("left")).display !== "none"`);
+    const rightIsChatOnly = await run(`!document.querySelector(".activity") && [...document.querySelectorAll("#panel .panel-view")].map((v) => v.dataset.view).join() === "chat"`);
     await run(`document.getElementById("t-daylight").click()`);
     await wait(500);
     const day = await run(`[document.documentElement.dataset.daylight, document.getElementById("reader").contentDocument.documentElement.dataset.theme]`);
-    step("folding and day", { foldedReaderWide: folded, reopened, day });
+    step("folding and day", { foldedReaderWide: folded, reopened, rightIsChatOnly, day });
     await picture("4-day");
     await run(`document.getElementById("t-daylight").click()`);
     // The chat: the agent hosts and their sessions; a message through a stand-in command (no real session is touched).
-    await icon("chat");
+    await run(`document.getElementById("t-chat").click()`);
     const hosts = await until(() => run(`(() => { const b = [...document.querySelectorAll("#hosts button")]; return b.length ? b.map((x) => [x.dataset.host, Number(x.querySelector(".k").textContent)]) : null; })()`), "the agent hosts", 30000);
     const claude = hosts.find(([id, n]) => id === "claude-code" && n > 0);
     let chat = { hosts };

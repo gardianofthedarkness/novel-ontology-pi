@@ -16,21 +16,34 @@
   <button id="add" class="ghost">Add a folder…</button>
   <span class="sep"></span>
   <button id="t-daylight" class="icon" title="Day or night">◐</button>
+  <button id="t-chat" class="icon toggle" aria-pressed="false" title="Your agents' sessions (⌘I)"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M4 5h16v11H9l-5 4z"/></svg></button>
 </header>
 <div class="work" id="work">
   <nav class="leftbar" id="leftbar" aria-label="Left views">
     <button data-left="library" title="Library: your folders and their books"><svg viewBox="0 0 24 24"><path d="M4 5h6l2 2h8v12H4z"/><path d="M4 9h16"/></svg></button>
     <button data-left="outline" title="Outline: the open book's chapters, scenes and cards"><svg viewBox="0 0 24 24"><path d="M5 6h2M5 12h2M5 18h2M10 6h9M12 12h7M12 18h7"/></svg></button>
     <button data-left="search" title="Search: words in the open book, and names"><svg viewBox="0 0 24 24"><circle cx="10.5" cy="10.5" r="6"/><path d="M15 15l5 5"/></svg></button>
+    <button data-left="characters" title="Characters: people and things, and each one's path"><svg viewBox="0 0 24 24"><circle cx="12" cy="8" r="4"/><path d="M4 21c0-4.4 3.6-8 8-8s8 3.6 8 8"/></svg></button>
+    <button data-left="places" title="Places: what holds what, and who was there"><svg viewBox="0 0 24 24"><path d="M12 22s7-6.2 7-12a7 7 0 0 0-14 0c0 5.8 7 12 7 12z"/><circle cx="12" cy="10" r="2.5"/></svg></button>
+    <button data-left="strands" title="Strands: who stays together, where they part and meet again"><svg viewBox="0 0 24 24"><circle cx="6" cy="5" r="2.2"/><circle cx="6" cy="19" r="2.2"/><circle cx="18" cy="9" r="2.2"/><path d="M6 7.2v9.6M18 11.2c0 4-6 3.5-11 6.2"/></svg></button>
+    <button data-left="record" title="Record: an entry and every line that refers to it"><svg viewBox="0 0 24 24"><path d="M6 3h9l4 4v14H6z"/><path d="M9 11h7M9 15h7M9 7h4"/></svg></button>
+    <button data-left="problems" title="Problems: credits the reading doubts"><svg viewBox="0 0 24 24"><path d="M12 3l10 18H2z"/><path d="M12 10v5M12 18v.5"/></svg><span class="badge" id="badge-problems" hidden></span></button>
+    <button data-left="debug" title="Reading details: Jev's and the reading's records of the line you tapped"><svg viewBox="0 0 24 24"><path d="M9 7a3 3 0 0 1 6 0"/><rect x="7" y="7" width="10" height="12" rx="5"/><path d="M3 11h4M17 11h4M3 17h4M17 17h4M12 11v8M5 5l2.5 2.5M19 5l-2.5 2.5"/></svg><span class="badge dot" id="badge-debug" hidden></span></button>
     <button data-left="readings" title="Readings: each book's reading, and the keys"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="8.5"/><path d="M10 8.5l5 3.5-5 3.5z"/></svg><span class="badge" id="badge-readings" hidden></span></button>
     <span class="grow"></span>
     <button data-left-action="keys" title="Model keys"><svg viewBox="0 0 24 24"><circle cx="8" cy="14" r="4"/><path d="M11 11l8-8M16 6l2 2M14 8l2 2"/></svg></button>
   </nav>
   <aside class="library" id="left" aria-label="Left view">
-    <div class="pane-head"><span id="left-title">Library</span><span class="grow"></span><span id="left-tools"><button id="refresh" class="icon small" title="Look for new books in every folder">↻</button></span><button class="icon small" id="left-fold" title="Fold the left panel">‹</button></div>
+    <div class="pane-head"><span id="left-title">Library</span><span class="count" id="left-count"></span><span class="grow"></span><span id="left-tools"><button id="refresh" class="icon small" title="Look for new books in every folder">↻</button></span><button class="icon small" id="left-fold" title="Fold the left panel">‹</button></div>
     <div class="left-view" data-left="library"><div id="tree" class="tree" role="tree"></div></div>
     <div class="left-view" data-left="outline"><div class="view-body" id="l-outline"></div></div>
     <div class="left-view" data-left="search"><form class="search" id="search-form"><input id="search-text" type="search" placeholder="Search the open book" autocomplete="off" spellcheck="false"></form><div class="view-body" id="l-search"></div></div>
+    <div class="left-view" data-left="characters"><div class="seg" id="char-kind"><button data-kind="people" aria-pressed="true">People</button><button data-kind="things" aria-pressed="false">Things</button><button data-kind="unnamed" aria-pressed="false">Unnamed</button></div><div class="view-body" id="v-characters"></div></div>
+    <div class="left-view" data-left="places"><div class="view-body" id="v-places"></div></div>
+    <div class="left-view" data-left="strands"><div class="view-body" id="v-strands"></div></div>
+    <div class="left-view" data-left="record"><div class="view-body" id="v-record"></div></div>
+    <div class="left-view" data-left="problems"><div class="view-body" id="v-problems"></div></div>
+    <div class="left-view" data-left="debug"><div class="view-body" id="v-debug"></div></div>
     <div class="left-view" data-left="readings"><div class="view-body" id="l-readings"></div></div>
   </aside>
   <div class="split" data-split="library" aria-hidden="true"></div>
@@ -42,7 +55,7 @@
         <li><b>Add a folder</b> of books.</li>
         <li><b>Keys</b>: Jev's and the work model's. They stay in this Mac's secure store.</li>
         <li>Press <b>▶</b> beside a book to read it (about $0.35 a volume). It runs on its own; you can close the window.</li>
-        <li>Open the book. The icons on the right open its characters, places and strands, the reading's details for a line, and your agents' sessions.</li>
+        <li>Open the book. The icons on the left open its outline, characters, places and strands and the reading's details for a line; the chat on the right holds your agents' sessions.</li>
       </ol>
       <button class="primary big" id="add-2">Add a folder…</button>
     </section>
@@ -50,15 +63,9 @@
     <section class="dock" id="dock" hidden aria-label="Strands, wide"><header class="dock-head"><b>Strands</b><span class="grow"></span><button class="icon small" id="dock-close" title="Close the wide view">×</button></header><div class="dock-body" id="dock-body"></div></section>
   </main>
   <div class="split" data-split="panel" aria-hidden="true"></div>
-  <aside class="panel" id="panel" aria-label="View">
-    <header class="panel-head"><b id="panel-title"></b><span class="count" id="panel-count"></span><span class="grow"></span><span id="panel-tools"></span><button class="icon small" id="panel-fold" title="Fold the panel (⌘B)">›</button></header>
-    <div class="panel-view" data-view="characters"><div class="seg" id="char-kind"><button data-kind="people" aria-pressed="true">People</button><button data-kind="things" aria-pressed="false">Things</button><button data-kind="unnamed" aria-pressed="false">Unnamed</button></div><div class="view-body" id="v-characters"></div></div>
-    <div class="panel-view" data-view="places"><div class="view-body" id="v-places"></div></div>
-    <div class="panel-view" data-view="strands"><div class="view-body" id="v-strands"></div></div>
-    <div class="panel-view" data-view="record"><div class="view-body" id="v-record"></div></div>
-    <div class="panel-view" data-view="problems"><div class="view-body" id="v-problems"></div></div>
-    <div class="panel-view" data-view="debug"><div class="view-body" id="v-debug"></div></div>
-    <div class="panel-view chat" data-view="chat">
+  <aside class="panel" id="panel" aria-label="Agents">
+    <header class="panel-head"><b>Chat</b><span class="count" id="chat-count"></span><span class="grow"></span><button class="icon small" id="panel-fold" title="Fold the chat (⌘I)">›</button></header>
+    <div class="panel-view chat active" data-view="chat">
       <div class="chat-tools"><button id="chat-back" class="icon small" title="All sessions" hidden>‹ Sessions</button><span class="grow"></span><button id="chat-refresh" class="icon small" title="Look for sessions again">↻</button></div>
       <div class="hosts" id="hosts" role="tablist"></div>
       <div class="chat-body" id="chat-body"></div>
@@ -68,16 +75,6 @@
       </form>
     </div>
   </aside>
-  <nav class="activity" id="activity" aria-label="Views">
-    <button data-view="characters" title="Characters: people and things, and each one's path"><svg viewBox="0 0 24 24"><circle cx="12" cy="8" r="4"/><path d="M4 21c0-4.4 3.6-8 8-8s8 3.6 8 8"/></svg></button>
-    <button data-view="places" title="Places: what holds what, and who was there"><svg viewBox="0 0 24 24"><path d="M12 22s7-6.2 7-12a7 7 0 0 0-14 0c0 5.8 7 12 7 12z"/><circle cx="12" cy="10" r="2.5"/></svg></button>
-    <button data-view="strands" title="Strands: who stays together, where they part and meet again"><svg viewBox="0 0 24 24"><circle cx="6" cy="5" r="2.2"/><circle cx="6" cy="19" r="2.2"/><circle cx="18" cy="9" r="2.2"/><path d="M6 7.2v9.6M18 11.2c0 4-6 3.5-11 6.2"/></svg></button>
-    <button data-view="record" title="Record: an entry and every line that refers to it"><svg viewBox="0 0 24 24"><path d="M6 3h9l4 4v14H6z"/><path d="M9 11h7M9 15h7M9 7h4"/></svg></button>
-    <button data-view="problems" title="Problems: credits the reading doubts"><svg viewBox="0 0 24 24"><path d="M12 3l10 18H2z"/><path d="M12 10v5M12 18v.5"/></svg><span class="badge" id="badge-problems" hidden></span></button>
-    <button data-view="debug" title="Reading details: Jev's and the reading's records of the line you tapped"><svg viewBox="0 0 24 24"><path d="M9 7a3 3 0 0 1 6 0"/><rect x="7" y="7" width="10" height="12" rx="5"/><path d="M3 11h4M17 11h4M3 17h4M17 17h4M12 11v8M5 5l2.5 2.5M19 5l-2.5 2.5"/></svg><span class="badge dot" id="badge-debug" hidden></span></button>
-    <span class="grow"></span>
-    <button data-view="chat" title="Chat: your agents' sessions"><svg viewBox="0 0 24 24"><path d="M4 5h16v11H9l-5 4z"/></svg></button>
-  </nav>
 </div>
 <footer class="status"><span id="status">Ready.</span><span class="grow"></span><span id="readings"></span></footer>
 <div id="toast" class="toast" hidden></div>

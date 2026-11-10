@@ -15,30 +15,20 @@ const ask = (folder, method, params) => host.ask(folder, method, params);
 const say = (text, bad = false) => { $("status").textContent = text; $("status").className = bad ? "err" : ""; };
 const bookList = (tree) => [...tree.universes.flatMap((universe) => universe.books), ...tree.unsorted];
 
-// ---------- Layout: day and night, the icon strip and its panel, the splitters. ----------
-const TITLES = { characters: "Characters", places: "Places", strands: "Strands", record: "Record", problems: "Problems", debug: "Reading details", chat: "Chat" };
-let activeView = remember.get("view", "strands");
+// ---------- Layout: day and night; the right side is the agents' chat only (the user, 2026-11-10: "move all of them to the
+// left, right panel should be agent panel only"); every other view is the left strip's. ----------
 const counts = {};
 function daylight(mode) {
   document.documentElement.dataset.daylight = mode; remember.set("daylight", mode);
   $("reader").contentWindow?.postMessage({ type: "theme", mode: mode === "day" ? "light" : "dark" }, "*");
 }
 const panelOpen = () => !$("work").classList.contains("no-panel");
-function setPanel(open) { $("work").classList.toggle("no-panel", !open); remember.set("panel", open); markActivity(); }
-function markActivity() { for (const button of document.querySelectorAll("#activity button")) button.classList.toggle("active", panelOpen() && button.dataset.view === activeView); }
-/** An icon pressed: its view in the panel; pressed again when it shows, the panel folds. */
-function show(view, toggle = false) {
-  if (toggle && panelOpen() && activeView === view) { setPanel(false); return; }
-  activeView = view; remember.set("view", view);
-  for (const section of document.querySelectorAll(".panel-view")) section.classList.toggle("active", section.dataset.view === view);
-  $("panel-title").textContent = TITLES[view]; $("panel-count").textContent = counts[view] ?? "";
-  if (!panelOpen()) setPanel(true); else markActivity();
-  if (view === "debug") $("badge-debug").hidden = true;
-  if (view === "chat" && !hostsLoaded) loadHosts(); else renderView(view);
-}
-const setCount = (view, text) => { counts[view] = text; if (activeView === view) $("panel-count").textContent = text ?? ""; };
-for (const button of document.querySelectorAll("#activity button")) button.addEventListener("click", () => show(button.dataset.view, true));
+function setPanel(open) { $("work").classList.toggle("no-panel", !open); remember.set("panel", open); $("t-chat").setAttribute("aria-pressed", String(open)); if (open && !hostsLoaded) loadHosts(); }
+/** A view by name: on the left strip. */
+function show(view, toggle = false) { showLeft(view, toggle); }
+const setCount = (view, text) => { counts[view] = text; if (leftView === view) $("left-count").textContent = text ? ` · ${text}` : ""; };
 $("panel-fold").addEventListener("click", () => setPanel(false));
+$("t-chat").addEventListener("click", () => setPanel(!panelOpen()));
 for (const split of document.querySelectorAll(".split")) {
   split.addEventListener("pointerdown", (event) => {
     const which = split.dataset.split, work = $("work"), start = event.clientX, key = which === "library" ? "--lib-w" : "--panel-w";
@@ -52,13 +42,14 @@ for (const split of document.querySelectorAll(".split")) {
 $("t-daylight").addEventListener("click", () => daylight(document.documentElement.dataset.daylight === "day" ? "night" : "day"));
 document.addEventListener("keydown", (event) => {
   if (!event.metaKey || event.altKey || event.shiftKey) return;
-  if (event.key === "b") { event.preventDefault(); setPanel(!panelOpen()); if (panelOpen()) show(activeView); }
-  if (event.key === "i") { event.preventDefault(); show("chat", true); }
+  if (event.key === "b") { event.preventDefault(); if (leftOpen()) setLeft(false); else showLeft(leftView); }
+  if (event.key === "i") { event.preventDefault(); setPanel(!panelOpen()); }
 });
 
 
 // ---------- The left strip (as VS Code's): Library, Outline, Search, Readings; the active icon folds the left panel. ----------
-const LEFT_TITLES = { library: "Library", outline: "Outline", search: "Search", readings: "Readings" };
+const LEFT_TITLES = { library: "Library", outline: "Outline", search: "Search", characters: "Characters", places: "Places", strands: "Strands", record: "Record", problems: "Problems", debug: "Reading details", readings: "Readings" };
+const OWN_LEFT = new Set(["library", "outline", "search", "readings"]);
 let leftView = remember.get("left", "library"), searchTimer = null, lastSearch = null;
 const leftOpen = () => !$("work").classList.contains("no-left");
 function setLeft(open) { $("work").classList.toggle("no-left", !open); remember.set("leftOpen", open); markLeft(); }
@@ -67,7 +58,8 @@ function showLeft(view, toggle = false) {
   if (toggle && leftOpen() && leftView === view) { setLeft(false); return; }
   leftView = view; remember.set("left", view);
   for (const section of document.querySelectorAll(".left-view")) section.classList.toggle("active", section.dataset.left === view);
-  $("left-title").textContent = LEFT_TITLES[view]; $("refresh").hidden = view !== "library";
+  $("left-title").textContent = LEFT_TITLES[view]; $("left-count").textContent = counts[view] ? ` · ${counts[view]}` : ""; $("refresh").hidden = view !== "library";
+  if (view === "debug") $("badge-debug").hidden = true;
   if (!leftOpen()) setLeft(true); else markLeft();
   renderLeft(view);
   if (view === "search") setTimeout(() => $("search-text").focus(), 0);
@@ -77,6 +69,7 @@ function renderLeft(view = leftView) {
   if (view === "outline") renderOutline();
   if (view === "search") renderSearch();
   if (view === "readings") renderReadings();
+  if (!OWN_LEFT.has(view)) renderView(view);
 }
 for (const button of document.querySelectorAll("#leftbar [data-left]")) button.addEventListener("click", () => showLeft(button.dataset.left, true));
 document.querySelector('#leftbar [data-left-action="keys"]').addEventListener("click", () => enterKeys());
@@ -238,9 +231,9 @@ function openBook(folder, book, at) {
   $("crumb").textContent = book.title;
   world = null; record = null; selectedChar = null; selectedPlace = null; strandFocus = null; debugLine = null;
   const badge = $("badge-problems"); badge.hidden = !book.problems; badge.textContent = book.problems > 99 ? "99+" : String(book.problems || "");
-  lastSearch = null; render(); loadWorld(); renderView(activeView); if (leftView !== "library") renderLeft();
+  lastSearch = null; render(); loadWorld(); if (leftView !== "library") renderLeft();
 }
-function closeBook() { $("dock").hidden = true; current = null; world = null; $("reader").hidden = true; $("reader").src = "about:blank"; $("welcome").hidden = false; $("crumb").textContent = ""; renderView(activeView); }
+function closeBook() { $("dock").hidden = true; current = null; world = null; $("reader").hidden = true; $("reader").src = "about:blank"; $("welcome").hidden = false; $("crumb").textContent = ""; renderView(leftView); }
 const reveal = (sentence) => { if (current && sentence) $("reader").contentWindow.postMessage({ type: "reveal", sentence }, "*"); };
 async function goTo(folder, book, uri, range) {
   if (!book.reading) { say(`${book.title} has no reading yet: press ▶ to read it.`); return; }
@@ -256,7 +249,7 @@ window.addEventListener("message", async (event) => {
     catch (error) { event.source.postMessage({ reply: message.id, error: error.message }, "*"); }
     return;
   }
-  if (message.type === "selected") { debugLine = message.sentence; if (panelOpen() && activeView === "debug") renderView("debug"); else $("badge-debug").hidden = false; }
+  if (message.type === "selected") { debugLine = message.sentence; if (leftOpen() && leftView === "debug") renderView("debug"); else $("badge-debug").hidden = false; }
   if (message.type === "record" || message.type === "references") showRecord(message.entity);
   if (message.type === "error") say(`Reader: ${message.message}`, true);
 });
@@ -265,12 +258,12 @@ window.addEventListener("message", async (event) => {
 async function loadWorld() {
   const at = current; if (!at) return;
   const cached = worlds.get(at.key);
-  if (cached) { world = cached; renderView(activeView); return; }
-  try { const value = await ask(at.folder, "novel/world", { id: at.id }); worlds.set(at.key, value); if (current === at) { world = value; renderView(activeView); } }
-  catch (error) { if (current === at) { world = { error: error.message }; renderView(activeView); } }
+  if (cached) { world = cached; renderView(leftView); return; }
+  try { const value = await ask(at.folder, "novel/world", { id: at.id }); worlds.set(at.key, value); if (current === at) { world = value; renderView(leftView); } }
+  catch (error) { if (current === at) { world = { error: error.message }; renderView(leftView); } }
 }
 function renderView(view) {
-  if (view === "chat") return;
+  if (OWN_LEFT.has(view) || view === "chat") return;
   const body = $(`v-${view}`);
   if (view === "record") return renderRecord(body);
   if (view === "problems") return renderProblems(body);
@@ -503,7 +496,7 @@ async function loadHosts() {
   hostsLoaded = true; $("chat-body").innerHTML = `<p class="note">Looking for sessions…</p>`;
   try { hostList = await host.agents(); } catch (error) { $("chat-body").innerHTML = `<p class="note">${esc(error.message)}</p>`; return; }
   if (!hostList.some((entry) => entry.id === chosenHost)) chosenHost = (hostList.find((entry) => entry.sessions.length) ?? hostList[0])?.id ?? null;
-  setCount("chat", String(hostList.reduce((sum, entry) => sum + entry.sessions.length, 0)));
+  $("chat-count").textContent = ` · ${hostList.reduce((sum, entry) => sum + entry.sessions.length, 0)} sessions`;
   renderHosts(); if (openSession) showSession(openSession); else renderSessions();
 }
 function renderHosts() { $("hosts").innerHTML = hostList.map((entry) => `<button role="tab" data-host="${esc(entry.id)}" aria-selected="${entry.id === chosenHost}">${esc(entry.name)}<span class="k">${entry.sessions.length}</span></button>`).join(""); }
@@ -593,8 +586,7 @@ window.addEventListener("focus", () => refresh());
 // Start as it was left: day or night, the panel and its view, the widths.
 daylight(remember.get("daylight", "night"));
 for (const [which, key] of [["library", "--lib-w"], ["panel", "--panel-w"]]) { const width = remember.get(`width:${which}`, null); if (width) $("work").style.setProperty(key, `${width}px`); }
-if (!TITLES[activeView]) activeView = "strands";
-show(activeView); setPanel(remember.get("panel", true));
+setPanel(remember.get("panel", false));
 if (!LEFT_TITLES[leftView]) leftView = "library";
 showLeft(leftView); setLeft(remember.get("leftOpen", true));
-refresh().then(keyDots).then(() => { $("welcome").hidden = Boolean(current); renderView(activeView); });
+refresh().then(keyDots).then(() => { $("welcome").hidden = Boolean(current); renderView(leftView); });

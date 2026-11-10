@@ -166,7 +166,8 @@ Developer ID if it is shared.
 | --- | --- | --- |
 | Library (left) | always | folders, universes, books, chapters, scenes |
 | The book (middle) | always | the reader |
-| Panel (right), behind an icon strip | foldable: one view at a time, each behind its icon (as VS Code's activity bar; the user, on 0.2.0) | **Characters**: people and things (movables) and each one's path: where and when it is, scene by scene. **Places**: the place tree (unoriented: containment only), each place with who was there and when. **Strands**. **Record** and **Problems** of what is open |
+| Left icon strip | every view behind its icon, one at a time, foldable (as VS Code's activity bar; the user, on 0.2.0 and 0.4.0) |
+| Right side | the agents' chat only (the user: "right panel should be agent panel only") | **Characters**: people and things (movables) and each one's path: where and when it is, scene by scene. **Places**: the place tree (unoriented: containment only), each place with who was there and when. **Strands**. **Record** and **Problems** of what is open |
 | Chat (far right) | foldable | the agent hosts' existing sessions (the adapters: Claude Code, Codex, Pi, Gemini CLI and the others the registry adds), read and continued in place |
 | The bar's buttons | | fold or open the side bar, the chat; day or night (v1's two palettes) |
 
