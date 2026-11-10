@@ -78,15 +78,19 @@ try {
     await run(`document.querySelector("#v-places .prow").click()`);
     const placeScenes = await until(() => run(`document.querySelectorAll("#v-places .scene-row").length || null`), "a place's scenes", 10000);
     await icon("strands");
-    const strands = await until(() => run(`(() => { const rows = document.querySelectorAll("#v-strands .srow").length; return rows ? { rows, nodes: document.querySelectorAll("#v-strands svg circle").length, curves: document.querySelectorAll("#v-strands svg path").length, refs: document.querySelectorAll("#v-strands .sref").length, legend: document.querySelectorAll("#v-strands .legend button").length } : null; })()`), "the strands", 10000);
+    const strands = await until(() => run(`(() => { const nodes = document.querySelectorAll("#v-strands .snode").length; return nodes ? { nodes, lines: document.querySelectorAll("#v-strands .hgraph path").length, labels: document.querySelectorAll("#v-strands .slabel").length, legend: document.querySelectorAll("#v-strands .legend button").length } : null; })()`), "the strands", 10000);
     step("views", { oneAtATime, characters, path, places, placeScenes, strands });
     await picture("3-strands");
-    // Where a strand forks off and where one rejoins.
-    await run(`(() => { const refs = [...document.querySelectorAll("#v-strands .srow .sref:not(.join)")]; (refs[2] ?? refs[1] ?? refs[0])?.scrollIntoView({ block: "center" }); })()`);
+    // Wide, under the book: where a strand forks off and where one rejoins.
+    await run(`document.querySelector('#v-strands [data-wide="on"]').click()`);
+    const wide = await until(() => run(`document.querySelectorAll("#dock-body .snode").length || null`), "the wide strands", 10000);
+    await run(`(() => { const label = [...document.querySelectorAll("#dock-body .slabel")][1]; const box = document.querySelector("#dock-body .hgraph"); if (label && box) box.scrollLeft = Math.max(0, label.getBBox().x - box.clientWidth / 2); })()`);
     await wait(300);
     await picture("3b-fork");
+    strands.wide = wide;
+    await run(`document.querySelector('#dock-body [data-wide="off"]').click()`);
     // A strand row moves the reader; a character's record; the problems.
-    await run(`document.querySelectorAll("#v-strands .srow")[40]?.click()`);
+    await run(`document.querySelectorAll("#v-strands .snode")[40]?.dispatchEvent(new MouseEvent("click", { bubbles: true }))`);
     await icon("characters");
     await run(`document.querySelector("#v-characters [data-record]").click()`);
     const record = await until(() => run(`(() => { const r = document.querySelector("#v-record .record h1"); const refs = document.querySelectorAll("#v-record [data-line]").length; return r && refs ? { references: refs } : null; })()`), "the record", 20000);

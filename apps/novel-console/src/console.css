@@ -77,7 +77,12 @@ code { font: 12px var(--mono); }
 @keyframes spin { to { transform: rotate(360deg); } }
 @media (prefers-reduced-motion: reduce) { .spin { animation: none; } }
 
-.book { position: relative; min-width: 0; min-height: 0; background: var(--bg); }
+.book { position: relative; min-width: 0; min-height: 0; background: var(--bg); display: grid; grid-template-rows: minmax(0, 1fr) auto; grid-template-columns: minmax(0, 1fr); }
+.book > .welcome { grid-row: 1; } .book > #reader { grid-row: 1; }
+.dock { grid-row: 2; min-width: 0; height: var(--dock-h, 320px); border-top: 1px solid var(--line); background: var(--panel); display: flex; flex-direction: column; min-height: 0; }
+.dock-head { display: flex; align-items: center; gap: 8px; padding: 5px 8px 5px 12px; font-size: 11.5px; letter-spacing: .07em; text-transform: uppercase; color: var(--dim); background: var(--deep); }
+.dock-head b { color: var(--ink); }
+.dock-body { overflow: auto; min-height: 0; flex: 1; padding: 6px 10px; }
 #reader { border: 0; width: 100%; height: 100%; display: block; }
 .welcome { max-width: 40em; margin: 9vh auto 0; padding: 0 28px; }
 .welcome h1 { font-size: 26px; letter-spacing: -.01em; margin: 0 0 10px; text-wrap: balance; }
@@ -85,7 +90,7 @@ code { font: 12px var(--mono); }
 .welcome ol { font-size: 14px; line-height: 1.8; padding-left: 1.3em; margin: 18px 0 24px; }
 
 /* The panel: one view at a time, chosen on the icon strip. */
-.panel { background: var(--panel); display: flex; flex-direction: column; min-height: 0; min-width: 0; }
+.panel { background: var(--panel); display: flex; flex-direction: column; min-height: 0; min-width: 0; overflow: hidden; }
 .panel-head { display: flex; align-items: center; gap: 8px; padding: 8px 8px 8px 12px; font-size: 11.5px; letter-spacing: .07em; text-transform: uppercase; color: var(--dim); border-bottom: 1px solid var(--line); background: var(--deep); }
 .panel-head b { color: var(--ink); }
 .panel-head .count { font-variant-numeric: tabular-nums; }
@@ -226,3 +231,10 @@ dialog .row { display: flex; justify-content: flex-end; gap: 8px; margin-top: 14
 .srow .day { flex: none; font: 600 10.5px var(--mono); color: var(--jev); }
 .srow .pl { font-family: var(--book); color: var(--place); overflow: hidden; text-overflow: ellipsis; min-width: 0; flex: 0 1 auto; }
 .srow .pp { font-family: var(--book); color: var(--dim); overflow: hidden; text-overflow: ellipsis; min-width: 0; flex: 1 1 auto; }
+
+/* Strands drawn left to right (the user's diagram): lanes, nodes, tip labels. */
+.gtools { display: flex; align-items: center; gap: 4px; margin: 2px 0 6px; }
+.hgraph { max-width: 100%; overflow-x: auto; overflow-y: hidden; border: 1px solid var(--rule); border-radius: 6px; background: var(--deep); }
+.hgraph svg { display: block; }
+.hgraph .snode, .hgraph .slabel { cursor: pointer; }
+.hgraph .snode:hover circle:last-child { stroke-opacity: 1; stroke-width: 2.5; }
