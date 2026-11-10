@@ -1,6 +1,6 @@
 // The Novel Workbench: the opened folder as a workspace of novels (docs/v3/workspace.md). A thin shell over the novel
-// language server: it starts the server, shows its tree in the explorer, and hands the editor's questions (outline, hover,
-// definition, references, problems) to it. No dependency: the client side of the protocol is the few lines below.
+// language server: it starts the server, shows its tree in the explorer, hands the editor's questions (outline, hover,
+// definition, references, problems) to it, and opens a processed book in the reader. No dependency: the client side of the protocol is the few lines below.
 const vscode = require("vscode");
 const path = require("node:path");
 const fs = require("node:fs");
@@ -96,6 +96,45 @@ class CastTree {
   }
 }
 
+// The reader (docs/v3/reader.md): a processed book read as published, in a webview: its EPUB a document at a time, each
+// sentence coloured by its kind, names, descriptions and times marked, the speaker before a spoken line, and the notes
+// (every record of a tapped sentence). The page asks the language server through here; nothing else reaches it.
+const READER_ASKS = new Set(["novel/read", "novel/readDocument", "novel/readLine", "novel/readPortrait"]);
+class Readers {
+  constructor(context, client, ask, actions, log) { this.log = log; this.context = context; this.client = client; this.ask = ask; this.actions = actions; this.panels = new Map(); this.last = new Map(); }
+  html(webview, boot) {
+    const nonce = require("node:crypto").randomBytes(16).toString("base64").replace(/[^A-Za-z0-9]/g, "");
+    const csp = `default-src 'none'; img-src data: ${webview.cspSource}; style-src 'unsafe-inline'; script-src 'nonce-${nonce}';`;
+    return fs.readFileSync(path.join(__dirname, "media", "reader.html"), "utf8").replace("__CSP__", csp).replace(/__NONCE__/g, nonce)
+      .replace("/*BOOT*/null", JSON.stringify(boot).replace(/</g, "\\u003c"));
+  }
+  open(id, title, at) {
+    const known = this.panels.get(id);
+    if (known) { known.reveal(); if (at) known.webview.postMessage({ type: "reveal", sentence: at }); return known; }
+    for (const key of [...this.last.keys()]) if (key.startsWith(`${id}:`)) this.last.delete(key);
+    const panel = vscode.window.createWebviewPanel("novel.reader", `Read \u00b7 ${title}`, vscode.ViewColumn.Active, { enableScripts: true, retainContextWhenHidden: true, localResourceRoots: [] });
+    panel.iconPath = vscode.Uri.file(path.join(__dirname, "media", "book.svg"));
+    panel.webview.html = this.html(panel.webview, { id, at: at || null });
+    panel.webview.onDidReceiveMessage(async (message) => {
+      if (message.id !== undefined && READER_ASKS.has(message.method)) {
+        try { panel.webview.postMessage({ reply: message.id, result: await this.client.request(message.method, { ...message.params, id }) }); }
+        catch (error) { panel.webview.postMessage({ reply: message.id, error: error.message }); }
+        return;
+      }
+      if (message.type === "shown" || message.type === "notes" || message.type === "error" || message.type === "started") { this.last.set(`${id}:${message.type}`, message); if (message.type === "error") this.log?.appendLine(`reader: ${message.message}`); return; }
+      if (message.type === "record" || message.type === "references") {
+        const record = await this.ask("novel/record", { id, entity: message.entity });
+        if (record) await (message.type === "record" ? this.actions.record(record.uri) : this.actions.references(record.uri));
+        return;
+      }
+      if (message.type === "show") { const where = await this.ask("novel/locate", { id, sentence: message.sentence }); if (where) await this.actions.open(where.uri, where.range, vscode.ViewColumn.Beside); }
+    }, undefined, this.context.subscriptions);
+    panel.onDidDispose(() => this.panels.delete(id), undefined, this.context.subscriptions);
+    this.panels.set(id, panel);
+    return panel;
+  }
+}
+
 /** The file id of the book a document is, from the tree (a virtual document carries it in its path). */
 const bookIdOf = (uri, tree) => {
   if (uri.scheme === "novel") return uri.path.split("/")[2] || null;
@@ -132,10 +171,34 @@ async function activate(context) {
   let scanning = null;
   const scan = () => (scanning ??= ask("novel/scan").finally(() => { scanning = null; }).then(async (report) => { await refresh(); return report; }));
 
-  const open = async (uri, range) => {
+  const open = async (uri, range, column) => {
     const document = await vscode.workspace.openTextDocument(vscode.Uri.parse(uri));
-    const editor = await vscode.window.showTextDocument(document, { preview: true });
-    if (range) { const where = toRange(range); editor.selection = new vscode.Selection(where.start, where.start); editor.revealRange(where, vscode.TextEditorRevealType.AtTop); }
+    const editor = await vscode.window.showTextDocument(document, { preview: true, ...(column ? { viewColumn: column } : {}) });
+    if (range) { const where = toRange(range); editor.selection = new vscode.Selection(where.start, column ? where.end : where.start); editor.revealRange(where, column ? vscode.TextEditorRevealType.InCenter : vscode.TextEditorRevealType.AtTop); }
+  };
+  const record = async (uri) => { await vscode.commands.executeCommand("markdown.showPreviewToSide", vscode.Uri.parse(uri)).then(undefined, () => open(uri)); };
+  const references = async (uri) => {
+    const found = await ask("textDocument/references", { textDocument: { uri }, position: { line: 0, character: 0 }, context: { includeDeclaration: true } });
+    if (found?.length) await vscode.commands.executeCommand("editor.action.showReferences", vscode.Uri.parse(found[0].uri), toRange(found[0].range).start, found.map(toLocation));
+  };
+  const readers = new Readers(context, client, ask, { open, record, references }, log);
+  // Read: a book from the tree, a chapter or scene from where it starts, or the book in the editor from the cursor.
+  const read = async (node) => {
+    let id = null, title = "", from = null;
+    if (node?.type === "book") { id = node.book.id; title = node.book.title; }
+    else if (node?.type === "part") {
+      let book = node.parent; while (book && book.type !== "book") book = book.parent;
+      id = book?.book.id; title = book?.book.title ?? "";
+      from = (await ask("novel/sentenceAt", { textDocument: { uri: node.uri }, position: node.part.range.start }))?.sentence ?? null;
+    } else {
+      const editor = vscode.window.activeTextEditor;
+      if (!editor) { vscode.window.showInformationMessage("Pick a book in the Books view to read it."); return null; }
+      const here = await ask("novel/sentenceAt", at(editor.document, editor.selection.active));
+      if (!here) { vscode.window.showInformationMessage("This document is not a book of the folder."); return null; }
+      id = here.id; from = here.sentence;
+      const tree = await books.load(); title = [...tree.universes.flatMap((universe) => universe.books), ...tree.unsorted].find((book) => book.id === id)?.title ?? "";
+    }
+    return id ? readers.open(id, title, from) : null;
   };
 
   context.subscriptions.push(
@@ -145,11 +208,9 @@ async function activate(context) {
     vscode.workspace.registerTextDocumentContentProvider("novel", { onDidChange: text.event, provideTextDocumentContent: async (uri) => (await ask("novel/document", { uri: uri.toString() }))?.text ?? "" }),
     vscode.commands.registerCommand("novel.scan", async () => { const report = await scan(); if (report) vscode.window.setStatusBarMessage(`Novels: ${report.files} files, ${report.unsorted} unsorted`, 5000); return report; }),
     vscode.commands.registerCommand("novel.open", open),
-    vscode.commands.registerCommand("novel.showRecord", async (uri) => { await vscode.commands.executeCommand("markdown.showPreviewToSide", vscode.Uri.parse(uri)).then(undefined, () => open(uri)); }),
-    vscode.commands.registerCommand("novel.findReferences", async (node) => {
-      const uri = vscode.Uri.parse(node.symbol.uri), found = await ask("textDocument/references", { textDocument: { uri: uri.toString() }, position: { line: 0, character: 0 }, context: { includeDeclaration: true } });
-      if (found?.length) await vscode.commands.executeCommand("editor.action.showReferences", vscode.Uri.parse(found[0].uri), toRange(found[0].range).start, found.map(toLocation));
-    }),
+    vscode.commands.registerCommand("novel.showRecord", record),
+    vscode.commands.registerCommand("novel.findReferences", (node) => references(node.symbol.uri)),
+    vscode.commands.registerCommand("novel.read", read),
     vscode.commands.registerCommand("novel.openFile", (node) => node?.book?.fileUri && vscode.commands.executeCommand("revealInExplorer", vscode.Uri.parse(node.book.fileUri))),
     vscode.languages.registerDocumentSymbolProvider(selector, { provideDocumentSymbols: async (document) => {
       const shape = (node) => { const symbol = new vscode.DocumentSymbol(node.name, node.detail || "", symbolKind(node.kind), toRange(node.range), toRange(node.selectionRange)); symbol.children = (node.children || []).map(shape); return symbol; };
@@ -182,7 +243,7 @@ async function activate(context) {
   }
   for (const document of vscode.workspace.textDocuments) await diagnose(document);
   await follow(vscode.window.activeTextEditor);
-  return { client, books, booksView, cast, scan, refresh };
+  return { client, books, booksView, cast, scan, refresh, read, readers };
 }
 
 function deactivate() {}

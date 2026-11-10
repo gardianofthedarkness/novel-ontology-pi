@@ -49,6 +49,8 @@ export interface BookIndex {
   references(entity: string): Reference[];
   /** The references a line holds, the one under the offset first. */
   at(offset: number): Reference[];
+  /** Every reference a line holds. */
+  onLine(sentence: string): Reference[];
   speakers: (Span & { sentence: string; entity: string; label: string; confidence: number; settled: boolean; via?: string })[];
   outline: OutlineNode[];
   problems: Problem[];
@@ -198,7 +200,7 @@ export function indexBook(book: BookText, reading: Reading, blockSize?: number):
   problems.sort((a, b) => a.start - b.start);
 
   return {
-    book, lines, line: (id) => byId.get(id), lineAt, symbols, symbol: (id) => symbolOf.get(id), references: (entity) => perEntity.get(entity) ?? [], at, speakers, outline, problems, scenes,
+    book, lines, line: (id) => byId.get(id), lineAt, symbols, symbol: (id) => symbolOf.get(id), references: (entity) => perEntity.get(entity) ?? [], at, onLine: (id) => perLine.get(id) ?? [], speakers, outline, problems, scenes,
     counts: (entity) => { const counts: Record<string, number> = {}; for (const reference of perEntity.get(entity) ?? []) for (const how of reference.how) counts[how] = (counts[how] ?? 0) + 1; return counts; },
   };
 }

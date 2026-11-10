@@ -2,7 +2,8 @@
  * The novel language server (docs/v3/workspace.md): the opened folder's books answered as an editor asks about source.
  * It speaks the Language Server Protocol over stdio (JSON-RPC with Content-Length frames, written here: no dependency),
  * so any editor's client can use it, and a few requests of its own for the explorer (`novel/tree`, `novel/book`,
- * `novel/document`, `novel/scan`, `novel/cast`).
+ * `novel/document`, `novel/scan`, `novel/cast`, and the reader's `novel/read`, `novel/readDocument`, `novel/readLine`, `novel/readPortrait`, `novel/record`,
+ * `novel/locate`, `novel/sentenceAt`).
  *
  * Documents: a text file that is a book as it stands is served at its own file URI; an EPUB, or a book shown as a linked
  * reading's stored source, is a virtual document `novel:/book/<file id>/<title>.txt`; an entity's record (its definition)
@@ -12,6 +13,7 @@ import { join } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { recordOf, type OutlineNode, type Span } from "./book.js";
 import { folderTree, scanFolder } from "./folder.js";
+import { readerBook, readerDocument, readerLine, readerPortrait } from "./reader.js";
 import { NovelWorkspace, type OpenBook } from "./workspace.js";
 
 type Json = Record<string, unknown>;
@@ -69,6 +71,25 @@ export class NovelServer {
       case "novel/cast": return this.castOf(String(params.id), params as { query?: string; category?: string; limit?: number });
       case "novel/document": return this.document(String(params.uri));
       case "novel/problems": return this.diagnostics(String(params.uri));
+      // The reader (docs/v3/reader.md): the book as published with the reading's marks, a document of its EPUB, every
+      // record of one sentence; where a sentence stands in the book's document, and the sentence at a place in it.
+      case "novel/read": return readerBook(this.ws, String(params.id));
+      case "novel/readDocument": return readerDocument(this.ws, String(params.id), Number(params.item));
+      case "novel/readLine": return readerLine(this.ws, String(params.id), String(params.sentence));
+      case "novel/record": {
+        const open = await this.ws.book(String(params.id)), symbol = open.index?.symbol(String(params.entity));
+        return symbol ? { uri: entityUri(open, symbol.id, symbol.label), label: symbol.label } : null;
+      }
+      case "novel/readPortrait": return readerPortrait(this.ws, String(params.id), String(params.entity));
+      case "novel/locate": {
+        const open = await this.ws.book(String(params.id)), line = open.index?.line(String(params.sentence));
+        return line ? this.location(open, line) : null;
+      }
+      case "novel/sentenceAt": {
+        const here = await this.here(params);
+        const line = here?.open.index?.lineAt(here.offset) ?? (here ? here.open.index?.lines.find((entry) => entry.start >= here.offset) : undefined);
+        return here ? { id: here.open.book.id, sentence: line?.id ?? null } : null;
+      }
       case "textDocument/didOpen": return null;
       case "textDocument/documentSymbol": {
         const found = await this.resolve((params.textDocument as { uri: string }).uri);

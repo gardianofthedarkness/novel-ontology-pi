@@ -104,6 +104,8 @@ when the folder holds an EPUB or was scanned before, and registers the editor's 
   the tree without a reload.
 - To try it: `code --extensionDevelopmentPath=<repository>/apps/novel-vscode <folder>` after `npm run build`.
 
+The **Read** command opens a processed book as published, with the reading's marks and notes: see [reader.md](reader.md).
+
 ## 7. Measured on the two books (library 16, read-only)
 
 | | Volume 1 | Volume 2 |

@@ -69,6 +69,11 @@ export async function writeReading(root: string, name: string, text: string, spe
   entities: { id: string; category: string; names: string[] }[];
   breaks: string[];
   credits: { line: string; kind: "spoken" | "action"; who: string; settled?: boolean; confidence?: number; via?: string }[];
+  /** Descriptions of someone and whom they mean; times; a face for one person; a note on a line (for the reader). */
+  descriptions?: { line: string; text: string; entity: string | null; confidence: number }[];
+  times?: { line: string; text: string; gloss: string; role: string }[];
+  portrait?: string;
+  note?: { line: string; text: string };
 }): Promise<{ novel: string; data: string; lines: Line[] }> {
   const novel = join(root, name, "novel"), reading = join(root, name, "reading"), sha256 = createHash("sha256").update(text).digest("hex");
   await mkdir(join(novel, "ontology"), { recursive: true }); await mkdir(join(novel, "source"), { recursive: true }); await mkdir(reading, { recursive: true });
@@ -95,7 +100,20 @@ export async function writeReading(root: string, name: string, text: string, spe
     cards.push({ id: `${kind}:${line.id}`, kind, first: line.id, last: line.id, sentences: [line.id], entities: entities.filter((entity) => entity.category !== "person" && entity.seen.includes(line.id)).map((entity) => ({ id: entity.id, at: [line.id] })), people });
   }
   const data = join(reading, "data.json");
-  await writeFile(data, JSON.stringify({ scenes, cards, roles, chart: { entities }, slots: [] }), "utf8");
+  const kinds = Object.fromEntries(cards.map((card) => [card.first as string, { kind: card.kind as string, confidence: 0.7, turn: 0, top: [[card.kind as string, 0.7], ["narration", 0.2]] }]));
+  const references = (spec.descriptions ?? []).map((entry) => ({ text: entry.text, type: "person", sentences: [find(entry.line).id], entity: entry.entity, confidence: entry.confidence }));
+  const em = [{ batch: lines[0].id, results: [...(spec.descriptions ?? []).map((entry, n) => ({ key: `d${n}`, text: entry.text, type: "person", category: "person", outcome: "description" })), ...entities.map((entity, n) => ({ key: `n${n}`, text: entity.names[0], type: entity.category, category: entity.category, outcome: "entity", entity: entity.id }))] }];
+  const words = (spec.times ?? []).map((entry) => { const line = find(entry.line), start = line.text.indexOf(entry.text); return { key: `${line.id}:${start}`, text: entry.text, sentence: line.id, start, end: start + entry.text.length, gloss: entry.gloss, role: entry.role, confidence: 0.8 }; });
+  await writeFile(data, JSON.stringify({ scenes, cards, roles, kinds, em, references, time: { words }, facts: [{ id: "fact_000001", sentences: [lines[1].id], about: [], time: null }], chart: { entities }, slots: [] }), "utf8");
+  if (spec.portrait) {
+    await mkdir(join(novel, "assets", "portraits"), { recursive: true });
+    await writeFile(join(novel, "assets", "portraits", "face.png"), Buffer.from("89504e470d0a1a0a0000000d4948445200000001000000010806000000", "hex"));
+    await writeFile(join(novel, "ontology", "portraits.jsonl"), `${JSON.stringify({ portrait: "assets/portraits/face.png", entityId: spec.portrait })}\n`, "utf8");
+  }
+  if (spec.note) {
+    await mkdir(join(novel, "stage", "director"), { recursive: true });
+    await writeFile(join(novel, "stage", "director", "notes.jsonl"), `${JSON.stringify({ at: "2026-11-10T08:00:00Z", card: "c1", sentence: find(spec.note.line).id, text: spec.note.text })}\n`, "utf8");
+  }
   return { novel, data, lines };
 }
 
@@ -119,6 +137,10 @@ export async function shelf(): Promise<{ root: string; folder: string; one: { no
       { line: "ran for the rope", kind: "action", who: "char_000001" },
       { line: "Bring the rope", kind: "spoken", who: "char_000003", via: "the stranger", confidence: 0.4 },
     ],
+    descriptions: [{ line: "Bring the rope", text: "the stranger", entity: "char_000003", confidence: 0.4 }],
+    times: [{ line: "The storm arrived", text: "midnight", gloss: "00:00", role: "ADVANCE" }],
+    portrait: "char_000002",
+    note: { line: "There is a boat", text: "Is this the same boat as the captain's?" },
   });
   const two = await writeReading(root, "lib-2", KEEPER_2, {
     entities: [{ id: "char_000009", category: "person", names: ["Mara"] }, { id: "char_000010", category: "person", names: ["the boy"] }],

@@ -57,7 +57,7 @@ const watcher = shots ? setInterval(async () => {
 }, 300) : null;
 let errors = "";
 child.stderr.on("data", (chunk) => { errors += chunk; });
-const timer = setTimeout(() => { errors += "\nTimed out after 120 seconds."; child.kill(); }, 120000);
+const timer = setTimeout(() => { errors += "\nTimed out after 420 seconds."; child.kill(); }, 420000);
 child.on("exit", (code) => {
   clearTimeout(timer); if (watcher) clearInterval(watcher);
   const result = existsSync(out) ? JSON.parse(readFileSync(out, "utf8")) : { ok: false, error: `The editor wrote no result (exit ${code}).\n${errors.split("\n").filter((line) => /error|fail/i.test(line)).slice(-8).join("\n")}` };

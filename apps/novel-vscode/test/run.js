@@ -73,6 +73,29 @@ async function check() {
   const groups = await api.cast.getChildren();
   assert.ok(groups.length > 0 && groups[0].symbols.length > 0, "the cast view lists the book's people");
   step("cast view", { groups: groups.map((group) => `${group.label} ${group.symbols.length}`) });
+
+  // The reader: the book as published, its sentences coloured and marked, the notes on a spoken line.
+  const view = await api.client.request("novel/read", { id: any.book.id });
+  const spoken = Object.keys(view.speakers).find((id) => view.marks[id] && view.kinds[id] === "spoken") || Object.keys(view.speakers)[0];
+  const panel = await api.read({ type: "book", book: any.book });
+  assert.ok(panel, "the reader opened");
+  // The first page (an EPUB may open on its cover and plates, with no sentence yet), then a spoken line, then the end.
+  const shown = await until(() => api.readers.last.get(`${any.book.id}:shown`), "the reader's first page", 30000).catch((error) => { throw new Error(`${error.message}: ${JSON.stringify([...api.readers.last.entries()])}`); });
+  panel.webview.postMessage({ type: "reveal", sentence: spoken });
+  const notes = await until(() => { const last = api.readers.last.get(`${any.book.id}:notes`); return last && last.sentence === spoken ? last : null; }, "the notes on a spoken line", 90000);
+  assert.ok(notes.sections.includes("Who says it"), "the notes say who says the line");
+  const after = api.readers.last.get(`${any.book.id}:shown`);
+  assert.ok(after.found > 0 && after.marks > 0 && after.kinds > 0, "sentences are found, coloured and marked");
+  const last = view.sentences[view.sentences.length - 1][0];
+  panel.webview.postMessage({ type: "reveal", sentence: last });
+  const end = await until(() => { const now = api.readers.last.get(`${any.book.id}:notes`); return now && now.sentence === last ? api.readers.last.get(`${any.book.id}:shown`) : null; }, "the end of the book", 120000);
+  const counts = (state) => ({ found: state.found, documents: state.item, kinds: state.kinds, marks: state.marks, speakers: state.speakers, problems: state.problems, pictures: state.pictures });
+  step("reader", { mode: view.mode, epub: view.epub, sentences: view.sentences.length, firstPage: counts(shown), toTheLine: counts(after), toTheEnd: counts(end), notes: { kind: notes.kind, sections: notes.sections, chips: notes.chips } });
+  // From a chapter in the tree, and again from the cursor in the book's text.
+  const later = chapters[chapters.length - 1];
+  await vscode.commands.executeCommand("novel.read", later);
+  step("reader from a chapter", { chapter: later.part.label });
+  panel.dispose();
   return seen;
 }
 
@@ -106,6 +129,19 @@ async function pose(directory) {
   await vscode.commands.executeCommand("closeReferenceSearch");
   await vscode.commands.executeCommand("novel.showRecord", symbol.uri);
   await held("4-record");
+  // The reader at a spoken line with a mark, its notes open.
+  await vscode.commands.executeCommand("workbench.action.closeAllEditors");
+  const view = await api.client.request("novel/read", { id: book.book.id });
+  const pick = Object.keys(view.speakers).filter((id) => view.marks[id]?.some((mark) => mark[2] === "desc" && mark[3]) && view.kinds[id] === "spoken");
+  const line = pick[Math.min(pick.length - 1, 3)] || Object.keys(view.speakers)[0];
+  const panel = await api.read({ type: "book", book: book.book });
+  await until(() => api.readers.last.get(`${book.book.id}:shown`), "the reader", 30000);
+  panel.webview.postMessage({ type: "reveal", sentence: line });
+  await until(() => api.readers.last.get(`${book.book.id}:notes`)?.sentence === line, "the notes", 150000);
+  await held("5-reader");
+  // The front of the book: its first pictures and headings.
+  const first = view.chapters.find((chapter) => chapter.first)?.first;
+  if (first) { panel.webview.postMessage({ type: "reveal", sentence: first }); await held("6-reader-start"); }
 }
 
 exports.run = async () => {

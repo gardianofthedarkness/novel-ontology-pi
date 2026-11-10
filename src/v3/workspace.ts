@@ -7,7 +7,7 @@ import { isAbsolute, join, resolve } from "node:path";
 import { blockSizeOf, indexBook, linesOf, loadReading, plainOutline, recordOf, type BookIndex, type OutlineNode, type Reference, type Symbol_ } from "./book.js";
 import { STATE_DIR, STATE_FILE, bookText, findFile, loadState, noName, noReading, type BookText, type FolderState } from "./folder.js";
 
-export interface OpenBook { book: BookText; index: BookIndex | null; outline: OutlineNode[]; lines: ReturnType<typeof linesOf>; universe: string | null }
+export interface OpenBook { book: BookText; index: BookIndex | null; reading: unknown | null; outline: OutlineNode[]; lines: ReturnType<typeof linesOf>; universe: string | null }
 const stamp = (path: string) => stat(path).then((info) => info.mtimeMs, () => 0);
 
 export class NovelWorkspace {
@@ -32,7 +32,7 @@ export class NovelWorkspace {
     if (kept && kept.stamp === now) return kept.value;
     const book = await bookText(this.folder, state, file.id), reading = await loadReading(book);
     const index = reading ? indexBook(book, reading, await blockSizeOf(book)) : null;
-    const value: OpenBook = { book, index, outline: index?.outline ?? plainOutline(book), lines: linesOf(book.text), universe: this.universeOf(state, file.id) };
+    const value: OpenBook = { book, index, reading, outline: index?.outline ?? plainOutline(book), lines: linesOf(book.text), universe: this.universeOf(state, file.id) };
     this.open.set(file.id, { stamp: now, value });
     return value;
   }
