@@ -175,7 +175,7 @@ async function loadWorld() {
   const at = current; if (!at) return;
   const cached = worlds.get(at.key);
   if (cached) { world = cached; renderView(activeView); return; }
-  try { const value = await ask(at.folder, "novel/world", { id: at.id }); worlds.set(at.key, value); if (current === at) { world = value; renderView(activeView); if (strandsWide && activeView !== "strands") { $("dock").hidden = false; renderStrandsInto($("dock-body")); } } }
+  try { const value = await ask(at.folder, "novel/world", { id: at.id }); worlds.set(at.key, value); if (current === at) { world = value; renderView(activeView); } }
   catch (error) { if (current === at) { world = { error: error.message }; renderView(activeView); } }
 }
 function renderView(view) {
@@ -263,95 +263,74 @@ $("v-places").addEventListener("click", (event) => {
 });
 
 /**
- * Strands as a git graph, drawn as the user's diagram (2026-11-10): time runs left to right, scene by scene in story
- * order; each strand is a lane of its own, the main one in the middle and the others above and below it; a lane's line
- * runs only from node to node (it starts at the strand's first scene and stops at its last); a strand that split from
- * others curves out of their lane into its first node; a strand that rejoins curves (dashed) from its last node into the
- * node of the scene where it joined; a label at each strand's tip names its people. Days are marked along the top.
+ * Strands as a git graph, vertical (the user, 2026-11-10: "verticle in our case ... what's important is the strand lines
+ * terminates at node end", after their diagram): time runs down, scene by scene in story order, days tagged where they
+ * change; each strand a lane of its own (the main one leftmost; a lane is freed once its strand has ended or joined); a
+ * lane's line runs only from node to node: it starts at the strand's first scene and stops at its last; a strand that
+ * split from others curves out of their lane (from their last node before it) into its first node; a strand that rejoins
+ * curves (dashed) from its last node into the ringed node of the scene where it joined; a label on the row of each
+ * strand's tip names its people, as a branch name at its last commit.
  */
-let strandsWide = remember.get("strandsWide", false), strandZoom = remember.get("strandZoom", 26);
-function renderStrands(body) {
-  if (strandsWide && body === $("v-strands")) {
-    body.innerHTML = `<p class="empty">The strands are shown wide, under the book. <button class="chip" data-wide="off">Show them here</button></p>`;
-    renderStrandsInto($("dock-body"));
-    $("dock").hidden = false;
-    return;
-  }
-  $("dock").hidden = !strandsWide;
-  renderStrandsInto(body);
-}
+function renderStrands(body) { $("dock").hidden = true; renderStrandsInto(body); }
 function renderStrandsInto(target) {
-  const scenes = storyScenes(), S = strandZoom, LH = 46, X0 = 34, rowOf = new Map(scenes.map((scene, n) => [scene.id, n]));
+  const scenes = storyScenes(), RH = 24, W = 16, rowOf = new Map(scenes.map((scene, n) => [scene.id, n]));
   const nodesOf = new Map();
   scenes.forEach((scene, n) => { if (scene.strand) (nodesOf.get(scene.strand) ?? nodesOf.set(scene.strand, []).get(scene.strand)).push(n); });
   const byId = new Map(world.strands.map((strand) => [strand.id, strand]));
   const live = world.strands.filter((strand) => nodesOf.has(strand.id)).sort((a, b) => nodesOf.get(a.id)[0] - nodesOf.get(b.id)[0]);
   const joinAt = (strand) => (strand.into && strand.intoAt && rowOf.has(strand.intoAt) ? rowOf.get(strand.intoAt) : null);
-  // Lanes: the strand with the most scenes is the middle one; each other takes the free slot nearest the middle (above,
-  // then below), freed again once its strand has ended (or joined).
+  // Lanes: the strand with the most scenes leftmost; each other takes the leftmost lane free over its whole life.
   const main = [...live].sort((a, b) => nodesOf.get(b.id).length - nodesOf.get(a.id).length)[0];
-  const slots = [0, -1, 1, -2, 2, -3, 3, -4, 4, -5, 5, -6, 6, -7, 7, -8, 8], until = new Map(), slotOf = new Map();
+  const busy = [], lane = new Map();
   for (const strand of [main, ...live.filter((entry) => entry !== main)].filter(Boolean)) {
     const nodes = nodesOf.get(strand.id), from = nodes[0] - 1, to = Math.max(nodes.at(-1), joinAt(strand) ?? 0);
-    const slot = strand === main ? 0 : slots.slice(1).find((candidate) => (until.get(candidate) ?? -1) < from) ?? slots.length + slotOf.size;
-    until.set(slot, to); slotOf.set(strand.id, slot);
+    let column = strand === main ? 0 : busy.findIndex((until, n) => n > 0 && until < from);
+    if (column < 0) column = Math.max(1, busy.length);
+    busy[column] = to; lane.set(strand.id, column);
   }
-  const used = [...slotOf.values()], top = Math.min(0, ...used), bottom = Math.max(0, ...used);
-  const height = (bottom - top + 1) * LH + 56, y = (id) => 40 + (slotOf.get(id) - top) * LH, x = (n) => X0 + n * S, width = X0 * 2 + scenes.length * S + 160;
+  const lanes = Math.max(1, busy.length), gw = lanes * W + 14, x = (id) => 10 + (lane.get(id) ?? 0) * W, y = (row) => row * RH + RH / 2, height = scenes.length * RH;
   const told = live.filter((strand) => !strand.past);
   setCount("strands", String(told.length));
   const fade = (id) => (strandFocus && strandFocus !== id ? ' opacity="0.2"' : "");
   let svg = "";
-  // Days along the top.
-  let day = null;
-  scenes.forEach((scene, n) => { const today = dayOf(scene); if (today && today !== day) { day = today; svg += `<line x1="${x(n) - S / 2}" y1="16" x2="${x(n) - S / 2}" y2="${height - 6}" stroke="var(--rule)" stroke-dasharray="2 4"/><text x="${x(n) - S / 2 + 4}" y="12" fill="var(--jev)" font-size="10.5" font-family="var(--mono)" font-weight="700">${esc(today)}</text>`; } });
-  // Lines: node to node within a strand; forks out of the lane left; joins into the node where the strand rejoined.
   for (const strand of live) {
-    const nodes = nodesOf.get(strand.id), cy = y(strand.id), color = colorOf(strand.id), dim = fade(strand.id);
-    if (nodes.length > 1) svg += `<path d="M${x(nodes[0])} ${cy} H ${x(nodes.at(-1))}" stroke="${color}" stroke-width="3" fill="none"${dim}/>`;
+    const nodes = nodesOf.get(strand.id), cx = x(strand.id), color = colorOf(strand.id), dim = fade(strand.id);
+    // The lane: from the first node to the last, never past it.
+    if (nodes.length > 1) svg += `<line x1="${cx}" y1="${y(nodes[0])}" x2="${cx}" y2="${y(nodes.at(-1))}" stroke="${color}" stroke-width="2.5"${dim}/>`;
     for (const parent of strand.splitFrom) {
-      if (!slotOf.has(parent)) continue;
-      const before = (nodesOf.get(parent) ?? []).filter((n) => n < nodes[0]).at(-1), px = before === undefined ? x(nodes[0]) - S * 1.5 : Math.max(x(before), x(nodes[0]) - S * 2), py = y(parent), fx = x(nodes[0]);
-      svg += `<path d="M${px} ${py} C ${fx - S * 0.2} ${py}, ${fx - S * 0.9} ${cy}, ${fx} ${cy}" stroke="${color}" stroke-width="3" fill="none"${dim}/>`;
+      if (!lane.has(parent)) continue;
+      const before = (nodesOf.get(parent) ?? []).filter((n) => n < nodes[0]).at(-1), px = x(parent), y0 = y(before ?? Math.max(0, nodes[0] - 1)), y1 = y(nodes[0]);
+      svg += `<path d="M${px} ${y0} C ${px} ${y1 - RH * 0.2}, ${cx} ${y0 + RH * 0.2}, ${cx} ${y1}" stroke="${color}" stroke-width="2.5" fill="none"${dim}/>`;
     }
     const join = joinAt(strand);
-    if (strand.into && join !== null && slotOf.has(strand.into)) {
-      const lx = x(nodes.at(-1)), jx = x(join), ty = y(strand.into), mid = lx + Math.max(S, (jx - lx) * 0.5);
-      svg += `<path d="M${lx} ${cy} C ${mid} ${cy}, ${jx - Math.min(S, (jx - lx) * 0.4)} ${ty}, ${jx} ${ty}" stroke="${color}" stroke-width="2.5" fill="none" stroke-dasharray="5 4"${dim}/>`;
+    if (strand.into && join !== null && lane.has(strand.into)) {
+      const tx = x(strand.into), y0 = y(nodes.at(-1)), y1 = y(join);
+      svg += `<path d="M${cx} ${y0} C ${cx} ${y0 + Math.min(RH * 1.5, (y1 - y0) * 0.5)}, ${tx} ${y1 - Math.min(RH * 1.5, (y1 - y0) * 0.5)}, ${tx} ${y1}" stroke="${color}" stroke-width="2" fill="none" stroke-dasharray="4 3"${dim}/>`;
     }
   }
-  // Nodes: a scene each; a scene in the past hollow; the scene where a strand rejoined ringed.
   const joinedAt = new Set(live.map(joinAt).filter((n) => n !== null));
-  scenes.forEach((scene, n) => {
-    if (!scene.strand || !slotOf.has(scene.strand)) return;
-    const color = colorOf(scene.strand), cx = x(n), cy = y(scene.strand), dim = fade(scene.strand);
-    const title = `<title>${esc(`${placeName(scene.place)} · ${whenOf(scene)} · ${scene.present.slice(0, 6).map(nameOf).join(", ")}${scene.present.length > 6 ? ` +${scene.present.length - 6}` : ""}`)}</title>`;
-    svg += `<g class="snode" data-sentence="${esc(scene.first)}"${dim}>${title}${joinedAt.has(n) ? `<circle cx="${cx}" cy="${cy}" r="9.5" fill="none" stroke="${color}" stroke-width="2"/>` : ""}<circle cx="${cx}" cy="${cy}" r="${Math.min(7, S * 0.32)}" fill="${scene.flashback ? "var(--panel)" : color}" stroke="var(--ink)" stroke-opacity="0.55" stroke-width="1.5"/></g>`;
-  });
-  // A label at each strand's tip: who is in it, and where it went.
+  const tipAt = new Map(); for (const strand of told) (tipAt.get(nodesOf.get(strand.id).at(-1)) ?? tipAt.set(nodesOf.get(strand.id).at(-1), []).get(nodesOf.get(strand.id).at(-1))).push(strand);
   const who = (strand) => `${strand.people.slice(0, 2).map(nameOf).join(", ") || "—"}${strand.people.length > 2 ? ` +${strand.people.length - 2}` : ""}`;
-  for (const strand of told) {
-    const nodes = nodesOf.get(strand.id), tip = x(nodes.at(-1)), cy = y(strand.id), above = (slotOf.get(strand.id) ?? 0) <= 0, color = colorOf(strand.id), dim = fade(strand.id);
-    const text = `${who(strand)}${strand.into ? " →" : ""}`, w = Math.max(40, text.length * 12 + 14), ly = above ? cy - 30 : cy + 14;
-    svg += `<g class="slabel" data-strand="${esc(strand.id)}"${dim}><rect x="${tip - w / 2}" y="${ly}" width="${w}" height="18" rx="3" fill="${color}" stroke="var(--ink)" stroke-opacity="0.6"/><text x="${tip}" y="${ly + 13}" text-anchor="middle" font-size="11" font-family="var(--book)" fill="#04121a">${esc(text)}</text></g>`;
-  }
+  let day = null, rows = "";
+  scenes.forEach((scene, n) => {
+    const known = scene.strand && lane.has(scene.strand), color = colorOf(scene.strand), cx = known ? x(scene.strand) : 10, dim = fade(scene.strand);
+    if (joinedAt.has(n)) svg += `<circle cx="${cx}" cy="${y(n)}" r="7.5" fill="none" stroke="${color}" stroke-width="2"/>`;
+    svg += `<circle class="snode" data-sentence="${esc(scene.first)}" cx="${cx}" cy="${y(n)}" r="4.8" fill="${scene.flashback ? "var(--panel)" : color}" stroke="${color}" stroke-width="1.5"${dim}/>`;
+    const today = dayOf(scene), dayTag = today && today !== day ? `<span class="day">${esc(today)}</span>` : ""; if (today) day = today;
+    const tips = (tipAt.get(n) ?? []).map((strand) => `<span class="sref${strand.into ? " join" : ""}" style="--lc:${colorOf(strand.id)}" data-strand="${esc(strand.id)}" title="${esc(strand.people.map(nameOf).join(", "))}">${esc(who(strand))}${strand.into ? ` → ${esc(who(byId.get(strand.into) ?? strand))}` : ""}</span>`).join("");
+    rows += `<div class="srow${strandFocus && scene.strand !== strandFocus ? " dim" : ""}" data-sentence="${esc(scene.first)}" title="${esc(`${scene.id} · ${scene.when ?? ""}`)}">${dayTag}${tips}<span class="pl">${esc(placeName(scene.place))}</span><span class="pp">${esc(scene.present.slice(0, 3).map(nameOf).join(", "))}${scene.present.length > 3 ? ` +${scene.present.length - 3}` : ""}</span></div>`;
+  });
   const legend = `<div class="legend">${told.map((strand) => `<button data-strand="${esc(strand.id)}" aria-pressed="${strandFocus === strand.id}" style="--lc:${colorOf(strand.id)}" title="${esc(strand.people.map(nameOf).join(", "))}"><i></i>${esc(who(strand))} · ${strand.scenes.length}${strand.open ? "" : strand.into ? " → joins" : ""}</button>`).join("")}</div>`;
-  const tools = `<div class="gtools"><span class="mini">${scenes.length} scenes, left to right in story order</span><span class="grow"></span><button class="chip" data-zoom="-1" title="Closer together">−</button><button class="chip" data-zoom="1" title="Further apart">+</button>${target === $("dock-body") ? `<button class="chip" data-wide="off">Back to the panel</button>` : `<button class="chip" data-wide="on" title="Show the graph wide, under the book">Wide</button>`}</div>`;
-  const scroll = target.querySelector(".hgraph")?.scrollLeft ?? 0;
-  target.innerHTML = `${legend}${tools}<div class="hgraph"><svg width="${width}" height="${height}" viewBox="0 0 ${width} ${height}">${svg}</svg></div>`;
-  target.querySelector(".hgraph").scrollLeft = scroll;
+  const scroll = target.scrollTop;
+  target.innerHTML = `${legend}<div class="sgraph" style="--gw:${gw}px;--rh:${RH}px"><svg width="${gw}" height="${height}" viewBox="0 0 ${gw} ${height}">${svg}</svg><div class="srows">${rows}</div></div>`;
+  target.scrollTop = scroll;
 }
 function strandsClick(event) {
-  const wide = event.target.closest("[data-wide]")?.dataset.wide;
-  if (wide) { strandsWide = wide === "on"; remember.set("strandsWide", strandsWide); if (!strandsWide) { $("dock").hidden = true; } renderStrands($("v-strands")); return; }
-  const zoom = event.target.closest("[data-zoom]")?.dataset.zoom;
-  if (zoom) { strandZoom = Math.max(8, Math.min(60, strandZoom + Number(zoom) * 6)); remember.set("strandZoom", strandZoom); renderStrands($("v-strands")); return; }
   const strand = event.target.closest("[data-strand]")?.dataset.strand; if (strand) { strandFocus = strandFocus === strand ? null : strand; renderStrands($("v-strands")); return; }
   const sentence = event.target.closest("[data-sentence]")?.dataset.sentence; if (sentence) reveal(sentence);
 }
 $("v-strands").addEventListener("click", strandsClick);
-$("dock-body").addEventListener("click", strandsClick);
-$("dock-close").addEventListener("click", () => { strandsWide = false; remember.set("strandsWide", false); $("dock").hidden = true; renderStrands($("v-strands")); });
+$("dock-close").addEventListener("click", () => { $("dock").hidden = true; });
 
 // ---------- The reading's details of a line: Jev's and the reading's records (the debug view). ----------
 async function renderDebug(body) {

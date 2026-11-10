@@ -222,6 +222,7 @@ dialog .row { display: flex; justify-content: flex-end; gap: 8px; margin-top: 14
 /* Strands: a git graph. One drawing for the whole history; rows of text beside it. */
 .sgraph { position: relative; display: grid; grid-template-columns: var(--gw) minmax(0, 1fr); }
 .sgraph svg { grid-column: 1; grid-row: 1; display: block; overflow: visible; }
+.sgraph .snode { cursor: pointer; }
 .sgraph .srows { grid-column: 2; grid-row: 1; display: grid; grid-auto-rows: var(--rh); }
 .srow { display: flex; align-items: center; gap: 6px; min-width: 0; padding: 0 4px; border-radius: 4px; cursor: pointer; white-space: nowrap; overflow: hidden; font-size: 12px; }
 .srow:hover { background: var(--raised); }
