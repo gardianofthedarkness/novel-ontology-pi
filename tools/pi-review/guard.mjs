@@ -63,6 +63,8 @@ const FORMS = {
   settings: "novel settings show <book> [<prefix>] [--place <id>] [--changed] | explain <key> | set <book> <key> '<JSON>' [--place <id>] [--layer universe|book] [--table] --why <text> [--before] | unset <book> <key> [...] --why <text> | diff <book> [--from <snapshot>] | profile save|apply|list <book> [<name>] --why <text> [--before]  (novel-models skill)",
   warehouse: "novel warehouse list [--source <name>] [<book>] | find '<words>' [--kind '<kind>'] [--category <c>] [--size <m>] [--source <name>] [--top N] [<book>] | show <source>:<part> [<book>] | use <source>:<part> for <slot> <book> --why <text> [--place <id>] [--before] [--floors a b] | fetch <name> <https-url> --licence <SPDX> --ok '<the user's words>' --why <text> [--path <folder>] [--limit <MB>] | refresh <name> | add <name> <folder under the packs root> --licence <SPDX> --why <text> | interact <source>:<part>|'<kind>' ['<json sheet>'] <book> [--why <text>] [--before]  (novel-models skill; a download only with the user's OK)",
   model: "novel model nominate <book> [--top N] | list <book> [--state todo|made|failed|part] | brief <book> <thing> | write <book> <thing>|--all [--limit N] | check <book> <thing>|--all | show <book> <thing> | use <book> <thing> <source>:<part> [--why <text>] | bind <book> [--limit N] | parts '<kind>'  (novel-models skill)",
+  volume: 'novel volume status <book> | run <book> [--step <id> | --until <id>] | log <book> <step> [--lines N] | done <book> look --why <text>  (a whole volume, step by step: novel-volume skill)',
+  strands: 'novel strands show <book> | inherit <book> [--work] [--dry] | set <book> <strand key> inherited|closed --why <text> [--into <key>]  (what the book carries from the book before: novel-volume skill)',
   look: "novel look context <book> [--place <id>] [--top N]  (the look pass, novel-models skill: each place's environment sentences, the parts the text names, the keys a place may set; then novel settings set|warehouse use ... --place <id> --why <sentence ids>)",
   help: 'novel help', config: 'novel config',
 };
@@ -395,6 +397,25 @@ function permit(command, scope) {
   // The world generator's settings (novel settings; milestones M8d), the model warehouse (novel warehouse; M10g–i) and models
   // as code (novel model; M10): the assigned book's only; a why wherever something is written; a download only with the
   // user's OK; a folder registered only under the packs root. Flags come in pairs or as switches, each at most once.
+  // A whole volume (novel volume; the user, 2026-11-10): the assigned book's only; a step's id is one of the runner's;
+  // the agent marks only its own step done, with a why. What the book carries (novel strands): show, inherit, the
+  // agent's override with a why; registering a book and keeping a run's damage are the runner's steps.
+  if (verb === 'volume') {
+    const STEP = /^[a-z][a-z-]{1,20}$/, why = value => typeof value === 'string' && value.trim().length > 0 && !value.startsWith('-') && Buffer.byteLength(value) <= 400;
+    valid = tokens[2] === novel && (
+      operation === 'status' && tokens.length === 3
+      || operation === 'run' && (tokens.length === 3 || tokens.length === 5 && ['--step', '--until'].includes(tokens[3]) && STEP.test(tokens[4] ?? ''))
+      || operation === 'log' && STEP.test(tokens[3] ?? '') && (tokens.length === 4 || tokens.length === 6 && tokens[4] === '--lines' && /^\d{1,3}$/.test(tokens[5] ?? ''))
+      || operation === 'done' && tokens[3] === 'look' && tokens.length === 6 && tokens[4] === '--why' && why(tokens[5]));
+  }
+  if (verb === 'strands') {
+    const KEY = /^vol-[\w-]{1,20}:[\w~-]{1,60}$/, why = value => typeof value === 'string' && value.trim().length > 0 && !value.startsWith('-') && Buffer.byteLength(value) <= 400;
+    const rest = tokens.slice(3), switches = new Set(rest);
+    valid = tokens[2] === novel && (
+      operation === 'show' && tokens.length === 3
+      || operation === 'inherit' && rest.every(token => ['--work', '--dry'].includes(token)) && switches.size === rest.length
+      || operation === 'set' && KEY.test(tokens[3] ?? '') && ['inherited', 'closed'].includes(tokens[4]) && tokens[5] === '--why' && why(tokens[6]) && (tokens.length === 7 || tokens.length === 9 && tokens[7] === '--into' && KEY.test(tokens[8] ?? '')));
+  }
   if (verb === 'look') valid = operation === 'context' && tokens[2] === novel && (() => { for (let i = 3; i < tokens.length; i += 2) { if (tokens[i] === '--place' && /^[\w:-]{1,80}$/.test(tokens[i + 1] ?? '')) continue; if (tokens[i] === '--top' && /^\d+$/.test(tokens[i + 1] ?? '') && Number(tokens[i + 1]) >= 1 && Number(tokens[i + 1]) <= 40) continue; return false; } return true; })();
   if (verb === 'settings' || verb === 'warehouse' || verb === 'model') {
     const text = (value, most = 400) => typeof value === 'string' && value.trim().length > 0 && !value.startsWith('-') && Buffer.byteLength(value) <= most;

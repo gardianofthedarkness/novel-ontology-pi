@@ -343,3 +343,17 @@ test('settings, warehouse and model commands pass for the assigned book, with a 
     `novel model use '${novel}' 'the van' van`, `novel warehouse list --source 'kit; env'`, `novel look context /tmp/other`, `novel look context '${novel}' --top 500`, `novel warehouse interact kit:cw_veh_bus '{"solid":false}' '${novel}'`, `novel warehouse interact kit:cw_veh_bus /tmp/other`,
   ]) assert.throws(() => authorize(command), command);
 });
+
+test('a whole volume and what it carries: the assigned book only, the runner\'s steps, a why where the agent decides', () => {
+  for (const command of [
+    `novel volume status '${novel}'`, `novel volume run '${novel}'`, `novel volume run '${novel}' --step terrain`, `novel volume run '${novel}' --until prefilm`,
+    `novel volume log '${novel}' read`, `novel volume log '${novel}' direct --lines 80`, `novel volume done '${novel}' look --why 'models and settings set'`,
+    `novel strands show '${novel}'`, `novel strands inherit '${novel}'`, `novel strands inherit '${novel}' --work --dry`,
+    `novel strands set '${novel}' vol-1:scene_000002 inherited --why 'the same group goes on' --into vol-2:scene_000003`, `novel strands set '${novel}' vol-1:scene_000002 closed --why 'resolved'`,
+  ]) assert.equal(authorize(command).kind, 'cli', command);
+  for (const command of [
+    'novel volume status /tmp/other', `novel volume run '${novel}' --step 'a;b'`, `novel volume done '${novel}' direct --why x`, `novel volume done '${novel}' look`, `novel volume run '${novel}' --step terrain --until x`,
+    `novel strands register '${novel}'`, `novel strands keep '${novel}' --run d20261109081436`, `novel strands set '${novel}' vol-1:scene_000002 maybe --why x`, `novel strands set '${novel}' vol-1:scene_000002 closed`,
+    `novel strands inherit '${novel}' --work --work`, 'novel strands show /tmp/other',
+  ]) assert.throws(() => authorize(command), undefined, command);
+});

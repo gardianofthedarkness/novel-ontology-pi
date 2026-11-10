@@ -69,6 +69,7 @@ import { sourceGrep, sourceSimilar } from "./commands/extract/sourceCommands.js"
 import { worldAnswer, worldBatch, worldPool } from "./commands/extract/worldCommands.js";
 import { castAsk, castMerge, castReview, castSheet, castShow, sky } from "./commands/extract/castCommands.js";
 import { strandsInherit, strandsKeep, strandsRegister, strandsSet, strandsShow } from "./commands/extract/strandCommands.js";
+import { volumeDone, volumeLog, volumeRun, volumeStatus } from "./commands/extract/volumeCommands.js";
 import { settingsDiff, settingsExplain, settingsProfileApply, settingsProfileList, settingsProfileSave, settingsSet, settingsShow, settingsUnset } from "./commands/extract/settingsCommands.js";
 import { warehouseAdd, warehouseFetch, warehouseFind, warehouseInteract, warehouseList, warehouseRefresh, warehouseShow, warehouseUse } from "./commands/extract/warehouseCommands.js";
 import { lookContext } from "./commands/extract/lookCommands.js";
@@ -162,6 +163,7 @@ const COMMANDS: Record<string, string> = {
   "novel world log <novel-dir> --scene|--person|--card <id> [--run <id>]": "The world log of the last director run: who was where, moves, meetings, blasts, and the laws' verdicts (read-only)",
   "novel world held <novel-dir> [--run <id>] [--budget N]": "A director run's held items (what the laws could not settle, and the user's notes) into the review pool, one batch per scene by reach",
   "novel world apply <novel-dir>": "The main agent's answers into the pins the director plays by, under the laws (what they turn back returns to the pool)",
+  "novel volume status|run|log|done <novel-dir> …": "A whole volume step by step (novel-volume skill): each step's status (status); the steps from the first not done up to the agent's look pass, or one step, or up to a step, started in the background (run [--step <id> | --until <id>]); a step's log (log <step> [--lines N]); the agent's look pass marked done (done look --why t)",
   "novel strands register|inherit|set|keep|show <novel-dir> …": "What a book carries into the next, per strand (docs/v2/borrow-and-spawn.md §4.5): the book's strands at its end into the universe's registry (register [--run <id>]); at the next book's reading each open strand of the last book inherited (its damage to buildings that are not nominated stays) or closed (they stand whole) (inherit [--work] [--dry]); the main agent's override (set <strand key> inherited|closed --why t [--into <key>]); a run's damage into the universe building by building (keep --run <id>); the registry and the damage in force (show)",
   "novel cast show|merge|sheet|ask|review <novel-dir> …": "The cast's review: the cast and their ability sheets (show [<char>]); two entries made one person in the reading, its views, the ontology and the universe's sheets (merge <keep> <merged> --reason t [--reading <data.json>]... [--dry]); one person's ability sheet (sheet <char> --sheet '<JSON>' | --none --reason t [--evidence <ids>]); two people raised as one for the agent (ask <a> <b> --why t); the cast's questions in batches in the world's review pool (review [--size N] [--least-cards N] [--send <console-dir>]), answered with novel world answer, done by novel world apply",
   "novel sky build|show <novel-dir> [--dry] [--cache <dir>]": "The story sky: each unit's time of day and weather into sky.json beside the reading the director plays (build: Jev, cents, cached; --dry counts only); show: what it holds",
@@ -806,6 +808,17 @@ async function main(): Promise<void> {
     if (!text) throw new Error(`Usage: novel source ${sub} <novel-dir> <${sub === "grep" ? "regex" : "text"}> [--limit N]`);
     if (!Number.isInteger(limit) || limit < 1 || limit > 50) throw new Error("--limit must be a whole number from 1 to 50.");
     out(await (sub === "grep" ? sourceGrep(novelDir, text, limit) : sourceSimilar(novelDir, text, limit)), pretty);
+    return;
+  }
+
+  if (cmd === "volume") {
+    const novelDir = positional[2], usage = "Usage: novel volume status <novel-dir> | run <novel-dir> [--step <id> | --until <id>] | log <novel-dir> <step> [--lines N] | done <novel-dir> <step> --why <text>";
+    if (!["status", "run", "log", "done"].includes(sub ?? "") || !novelDir || novelDir.startsWith("--")) throw new Error(usage);
+    if (sub === "status") { out(await volumeStatus(novelDir), pretty); return; }
+    if (sub === "run") { out(await volumeRun(novelDir, { step: flag(positional, "--step"), until: flag(positional, "--until") }), pretty); return; }
+    if (sub === "log") { if (!positional[3]) throw new Error(usage); const lines = flag(positional, "--lines"); out(await volumeLog(novelDir, positional[3], lines === undefined ? undefined : Number(lines)), pretty); return; }
+    const why = flag(positional, "--why"); if (!positional[3] || !why) throw new Error(usage);
+    out(await volumeDone(novelDir, positional[3], why), pretty);
     return;
   }
 
