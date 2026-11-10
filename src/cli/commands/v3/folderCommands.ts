@@ -8,12 +8,14 @@ import { folderTree, linkReading, putBook, scanFolder, takeBook, universeAdd, un
 import { NovelServer, serve } from "../../../v3/server.js";
 import { NovelWorkspace } from "../../../v3/workspace.js";
 import { keyStatus, readingStatus, setKey, startReading, stopReading } from "../../../v3/reading.js";
+import { basicList, basicStep } from "../../../v3/basic.js";
 
 export const FOLDER_USAGE = [
   "Usage: novel folder scan <folder>",
   "       novel folder show <folder> [--opening N]",
   "       novel folder universe <folder> <name> [--why <text>] [--rename <new name>] [--remove]",
-  "       novel folder put <folder> <file> <universe> [--at N] [--title <text>]",
+  "       novel folder put <folder> <file> <universe> [--at N] [--title <text>] [--series <name>]",
+  "       novel folder basics <folder>   (every book's basic layer: title, author, language, series and volume by title, names by pattern; where it is placed)",
   "       novel folder take <folder> <file>",
   "       novel folder link <folder> <file> <novel-dir> [--reading <data.json>] [--force] | unlink <folder> <file>",
   "       novel folder chapters <folder> <file> [--depth chapters|parts|cards]",
@@ -28,7 +30,7 @@ export const FOLDER_USAGE = [
   "       novel folder serve <folder>",
 ].join("\n");
 
-const VALUED = ["--opening", "--why", "--rename", "--at", "--title", "--reading", "--depth", "--query", "--category", "--limit", "--how", "--chapter", "--scene", "--from", "--around", "--stand-in"];
+const VALUED = ["--opening", "--why", "--rename", "--at", "--title", "--reading", "--depth", "--query", "--category", "--limit", "--how", "--chapter", "--scene", "--from", "--around", "--stand-in", "--series"];
 const SWITCHES = ["--remove", "--guesses", "--via", "--universe", "--force", "--jev", "--work", "--stop"];
 
 export async function folderCommand(args: string[]): Promise<unknown> {
@@ -47,7 +49,8 @@ export async function folderCommand(args: string[]): Promise<unknown> {
     case "scan": return scanFolder(folder);
     case "show": return folderTree(folder, { opening: number("--opening") });
     case "universe": need(2); return on.has("--remove") ? universeRemove(folder, plain[1]) : universeAdd(folder, plain[1], { why: flags.get("--why"), rename: flags.get("--rename") });
-    case "put": need(3); return putBook(folder, plain[1], plain[2], { at: number("--at"), title: flags.get("--title") });
+    case "put": need(3); return putBook(folder, plain[1], plain[2], { at: number("--at"), title: flags.get("--title"), series: flags.get("--series") });
+    case "basics": { let step; do { step = await basicStep(folder, 6); } while (step.left > 0); return basicList(folder); }
     case "take": need(2); return takeBook(folder, plain[1]);
     case "link": need(3); return linkReading(folder, plain[1], plain[2], flags.get("--reading"), { force: on.has("--force") });
     case "unlink": need(2); return linkReading(folder, plain[1], null);

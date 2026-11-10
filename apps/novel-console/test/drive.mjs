@@ -3,16 +3,17 @@
 // the user's is read or changed; it is driven through its debugging port (the page's own buttons, clicked in the page), and
 // pictures are of its window only. Prints what it saw as JSON. No reading is started: the play button with no keys must
 // open the keys dialog, and that is all it is pressed for.
-import { spawn } from "node:child_process";
-import { mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
-import { tmpdir } from "node:os";
+import { execFileSync, spawn } from "node:child_process";
+import { mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
+import { homedir, tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const here = dirname(fileURLToPath(import.meta.url)), appDir = resolve(here, "..");
 const argv = process.argv.slice(2), flag = (name) => { const at = argv.indexOf(name); return at >= 0 ? argv.splice(at, 2)[1] : null; };
-const arrange = argv.includes("--arrange"); if (arrange) argv.splice(argv.indexOf("--arrange"), 1);
-const packaged = flag("--app"), pick = Number(flag("--book") ?? 1) - 1; flag("--shots");
+const take = (name) => { const at = argv.indexOf(name); if (at < 0) return false; argv.splice(at, 1); return true; };
+const arrange = take("--arrange"), agentArrange = take("--agent-arrange"), asUser = take("--as-user"), realAgent = take("--real-agent") || asUser;
+const packaged = flag("--app"), pick = Number(flag("--book") ?? 1) - 1, agentTab = flag("--agent") ?? "claude-code"; flag("--shots");
 const shotsDir = (() => { const at = process.argv.indexOf("--shots"); return at >= 0 ? resolve(process.argv[at + 1]) : null; })();
 const folders = (argv[0] ?? "").split(",").filter(Boolean).map((folder) => resolve(folder));
 if (!folders.length) { console.error("usage: node test/drive.mjs <folder>[,<folder>…] [--app <path to .app>] [--shots <dir>]"); process.exit(2); }
@@ -21,10 +22,42 @@ const profile = mkdtempSync(join(tmpdir(), "novel-console-")), secrets = join(pr
 writeFileSync(join(profile, "libraries.json"), JSON.stringify({ folders }));
 const port = 9400 + Math.floor(Math.random() * 400);
 const binary = packaged ? join(resolve(packaged), "Contents", "MacOS", "Novel Console") : join(appDir, "node_modules", "electron", "dist", "Electron.app", "Contents", "MacOS", "Electron");
-// A stand-in for the agents' command: the chat's send is tested without touching any real session.
-const standIn = join(profile, "agent-stand-in.sh");
-writeFileSync(standIn, "#!/bin/sh\necho '{\"result\":\"stand-in reply\"}'\n", { mode: 0o700 });
-const child = spawn(binary, [...(packaged ? [] : [appDir]), `--remote-debugging-port=${port}`], { stdio: ["ignore", "ignore", "pipe"], env: { ...process.env, NOVEL_CONSOLE_DATA: profile, NOVEL_SECRETS_DIR: secrets, NOVEL_CONSOLE_AGENT_COMMAND: standIn, TYPESAFE_API_KEY: "", WORK_LLM_API_KEY: "", ELECTRON_RUN_AS_NODE: "" } });
+// Stand-ins for the two agents the console starts, each speaking as the real one does (Claude Code's stream-json, the Pi
+// runner's JSON lines and a session file of its own): an arrangement makes one universe of the first two books not arranged,
+// each with the series its title gives, through the folder's own novel command; a continued session answers. No real
+// session is touched.
+const standIn = join(profile, "agent-stand-in.mjs"), piSessions = join(profile, "pi-sessions");
+writeFileSync(standIn, `#!${process.execPath}
+import { execFileSync } from "node:child_process";
+import { mkdirSync, writeFileSync, appendFileSync } from "node:fs";
+import { join } from "node:path";
+const args = process.argv.slice(2), pi = args[0] !== "-p", say = (value) => console.log(JSON.stringify(value));
+const novel = pi ? args[1] : process.env.NOVEL_COMMAND, folder = pi ? args[0] : process.env.NOVEL_FOLDER;
+const run = (...rest) => { if (pi) say({ step: ["folder", ...rest].join(" ") }); else say({ type: "assistant", message: { content: [{ type: "tool_use", name: "Bash", input: { command: [novel, "folder", ...rest].join(" ") } }] } }); return JSON.parse(execFileSync(novel, ["folder", ...rest], { encoding: "utf8", env: { ...process.env, ELECTRON_RUN_AS_NODE: "" } })); };
+if (!pi && args.includes("--resume") && !process.env.NOVEL_COMMAND) { say({ type: "result", result: "stand-in reply", session_id: args[args.indexOf("--resume") + 1] }); process.exit(0); }
+const file = pi ? (args[4] ?? join(args[3], "stand-in-" + Date.now() + ".jsonl")) : null;
+if (pi) { mkdirSync(args[3], { recursive: true }); if (!args[4]) writeFileSync(file, JSON.stringify({ type: "session", id: "stand-in-pi", cwd: folder }) + "\\n"); appendFileSync(file, JSON.stringify({ type: "message", message: { role: "user", content: [{ type: "text", text: process.env.NOVEL_ARRANGE_PROMPT ?? "" }] } }) + "\\n"); say({ session: file }); }
+else say({ type: "system", subtype: "init", session_id: "stand-in-session" });
+const list = run("basics", folder), loose = list.books.filter((book) => !book.placed).slice(0, 2);
+const made = run("universe", folder, "Stand-in world " + Date.now() % 100000, "--why", "the stand-in's test");
+for (const book of loose) run("put", folder, book.id, made.universe, "--series", book.seriesByTitle ?? "one");
+const text = "Stand-in arranged " + loose.length + " books into Stand-in world.";
+if (pi) { appendFileSync(file, JSON.stringify({ type: "message", message: { role: "assistant", content: [{ type: "text", text }] } }) + "\\n"); say({ result: text, sessionFile: file, commands: loose.length + 2, refused: 0, seconds: 1 }); }
+else say({ type: "result", result: text, session_id: "stand-in-session", total_cost_usd: 0 });
+`, { mode: 0o700 });
+// As the user (the user, 2026-11-10: "mimick user work environment ... Imagine you are the user when running tests"): the
+// DMG's app opened as Finder opens it (LaunchServices: launchd's environment, nothing of this shell's), the user's own
+// profile and key store, the real agents. The one stand-in: a folder the user has not added is written into the user's
+// libraries list, for the one click on "Add a folder…" (a native dialog this driver cannot press).
+if (asUser) {
+  if (!packaged) throw new Error("--as-user needs --app <the DMG's app>.");
+  const own = join(homedir(), "Library", "Application Support", "Novel Console"), listFile = join(own, "libraries.json");
+  let list = { folders: [] }; try { list = JSON.parse(readFileSync(listFile, "utf8")); } catch {}
+  const added = folders.filter((folder) => !list.folders.includes(folder));
+  if (added.length) { mkdirSync(own, { recursive: true }); writeFileSync(listFile, JSON.stringify({ ...list, folders: [...list.folders, ...added] })); }
+}
+const appBinary = packaged ? `${resolve(packaged)}/Contents/MacOS/Novel Console` : null;
+const child = asUser ? spawn("open", ["-n", "-a", resolve(packaged), "--args", `--remote-debugging-port=${port}`], { stdio: ["ignore", "ignore", "pipe"] }) : spawn(binary, [...(packaged ? [] : [appDir]), `--remote-debugging-port=${port}`], { stdio: ["ignore", "ignore", "pipe"], env: { ...process.env, NOVEL_CONSOLE_DATA: profile, NOVEL_SECRETS_DIR: secrets, ...(realAgent ? {} : { NOVEL_CONSOLE_AGENT_COMMAND: standIn, NOVEL_CONSOLE_PI_RUNNER: standIn, NOVEL_CONSOLE_PI_SESSIONS: piSessions }), TYPESAFE_API_KEY: "", WORK_LLM_API_KEY: realAgent ? process.env.WORK_LLM_API_KEY ?? "" : "stand-in", ELECTRON_RUN_AS_NODE: "" } });
 let errors = ""; child.stderr.on("data", (chunk) => { errors += chunk; });
 const wait = (ms) => new Promise((done) => setTimeout(done, ms));
 const until = async (probe, what, most = 30000) => { for (const start = Date.now(); ;) { const value = await probe().catch(() => null); if (value) return value; if (Date.now() - start > most) throw new Error(`Timed out waiting for ${what}`); await wait(250); } };
@@ -57,6 +90,25 @@ try {
     await picture("1b-arranged");
   }
 
+  if (agentArrange) {
+    const before = await run(`[...document.querySelectorAll("#tree .node")].filter((row) => row.querySelector(".ic")?.textContent === "◎" && /books?$/.test(row.querySelector(".desc").textContent)).length`);
+    // As a user: open the chat, pick the agent's tab there, then press the row's Ask.
+    await run(`document.getElementById("t-chat").getAttribute("aria-pressed") === "true" || document.getElementById("t-chat").click()`);
+    await until(() => run(`Boolean(document.querySelector('#hosts [data-host="${agentTab}"]'))`), "the chat's agents");
+    await run(`document.querySelector('#hosts [data-host="${agentTab}"]').click()`);
+    const asked = await run(`[...document.querySelectorAll("#tree .node.agent-row")][0].querySelector(".act").textContent`);
+    await run(`[...document.querySelectorAll("#tree .node.agent-row")][0].querySelector(".act").click()`);
+    const started = Date.now();
+    const midway = await until(() => run(`(() => { const steps = document.querySelectorAll("#chat-body .msg.step").length; return steps ? steps : /arranged by|stopped|signed out|cannot|Pick|its key/.test(document.getElementById("status").textContent + document.getElementById("chat-body").textContent) ? -1 : null; })()`), "the first command in the chat", realAgent ? 300000 : 30000);
+    if (midway > 0) await picture("1c-agent-working");
+    await until(() => run(`/arranged by|stopped|signed out|cannot|Pick|its key/.test(document.getElementById("status").textContent) && !document.querySelector("#chat-body .pending")`), "the agent's report", realAgent ? 1200000 : 30000);
+    await wait(1500);
+    const chat = await run(`({ title: (document.querySelector("#chat-body .note b")?.textContent ?? "").replace(/[^\\x20-\\x7e]/g, "?"), messages: document.querySelectorAll("#chat-body .msg").length, tab: document.querySelector("#hosts [aria-selected=true]")?.dataset.host, compose: !document.getElementById("compose").hidden })`);
+    const report = chat.messages;
+    const after = await run(`({ universes: [...document.querySelectorAll("#tree .node")].filter((row) => row.querySelector(".ic")?.textContent === "◎" && /books?$/.test(row.querySelector(".desc").textContent)).length, seriesRows: document.querySelectorAll("#tree .node.series").length, notArranged: ([...document.querySelectorAll("#tree .node.group")].map((row) => row.textContent).find((text) => /Not arranged/.test(text)) ?? "").replace(/[^0-9]/g, "") })`);
+    step("arranged by an agent", { real: realAgent, agent: agentTab, asked, seconds: Math.round((Date.now() - started) / 1000), commandsSeenLive: midway, universesBefore: before, ...after, chat, status: await run(`document.getElementById("status").textContent.replace(/[^\x20-\x7e]/g, "?")`) });
+    await picture("1d-agent-arranged");
+  }
   // A book with a reading: the reader, a spoken line's notes, the cast, a record.
   const opened = await run(`(() => { const row = [...document.querySelectorAll("#tree .node")].filter((node) => /entries/.test(node.querySelector(".desc").textContent))[${pick}]; if (!row) return null; row.click(); return row.querySelector(".name").textContent; })()`);
   if (opened) {
@@ -141,9 +193,11 @@ try {
       await run(`document.querySelector("#chat-body [data-session]").click()`);
       const messages = await until(() => run(`document.querySelectorAll("#chat-body .msg").length || null`), "a session's messages", 20000);
       const compose = await run(`!document.getElementById("compose").hidden`);
-      await run(`(() => { document.getElementById("compose-text").value = "stand-in test message"; document.getElementById("compose").requestSubmit(); })()`);
-      await until(() => run(`!document.getElementById("pending") || /Not sent/.test(document.getElementById("pending").textContent) ? true : null`), "the stand-in reply", 20000);
-      chat = { hosts, messages, compose, sentThroughStandIn: await run(`!document.querySelector("#chat-body .pending")`) };
+      if (!realAgent) {
+        await run(`(() => { document.getElementById("compose-text").value = "stand-in test message"; document.getElementById("compose").requestSubmit(); })()`);
+        await until(() => run(`!document.getElementById("pending") || /Not sent/.test(document.getElementById("pending").textContent) ? true : null`), "the stand-in reply", 20000);
+      }
+      chat = { hosts, messages, compose, sentThroughStandIn: realAgent ? "skipped (real agent)" : await run(`!document.querySelector("#chat-body .pending")`) };
     }
     step("chat", chat);
     await picture("5-chat");
@@ -166,7 +220,7 @@ try {
 } finally {
   seen.stderr = errors.split("\n").filter((line) => /error|uncaught/i.test(line)).slice(-6);
   try { socket?.close(); } catch {}
-  child.kill();
+  if (asUser) { try { execFileSync("pkill", ["-f", appBinary]); } catch {} } else child.kill();
   console.log(JSON.stringify(seen, null, 1));
   process.exit(seen.ok ? 0 : 1);
 }

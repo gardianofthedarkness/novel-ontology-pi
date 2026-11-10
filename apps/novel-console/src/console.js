@@ -152,8 +152,12 @@ async function load(folder) {
   catch (error) { trees.set(folder, { error: error.message, universes: [], unsorted: [] }); }
 }
 async function refresh(scan = false) {
+  // macOS asks a new app (and each new build) whether it may open folders like Documents, and nothing answers until the
+  // user does; say so instead of showing an empty library.
+  const waiting = setTimeout(() => { say("Waiting for macOS: if it asks whether Novel Console may open files in your folders, press Allow (the prompt may be behind this window).", true); $("tree").innerHTML = `<p class="empty">Waiting for macOS to let Novel Console open your folders. Look for its prompt and press Allow.</p>`; }, 6000);
   libs = await host.libraries();
   for (const lib of libs) { if (!lib.exists) continue; if (scan) await ask(lib.path, "novel/scan").catch(() => {}); await load(lib.path); if (!expanded.has(lib.path) && !expanded.has(`closed:${lib.path}`)) expanded.add(lib.path); }
+  clearTimeout(waiting);
   $("welcome").hidden = Boolean(current);
   render(); follow();
   for (const lib of libs) if (lib.exists) basicLayer(lib.path);
@@ -175,6 +179,69 @@ async function basicLayer(folder) {
     await load(folder); render();
   } finally { basicRunning.delete(folder); }
 }
+// Arrange with an agent: the agent open in the chat does it (the user, 2026-11-10: "User is free to activate on whichever
+// window using"): Claude Code or Pi; into the session open there when the console can continue it, else a new one. The
+// chat shows each command as it runs, then the session itself.
+const AGENT_NAMES = { "claude-code": "Claude Code", pi: "Pi" };
+const arrangingNow = new Map();
+let liveShown = null;
+async function arrangeWithAgent(lib) {
+  if (!hostsLoaded || !hostList.length) await loadHosts();
+  setPanel(true);
+  if (arrangingNow.has(lib.path)) { paintLive(arrangingNow.get(lib.path)); return; }
+  const agent = AGENT_NAMES[chosenHost] ? chosenHost : null, entry = hostList.find((item) => item.id === agent);
+  if (!agent || !entry?.starts) {
+    renderSessions();
+    $("chat-body").insertAdjacentHTML("afterbegin", `<p class="note pick">${agent ? esc(entry?.note ?? `${AGENT_NAMES[agent]} cannot be started on this Mac.`) : "Pick Claude Code or Pi above, then press Ask again: the console can start those two (Codex and Gemini not yet)."}</p>`);
+    return;
+  }
+  if (agent === "pi" && !(await host.keys().catch(() => ({}))).work) {
+    paintLive({ folder: lib.path, name: lib.name, agent, into: null, steps: [], reply: null, error: "Pi works on the work model, and its key is not entered yet. Enter it, then press Ask Pi again.", action: ["Enter the work model's key", () => enterKeys().then(() => render())] });
+    say("Pi works on the work model: enter its key, then press Ask Pi again.", true);
+    return;
+  }
+  const open = openSession?.startsWith(`${agent}|`) ? entry.sessions.find((item) => item.key === openSession) : null;
+  const into = open && (open.continues || entry.continues) ? open.key : null;
+  const live = { folder: lib.path, name: lib.name, agent, into, intoTitle: open?.title ?? null, steps: [], session: null, reply: null, error: null };
+  arrangingNow.set(lib.path, live); render(); paintLive(live);
+  say(`${AGENT_NAMES[agent]} is arranging ${lib.name}${into ? " in the open session" : ""}; the chat shows each command.`);
+  try {
+    const reply = await host.arrangeWithAgent(lib.path, { agent, session: into });
+    live.reply = reply;
+    seriesOf.set(lib.path, await ask(lib.path, "novel/series").catch(() => []));
+    await load(lib.path);
+    say(reply.signedOut ? reply.error : reply.error ? `${AGENT_NAMES[agent]} stopped: ${reply.error}` : `${lib.name} arranged by ${AGENT_NAMES[agent]}${reply.cost ? ` ($${Number(reply.cost).toFixed(2)})` : ""}${live.steps.length ? ` · ${live.steps.length} commands` : ""}.`, Boolean(reply.error));
+  } catch (error) { live.error = plainError(error); say(live.error, true); }
+  finally { arrangingNow.delete(lib.path); render(); }
+  // The session it worked in, as the chat shows any session; the live view when it is not found.
+  if (liveShown !== live) return;
+  const shown = live;
+  await loadHosts();
+  const key = live.reply?.sessionId ? hostList.find((item) => item.id === "claude-code")?.sessions.find((item) => item.key.endsWith(`/${live.reply.sessionId}.jsonl`))?.key
+    : live.reply?.sessionFile ? `pi|${live.reply.sessionFile}` : null;
+  if (key && hostList.some((item) => item.sessions.some((session) => session.key === key))) { chosenHost = agent; remember.set("chatHost", agent); renderHosts(); await showSession(key); if (live.reply?.error) $("chat-body").insertAdjacentHTML("beforeend", `<div class="msg assistant failed">${esc(live.reply.error)}</div>`); }
+  else paintLive(shown);
+}
+/** An error from the Mac side as the user reads it (Electron wraps it in "Error invoking remote method ..."). */
+const plainError = (error) => String(error?.message ?? error).replace(/^Error invoking remote method '[^']*': /, "").replace(/^Error: /, "");
+/** An arrangement in the chat while it runs: the request, each command as the agent runs it, then its reply. */
+function paintLive(live) {
+  liveShown = live; openSession = null; $("chat-back").hidden = false; $("compose").hidden = true;
+  const short = (text) => text.replace(/\S*\/\.novel\/bin\/novel/g, "novel").split(live.folder).join(live.name);
+  const steps = live.steps.slice(-80).map((step) => `<div class="msg step"><code>${esc(short(step))}</code></div>`).join("");
+  const done = live.reply || live.error;
+  const end = !done ? `<div class="msg assistant pending">${esc(AGENT_NAMES[live.agent])} is working… ${live.steps.length} ${live.steps.length === 1 ? "command" : "commands"} so far</div>`
+    : `<div class="msg assistant${live.error || live.reply?.error ? " failed" : ""}">${esc(live.error ?? live.reply.error ?? live.reply.result ?? "")}${live.action ? `<div class="chips" style="margin-top:8px"><button class="chip" id="live-action">${esc(live.action[0])}</button></div>` : ""}</div>`;
+  $("chat-body").innerHTML = `<p class="note"><b>${esc(AGENT_NAMES[live.agent])} · arranging ${esc(live.name)}</b><br>${live.into ? `in the open session “${esc(live.intoTitle ?? "")}”` : "a new session"} · the folder's novel command only; your files are not changed</p><div class="msg user">Arrange the novels in ${esc(live.folder)}: universes, series and reading order.</div>${live.steps.length > 80 ? `<p class="note">… ${live.steps.length - 80} earlier commands</p>` : ""}${steps}${end}`;
+  $("chat-body").scrollTop = $("chat-body").scrollHeight;
+  if (live.action) $("live-action").addEventListener("click", live.action[1]);
+}
+host.onAgentStep((step) => {
+  const live = arrangingNow.get(step.folder); if (!live) return;
+  if (step.session) live.session = step.session;
+  if (step.step) live.steps.push(step.step);
+  if (liveShown === live) paintLive(live);
+});
 async function arrangeSeries(folder, series) {
   try { const made = await ask(folder, "novel/arrange", { name: series.name, files: series.books.map((book) => book.file) }); say(`${series.name}: a universe of ${made.books} books, in volume order.`); seriesOf.set(folder, await ask(folder, "novel/series").catch(() => [])); await load(folder); render(); }
   catch (error) { say(error.message, true); }
@@ -225,7 +292,20 @@ function render() {
     for (const universe of data.universes) {
       const key = `u|${lib.path}|${universe.id}`, uOpen = !expanded.has(`closed:${key}`);
       tree.append(node({ depth: 1, chev: uOpen, icon: "◎", name: universe.name, nameClass: "book", desc: `${universe.books.length} ${universe.books.length === 1 ? "book" : "books"}`, onClick: () => toggle(`closed:${key}`) }));
-      if (uOpen) for (const book of universe.books) tree.append(...bookRow(lib.path, book, 2));
+      if (uOpen) {
+        let series = null;
+        for (const book of universe.books) {
+          if (book.series && book.series !== series) { series = book.series; const count = universe.books.filter((entry) => entry.series === series).length; tree.append(node({ depth: 2, icon: "≡", name: series, nameClass: "book", desc: `${count} ${count === 1 ? "book" : "books"}`, cls: "series" })); }
+          if (!book.series) series = null;
+          tree.append(...bookRow(lib.path, book, book.series ? 3 : 2));
+        }
+      }
+    }
+    if (data.unsorted.length || data.universes.length || arrangingNow.has(lib.path)) {
+      const busy = arrangingNow.has(lib.path);
+      const agentName = AGENT_NAMES[busy ? arrangingNow.get(lib.path).agent : chosenHost];
+      tree.append(node({ depth: 1, icon: "✦", name: "Arrange with an agent", desc: busy ? `${agentName} is arranging…` : agentName ? `${agentName}, the agent open in the chat` : "pick Claude Code or Pi in the chat", cls: "agent-row", title: "The agent open in the chat (Claude Code or Pi; switch it there) arranges this folder into universes, series and reading order, with the folder's novel command only: your files are not changed",
+        action: busy ? actionButton(`<span class="spin"></span>`, "", "Show the arrangement in the chat", () => arrangeWithAgent(lib)) : actionButton(agentName ? `Ask ${agentName}` : "Ask", "run", `Ask ${agentName ?? "an agent"} to arrange this folder`, () => arrangeWithAgent(lib)) }));
     }
     const found = seriesOf.get(lib.path) ?? [];
     if (found.length) {
@@ -240,7 +320,8 @@ function render() {
 }
 const toggle = (key) => { if (expanded.has(key)) expanded.delete(key); else expanded.add(key); render(); };
 async function libraryMenu(lib) {
-  const choice = await chooser(lib.name, lib.path, [["Import a text file…", "import"], ["Show in Finder", "reveal"], ["Remove from the console", "remove"]]);
+  const choice = await chooser(lib.name, lib.path, [[`Ask ${AGENT_NAMES[chosenHost] ?? "an agent"} to arrange`, "agent"], ["Import a text file…", "import"], ["Show in Finder", "reveal"], ["Remove from the console", "remove"]]);
+  if (choice === "agent") { arrangeWithAgent(lib); return; }
   if (choice === "import") { try { const report = await host.importText(lib.path); if (report) { say(`Imported: ${report.added.length} new ${report.added.length === 1 ? "book" : "books"}.`); await load(lib.path); render(); basicLayer(lib.path); } } catch (error) { say(error.message, true); } }
   if (choice === "reveal") host.reveal(lib.path);
   if (choice === "remove") { libs = await host.removeLibrary(lib.path); trees.delete(lib.path); if (current?.folder === lib.path) closeBook(); render(); }
@@ -539,25 +620,26 @@ async function loadHosts() {
 function renderHosts() { $("hosts").innerHTML = hostList.map((entry) => `<button role="tab" data-host="${esc(entry.id)}" aria-selected="${entry.id === chosenHost}">${esc(entry.name)}<span class="k">${entry.sessions.length}</span></button>`).join(""); }
 const ago = (iso) => { const minutes = Math.round((Date.now() - Date.parse(iso)) / 60000); return minutes < 60 ? `${minutes} min ago` : minutes < 1440 ? `${Math.round(minutes / 60)} h ago` : `${Math.round(minutes / 1440)} d ago`; };
 function renderSessions() {
-  openSession = null; $("chat-back").hidden = true; $("compose").hidden = true;
+  openSession = null; liveShown = null; $("chat-back").hidden = true; $("compose").hidden = true;
   const entry = hostList.find((item) => item.id === chosenHost);
   if (!entry) { $("chat-body").innerHTML = `<p class="note">No agent hosts are registered.</p>`; return; }
   $("chat-body").innerHTML = `${entry.note ? `<p class="note">${esc(entry.note)}</p>` : ""}${entry.sessions.length ? entry.sessions.map((session) => `<div class="session" data-session="${esc(session.key)}"><span class="t">${esc(session.title)}</span><small>${esc(session.cwd ? session.cwd.split("/").slice(-2).join("/") : "")} · ${esc(ago(session.updated))}</small></div>`).join("") : `<p class="note">No sessions of ${esc(entry.name)} on this Mac.</p>`}`;
 }
 async function showSession(key) {
-  openSession = key; $("chat-back").hidden = false;
+  openSession = key; liveShown = null; $("chat-back").hidden = false;
   const entry = hostList.find((item) => item.sessions.some((session) => session.key === key)), session = entry?.sessions.find((item) => item.key === key);
   $("chat-body").innerHTML = `<p class="note">Reading the session…</p>`;
   let transcript; try { transcript = await host.transcript(key); } catch (error) { $("chat-body").innerHTML = `<p class="note">${esc(error.message)}</p>`; return; }
   if (openSession !== key) return;
   $("chat-body").innerHTML = `<p class="note"><b>${esc(session?.title ?? "")}</b><br>${esc(entry?.name ?? "")} · ${esc(session?.cwd ?? "")} · the last ${transcript.messages.length} messages</p>${transcript.messages.map((message) => `<div class="msg ${message.role === "user" ? "user" : "assistant"}">${message.text.trim() ? esc(message.text.length > 4000 ? `${message.text.slice(0, 4000)}…` : message.text) : ""}${message.tools ? `<span class="tools">${message.tools} tool ${message.tools === 1 ? "call" : "calls"}</span>` : ""}</div>`).join("")}`;
   $("chat-body").scrollTop = $("chat-body").scrollHeight;
-  $("compose").hidden = !entry?.continues;
-  $("compose-note").textContent = entry?.continues ? `Sent with ${entry.name}'s own command, in ${session?.cwd ? session.cwd.split("/").pop() : "its folder"}.` : "";
+  const continues = Boolean(entry?.continues || session?.continues);
+  $("compose").hidden = !continues;
+  $("compose-note").textContent = !continues ? "" : session?.continues && entry?.id === "pi" ? `Sent to Pi in ${session.cwd ? session.cwd.split("/").pop() : "its folder"}, with the folder's novel command only.` : `Sent with ${entry.name}'s own command, in ${session?.cwd ? session.cwd.split("/").pop() : "its folder"}.`;
 }
-$("hosts").addEventListener("click", (event) => { const id = event.target.closest("[data-host]")?.dataset.host; if (!id) return; chosenHost = id; remember.set("chatHost", id); renderHosts(); renderSessions(); });
+$("hosts").addEventListener("click", (event) => { const id = event.target.closest("[data-host]")?.dataset.host; if (!id) return; chosenHost = id; remember.set("chatHost", id); renderHosts(); renderSessions(); if (leftView === "library") render(); });
 $("chat-body").addEventListener("click", (event) => { const key = event.target.closest("[data-session]")?.dataset.session; if (key) showSession(key); });
-$("chat-back").addEventListener("click", renderSessions);
+$("chat-back").addEventListener("click", () => renderSessions());
 $("chat-refresh").addEventListener("click", loadHosts);
 $("compose").addEventListener("submit", async (event) => {
   event.preventDefault();

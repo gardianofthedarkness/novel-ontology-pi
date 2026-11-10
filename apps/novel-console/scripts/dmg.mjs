@@ -2,7 +2,7 @@
 // copy given to someone else must be opened once with right-click > Open), then a disk image with the app and a link to
 // Applications. Run after `npm run pack`.
 import { execFileSync } from "node:child_process";
-import { existsSync, mkdtempSync, readFileSync, symlinkSync, cpSync } from "node:fs";
+import { existsSync, mkdtempSync, readFileSync, symlinkSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -15,10 +15,13 @@ if (!existsSync(bundle)) throw new Error("Pack the app first (npm run pack).");
 const backend = join(app, "build", "backend");
 if (!existsSync(join(backend, "node_modules"))) throw new Error("Assemble the backend first (npm run backend).");
 execFileSync("ditto", [backend, join(bundle, "Contents", "Resources", "backend")], { stdio: "inherit" });
-execFileSync("codesign", ["--force", "--deep", "--sign", "-", bundle], { stdio: "inherit" });
-execFileSync("codesign", ["--verify", "--deep", "--strict", bundle], { stdio: "inherit" });
-const stage = mkdtempSync(join(tmpdir(), "novel-console-dmg-"));
-cpSync(bundle, join(stage, "Novel Console.app"), { recursive: true, verbatimSymlinks: true });
+// Signed outside the repository: a folder macOS syncs (Documents with iCloud) keeps Finder metadata on every file, which
+// codesign refuses, so the app is copied without it into a temporary folder and signed there.
+const stage = mkdtempSync(join(tmpdir(), "novel-console-dmg-")), staged = join(stage, "Novel Console.app");
+execFileSync("ditto", ["--norsrc", "--noextattr", "--noqtn", bundle, staged], { stdio: "inherit" });
+execFileSync("xattr", ["-cr", staged], { stdio: "inherit" });
+execFileSync("codesign", ["--force", "--deep", "--sign", "-", staged], { stdio: "inherit" });
+execFileSync("codesign", ["--verify", "--deep", "--strict", staged], { stdio: "inherit" });
 symlinkSync("/Applications", join(stage, "Applications"));
 const dmg = join(app, "release", `Novel-Console-${version}-arm64.dmg`);
 execFileSync("hdiutil", ["create", "-volname", "Novel Console", "-srcfolder", stage, "-ov", "-format", "UDZO", dmg], { stdio: "inherit" });

@@ -23,6 +23,11 @@ copy("config");
 mkdirSync(join(out, "world-engine", "director"), { recursive: true });
 copy("world-engine/director/segments.mjs");
 copy("apps/reader/reader.html");
+copy("skills/novel-folder");
+// Pi, for arranging a folder when Claude Code is signed out (tools/pi-review/folder-arrange.mjs and its packages).
+for (const name of ["folder-arrange.mjs", "folder-scope.mjs", "package.json"]) copy(`tools/pi-review/${name}`);
+// Its packages without node_modules/.bin: those are symbolic links, which the app's signature refuses (Pi runs as a module).
+cpSync(join(repository, "tools/pi-review/node_modules"), join(out, "tools/pi-review/node_modules"), { recursive: true, dereference: true, filter: (from) => !/[\\/]node_modules[\\/]\.bin([\\/]|$)/.test(from) });
 writeFileSync(join(out, "package.json"), JSON.stringify({ name: "novel-console-backend", private: true, type: "module" }, null, 2));
 
 // The production packages (npm's own list), Apple Silicon only.

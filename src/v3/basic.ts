@@ -155,3 +155,18 @@ export async function seriesSuggestions(folder: string, state?: FolderState): Pr
 }
 
 export const basicOf = (folder: string, name: string) => loadState(resolve(folder)).then((state) => readBasic(folder, findFile(state, name).id));
+
+/** Every book's basic layer in one list, for an agent arranging the folder: what it is, where it is now. */
+export async function basicList(folder: string): Promise<Record<string, unknown>> {
+  const root = resolve(folder), state = await loadState(root), placed = new Map<string, { universe: string; series?: string; at: number }>();
+  for (const universe of state.universes) universe.books.forEach((book, n) => placed.set(book.file, { universe: universe.id, ...(book.series ? { series: book.series } : {}), at: n + 1 }));
+  const books = [];
+  for (const file of state.files) {
+    if (file.missing) continue;
+    const layer = await readBasic(root, file.id) as (BasicLayer & { failed?: string }) | null;
+    books.push({ id: file.id, path: file.path, ...(file.copies?.length ? { copies: file.copies.length } : {}),
+      ...(layer && !layer.failed ? { title: layer.title, author: layer.author, language: layer.language, seriesByTitle: layer.series, volume: layer.volume, chapters: layer.chapters, lines: layer.lines, names: layer.names.slice(0, 10).map((name) => name.name) } : { title: file.title, basic: layer?.failed ? `failed: ${layer.failed}` : "not yet" }),
+      placed: placed.get(file.id) ?? null });
+  }
+  return { folder: root, universes: state.universes.map((universe) => ({ id: universe.id, name: universe.name, books: universe.books.length })), books };
+}

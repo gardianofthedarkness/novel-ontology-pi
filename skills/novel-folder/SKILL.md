@@ -5,7 +5,7 @@ description: Arrange an opened folder of novels (EPUB and text files) into unive
 
 # The opened folder as a workspace of novels
 
-The folder the editor has open is the workspace. Its books stay where they are: you never move, rename or edit the
+The folder the console (or the editor) has open is the workspace. Its books stay where they are: you never move, rename or edit the
 user's files. The arrangement is kept in a hidden `.novel/workspace.json` that only the `novel folder` commands write.
 The editor's Novels view shows the same arrangement and updates when a command changes it.
 
@@ -14,18 +14,30 @@ path, the end of its path, or its id (`f_...`). None of these commands calls a m
 
 ## 1. Arrange the folder
 
-1. `novel folder scan <folder>` finds every EPUB and text file under the folder. Run it first, and again after files
-   are added, moved or removed (a moved or renamed book keeps its place: it is known by its content).
-2. `novel folder show <folder> --opening 400` lists the universes, their books in order, and the unsorted files, each
-   with its title, its chapter titles and its first 400 characters. Read these before deciding anything.
-3. Decide which files are books of the same world. Go by the evidence in the text: a shared series title, volume
-   numbers, the same people and places in the openings and chapter titles. A file name alone is weak evidence.
-4. Make each universe and say why: `novel folder universe <folder> "<name>" --why "<what the books share>"`.
-5. Put each book in, in reading order: `novel folder put <folder> <file> <universe> [--at N] [--title "<text>"]`.
-   Order by volume number when the titles give one, else by what the text says of its own order.
-6. Leave a file unsorted when it is not a novel (notes, a list, a fragment) or when you cannot tell where it belongs,
-   and say so in your report. `novel folder take <folder> <file>` takes a book back out.
-7. `novel folder show <folder>` again, and report the arrangement and every file you left unsorted with the reason.
+The arrangement has two levels, as v1's library had: a **universe** is one fictional world; inside it, each book belongs
+to a **series**, and the universe keeps its books in reading order. Different series of one world share a universe (a
+main series and its side series); one series stays one series whatever its titles say (a renamed volume, another
+edition, another language).
+
+1. `novel folder basics <folder>` lists every book with its basic layer, read with no model: title, author, language,
+   the series and volume its title gives, its chapters and lines, the names found in it by pattern, how many copies the
+   folder holds, and where it is placed now. Start here.
+2. `novel folder show <folder> --opening 400` adds each book's chapter titles and first 400 characters. Read the
+   openings of the books you are unsure of (a synopsis or a cast list in the front matter says a lot).
+3. Decide, from that evidence: which books are one series (the series title, volume numbers, the same people), and which
+   series share a world (the same author's shared setting, the same people or places, a front matter that says so).
+   A similar title alone is weak evidence; a different title alone is not evidence against. Two editions of one series
+   in two languages are one series.
+4. Make each universe, saying why: `novel folder universe <folder> "<name>" --why "<what the books share>"`. Name it after
+   the world (the franchise), not one series.
+5. Put each book in, in reading order, with its series:
+   `novel folder put <folder> <file> <universe> --series "<series name>" [--at N]`. Order by volume within a series; put
+   a series' books together, the main series first.
+6. Leave a file unsorted when it is not a novel or when you cannot tell where it belongs, and say so in your report.
+   `novel folder take <folder> <file>` takes a book back out; `novel folder universe <folder> <name> --remove` removes a
+   universe (its books go back to unsorted); `--rename "<new name>"` renames one.
+7. `novel folder show <folder>` again, and report: each universe with its series and books in order, and every file you
+   left unsorted with the reason.
 
 ## 2. Link a reading that already exists
 

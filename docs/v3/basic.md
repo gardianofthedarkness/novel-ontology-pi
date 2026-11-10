@@ -59,8 +59,24 @@ and works its window (`--arrange` presses the first Arrange, which changes the f
 | series found | 4: the El-Melloi II case files (9, with volume 6 twice and one untitled by volume), Fate/strange Fake (9), the Chinese edition of one series (8), its Japanese edition (3) |
 | Arrange | the first series a universe of 9 books in volume order |
 
-## 5. Not yet
+## 5. Arranged by an agent, one click
+
+Titles alone cannot say which series share a world (v1's library stage was its main agent's work, with quotes for
+evidence, not Jev's), so the Library's **Arrange with an agent** row (and the folder's menu) asks an agent to do it
+(the user, 2026-11-10: "we can simply one click a bottom to ask the agent session to arrange our work space"):
+
+| | |
+| --- | --- |
+| the agent | the user's: the one open in the chat (the user: "User is free to activate on whichever window using"). The row reads **Ask Claude Code** or **Ask Pi** after the chat's tab; switching the tab switches the agent. Claude Code runs as `claude -p` (streamed); Pi on the work model's key (`tools/pi-review/folder-arrange.mjs`). Codex and Gemini are not started from the console yet, and the chat says so |
+| the session | the one open in the chat when the console can continue it (any Claude Code session; Pi's own sessions, kept in `~/.pi/agent/sessions/novel-console`), else a new one. The chat shows the request and each command as it runs, then the session itself, which can be continued from the chat's box |
+| its one tool | the folder's own `novel` command (`.novel/bin/novel`, the app's backend run by the app's Node), with the verbs that sort books: `basics`, `show`, `scan`, `universe`, `put`, `take` and the read-only ones; never `read` (a paid reading is the user's button), `keys`, `import` or `link`. Claude Code gets it as its only Bash permission; Pi through a scoped bash that refuses pipes, joins, expansions, other folders and other files (`folder-scope.mjs`) |
+| what it follows | the folder skill, §1: two levels (a universe is one world; series inside it), each book `put` with `--series` in reading order, a `--why` on each universe; what it cannot place stays unsorted |
+| what it changes | only `.novel/workspace.json`: no file of the user's is moved or written |
+| after | the Library shows each universe with its series as header rows; the chat shows the session the agent worked in |
+| signed out | nothing runs in the agent's place: a signed-out Claude Code says so in the chat (sign in with `claude auth login`, or pick another agent); Pi without the work model's key asks for it |
+
+## 6. Not yet
 
 - DOCX import.
-- Two editions of one series in two languages are two series by their titles; an agent (or the user) joins them.
+- Two editions of one series in two languages are two series by their titles; the agent arrangement (§5) joins them.
 - A book whose title gives no volume goes last in its series.

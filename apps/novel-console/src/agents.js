@@ -83,7 +83,7 @@ const HOSTS = {
     command: () => null,
   },
   pi: {
-    files: () => [path.join(home, ".pi", "agent", "sessions"), ...piRunFolders()].flatMap((dir) => walk(dir, (name) => name.endsWith(".jsonl"), 2)),
+    files: () => [...new Set([path.join(home, ".pi", "agent", "sessions"), piConsoleSessions(), ...piRunFolders()])].flatMap((dir) => walk(dir, (name) => name.endsWith(".jsonl"), 2)).filter((file, at, all) => all.indexOf(file) === at),
     summary(file) {
       const head = lines(slice(file, HEAD, false)), meta = head.find((entry) => entry.type === "session") ?? {};
       const first = head.find((entry) => entry.type === "message" && entry.message?.role === "user");
@@ -103,7 +103,7 @@ const HOSTS = {
 const NOTES = {
   codex: "Read only: Codex's command is not installed on this Mac.",
   "gemini-cli": "Read only: Gemini resumes a session only by its number within its own project folder, which its files do not name.",
-  pi: "Read only: Pi's sessions belong to the console host that ran them.",
+  pi: "Pi's sessions from the console hosts are read only here; the ones Novel Console starts (Arrange with an agent) can be continued.",
   "claude-code": "Read only: the claude command was not found.",
 };
 /** The Pi host's own sessions: each console host keeps them in its library's run folders (runtime/<run>/sessions). */
@@ -133,10 +133,13 @@ async function hosts(registry) {
     const host = HOSTS[id];
     if (!host) return { id, name: names.get(id) ?? id, sessions: [], read: false, continues: false, note: "No sessions of this host are kept on this Mac." };
     const files = host.files().map((file) => ({ file, info: stat(file) })).filter((entry) => entry.info && entry.info.size > 0).sort((a, b) => b.info.mtimeMs - a.info.mtimeMs).slice(0, MOST);
-    const sessions = files.map(({ file, info }) => { try { return { ...host.summary(file), updated: info.mtime.toISOString(), size: info.size, key: `${id}|${file}` }; } catch { return null; } }).filter(Boolean);
+    const own = id === "pi" ? `${piConsoleSessions()}/` : null;
+    const sessions = files.map(({ file, info }) => { try { return { ...host.summary(file), updated: info.mtime.toISOString(), size: info.size, key: `${id}|${file}`, ...(own && file.startsWith(own) ? { continues: true } : {}) }; } catch { return null; } }).filter(Boolean);
     const command = host.command();
     const continues = Boolean(command && host.send);
-    return { id, name: names.get(id) ?? id, sessions, read: true, continues, note: continues ? null : NOTES[id] ?? "Read only here." };
+    // Which agents the console can start a session of (for Arrange with an agent): Claude Code when its command is here, Pi always (it needs the work model's key).
+    const starts = id === "pi" || (id === "claude-code" && Boolean(claudeCommand()));
+    return { id, name: names.get(id) ?? id, sessions, read: true, continues, starts, note: continues ? null : NOTES[id] ?? "Read only here." };
   });
 }
 /** One session's messages (its last few megabytes). */
@@ -161,4 +164,43 @@ async function send(key, text) {
   if (!String(text ?? "").trim()) throw new Error("The message is empty.");
   return { reply: await host.send(command, host.summary(file), String(text)) };
 }
-module.exports = { hosts, transcript, send };
+/** Claude Code's command here, for work the console hands to a new session (the stand-in's in tests). */
+const SIGNED_OUT = /authentication_error|Failed to authenticate|run \/login|auth login|token has expired/i;
+const SIGNED_OUT_HELP = "Claude Code is signed out on this Mac. Sign in once in Terminal (run `claude auth login`), or pick another agent in the chat, then press Ask again.";
+const claudeCommand = () => process.env.NOVEL_CONSOLE_AGENT_COMMAND || which("claude");
+/** A Claude Code session in `cwd` (new, or `resume` continued) given `prompt`, its tools limited to `allowed`; the session's
+ * id and each command it runs go to `onStep` as they come; resolves with its reply. */
+function startSession(prompt, cwd, allowed, env = {}, { resume = null, onStep = () => {} } = {}) {
+  const command = claudeCommand();
+  if (!command) return Promise.reject(new Error("Claude Code's command (claude) was not found on this Mac. Pick Pi in the chat, or install Claude Code."));
+  return new Promise((resolve, reject) => {
+    const child = spawn(command, ["-p", prompt, ...(resume ? ["--resume", resume] : []), "--output-format", "stream-json", "--verbose", "--allowedTools", ...allowed], { cwd, stdio: ["ignore", "pipe", "pipe"], env: { ...process.env, ELECTRON_RUN_AS_NODE: "", ...env } });
+    let buffer = "", err = "", reply = null, sessionId = null;
+    const line = (text) => {
+      let event; try { event = JSON.parse(text); } catch { return; }
+      if (event.session_id && !sessionId) { sessionId = event.session_id; onStep({ session: sessionId }); }
+      if (event.type === "assistant") for (const block of event.message?.content ?? []) if (block?.type === "tool_use") onStep({ step: clip(String(block.input?.command ?? block.input?.file_path ?? block.input?.pattern ?? block.name), 240) });
+      if (event.type === "result") reply = event;
+    };
+    child.stdout.on("data", (chunk) => { buffer += chunk; for (let at = buffer.indexOf("\n"); at >= 0; at = buffer.indexOf("\n")) { line(buffer.slice(0, at)); buffer = buffer.slice(at + 1); } });
+    child.stderr.on("data", (chunk) => { err += chunk; });
+    child.on("error", reject);
+    child.on("close", (code) => {
+      if (buffer.trim()) line(buffer);
+      if (!reply) { reject(new Error(clip(err || `Claude Code exited ${code}`, 400))); return; }
+      const error = reply.is_error ? String(reply.result ?? "") : null;
+      // Claude Code signed out on this Mac (its own login, apart from the desktop app's): say what the user can do.
+      if (error && SIGNED_OUT.test(error)) { resolve({ result: SIGNED_OUT_HELP, sessionId: null, cost: null, error: SIGNED_OUT_HELP, signedOut: true }); return; }
+      resolve({ result: reply.result ?? "", sessionId: reply.session_id ?? sessionId, cost: reply.total_cost_usd ?? null, error: error ? clip(error, 400) : null });
+    });
+  });
+}
+/** Where the Pi sessions Novel Console starts are kept (they can be continued from the chat; Pi's others are read only). */
+const piConsoleSessions = () => process.env.NOVEL_CONSOLE_PI_SESSIONS || path.join(home, ".pi", "agent", "sessions", "novel-console");
+/** A session by its chat key: its host, file and summary (with whether the console can continue it). */
+function sessionOf(key) {
+  const [id, file] = [key.slice(0, key.indexOf("|")), key.slice(key.indexOf("|") + 1)], host = HOSTS[id];
+  if (!host || !host.files().includes(file)) throw new Error("No such session.");
+  return { host: id, file, ...host.summary(file), continues: id === "pi" ? file.startsWith(`${piConsoleSessions()}/`) : Boolean(host.command() && host.send) };
+}
+module.exports = { hosts, transcript, send, startSession, claudeCommand, sessionOf, piConsoleSessions };

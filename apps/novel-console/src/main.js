@@ -6,7 +6,8 @@ const { app, BrowserWindow, dialog, ipcMain, net, protocol, shell } = require("e
 const path = require("node:path");
 const fs = require("node:fs");
 const crypto = require("node:crypto");
-const { fork } = require("node:child_process");
+const { fork, spawn } = require("node:child_process");
+const os = require("node:os");
 const { pathToFileURL } = require("node:url");
 
 // The backend: the repository's built code beside the app in development, its copy in the app's resources when packaged.
@@ -112,7 +113,82 @@ const agents = require("./agents.js");
 const registry = async () => { try { return (await import(pathToFileURL(path.join(backend, "dist", "src", "adapters", "hosts.js")).href)).listAgentHosts(); } catch { return []; } };
 ipcMain.handle("agents", async () => agents.hosts(await registry()));
 ipcMain.handle("transcript", (event, key) => agents.transcript(key));
-ipcMain.handle("sendToSession", (event, key, text) => agents.send(key, text));
+ipcMain.handle("sendToSession", async (event, key, text) => {
+  // A Pi session the console started: continued by Pi in its folder, with the same one tool.
+  if (String(key).startsWith("pi|")) {
+    const session = agents.sessionOf(key);
+    if (!session.continues || !libraries().includes(session.cwd)) throw new Error("This Pi session can be read here but not continued.");
+    if (!String(text ?? "").trim()) throw new Error("The message is empty.");
+    const reply = await runPi({ folder: session.cwd, novel: folderNovel(session.cwd), skill: folderSkill(), prompt: String(text), sessionFile: session.file });
+    if (reply.error) throw new Error(reply.error);
+    return { reply: reply.result };
+  }
+  return agents.send(key, text);
+});
+// One click: an agent arranges a library folder (universes, series, reading order) with the novel folder commands only, as
+// v1's library stage had the agent do it (the user, 2026-11-10: "one click a bottom to ask the agent session to arrange our
+// work space"). Which agent is the user's: the one open in the chat (the user: "User is free to activate on whichever
+// window using"), Claude Code or Pi; a session of it open there is continued, else a new one starts. Each command it runs
+// is sent to the window as it runs. The folder gets its own `novel` command in .novel/bin, run by this app's Node.
+const arranging = new Map();
+function folderNovel(folder) {
+  const bin = path.join(folder, ".novel", "bin"), novel = path.join(bin, "novel");
+  fs.mkdirSync(bin, { recursive: true });
+  fs.writeFileSync(novel, `#!/bin/sh\n# Novel Console's novel command for this folder (an agent's only tool when it arranges it).\nELECTRON_RUN_AS_NODE=1 exec "${process.execPath}" "${path.join(backend, "dist", "src", "cli", "cli.js")}" "$@"\n`, { mode: 0o755 });
+  return novel;
+}
+const folderSkill = () => path.join(backend, "skills", "novel-folder", "SKILL.md");
+ipcMain.handle("arrangeWithAgent", async (event, folder, options = {}) => {
+  if (!libraries().includes(folder)) throw new Error("That folder is not one of the console's libraries.");
+  if (arranging.has(folder)) return arranging.get(folder);
+  const agent = options.agent;
+  if (agent !== "claude-code" && agent !== "pi") throw new Error("Pick Claude Code or Pi in the chat: the console can start only those two.");
+  const session = options.session ? agents.sessionOf(options.session) : null;
+  if (session && (session.host !== agent || !session.continues)) throw new Error("That session cannot be continued here.");
+  const novel = folderNovel(folder), skill = folderSkill();
+  const prompt = [
+    `Arrange the novels in this folder for Novel Console: ${folder}`,
+    `Read the skill first: ${skill} (section 1, "Arrange the folder").`,
+    `The novel command is ${novel}. Run it as \`${novel} folder <verb> "${folder}" ...\` (start with \`${novel} folder basics "${folder}"\`). It is the only command you may run; it never moves or changes the user's files.`,
+    "The folder may already have universes (some made by grouping titles only): keep what is right and fix what is not.",
+    "Put every book you can place, each with its series, in reading order; leave the rest unsorted.",
+    "End with a short report: each universe with its series and books in order, and the books left unsorted and why.",
+  ].join("\n");
+  const onStep = (step) => { if (!event.sender.isDestroyed()) event.sender.send("agentStep", { folder, agent, ...step }); };
+  const run = (agent === "pi"
+    ? runPi({ folder, novel, skill, prompt: prompt.replace(/\(section 1[^)]*\)\./, "(section 1): read it with cat."), sessionFile: session?.file, onStep })
+    : agents.startSession(prompt, session?.cwd ?? folder, [`Bash(${novel}:*)`, "Read", "Grep", "Glob"], { NOVEL_COMMAND: novel, NOVEL_FOLDER: folder }, { resume: session?.id, onStep }).then((reply) => ({ ...reply, by: "claude-code" })))
+    .finally(() => arranging.delete(folder));
+  arranging.set(folder, run);
+  return run;
+});
+/** Pi on the work model (tools/pi-review/folder-arrange.mjs): a session of the console's own, new or continued, whose one tool
+ * runs the folder's novel command; each step and the session's file go to onStep. */
+async function runPi({ folder, novel, skill, prompt, sessionFile = null, onStep = () => {} }) {
+  const secrets = await import(pathToFileURL(path.join(backend, "dist", "src", "ground", "connectors", "secrets.js")).href);
+  const key = process.env.WORK_LLM_API_KEY?.trim() || secrets.getStoredSecret("work-llm");
+  if (!key) throw new Error("Pi works on the work model: enter its key with the key button, then press Ask again.");
+  const script = process.env.NOVEL_CONSOLE_PI_RUNNER || path.join(backend, "tools", "pi-review", "folder-arrange.mjs");
+  return new Promise((resolve, reject) => {
+    const child = spawn(process.execPath, [script, folder, novel, skill, agents.piConsoleSessions(), ...(sessionFile ? [sessionFile] : [])], { cwd: folder, stdio: ["ignore", "pipe", "pipe"], env: { ...process.env, ELECTRON_RUN_AS_NODE: "1", WORK_LLM_API_KEY: key, NOVEL_ARRANGE_PROMPT: prompt } });
+    let buffer = "", err = "", reply = null;
+    const line = (text) => {
+      let entry; try { entry = JSON.parse(text); } catch { return; }
+      if (entry.session !== undefined) onStep({ session: entry.session });
+      else if (entry.step !== undefined) onStep({ step: String(entry.step) });
+      else reply = entry;
+    };
+    child.stdout.on("data", (chunk) => { buffer += chunk; for (let at = buffer.indexOf("\n"); at >= 0; at = buffer.indexOf("\n")) { line(buffer.slice(0, at)); buffer = buffer.slice(at + 1); } });
+    child.stderr.on("data", (chunk) => { err += chunk; });
+    child.on("error", reject);
+    child.on("close", () => {
+      if (buffer.trim()) line(buffer);
+      if (!reply) { reject(new Error(`Pi stopped: ${(err || "no reply").trim().slice(-300).replace(/sk-[A-Za-z0-9]{8,}/g, "sk-…")}`)); return; }
+      if (reply.error) { resolve({ by: "pi", result: reply.error, error: reply.error }); return; }
+      resolve({ by: "pi", result: reply.result, sessionFile: reply.sessionFile, commands: reply.commands, refused: reply.refused, seconds: reply.seconds, error: null });
+    });
+  });
+}
 ipcMain.handle("reveal", (event, folder) => { if (libraries().includes(folder)) shell.showItemInFolder(folder); });
 ipcMain.handle("version", () => ({ app: app.getVersion(), electron: process.versions.electron, backend: app.isPackaged ? "bundled" : backend }));
 

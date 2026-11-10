@@ -49,7 +49,11 @@ export interface FolderFile {
   missing?: boolean;
 }
 export interface ReadingLink { novel: string; data: string; sourceSha256: string; sameText: boolean }
-export interface FolderBook { file: string; title?: string; reading?: ReadingLink }
+export interface FolderBook {
+  file: string; title?: string; reading?: ReadingLink;
+  /** The series the book belongs to inside its universe (different series can share a world); its order is the universe's. */
+  series?: string;
+}
 export interface FolderUniverse { id: string; name: string; why?: string; books: FolderBook[] }
 export interface FolderState {
   version: 1; files: FolderFile[]; universes: FolderUniverse[];
@@ -228,17 +232,18 @@ export async function universeRemove(folder: string, name: string): Promise<Reco
 }
 
 /** A file put into a universe as a book, at a place in its order (1 is first; the end when not given). It leaves any universe it was in. */
-export async function putBook(folder: string, name: string, universeName: string, options: { at?: number; title?: string } = {}): Promise<Record<string, unknown>> {
+export async function putBook(folder: string, name: string, universeName: string, options: { at?: number; title?: string; series?: string } = {}): Promise<Record<string, unknown>> {
   const root = resolve(folder), state = await loadState(root), file = findFile(state, name), universe = findUniverse(state, universeName);
   if (file.unread) throw new Error(`${file.path} could not be read as a book (${file.unread}).`);
   const was = bookOf(state, file), book: FolderBook = was?.book ?? { file: file.id };
   if (was) was.universe.books.splice(was.index, 1);
   if (options.title !== undefined) { if (options.title.trim()) book.title = options.title.trim(); else delete book.title; }
+  if (options.series !== undefined) { if (options.series.trim()) book.series = options.series.trim(); else delete book.series; }
   const at = options.at === undefined ? universe.books.length : options.at - 1;
   if (!Number.isInteger(at) || at < 0 || at > universe.books.length) throw new Error(`--at must be from 1 to ${universe.books.length + 1} in ${universe.id}.`);
   universe.books.splice(at, 0, book);
   await saveState(root, state);
-  return { universe: universe.id, order: universe.books.map((entry, index) => ({ at: index + 1, file: state.files.find((known) => known.id === entry.file)?.path ?? entry.file, title: entry.title ?? state.files.find((known) => known.id === entry.file)?.title })) };
+  return { universe: universe.id, order: universe.books.map((entry, index) => ({ at: index + 1, ...(entry.series ? { series: entry.series } : {}), file: state.files.find((known) => known.id === entry.file)?.path ?? entry.file, title: entry.title ?? state.files.find((known) => known.id === entry.file)?.title })) };
 }
 
 /** A book taken out of its universe, back to the unsorted files. */
@@ -332,7 +337,7 @@ export async function folderTree(folder: string, options: { opening?: number } =
     return book.text.trim().slice(0, options.opening);
   };
   const shape = async (file: FolderFile, book?: FolderBook) => ({
-    id: file.id, path: file.path, title: book?.title ?? file.title, kind: file.kind, chars: file.chars, chapters: file.chapters.length,
+    id: file.id, path: file.path, title: book?.title ?? file.title, kind: file.kind, chars: file.chars, chapters: file.chapters.length, ...(book?.series ? { series: book.series } : {}),
     ...(file.copies?.length ? { copies: file.copies } : {}), ...(file.missing ? { missing: true } : {}), ...(file.unread ? { unread: file.unread } : {}),
     ...(book?.reading ? { reading: { novel: book.reading.novel, sameText: book.reading.sameText } } : {}),
     ...(options.opening ? { chapterTitles: file.chapters.map((chapter) => chapter.title).filter(Boolean).slice(0, 12), opening: await opening(file) } : {}),

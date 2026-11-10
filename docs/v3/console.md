@@ -96,6 +96,11 @@ has 348 nodes, 10 lanes, 12 curves and 10 tip labels; every lane's line ends on 
 is marked when a line is tapped; folding the panel widens the book. Sessions found on this Mac: Pi 37, Codex 40, Claude
 Code 6, Gemini CLI 2. A session is continued in a test only through a stand-in command (`NOVEL_CONSOLE_AGENT_COMMAND`).
 
+Since 0.7.0 the Library has **Arrange with an agent**: the agent open in the chat (Claude Code or Pi, the user's pick)
+arranges the folder into universes and series with the folder's own `novel` command only, in the session open there or
+a new one, its commands shown in the chat as they run (basic.md §5). Pi's sessions started by the console can be continued
+from the chat.
+
 ## 6. Not yet
 
 - An icon of its own (the app shows Electron's).
