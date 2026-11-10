@@ -878,6 +878,22 @@ confirmed by the next action (rule 11): the text 6 strands, 4 unions, the wrong 
 - [x] **M17g Measured**: the first quarter 198 of 217 measures as before, the rest the strand measures (2 strands);
       W15 re-stranded to the scratchpad (never to library 16); strands.md §0.7.
 
+## M18 — Places as open layers (the user, 2026-11-10; design docs/v2/place-layers.md)
+
+Volume 2's run (W16) was stopped by the user: the book travels between countries and the place system has six fixed
+scales with "region" for everything above a city, one canvas for every ground, and a walk for every move. Measured: 158
+places, 19 at the root, 9 grounds, 25 crossings between grounds of which 19 share no ancestor.
+
+- [ ] **M18a A place is a size and a kind**: size bands (log10 metres) and free kinds in place of the six scales; the
+      law by size; bands as labels (`config/places/bands.json`).
+- [ ] **M18b The tree grows**: up when a larger place appears; loose roots joined by world knowledge or the text, else a
+      virtual holder; one place across books in the universe.
+- [ ] **M18c Grounds and maps**: a canvas and a terrain per ground; places above the grounds as maps.
+- [ ] **M18d Journeys between grounds** in the director, at the band of the common ancestor.
+- [ ] **M18e Generators by band and kind** (config/terrain/).
+- [ ] **M18f Measured**: volume 1 rehearsed the same (one ground); volume 2's places read again and joined; then its
+      terrain per ground and W16 again, on the user's go.
+
 ## M16 — Across books, per strand (the user, 2026-11-09)
 
 The review before volume 2 (2026-11-09): the per-book clearing of the design's §4.5 was bookkeeping only. `Slot.damaged`
