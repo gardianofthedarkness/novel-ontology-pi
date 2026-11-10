@@ -15,6 +15,8 @@ import { mapPicture } from './world-map.mjs';
 import { partsIn, snapMarkers } from './composite.mjs';
 import { setting, table } from '../../dist/src/v2/settings.js';
 import { layered, strandLayers } from './strand-layers.mjs';
+/** The most a walk window reaches from its centre (metres): a window wider than about 2 km has more edges than a Map holds. */
+export const WINDOW_MOST = 1024, windowsCapped = { count: 0 };
 
 const repository = resolve(dirname(fileURLToPath(import.meta.url)), '..', '..');
 const load = path => import(pathToFileURL(`${repository}/${path}`));
@@ -216,7 +218,10 @@ export async function strandDemo(novelDir, options) {
       for (const [key, entry] of [...spotCache]) if (!live.has(entry.version)) spotCache.delete(key);
       dirty.length = 0; shared.built = { version: shared.version };
     }
-    const f = focus ?? { x: 0, z: 0 }, cx = Math.round(f.x / 128) * 128, cz = Math.round(f.z / 128) * 128, h = Math.max(192, Math.ceil((half + Math.max(Math.abs(f.x - cx), Math.abs(f.z - cz))) / 64) * 64), key = `${cx}|${cz}|${h}`;
+    // A window is at most WINDOW_MOST metres from its centre each way: a walk between two cities kilometres apart (W16)
+    // asked for one whose graph passed a Map's size limit; beyond this a walk finds no way, as an unreachable target does.
+    const f = focus ?? { x: 0, z: 0 }, cx = Math.round(f.x / 128) * 128, cz = Math.round(f.z / 128) * 128, want = Math.max(192, Math.ceil((half + Math.max(Math.abs(f.x - cx), Math.abs(f.z - cz))) / 64) * 64), h = Math.min(want, WINDOW_MOST), key = `${cx}|${cz}|${h}`;
+    if (want > WINDOW_MOST) windowsCapped.count++;
     if (!windows.has(key)) {
       const started = performance.now(), box = { x0: cx - h, x1: cx + h, z0: cz - h, z1: cz + h }; windows.set(key, { version: shared.version, box, ...W.worldGraph(world, shared.standing, [...shared.things.values()], box, shared.rubble) }); cost.builds++; cost.ms += performance.now() - started;
       // The ways between the layers this window laid (terrain-levels §3.4), kept for the page: each once, by its two ends.
