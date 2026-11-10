@@ -17,7 +17,6 @@ import { fileURLToPath } from "node:url";
 import { checkOps } from "./world/fillOps.js";
 import { checkPartMap } from "./models/partRefs.js";
 import { checkInteract } from "./models/interact.js";
-import { PLACE_SCALES } from "./rules/places.js";
 
 export type Layer = "universe" | "book" | "place";
 export interface Entry { default: unknown; unit: string; meaning: string; used: string[]; layers: Layer[]; kind: "hard" | "knob" | "physics" | "structure" | "presentation"; range?: [number, number]; wired?: boolean }
@@ -67,8 +66,6 @@ export function problemsOf(key: string, value: unknown, layer?: Layer): string[]
   // The warehouse's slot maps (kind -> part; milestones M10i): their keys are kinds, not parts of the default.
   if (key === "fill.props" || key === "models.vehicles" || key === "models.parts") return [...out, ...checkPartMap(key, value)];
   if (key === "models.interact") return [...out, ...checkInteract(value)];
-  // A strand's envelope is one of the place scales (docs/v2/strands.md).
-  if (key === "strands.envelope") return (PLACE_SCALES as readonly string[]).includes(value as string) ? out : [...out, `${key} must be a place scale (${PLACE_SCALES.join(", ")})`];
   walk(key, entry.default, value);
   if (entry.range && typeof value === "number" && (value < entry.range[0] || value > entry.range[1])) out.push(`${key} = ${value} is outside ${entry.range[0]}–${entry.range[1]} ${entry.unit}`);
   return out;

@@ -106,17 +106,17 @@ export function segmentWorld({ reading: given, script, spawn, backCredits = true
 
 /**
  * The strands file (stage/world/strands.json's shape) of a segment script, in story time (the user, 2026-11-03: "we need
- * to make it story objective time order, as strands become forks"), by group and envelope (docs/v2/strands.md; the user,
- * 2026-11-09: "a timeline performed by a group of people in a limited, enveloping area"). The builder is the book's own
- * (`groupStrands`, `strandsDocument`: src/v2/extraction/strands.ts), bound with the book's envelope scale and the built
- * world's place tree by strand-builder.mjs: a container is on the strand its people are on unless they are told in
- * another envelope while the rest of their group is told elsewhere; where the text has groups together they are one
- * strand again. Each person's entry comes `from` the last container they were in **in story time** (a flashback hands
- * nothing over), at the same place or not; a container with nobody in it is on the strand being told. `strands` is the
+ * to make it story objective time order, as strands become forks"), by interaction (docs/v2/strands.md §0; the user,
+ * 2026-11-09: "As long as the group splits on different things and no longer interact with each other on semantic
+ * scale, they become two strands"). The builder is the book's own (`groupStrands`, `strandBeats`, `strandsDocument`:
+ * src/v2/extraction/strands.ts), bound with the built world's place tree by strand-builder.mjs; `reading` (cards and
+ * roles, as segmentWorld returns it) gives each unit's interactions and beats. Each person's entry comes `from` the last
+ * container they were in **in story time** (a flashback hands nothing over), at the same place or not. `strands` is the
  * builder's own answer (its maps), for the engine's per-fork timeline.
  */
-export function strandsFile(script, { groupStrands, strandsDocument, envelope, tree }) {
-  const strands = groupStrands(script, { ...(envelope ? { envelope } : {}), ...(tree ? { tree } : {}) });
+export function strandsFile(script, { groupStrands, strandsDocument, strandBeats, tree }, { reading = null } = {}) {
+  const beats = reading?.cards && strandBeats ? strandBeats(reading.cards, reading.roles ?? {}, reading.scenes ?? [], script) : undefined;
+  const strands = groupStrands(script, { ...(tree ? { tree } : {}), ...(beats ? { beats } : {}) });
   return { ...strandsDocument(script, strands, 'v2-script-segments'), strands };
 }
 

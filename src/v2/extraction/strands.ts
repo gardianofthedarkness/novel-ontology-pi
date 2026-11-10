@@ -14,7 +14,7 @@
 import { storyStrands, type StoryStrands } from "../../../apps/playground/src/data/storyStrands.js";
 import type { StoryPlace, StoryScene, StoryTime, TimePlaceProjection } from "../../../apps/playground/src/data/timePlace.js";
 import { forkTimeline, type Fork, type ForkTimeline, type Handoff } from "../../digger/stage/environment.js";
-import { PLACE_SCALES, rankOf } from "../rules/places.js";
+import { rankOf } from "../rules/places.js";
 import type { ReadingScript, ScriptPlace, ScriptScene } from "./script.js";
 
 /** A clock time as v1's part of the day (its slots: late night to night). */
@@ -55,28 +55,40 @@ export function scriptStrands(script: ReadingScript): { strands: StoryStrands; t
 }
 
 /**
- * Strands as groups in envelopes (docs/v2/strands.md; milestones M17a; the user, 2026-11-09: "a timeline performed by a
- * group of people in a limited, enveloping area ... If the time is the same by mentioning the two groups united, the
- * strands reunify into one. Today our strands simply diverge"). A strand is a group, the area that envelops it, and the
- * stretch of story time it plays; one builder for the book's strands file and the director's segments.
+ * Strands by interaction (docs/v2/strands.md §0; milestones M17e; the user, 2026-11-09: "As long as the group splits on
+ * different things and no longer interact with each other on semantic scale, they become two strands. When they reunited
+ * the strands become one. Whether scale is building street what ever depends on the context"). A strand is a group, the
+ * area its scenes are in (read from them, at whatever scale) and the stretch of story time it plays; one builder for the
+ * book's strands file, the director's segments and a run re-stranded after smoothing.
  *
- * The envelope of a place is the first place at or above the envelope scale (`strands.envelope`, a district by default)
- * on the way up from it; a place that never reaches that scale has none known. Two envelopes are **apart** only on
- * evidence: both known, neither inside the other, and either side by side under a place they share or two top places of
- * one scale that is a city's or larger. A scene placed coarsely (the whole city) is never evidence of leaving, and
- * neither is a sampling pool (a place the text left "somewhere in" an area: it is that area, no finer). Where the engine
- * built such a place is known to the terrain registry: `builtTree` reads it, and `tree` takes it.
+ * The rules (§0, §0.2–0.6), each scene walked in story order (the script's clock, then reading order):
+ *   1. A scene's group is the people acting in it (acting, speaking or spoken to: `evidence`), and anyone an action of
+ *      theirs is aimed at who is there (rule 12). People only held in view ride along: they neither split nor unite.
+ *   2. A split: part of a strand's group acts here while the rest of that group next appears (acting or in view) where
+ *      none of the people here is in view. No place scale enters (rules 2, 9, 10).
+ *   3. A union: people of two strands acting here and linked by an interaction (one conversation, one action, one event,
+ *      an action aimed at one of them). Strands acting here with no link act beside each other and stay apart. The strand
+ *      begun first keeps its id (rule 8).
+ *   4. A union is refused when both sides leave it at once: each side's next action is out of view of the other (a
+ *      meeting the reading made up); the walk then runs again (rule 11, narrowed when built).
+ *   5. Latency: a strand lands only if its group has a dialogue or an action in its next scene with anyone acting (its
+ *      next segment); otherwise it folds into the strand it left, a new group into the one it joins, else into the one
+ *      told before it. A strand of nobody folds into the first strand of someone (§0.2).
+ *   6. A flashback is a closed strand of its own, handing nothing on.
+ * Without beats (a script and nothing else), everyone acting in one scene is linked and every scene where someone acts
+ * has a beat.
  */
 export interface StrandFork extends Fork {
+  /** The smallest place holding the strand's scenes (the context's scale), when they are placed. */
   envelope: string | null; unites: string[]; open: boolean; into?: string; past?: boolean;
   /** The strands its people left when it began (a split: its world layer starts as a copy of theirs); none for a strand of people first seen. */
   splitFrom: string[];
   /** The scene where it closed into `into` (the union: from there its world layer is merged into that strand's). */
   intoAt?: string;
 }
-export interface StrandCheck { kind: "split" | "union" | "apart" | "conflict"; sceneId: string; status: string; count?: number; otherId?: string; characterId?: string }
+export interface StrandCheck { kind: "split" | "union" | "apart" | "conflict" | "beside" | "refused" | "folded"; sceneId: string; status: string; count?: number; otherId?: string; characterId?: string }
 export interface GroupStrands {
-  /** The envelope scale the strands were built at. */
+  /** "context": the scale of each strand is read from its scenes (`envelope`). */
   scale: string;
   /** The scenes in story order. */
   order: string[];
@@ -85,24 +97,25 @@ export interface GroupStrands {
   forkOf: Map<string, string>; envelopeOf: Map<string, string | null>; handoffs: Map<string, Handoff[]>;
   forks: StrandFork[]; checks: StrandCheck[];
 }
+/** A scene's interactions: who took part together (`links`), its beats (each a dialogue or an action, with its people), and who an action was aimed at. */
+export interface StrandBeats { links?: string[][]; beats?: string[][]; aimed?: string[] }
 export interface GroupOptions {
-  /** The envelope scale (a place scale); a district when not given. */
-  envelope?: string;
   /** Places the built world knows better than the script (a parent the text never states, a slot's own parent and scale). */
   tree?: Record<string, { parent?: string | null; scale?: string | null }>;
+  /** Per scene id (a run's sub-scene `x~2` reads scene x): from `strandBeats`. */
+  beats?: Record<string, StrandBeats>;
 }
+type StrandScene = ScriptScene & { evidence?: string[] };
 
-/** Envelopes over a place tree: a place's envelope, whether one place is inside another, whether two are known to be apart. */
-export function envelopes(places: Record<string, Pick<ScriptPlace, "scale" | "parent" | "pool">>, options: GroupOptions = {}) {
-  const scale = options.envelope ?? "district", need = rankOf(scale), city = rankOf("city");
-  if (need < 0) throw new Error(`strands.envelope ${JSON.stringify(scale)} is not a place scale (${PLACE_SCALES.join(", ")})`);
+/** The place tree: a place's path up, whether one place is inside another, whether two are known to be apart, the smallest place holding several. */
+export function placeTree(places: Record<string, Pick<ScriptPlace, "scale" | "parent" | "pool">>, options: Pick<GroupOptions, "tree"> = {}) {
+  const city = rankOf("city");
   const parentOf = (id: string): string | null => { const own = options.tree?.[id]; return own && own.parent !== undefined ? own.parent : places[id]?.parent ?? null; };
-  // A sampling pool is no area of its own: it has no scale here, so the area it samples is the envelope.
   const scaleOf = (id: string): string | null => options.tree?.[id]?.scale ?? (places[id]?.pool ? null : places[id]?.scale ?? null);
   /** The place and every place it stands in, itself first. */
   const pathOf = (id: string): string[] => { const path: string[] = []; for (let at: string | null = id; at && !path.includes(at) && path.length < 24; at = parentOf(at)) path.push(at); return path; };
-  const envelopeOf = (place: string | null | undefined): string | null => (place ? pathOf(place).find((id) => rankOf(scaleOf(id)) >= need) ?? null : null);
   const within = (inner: string, outer: string) => pathOf(inner).includes(outer);
+  /** Apart only on evidence: neither inside the other, and side by side under a place they share, or two top places of one scale a city's or larger. */
   const apart = (first: string | null, second: string | null): boolean => {
     if (!first || !second || first === second) return false;
     const a = pathOf(first), b = pathOf(second);
@@ -111,90 +124,206 @@ export function envelopes(places: Record<string, Pick<ScriptPlace, "scale" | "pa
     const top = rankOf(scaleOf(a.at(-1)!));
     return top >= city && top === rankOf(scaleOf(b.at(-1)!));
   };
-  return { scale, envelopeOf, within, apart, pathOf };
+  /** The smallest place holding all of these (nulls ignored); null when they share none. */
+  const holding = (ids: (string | null | undefined)[]): string | null => {
+    const paths = ids.filter((id): id is string => !!id).map(pathOf);
+    return paths.length ? paths[0].find((id) => paths.every((path) => path.includes(id))) ?? null : null;
+  };
+  return { pathOf, within, apart, holding, scaleOf };
 }
 
+/** A card as the beats read it: its kind, the cards inside it (a conversation's), its lines and its people's credit. */
+export interface BeatCard { id: string; kind: string; first: string; sentences?: string[]; inside?: string[]; people?: { id: string; how: string[]; at?: string[] }[] }
+const ACTING = new Set(["acts", "speaks", "addressed"]);
+/** A place the reading credits with acting ("the city") takes part in no interaction. */
+const aPlace = (id: string) => id.startsWith("loc_");
 /**
- * The script's strands by group and envelope. Scenes are walked in story order (the script's clock, then reading order;
- * a flashback is told where it is read and is a closed strand of its own, handing nothing on). For a scene, each strand
- * its people are on either plays it or is left by them:
- *
- *   - a strand whose envelope is not known to be apart from the scene's plays it;
- *   - one that is apart plays it too when its whole group is here (the strand moves), or when the rest of its group is
- *     not told elsewhere meanwhile (the next scene with any of them has someone from here, or is not apart from here);
- *   - otherwise the people here leave it (a **split**): the rest is told in its own envelope while they are in another.
- *
- * No strand plays it: a new strand, from the ones left (`splitFrom`). One: it goes on. Several: a **union**, the strand with the most
- * scenes keeps its id and the others close into it (`unites`, `into`, `intoAt`). A scene of people first seen is on the strand
- * being told unless its place is known to be apart (a new group in another area is a new strand). A scene with nobody in
- * it has no group to be a strand: it is on the strand being told, or on the open strand whose envelope it looks at, and
- * with the telling when it looks at nobody's.
+ * A reading's interactions per scene, for `groupStrands`: `links` are the people acting together in one conversation
+ * (a dialogue card), one action (in or out of a conversation) or one of the script's events, and an action's actor with
+ * a person its line names who is in the scene (an action aimed at someone, rule 12); `beats` are the conversations and
+ * the actions outside one, each with its people (the latency); `aimed` the people aimed at.
  */
-export function groupStrands(script: ReadingScript, options: GroupOptions = {}): GroupStrands {
-  const { scale, envelopeOf: envelopeAt, within, apart } = envelopes(script.places ?? {}, options);
-  const index = new Map(script.scenes.map((scene, n) => [scene.id, n])), keyOf = new Map<string, number>();
-  let key = -1e15;
-  for (const scene of script.scenes) { if (scene.clock && typeof scene.clock[0] === "number") key = scene.clock[0]; keyOf.set(scene.id, key); }
-  const ordered = [...script.scenes].sort((a, b) => keyOf.get(a.id)! - keyOf.get(b.id)! || index.get(a.id)! - index.get(b.id)!);
-  interface Live { id: string; lane: number; scenes: string[]; people: string[]; group: Set<string>; envelope: string | null; from: string[]; to: string[]; unites: string[]; open: boolean; into?: string; intoAt?: string; splitFrom: string[]; past?: boolean; last: string | null; active: number; closed?: number }
-  const strands = new Map<string, Live>(), onStrand = new Map<string, string>(), lastScene = new Map<string, ScriptScene>();
-  const layer = new Map<string, number>(), lane = new Map<string, number>(), continues = new Map<string, string | null>(), forkOf = new Map<string, string>(), envelopeOf = new Map<string, string | null>(), handoffs = new Map<string, Handoff[]>(), checks: StrandCheck[] = [];
-  const begin = (id: string, envelope: string | null): Live => { const strand: Live = { id, lane: strands.size, scenes: [], people: [], group: new Set(), envelope, from: [], to: [], unites: [], splitFrom: [], open: true, last: null, active: -1 }; strands.set(id, strand); return strand; };
-  const strandOf = (person: string): Live | null => { let at = onStrand.has(person) ? strands.get(onStrand.get(person)!)! : null; while (at?.into) at = strands.get(at.into)!; return at; };
-  const link = (from: Live, to: Live) => { if (from === to) return; if (!to.from.includes(from.id)) to.from.push(from.id); if (!from.to.includes(to.id)) from.to.push(to.id); };
-  /** The next scene in story time (not a flashback) with any of these people. */
-  const nextWith = (people: string[], after: number) => ordered.find((scene, rank) => rank > after && scene.clock !== null && (scene.present ?? []).some((person) => people.includes(person))) ?? null;
-  let told: Live | null = null;
-  ordered.forEach((scene, rank) => {
-    const people = scene.present ?? [], here = envelopeAt(scene.place);
-    layer.set(scene.id, rank); envelopeOf.set(scene.id, here);
-    const place = (strand: Live) => { continues.set(scene.id, strand.last); forkOf.set(scene.id, strand.id); lane.set(scene.id, strand.lane); strand.scenes.push(scene.id); for (const person of people) if (!strand.people.includes(person)) strand.people.push(person); strand.last = scene.id; strand.active = rank; };
-    if (scene.clock === null) {
-      // The past, told here: its own closed strand; nobody comes into it from the present and nobody leaves it for the present.
-      const past = begin(scene.id, here); past.past = true; past.open = false; past.closed = rank;
-      handoffs.set(scene.id, people.map((person) => ({ person, from: null, samePlace: false })));
-      place(past);
-      return;
+export function strandBeats(cards: readonly BeatCard[], roles: Readonly<Record<string, { kind?: string; who?: { id: string | null } }>>, units: readonly { id: string; sentences: readonly string[] }[], script: { scenes: readonly StrandScene[] }): Record<string, StrandBeats> {
+  const unitOf = new Map(units.flatMap((unit) => unit.sentences.map((id) => [id, unit.id] as const)));
+  const sceneOf = new Map(script.scenes.map((scene) => [scene.id, scene]));
+  const base = (id: string) => id.replace(/#\d+$/, "");
+  const inside = new Set(cards.filter((card) => card.kind === "dialogue").flatMap((card) => (card.inside ?? []).map(base)));
+  const out: Record<string, { links: string[][]; beats: string[][]; aimed: Set<string> }> = {};
+  const at = (unit: string) => (out[unit] ??= { links: [], beats: [], aimed: new Set() });
+  for (const card of cards) {
+    const conversation = card.kind === "dialogue", action = card.kind === "action";
+    if (!conversation && !action) continue;
+    const byUnit = new Map<string, Set<string>>();
+    for (const person of card.people ?? []) if (!aPlace(person.id) && person.how.some((how) => ACTING.has(how))) for (const id of person.at?.length ? person.at : [card.first]) { const unit = unitOf.get(id); if (unit) (byUnit.get(unit) ?? byUnit.set(unit, new Set()).get(unit)!).add(person.id); }
+    for (const [unit, people] of byUnit) {
+      if (people.size > 1) at(unit).links.push([...people]);
+      if (conversation || !inside.has(base(card.id))) at(unit).beats.push([...people]);
     }
-    handoffs.set(scene.id, people.map((person) => { const from = lastScene.get(person); return { person, from: from?.id ?? null, samePlace: !!from && !!scene.place && from.place === scene.place }; }));
-    for (const person of people) { const from = lastScene.get(person); if (from && scene.at?.stated && from.at?.stated && scene.at.node === from.at.node && apart(envelopeAt(from.place), here)) checks.push({ kind: "conflict", sceneId: scene.id, status: "one stated time in two envelopes", otherId: from.id, characterId: person }); }
-    const sources = [...new Set(people.map(strandOf).filter((strand): strand is Live => !!strand))], together: Live[] = [], left: Live[] = [];
-    for (const source of sources) {
-      if (!apart(source.envelope, here)) { together.push(source); continue; }
-      const mine = people.filter((person) => strandOf(person) === source), rest = [...source.group].filter((person) => !mine.includes(person) && strandOf(person) === source);
-      const next = rest.length ? nextWith(rest, rank) : null;
-      if (next && !(next.present ?? []).some((person) => mine.includes(person)) && apart(envelopeAt(next.place), here)) left.push(source); else together.push(source);
+    if (!action) continue;
+    for (const id of card.sentences ?? [card.first]) {
+      const role = roles[id], actor = role?.kind === "action" ? role.who?.id : null, unit = unitOf.get(id), scene = unit ? sceneOf.get(unit) : undefined;
+      if (!actor || !unit || !scene) continue;
+      const here = new Set([...(scene.evidence ?? []), ...scene.present]);
+      for (const person of card.people ?? []) if (person.id !== actor && !aPlace(person.id) && !aPlace(actor) && person.how.includes("named") && (person.at ?? []).includes(id) && here.has(person.id)) { at(unit).links.push([actor, person.id]); at(unit).aimed.add(person.id); }
     }
-    let strand: Live;
-    if (!sources.length) {
-      // Nobody here is on a strand yet: the strand being told, else the open one last told that this place is not apart
-      // from; a scene of nobody apart from every open strand stays with the telling (no group, no strand of its own).
-      const near = (other: Live) => other.open && !apart(other.envelope, here);
-      const open = [...strands.values()].filter(near).sort((a, b) => b.active - a.active);
-      strand = (told && near(told) ? told : open[0]) ?? (!people.length && told?.open ? told : begin(scene.id, here));
-      if (!strand.scenes.length) strand.group = new Set(people);
-    } else if (!together.length) {
-      strand = begin(scene.id, here); strand.group = new Set(people); strand.splitFrom = left.map((source) => source.id);
-    } else {
-      strand = together.reduce((best, other) => (other.scenes.length > best.scenes.length || (other.scenes.length === best.scenes.length && other.lane < best.lane) ? other : best));
-      for (const other of together) if (other !== strand) { other.open = false; other.into = strand.id; other.intoAt = scene.id; other.closed = rank; strand.unites.push(other.id); link(other, strand); checks.push({ kind: "union", sceneId: scene.id, status: "groups together", otherId: other.id }); }
-      // The envelope follows the group: a finer place inside it, or the place it moved to; a coarser placement tells nothing new.
-      if (here && !(strand.envelope && within(strand.envelope, here))) strand.envelope = here;
-      strand.group = new Set(people);
-    }
-    for (const source of left) { link(source, strand); checks.push({ kind: "split", sceneId: scene.id, status: "envelopes differ", otherId: source.id }); }
-    place(strand);
-    for (const person of people) { onStrand.set(person, strand.id); lastScene.set(person, scene); }
-    told = strand;
-  });
-  // A chapter that ends with more than one strand open: groups still apart (for the review; nothing reads it as an error).
-  const chapters = new Map<number, { last: number; scene: string; strands: Set<Live> }>();
-  ordered.forEach((scene, rank) => { const strand = strands.get(forkOf.get(scene.id)!)!; if (strand.past) return; const chapter = chapters.get(scene.chapter) ?? chapters.set(scene.chapter, { last: rank, scene: scene.id, strands: new Set() }).get(scene.chapter)!; chapter.last = rank; chapter.scene = scene.id; chapter.strands.add(strand); });
-  for (const chapter of chapters.values()) { const count = [...chapter.strands].filter((strand) => strand.open || (strand.closed ?? -1) > chapter.last).length; if (count > 1) checks.push({ kind: "apart", sceneId: chapter.scene, status: "open at the chapter's end", count }); }
-  const forks: StrandFork[] = [...strands.values()].map((strand) => ({ id: strand.id, scenes: strand.scenes, people: strand.people, from: strand.from, to: strand.to, envelope: strand.envelope, unites: strand.unites, open: strand.open, splitFrom: strand.splitFrom, ...(strand.into ? { into: strand.into, intoAt: strand.intoAt } : {}), ...(strand.past ? { past: true } : {}) }));
-  return { scale, order: ordered.map((scene) => scene.id), layer, lane, continues, forkOf, envelopeOf, handoffs, forks, checks };
+  }
+  for (const scene of script.scenes) for (const event of scene.timeline ?? []) { const actors = (event.actors ?? []).filter((id) => !aPlace(id)); if (actors.length > 1) at(scene.id).links.push(actors); }
+  return Object.fromEntries(Object.entries(out).map(([unit, entry]) => [unit, { links: entry.links, beats: entry.beats, aimed: [...entry.aimed] }]));
 }
 
+interface Live { id: string; born: number; scenes: string[]; people: Set<string>; group: Set<string>; open: boolean; unites: string[]; splitFrom: string[]; into?: string; intoAt?: string; past?: boolean }
+interface WalkUnion { sceneId: string; other: string; keeper: string; who: string[]; with: string[] }
+interface Walked { strands: Live[]; checks: StrandCheck[]; unions: WalkUnion[] }
+
+/** The strands of a script by interaction (the rules above). */
+export function groupStrands(script: ReadingScript, options: GroupOptions = {}): GroupStrands {
+  const scenes = script.scenes as StrandScene[];
+  const tree = placeTree(script.places ?? {}, options);
+  const beatsOf = (id: string): StrandBeats | undefined => options.beats?.[id] ?? options.beats?.[id.split("~")[0]];
+  const actingOf = (scene: StrandScene) => scene.evidence ?? scene.present ?? [];
+  const seenIn = (scene: StrandScene) => new Set([...actingOf(scene), ...(scene.present ?? [])]);
+  // Who takes part in a scene: its acting people and those an action of theirs is aimed at.
+  const active = (scene: StrandScene) => { const aimed = beatsOf(scene.id)?.aimed ?? [], here = seenIn(scene); return [...new Set([...actingOf(scene), ...aimed.filter((person) => here.has(person))])]; };
+  const linksOf = (scene: StrandScene) => (options.beats ? beatsOf(scene.id)?.links ?? [] : [actingOf(scene)]);
+  const index = new Map(scenes.map((scene, n) => [scene.id, n])), keyOf = new Map<string, number>();
+  let key = -1e15;
+  for (const scene of scenes) { if (scene.clock && typeof scene.clock[0] === "number") key = scene.clock[0]; keyOf.set(scene.id, key); }
+  const ordered = [...scenes].sort((a, b) => keyOf.get(a.id)! - keyOf.get(b.id)! || index.get(a.id)! - index.get(b.id)!);
+  const rank = new Map(ordered.map((scene, n) => [scene.id, n])), sceneById = new Map(scenes.map((scene) => [scene.id, scene]));
+
+  const walk = (noUnion: Set<string>): Walked => {
+    const strands = new Map<string, Live>(), onStrand = new Map<string, string>(), checks: StrandCheck[] = [], unions: WalkUnion[] = [];
+    const begin = (id: string): Live => { const strand: Live = { id, born: strands.size, scenes: [], people: new Set(), group: new Set(), open: true, unites: [], splitFrom: [] }; strands.set(id, strand); return strand; };
+    const strandOf = (person: string): Live | null => { let at = onStrand.has(person) ? strands.get(onStrand.get(person)!)! : null; while (at?.into) at = strands.get(at.into)!; return at; };
+    const nextWith = (people: string[], after: number) => ordered.find((scene, n) => n > after && scene.clock !== null && [...seenIn(scene)].some((person) => people.includes(person))) ?? null;
+    let told: Live | null = null;
+    ordered.forEach((scene, n) => {
+      const acting = active(scene), present = new Set([...(scene.present ?? []), ...acting]);
+      const place = (strand: Live) => { strand.scenes.push(scene.id); for (const person of acting) strand.people.add(person); };
+      if (scene.clock === null) { const past = begin(scene.id); past.past = true; past.open = false; place(past); return; }
+      const sideOf = new Map(acting.map((person) => [person, strandOf(person)]));
+      const sources = [...new Set(acting.map(strandOf).filter((strand): strand is Live => !!strand))], together: Live[] = [], left: Live[] = [], beside: Live[] = [];
+      for (const source of sources) {
+        const rest = [...source.group].filter((person) => !present.has(person) && strandOf(person) === source);
+        const next = rest.length ? nextWith(rest, n) : null;
+        if (next && !acting.some((person) => seenIn(next).has(person))) left.push(source); else together.push(source);
+      }
+      let strand: Live;
+      if (!sources.length) {
+        // Nobody acting here is on a strand: someone in view who is (they are in the scene), else a new group, else (nobody acts) the telling.
+        const viewed = [...present].map(strandOf).find((other): other is Live => !!other);
+        strand = viewed ?? (acting.length || !told ? begin(scene.id) : told);
+        if (!strand.scenes.length) strand.group = new Set(acting);
+      } else if (!together.length) {
+        strand = begin(scene.id); strand.splitFrom = left.map((source) => source.id);
+      } else {
+        let united = together;
+        if (together.length > 1) {
+          const root = new Map(together.map((other) => [other, other])), find = (other: Live): Live => (root.get(other) === other ? other : find(root.get(other)!));
+          for (const link of noUnion.has(scene.id) ? [] : linksOf(scene)) {
+            const hit = [...new Set(link.map((person) => sideOf.get(person)).filter((other): other is Live => !!other && together.includes(other)))];
+            for (let i = 1; i < hit.length; i++) root.set(find(hit[i]), find(hit[0]));
+          }
+          const parts = new Map<Live, Live[]>();
+          for (const other of together) (parts.get(find(other)) ?? parts.set(find(other), []).get(find(other))!).push(other);
+          const weight = (part: Live[]) => acting.filter((person) => part.includes(sideOf.get(person)!)).length * 1e6 + Math.max(...part.map((other) => other.scenes.length));
+          united = [...parts.values()].sort((a, b) => weight(b) - weight(a))[0];
+          for (const other of together) if (!united.includes(other)) { beside.push(other); checks.push({ kind: "beside", sceneId: scene.id, status: "acting here with no interaction", otherId: other.id }); }
+        }
+        strand = united.reduce((best, other) => (other.born < best.born ? other : best));
+        for (const other of united) if (other !== strand) {
+          other.open = false; other.into = strand.id; other.intoAt = scene.id; strand.unites.push(other.id);
+          unions.push({ sceneId: scene.id, other: other.id, keeper: strand.id, who: acting.filter((person) => sideOf.get(person) === other), with: acting.filter((person) => sideOf.get(person) !== other) });
+        }
+      }
+      const mine = acting.filter((person) => !beside.includes(sideOf.get(person)!));
+      if (acting.length) strand.group = new Set(mine);
+      place(strand);
+      for (const person of mine) onStrand.set(person, strand.id);
+      told = strand;
+    });
+    return { strands: [...strands.values()], checks, unions };
+  };
+
+  // Rule 11: a union both sides leave at once (each side's next action out of view of the other) is refused, and the
+  // walk runs again: a meeting the reading made up, not one the text tells.
+  const noUnion = new Set<string>(), refused: StrandCheck[] = [];
+  let walked = walk(noUnion);
+  for (let round = 0; round < 100; round++) {
+    // Both sides straight back apart: each side's next action is out of view of the other.
+    const apartAfter = (union: WalkUnion, side: string[], other: string[]) => { const next = ordered.find((scene, n) => n > rank.get(union.sceneId)! && scene.clock !== null && side.some((person) => active(scene).includes(person))); return !!next && !other.some((person) => seenIn(next).has(person)); };
+    const bad = walked.unions.filter((union) => !noUnion.has(union.sceneId)).find((union) => apartAfter(union, union.who, union.with) && apartAfter(union, union.with, union.who));
+    if (!bad) break;
+    noUnion.add(bad.sceneId); refused.push({ kind: "refused", sceneId: bad.sceneId, status: "both sides apart at their next action", otherId: bad.other });
+    walked = walk(noUnion);
+  }
+
+  // Rule 5: the latency, folding after the walk. A strand's next segment is its next scene with anyone acting.
+  const checks: StrandCheck[] = [...walked.checks, ...refused];
+  const strands = new Map(walked.strands.map((strand) => [strand.id, { ...strand, scenes: [...strand.scenes], people: new Set(strand.people), splitFrom: [...strand.splitFrom], unites: [...strand.unites] }]));
+  const hasBeat = (id: string) => { const scene = sceneById.get(id)!, people = new Set(actingOf(scene)); const beats = options.beats ? beatsOf(id)?.beats ?? [] : people.size ? [[...people]] : []; return beats.some((beat) => beat.some((person) => people.has(person))); };
+  const lands = (strand: Live) => { const next = strand.scenes.slice(1).find((id) => actingOf(sceneById.get(id)!).length); return !!next && hasBeat(next); };
+  const before = (strand: Live, all: Live[]) => { for (let n = rank.get(strand.scenes[0])! - 1; n >= 0; n--) { const other = all.find((entry) => entry !== strand && !entry.past && entry.people.size && entry.scenes.includes(ordered[n].id)); if (other) return other; } return null; };
+  const fold = (strand: Live, target: Live, why: string) => {
+    checks.push({ kind: "folded", sceneId: strand.scenes[0], status: why, otherId: target.id });
+    target.scenes = [...target.scenes, ...strand.scenes].sort((a, b) => rank.get(a)! - rank.get(b)!);
+    for (const person of strand.people) target.people.add(person);
+    if (rank.get(strand.scenes[0])! < rank.get(target.scenes[0])! || target.scenes[0] === strand.scenes[0]) target.splitFrom = [...new Set([...target.splitFrom, ...strand.splitFrom])].filter((id) => id !== target.id);
+    target.unites = target.unites.filter((id) => id !== strand.id);
+    strands.delete(strand.id);
+    for (const other of strands.values()) {
+      if (other.into === strand.id) other.into = target.id;
+      other.splitFrom = [...new Set(other.splitFrom.map((id) => (id === strand.id ? target.id : id)))].filter((id) => id !== other.id);
+      other.unites = [...new Set(other.unites.map((id) => (id === strand.id ? target.id : id)))].filter((id) => id !== other.id);
+      if (other.into === other.id) { delete other.into; delete other.intoAt; other.open = true; }
+    }
+  };
+  for (;;) {
+    const all = [...strands.values()];
+    const short = all.filter((strand) => !strand.past && strand.people.size && !lands(strand) && (strand.splitFrom.length || strand.into || before(strand, all)))
+      .sort((a, b) => a.born - b.born);
+    if (!short.length) break;
+    const strand = short[0], target = strands.get(strand.splitFrom[0] ?? strand.into ?? "") ?? before(strand, all)!;
+    fold(strand, target, "no dialogue or action in its next segment");
+  }
+  for (const strand of [...strands.values()]) if (!strand.past && !strand.people.size) {
+    const first = [...strands.values()].filter((other) => !other.past && other.people.size).sort((a, b) => rank.get(a.scenes[0])! - rank.get(b.scenes[0])!)[0];
+    if (first) fold(strand, first, "nobody acts in it");
+  }
+
+  // The answer in the shape every reader takes: per scene its strand, its place in story order, its lane, the scene it continues.
+  const live = [...strands.values()].sort((a, b) => a.born - b.born);
+  const forkOf = new Map<string, string>(), lane = new Map<string, number>(), continues = new Map<string, string | null>(), layer = new Map<string, number>(), envelopeOf = new Map<string, string | null>();
+  const envelope = new Map(live.map((strand) => [strand.id, tree.holding(strand.scenes.map((id) => sceneById.get(id)!.place))]));
+  live.forEach((strand, n) => { let last: string | null = null; for (const id of strand.scenes) { forkOf.set(id, strand.id); lane.set(id, n); continues.set(id, last); last = id; } });
+  ordered.forEach((scene, n) => { layer.set(scene.id, n); envelopeOf.set(scene.id, envelope.get(forkOf.get(scene.id)!) ?? null); });
+  // How each person comes into each scene (from the last scene they were in, in story time; nothing from the past).
+  const handoffs = new Map<string, Handoff[]>(), lastScene = new Map<string, StrandScene>();
+  for (const scene of ordered) {
+    const people = scene.present ?? [];
+    if (scene.clock === null) { handoffs.set(scene.id, people.map((person) => ({ person, from: null, samePlace: false }))); continue; }
+    handoffs.set(scene.id, people.map((person) => { const from = lastScene.get(person); return { person, from: from?.id ?? null, samePlace: !!from && !!scene.place && from.place === scene.place }; }));
+    for (const person of people) {
+      const from = lastScene.get(person);
+      if (from && scene.at?.stated && from.at?.stated && scene.at.node === from.at.node && tree.apart(from.place, scene.place)) checks.push({ kind: "conflict", sceneId: scene.id, status: "one stated time in two places apart", otherId: from.id, characterId: person });
+    }
+    for (const person of people) lastScene.set(person, scene);
+  }
+  // The splits and unions that landed (after the latency and the refusals).
+  for (const strand of live) {
+    for (const source of strand.splitFrom) checks.push({ kind: "split", sceneId: strand.scenes[0], status: "the rest is told out of view", otherId: source });
+    if (strand.into) checks.push({ kind: "union", sceneId: strand.intoAt!, status: "groups interact", otherId: strand.id });
+  }
+  // A chapter that ends with more than one strand open: groups still apart (for the review; nothing reads it as an error).
+  const chapters = new Map<number, { last: number; scene: string; strands: Set<string> }>();
+  ordered.forEach((scene, n) => { const fork = forkOf.get(scene.id)!, strand = strands.get(fork)!; if (strand.past) return; const chapter = chapters.get(scene.chapter) ?? chapters.set(scene.chapter, { last: n, scene: scene.id, strands: new Set() }).get(scene.chapter)!; chapter.last = n; chapter.scene = scene.id; chapter.strands.add(fork); });
+  for (const chapter of chapters.values()) { const count = [...chapter.strands].filter((id) => { const strand = strands.get(id)!; return strand.open || rank.get(strand.intoAt ?? "")! > chapter.last; }).length; if (count > 1) checks.push({ kind: "apart", sceneId: chapter.scene, status: "open at the chapter's end", count }); }
+  const from = new Map<string, Set<string>>(), to = new Map<string, Set<string>>();
+  const link = (a: string, b: string) => { if (a === b) return; (to.get(a) ?? to.set(a, new Set()).get(a)!).add(b); (from.get(b) ?? from.set(b, new Set()).get(b)!).add(a); };
+  for (const strand of live) { for (const source of strand.splitFrom) link(source, strand.id); if (strand.into) link(strand.id, strand.into); }
+  const forks: StrandFork[] = live.map((strand) => ({ id: strand.id, scenes: strand.scenes, people: [...strand.people], from: [...(from.get(strand.id) ?? [])], to: [...(to.get(strand.id) ?? [])], envelope: envelope.get(strand.id) ?? null, unites: strand.unites, open: strand.open, splitFrom: strand.splitFrom, ...(strand.into ? { into: strand.into, intoAt: strand.intoAt } : {}), ...(strand.past ? { past: true } : {}) }));
+  return { scale: "context", order: ordered.map((scene) => scene.id), layer, lane, continues, forkOf, envelopeOf, handoffs, forks, checks };
+}
 /** A slot of the terrain registry as the built tree reads it (universe/terrain.json, a book's stage/terrain.json). */
 export interface BuiltSlot { id?: string; parent?: string | null; owner?: string | null; sharers?: { book?: string; mention?: string }[] }
 /**

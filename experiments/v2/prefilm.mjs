@@ -33,7 +33,7 @@ if (values['stand-in']) {
   work = cachedWork(workModelFromEnv(process.env), join(dirname(resolve(readingPath)), '..', 'cache-faculties'));
 }
 const started = Date.now();
-const { units, usage } = await readPrefilm({ reading, script, text, work, strandsOf: segmentScript => SG.strandsFile(segmentScript, strandsWith), pins, from: values.from ?? null, to: values.to ?? null, log: message => console.error(message) });
+const { units, usage } = await readPrefilm({ reading, script, text, work, strandsOf: (segmentScript, segmentReading) => SG.strandsFile(segmentScript, strandsWith, { reading: segmentReading }), pins, from: values.from ?? null, to: values.to ?? null, log: message => console.error(message) });
 const out = join(dirname(resolve(readingPath)), 'prefilm.json'), older = join(dirname(resolve(readingPath)), 'faculties.json');
 // A partial run (--from/--to) adds to what is there.
 const kept = values.from || values.to ? prefilmOf(JSON.parse(await readFile(out, 'utf8').catch(() => readFile(older, 'utf8')).catch(() => 'null')))?.units ?? {} : {};

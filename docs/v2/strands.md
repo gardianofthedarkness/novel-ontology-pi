@@ -6,8 +6,9 @@
 > before the cross-book carry (M16) and the first volume 2 run (W16).
 
 Built 2026-11-09 (M17a–d, the user: "I agree let's build it"): the builder (§3), the run on it, a world layer per strand
-(§4), re-stranding a run after smoothing (§5). §2 is what it measured on volume 1. **§0 revises the split rule** (planned
-as M17e–g): the scale is no longer set; strands split and unite by interaction.
+(§4), re-stranding a run after smoothing (§5). §2 is what it measured on volume 1. **§0 revises the split rule, built
+2026-11-09 as M17e–g (§0.7; the user: "Yes, build it")**: the scale is no longer set; strands split and unite by
+interaction. §1–§5 below describe M17a–d, where they speak of envelopes at a scale they are history.
 
 ## 0. Revision: the scale comes from the context (the user, 2026-11-09, after M17a–d)
 
@@ -308,18 +309,62 @@ does not). With the setting off, the rehearsal is the one before, 212 of 213 mea
 The W15 run was played with the old credits: re-stranded under the checked presence it gives 7 strands (people stood
 where the old credit put them) until a run is played with the check.
 
-**What it changes in what is built:**
-- M17e: rules 1–12 (the credit check is built; rule 12 is the strand builder's); the group is the people acting together (rule 9); the split test reads the rest's next appearance
-  (rule 10); the union keeps the id of the strand begun first; the latency is the next-segment beat (§0.2), the fold
-  after the walk; a strand of nobody folds into the first. The strands file keeps each folded strand (`folded`: its
-  units, its beats, where it went) for the review.
-- M17a: the walk's place tests become the interaction tests; the setting `strands.envelope` goes; `envelopes()` stays
-  for the envelope read from the places and the stated-time conflict check.
-- M17b: the director's units keep one strand each; a rehearsal measures the change.
-- M17c: unchanged, keyed by strand; more strands are more layers, cheap while copy-on-write.
-- M17d: `runUnits` groups by distance and the text's links, not by site envelopes; `--envelope` goes; the report gains
-  the pairs the text has interacting that stood beyond earshot.
-- M16 reads the open strands by interaction.
+### 0.7 Built (M17e–g; the user, 2026-11-09: "Yes, build it")
+
+**The builder** (`groupStrands` in `src/v2/extraction/strands.ts`) walks the scenes in story order with rules 1–12:
+the group is the people acting (and anyone an action of theirs is aimed at who is there); a split is part of a group
+acting while the rest next appears, acting or in view, out of view of the people here; a union is an interaction
+between strands (one conversation, one action, one event, an action aimed at one of them), the strand begun first
+keeping its id; strands acting in one scene with no interaction stay apart (`beside`); a strand lands only if its group
+has a dialogue or an action in its next segment, else it folds into the strand it left (a new group into the one it
+joins, else the one told before it), and a strand of nobody folds into the first strand of someone; a flashback is a
+closed strand. Each strand's `envelope` is the smallest place holding its scenes (`placeTree(...).holding`), at
+whatever scale. The checks record each `folded`, `refused` and `beside`, beside the landed `split` and `union`.
+`strandBeats(cards, roles, units, script)` reads the interactions and beats from a reading (a place the reading credits
+with acting takes part in none). Without beats, everyone acting in one scene is linked and every scene with someone
+acting has a beat.
+
+**Rule 11 narrowed when built.** As planned it refused a union whenever the next action of the people who joined had
+nobody of the other side in view. That also refused true meetings followed by a parting: in a test, a group meets a
+third person, then two of them go on alone and the third is not told again, and the union was refused. Since the
+credit check (§0.6) removes the made-up meetings at their source, rule 11 now refuses a union only when **both** sides
+go straight back apart (each side's next action out of view of the other). On volume 1 it refuses nothing either way.
+
+**Wired:** the binding (`director/strand-builder.mjs`) carries the built tree and the builder; `segments.mjs
+strandsFile(script, builder, { reading })` takes the units' reading (the director, why-walk, the pre-film casts); the
+book's strands file (`experiments/v2/strands.mjs`) is built on the units the director plays (segmentWorld over the
+reading, `--reading`, default `<novel>/../reading/data.json`). The setting `strands.envelope` and its group are removed
+from the schema and the settings check.
+
+**The run re-strand** (`smoother/restrand.mjs`, M17f): a unit's acting people chain into one group within earshot, and
+the text's interactions join them at any distance (each such pair beyond earshot is an `apartTalk` fault); a group out
+of reach and unlinked is a sub-unit; anyone else within earshot is in view. "Played away from its place" stays as a
+placement check, not a strand rule: the district of the text's place against the district the people stood in. The
+reading comes from `--reading` or is handed in (the director and the rehearsal hand theirs); `--envelope` is gone.
+
+**Measured (M17g):**
+
+| | Strands | Splits | Unions | Folded | Refused |
+| --- | --- | --- | --- | --- | --- |
+| Volume 1, the text (strands command, library 16, dry) | 3 | 1 | 2 | 4 | 0 |
+| W15 re-stranded (to the scratchpad): the text / the run | 4 / 5 | | 4 in the run | | |
+
+- **Volume 1, the text:** the main (241 units, with unit 1 folded into it); the guard and the chairman's line (32–38,
+  83–87, 137–144, 156), into the main at 217; the faller's line (130–136, 145–155, 157–161, 168), into the main at 169.
+  The same strands as the prototype's (§0.6), but for unit 1, now in the main.
+- **W15** was played before the credit check, so its played script still carries the old credits: its text side has 4
+  strands (the flight of 12–26 still one). The run adds 220–225, the one scene the run stood apart (a run fault). In 17
+  units 50 pairs the text has interacting stood more than 25 m apart; 22 units in 7 stretches were played in another
+  district than their place's (126–127, 165, 189–193, 195–196, 202–207, 209–211, 213–215).
+- **The first quarter rehearsed** (stand-in Jev, unpaid): 198 of 217 measures as before (play, laws, smoothing); the
+  differences are the strand measures: 2 strands in the quarter (one more world layer), the re-strand 2 in the text and
+  3 in the run, 10 pairs interacting in the text that stood more than 25 m apart, in 5 units.
+- Tests: `test/v2-group-strands.test.ts` (13) and `world-engine/smoother/restrand.test.mjs` (6) rewritten; the suites
+  874 of 875 (the unrelated init test) and 201 of 201.
+
+**Still open:** the reunion at 217 is early (a camera) and closes the chairman's part with the guard's; unit 156 stays on
+that line; an interlude not cut in with the main stays on it (§0.4); a union moves whole strands, not only the people
+who met.
 
 ## 1. The definition
 

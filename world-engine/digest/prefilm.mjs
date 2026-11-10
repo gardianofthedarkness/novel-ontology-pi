@@ -63,13 +63,13 @@ export function placedJourney(journey, places) {
 
 /**
  * Every pre-film cast over a reading. `text`: sentence id → its text; `work`: a work model (cached by the caller); `strandsOf`:
- * (script) → the strands file (segments.mjs strandsFile, bound by director/strand-builder.mjs); `pins`: the review's presence
+ * (script, reading) → the strands file (segments.mjs strandsFile, bound by director/strand-builder.mjs); `pins`: the review's presence
  * pins ({ "unit|who": true | false }); `from`/`to`: unit ids to read (all when absent); `parallel`: requests at once.
  * Returns { units, usage }.
  */
 export async function readPrefilm({ reading: given, script, text, work, strandsOf, pins = {}, from = null, to = null, parallel = 12, log = () => {}, backCredits = true }) {
   const world = SG.segmentWorld({ reading: given, script, spawn: null, backCredits }), reading = world.reading, scenes = reading.scenes;
-  const strands = strandsOf(world.script), forkOf = new Map((strands.scenes ?? []).map(entry => [entry.id, entry.fork]));
+  const strands = strandsOf(world.script, world.reading), forkOf = new Map((strands.scenes ?? []).map(entry => [entry.id, entry.fork]));
   const gate = G.gateOf(G.windowsOf(reading), { strandOf: scene => forkOf.get(scene) ?? null });
   const ids = scenes.map(scene => scene.id), first = from ? ids.indexOf(from) : 0, last = to ? ids.lastIndexOf(to) : ids.length - 1;
   const line = id => text.get(id) ?? '', kind = id => reading.kinds?.[id]?.kind ?? null;

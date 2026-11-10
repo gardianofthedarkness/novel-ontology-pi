@@ -49,7 +49,7 @@ if (process.argv[1] === fileURLToPath(import.meta.url)) {
   let reading = JSON.parse(await readFile(resolve(values.reading), 'utf8'));
   const worldFile = async name => JSON.parse(await readFile(join(dir, 'stage', 'world', name), 'utf8').catch(() => 'null'));
   const SG = await import('./segments.mjs'), seg = SG.segmentWorld({ reading, script: await worldFile('script.json'), spawn: await worldFile('spawn.json') });
-  const segStrands = SG.strandsFile(seg.script, await (await import('./strand-builder.mjs')).strandBuilder(dir));
+  const segStrands = SG.strandsFile(seg.script, await (await import('./strand-builder.mjs')).strandBuilder(dir), { reading: seg.reading });
   const held = heldMoves(record);
   const scenesOf = held.map(entry => entry.container).sort();
   // The page's nodes are its grid's dense cells; the engine's are numbered as first asked for (W.nodeId), so a run's

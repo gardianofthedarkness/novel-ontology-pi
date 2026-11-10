@@ -25,7 +25,7 @@ call); a real Jev run only when the user asks.
 | M13 | All SCAD: quantised page meshes, vehicles and furniture from the kits, a building kit of our own, the baked packs retired, every remaining baked choice a layered setting (design §9) | items M13a–g listed 2026-11-09; M13g begun |
 | M15 | Interaction sheets: what a part does (solid, layer, seats, crash degree and radius, what it becomes when broken), defaults by kind, overrides per book; the engine's use of them (design §11) | M15a–d built 2026-11-09: sheets, standing vehicles in the walk graph, a text crash sized by the sheet, the wreck pinned where it fell |
 | M14 | The look pass: the world generator set from the text, top down the place tree, hooked after the reading and before the terrain loop (design §10) | built and proved with no hint 2026-11-09 (volume 1: 502 turbines from the text alone); M14d the pipeline hook and volume 2 end to end left |
-| M17 | Strands as groups in envelopes: one builder for the book and the director, splits only across envelopes, unions kept, physics a layer per strand, re-strand after smoothing (docs/v2/strands.md) | M17a–d built 2026-11-09: volume 1 is 2 strands at the district scale (28 before), a world layer per strand, W15 re-stranded (4 strands in the run, 28 units played away from their places). Revised the same day (M17e–g planned): split and unite by interaction, the scale read from the context; prototype 21 strands in the text, 31 in W15 |
+| M17 | Strands as groups in envelopes: one builder for the book and the director, splits only across envelopes, unions kept, physics a layer per strand, re-strand after smoothing (docs/v2/strands.md) | M17a–d built 2026-11-09: volume 1 is 2 strands at the district scale (28 before), a world layer per strand, W15 re-stranded (4 strands in the run, 28 units played away from their places). Revised and built the same day (M17e–g): split and unite by interaction, the scale read from the context, the reading's credit checked; volume 1 is 3 strands, 2 unions |
 | M16 | Across books per strand: a strand registry (open, continued), shares and damage by strand, damage kept into the universe and replayed out of it (design §4.5) | items M16a–e listed 2026-11-09 after the review before volume 2 |
 | W15 | A paid volume 1 run with M8, M10 and M11 in, against W14 | done 2026-11-09 (about $0.34 with the models and a crashed attempt) |
 | W16 | A paid volume 2 run on the universe of volume 1, M16 in force | when the user asks |
@@ -865,17 +865,18 @@ confirmed by the next action (rule 11): the text 6 strands, 4 unions, the wrong 
       (prototype, rules 1–12) 4 in the text, 2 unions; first-quarter rehearsal: smoothing better, L6 at unit 26 shows
       a stand-in misplacement the wrong credit had hidden. Tests: `test/v2-presence-credits.test.ts`.
 
-- [ ] **M17e The builder by interaction**: a unit's group is its acting people (`evidence`); a split is part of a group
-      acting while the rest is next told out of its view; a union is people of two strands acting in one unit; the
-      envelope read from the strand's places; a latency (`strands.latency`, 40 lines by default: a strand seen apart
-      for fewer lines folds into the strand it left, after the walk; strands.md §0.1); `strands.envelope` removed from
-      the schema, settings and strand builder;
-      tests in `test/v2-group-strands.test.ts` rewritten for the rules.
-- [ ] **M17f Re-strand by interaction**: `runUnits` clusters a unit's acting people by distance (earshot) and keeps the
-      text's interacting people together at any distance; the report gains the interacting pairs that stood beyond
-      earshot; `--envelope` removed; tests.
-- [ ] **M17g Measured**: the first-quarter rehearsal before and after; W15 re-stranded to the scratchpad (never written
-      to library 16); strands.md §0 rewritten as built.
+- [x] **M17e The builder by interaction** (built 2026-11-09; the user: "Yes, build it"; strands.md §0.7): rules 1–12
+      in `groupStrands` (the group is the people acting and those aimed at; a split when the rest next appears out of
+      view; a union on an interaction, the strand begun first keeping its id; the latency of the next segment's beat;
+      rule 11 narrowed to unions both sides leave at once); `strandBeats` from a reading; `placeTree` (the envelope read
+      from the places); `strands.envelope` removed; the director, why-walk, the pre-film casts and the book's strands
+      file on it. Volume 1: 3 strands, 2 unions. Tests: `test/v2-group-strands.test.ts` (13).
+- [x] **M17f Re-strand by interaction**: earshot chains and the text's interactions group a unit's acting people,
+      interacting pairs beyond earshot reported (`apartTalk`), played away from their place by district (a placement
+      check), `--reading` instead of `--envelope`. W15: the text 4, the run 5, 50 pairs in 17 units, 22 units moved.
+      Tests: `restrand.test.mjs` (6).
+- [x] **M17g Measured**: the first quarter 198 of 217 measures as before, the rest the strand measures (2 strands);
+      W15 re-stranded to the scratchpad (never to library 16); strands.md §0.7.
 
 ## M16 — Across books, per strand (the user, 2026-11-09)
 

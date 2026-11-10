@@ -105,7 +105,7 @@ export async function direct(novelDir, { reading, readingPath = null, prefilm = 
   const worldFile = async name => JSON.parse(await readFile(join(novelDir, 'stage', 'world', name), 'utf8').catch(() => 'null'));
   const SG = await import('./segments.mjs'), seg = SG.segmentWorld({ reading, script: await worldFile('script.json'), spawn: await worldFile('spawn.json'), backCredits: setting('director.backCredits', { book: novelDir }) });
   if (!seg) throw new Error('the reading has no scenes to play');
-  const segStrands = SG.strandsFile(seg.script, await (await import('./strand-builder.mjs')).strandBuilder(novelDir));
+  const segStrands = SG.strandsFile(seg.script, await (await import('./strand-builder.mjs')).strandBuilder(novelDir), { reading: seg.reading });
   const segForkOf = new Map((segStrands.scenes ?? []).map(entry => [entry.id, entry.fork ?? entry.id]));
   reading = seg.reading;
   const scriptOf = async () => seg.script ?? { scenes: [] }, strandsOf = async () => segStrands, spawnOf = async () => seg.spawn;
@@ -2200,7 +2200,7 @@ export async function direct(novelDir, { reading, readingPath = null, prefilm = 
         // The run re-stranded (M17d, restrand.mjs): the groups and envelopes read off where its people stood, against the
         // text's strands; its strands file beside the smoothed positions, for the report and the cross-book registry.
         try {
-          const RS = await import('../smoother/restrand.mjs'), again = await RS.restrandRun(novelDir, { run: id, script: await scriptOf(), smoothed: { run: id, ...smoothedNow }, only: record.scenes.map(entry => entry.scene), write: true });
+          const RS = await import('../smoother/restrand.mjs'), again = await RS.restrandRun(novelDir, { run: id, script: await scriptOf(), smoothed: { run: id, ...smoothedNow }, reading, only: record.scenes.map(entry => entry.scene), write: true });
           record.restrand = RS.summary(again.report);
           log(`re-stranded: ${RS.describe(again.report)[0]}`);
         } catch (error) { record.restrand = { error: String(error.message ?? error) }; }

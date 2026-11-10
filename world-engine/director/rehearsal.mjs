@@ -123,7 +123,7 @@ if (process.argv[1] === fileURLToPath(import.meta.url)) {
     { const movement = backAndForth({ log: passLog, record }); passes.at(-1).backAndForth = { talk: movement.talk, roundTrips: { count: movement.roundTrips.count, throughTalk: movement.roundTrips.throughTalk, kinds: movement.roundTrips.kinds }, regrouped: record.scenes.reduce((n, scene) => n + (scene.regrouped?.length ?? 0), 0) }; }
     passes.at(-1).broken = Object.fromEntries(lawsNow.map(law => [law.law, law.violations.length]));
     // M17d: the pass re-stranded (the groups read off where its people stood, against the text's strands). Nothing written.
-    passes.at(-1).restrand = await restrandRun(novelDir, { run: `rehearsal-${pass}`, script: segScript, smoothed: smoothedNow.smoothed, only: record.scenes.map(entry => entry.scene) }).then(again => restrandSummary(again.report), error => ({ error: String(error.message ?? error) }));
+    passes.at(-1).restrand = await restrandRun(novelDir, { run: `rehearsal-${pass}`, script: segScript, smoothed: smoothedNow.smoothed, reading: lawReading, only: record.scenes.map(entry => entry.scene) }).then(again => restrandSummary(again.report), error => ({ error: String(error.message ?? error) }));
     passes.at(-1).brokenExamples = Object.fromEntries(lawsNow.filter(law => law.violations.length).map(law => [law.law, law.violations.slice(0, 20)]));
     smoothing = smoothedNow.smoothed;
     // L18: the run's blasts smoothed (when and how big), applied so on the next pass.
