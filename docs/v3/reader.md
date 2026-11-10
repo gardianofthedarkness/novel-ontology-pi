@@ -1,5 +1,8 @@
 # The reader: a processed book read as published
 
+> Set aside 2026-11-10: VS Code is no longer v3's host (plan.md §1.6). What this page describes outside the extension
+> carries into the console app (plan.md §1.5).
+
 > "I really like how our read result html and the read button highlights different characters and types of the
 > sentences and all notes etc and how the full epub is loaded. Can you make that the same for processed files?"
 > — the user, 2026-11-10

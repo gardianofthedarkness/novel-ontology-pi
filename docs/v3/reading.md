@@ -1,5 +1,8 @@
 # One-click readings
 
+> Set aside 2026-11-10: VS Code is no longer v3's host (plan.md §1.6). What this page describes outside the extension
+> carries into the console app (plan.md §1.5).
+
 > "I need to be able to browse any novels on the mac. Not a copy of your environment, but a true functionality that opens
 > up a path. When I enter the work model api and jev api, the reading phase work for a book is automatically run by one
 > click. You don't get involved, no agent is involved." — the user, 2026-11-10

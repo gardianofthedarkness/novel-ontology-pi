@@ -1,5 +1,8 @@
 # The opened folder as a workspace of novels (built 2026-11-10)
 
+> Set aside 2026-11-10: VS Code is no longer v3's host (plan.md §1.6). What this page describes outside the extension
+> carries into the console app (plan.md §1.5).
+
 > "I would say yes, but not in volume 1 or volume 2, but the same open folder vscode has. It scans through every epub or
 > text file in the opened folder, and when we use agent clis to arrange them, they are separated into universes and
 > sorted out, and expandable into Chapters and smaller parts just like how vscode manage repos" — the user, 2026-11-10,
