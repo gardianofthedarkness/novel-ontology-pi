@@ -1,5 +1,7 @@
 # v2: a guide by stage
 
+> v2 is the legacy version since 2026-11-10 (the user). The map is reimagined in v3: [docs/v3](../v3/README.md).
+
 v2 has two stages. **Extraction** reads the book into a world model; the **world engine** builds that world: the terrain
 first, then where everyone stands, then how they move. Each part below goes from the concept (on the
 [concept map](concepts.html), grouped by the same stages) to where it is designed and where it lives in code.

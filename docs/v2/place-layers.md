@@ -9,7 +9,8 @@
 > guessing the world from semantic observations. This could be done by agent terrain config design stage." — the user,
 > on the first draft (sizes in metres, real-world distances)
 
-Status: design, not built (milestones M18).
+Status: set aside (the user, 2026-11-10: travel time is not reliable, transport varies across novels). The map is
+reimagined in v3: docs/v3/render-units.md. Kept as the record of the two drafts.
 
 ## 1. What broke, measured (volume 2, library 16)
 

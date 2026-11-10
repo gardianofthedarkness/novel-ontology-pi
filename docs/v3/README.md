@@ -1,0 +1,14 @@
+# v3: the map reimagined
+
+Started 2026-11-10 from v2 (branch `v2`, which is the legacy version from now on), on the user's word: "We should make
+this phase v3, a new branch from v2. V2 now is from now on our legacy version. In v3 we reimagine how our map is built."
+
+Why: volume 2 travels between countries, and v2's map (six fixed place scales, one canvas with a city at its top, a walk
+for every move) could not hold it; its run was stopped (W16).
+
+| Document | What it is |
+| --- | --- |
+| [render-units.md](render-units.md) | The first design: the map as render units, each the largest space the story plays in without a break, with its own scale |
+
+v2's documents (docs/v2/) stay as the record of what is built: the reading, strands, the carry across books, the casts,
+the director, the volume runner. v3 changes how places become a map; see render-units.md §6.

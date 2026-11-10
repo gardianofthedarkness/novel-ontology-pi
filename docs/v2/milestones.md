@@ -880,6 +880,8 @@ confirmed by the next action (rule 11): the text 6 strands, 4 unions, the wrong 
 
 ## M18 — Places as open layers (the user, 2026-11-10; design docs/v2/place-layers.md)
 
+*Set aside the same day: the map is reimagined in v3 (docs/v3/render-units.md); v2 is the legacy version.*
+
 Volume 2's run (W16) was stopped by the user: the book travels between countries and the place system has six fixed
 scales with "region" for everything above a city, one canvas for every ground, and a walk for every move. Measured: 158
 places, 19 at the root, 9 grounds, 25 crossings between grounds of which 19 share no ancestor.
