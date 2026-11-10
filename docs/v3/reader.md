@@ -87,4 +87,7 @@ pictures, 3,382 tinted sentences, 3,337 marks, 1,376 speaker chips and 76 doubte
 
 - A line that is only punctuation is not wrapped, so it is not coloured or tappable.
 - The view does not yet follow the chapter you scroll into (the chapter list jumps but does not update).
-- The page is editor-only: there is no saved page to open on a phone.
+- On a phone the reader runs in the editor on vscode.dev through a VS Code tunnel (the user's idea, 2026-11-10): `code
+  tunnel` with its own `--cli-data-dir`, `--server-data-dir` and `--extensions-dir`, the last holding a link to
+  apps/novel-vscode named `novel-ontology-pi.novel-workbench-<version>`, signed in by GitHub's device flow. Not yet
+  checked through the tunnel by me: opening it needs the user's GitHub sign-in.
