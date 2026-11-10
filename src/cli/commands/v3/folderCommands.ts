@@ -7,6 +7,7 @@ import { resolve } from "node:path";
 import { folderTree, linkReading, putBook, scanFolder, takeBook, universeAdd, universeRemove } from "../../../v3/folder.js";
 import { NovelServer, serve } from "../../../v3/server.js";
 import { NovelWorkspace } from "../../../v3/workspace.js";
+import { keyStatus, readingStatus, setKey, startReading, stopReading } from "../../../v3/reading.js";
 
 export const FOLDER_USAGE = [
   "Usage: novel folder scan <folder>",
@@ -21,11 +22,14 @@ export const FOLDER_USAGE = [
   "       novel folder refs <folder> <file> <name or id> [--how named|described|speaks|acts|addressed|mentioned] [--chapter N] [--scene N] [--guesses] [--via] [--universe] [--from N] [--limit N]",
   "       novel folder line <folder> <file> <line id> [--around N]",
   "       novel folder problems <folder> <file> [--limit N]",
+  "       novel folder keys <folder> [--jev | --work]   (with a key flag, the key is read from standard input)",
+  "       novel folder read <folder> <file> [--stand-in <module>]   (the book's reading, in a process of its own)",
+  "       novel folder reading <folder> <file> [--stop]",
   "       novel folder serve <folder>",
 ].join("\n");
 
-const VALUED = ["--opening", "--why", "--rename", "--at", "--title", "--reading", "--depth", "--query", "--category", "--limit", "--how", "--chapter", "--scene", "--from", "--around"];
-const SWITCHES = ["--remove", "--guesses", "--via", "--universe", "--force"];
+const VALUED = ["--opening", "--why", "--rename", "--at", "--title", "--reading", "--depth", "--query", "--category", "--limit", "--how", "--chapter", "--scene", "--from", "--around", "--stand-in"];
+const SWITCHES = ["--remove", "--guesses", "--via", "--universe", "--force", "--jev", "--work", "--stop"];
 
 export async function folderCommand(args: string[]): Promise<unknown> {
   const sub = args[0], plain: string[] = [], flags = new Map<string, string>(), on = new Set<string>();
@@ -53,6 +57,15 @@ export async function folderCommand(args: string[]): Promise<unknown> {
     case "refs": need(3); return workspace().refs(plain[1], plain.slice(2).join(" "), { how: flags.get("--how"), chapter: number("--chapter"), scene: number("--scene"), guesses: on.has("--guesses"), via: on.has("--via"), universe: on.has("--universe"), from: number("--from"), limit: number("--limit") });
     case "line": need(3); return workspace().lineOf(plain[1], plain[2], number("--around"));
     case "problems": need(2); return workspace().problems(plain[1], { limit: number("--limit") });
+    // The keys go in by standard input, so they are never in a command line or a shell's history.
+    case "keys": {
+      const which = on.has("--jev") ? "jev" : on.has("--work") ? "work" : null;
+      if (!which) return keyStatus();
+      const chunks: Buffer[] = []; for await (const chunk of process.stdin) chunks.push(chunk as Buffer);
+      return setKey(which, Buffer.concat(chunks).toString("utf8"));
+    }
+    case "read": need(2); return startReading(folder, plain[1], { standIn: flags.get("--stand-in") });
+    case "reading": need(2); return on.has("--stop") ? stopReading(folder, plain[1]) : readingStatus(folder, plain[1]);
     case "serve": return new Promise<never>(() => { serve(new NovelServer(folder), process.stdin, process.stdout, (code) => process.exit(code)); });
     default: throw new Error(FOLDER_USAGE);
   }

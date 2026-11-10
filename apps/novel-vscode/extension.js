@@ -55,8 +55,10 @@ class BooksTree {
     if (node.type === "unsorted") { const item = new vscode.TreeItem("Unsorted", vscode.TreeItemCollapsibleState.Expanded); item.description = `${node.files.length}`; item.iconPath = new vscode.ThemeIcon("inbox"); item.tooltip = "Files no universe holds yet. An agent arranges them with: novel folder put <folder> <file> <universe>"; return item; }
     if (node.type === "book") {
       const book = node.book, item = new vscode.TreeItem(book.title, book.missing || book.unread ? vscode.TreeItemCollapsibleState.None : vscode.TreeItemCollapsibleState.Collapsed);
-      item.description = book.missing ? "missing" : book.unread ? "not readable" : [book.reading ? `${book.symbols} entries` : "no reading", book.problems ? `${book.problems} ${book.problems === 1 ? "problem" : "problems"}` : ""].filter(Boolean).join(" · ");
-      item.iconPath = new vscode.ThemeIcon(book.missing ? "warning" : book.reading ? "book" : "file-text"); item.tooltip = `${book.path}\n${book.chars.toLocaleString()} characters, ${book.chapters} chapters`; item.contextValue = "book";
+      const job = book.job, reading = job?.state === "running";
+      item.description = book.missing ? "missing" : book.unread ? "not readable" : reading ? `reading\u2026 ${job.now ?? ""}` : [book.reading ? `${book.symbols} entries` : job?.state === "failed" ? "reading failed" : job?.state === "stopped" ? "reading stopped" : "no reading", book.problems ? `${book.problems} ${book.problems === 1 ? "problem" : "problems"}` : ""].filter(Boolean).join(" \u00b7 ");
+      item.iconPath = new vscode.ThemeIcon(book.missing ? "warning" : reading ? "sync~spin" : book.reading ? "book" : "file-text"); item.tooltip = `${book.path}\n${book.chars.toLocaleString()} characters, ${book.chapters} chapters`; item.contextValue = book.missing || book.unread ? "book-gone" : reading ? "book-reading" : book.reading ? "book" : "book-unread";
+      if (job?.error && !reading) item.tooltip += `\nThe last reading ${job.state}: ${job.error}`;
       if (book.uri) item.command = { command: "novel.open", title: "Open", arguments: [book.uri] };
       return item;
     }
@@ -201,6 +203,55 @@ async function activate(context) {
     return id ? readers.open(id, title, from) : null;
   };
 
+  // The model keys, kept in the Mac's secure store by the language server (never shown again, never in settings).
+  const keys = async () => (await ask("novel/keys")) || {};
+  const enterKeys = async () => {
+    const now = await keys();
+    for (const [which, label] of [["jev", "Jev (TypeSafe)"], ["work", "the work model (DeepSeek)"]]) {
+      const value = await vscode.window.showInputBox({ title: `API key for ${label}`, prompt: now[which] ? `A key is set (${now[which]}). Enter a new one to replace it, or leave this empty to keep it.` : "Enter the key. It is kept in this Mac's secure store, not in the editor's settings.", password: true, ignoreFocusOut: true });
+      if (value === undefined) return keys();
+      if (value.trim()) await client.request("novel/setKey", { which, value }).catch((error) => vscode.window.showErrorMessage(error.message));
+    }
+    const after = await keys();
+    vscode.window.setStatusBarMessage(`Novel keys: Jev ${after.jev ? "set" : "missing"}, work model ${after.work ? "set" : "missing"}`, 6000);
+    return after;
+  };
+  // One click: the book's reading runs on the Mac in a process of its own; this follows it until it ends.
+  const following = new Set();
+  const followReading = (id, title) => {
+    if (following.has(id)) return;
+    following.add(id);
+    vscode.window.withProgress({ location: vscode.ProgressLocation.Notification, title: `Reading ${title}`, cancellable: true }, async (progress, cancel) => {
+      cancel.onCancellationRequested(() => ask("novel/stopReading", { id }));
+      let seen = -1, last = null;
+      for (;;) {
+        last = await ask("novel/reading", { id });
+        if (!last || last.state !== "running") break;
+        if (last.steps.length !== seen) { progress.report({ message: `${last.now ?? "starting"} · ${last.steps.length} steps done · about $${last.estimate}`, increment: seen >= 0 && last.steps.length > seen ? 6 : 0 }); seen = last.steps.length; books.refresh(); }
+        await new Promise((done) => setTimeout(done, 2000));
+      }
+      following.delete(id);
+      await refresh();
+      if (last?.state === "done") {
+        const pick = await vscode.window.showInformationMessage(`${title} is read: ${last.steps.length} steps${last.paid ? `, ${last.paid.jev} Jev and ${last.paid.work} work-model requests asked` : ""}.`, "Read");
+        if (pick === "Read") readers.open(id, title, null);
+      } else if (last?.state === "failed") vscode.window.showErrorMessage(`The reading of ${title} failed: ${last.error ?? `see .novel/books/${id}/reading.log`}`);
+      else if (last?.state === "stopped") vscode.window.showInformationMessage(`The reading of ${title} was stopped. Starting it again pays only for what it had not asked.`);
+    });
+  };
+  const runReading = async (node) => {
+    const book = node?.book;
+    if (!book) { vscode.window.showInformationMessage("Pick a book in the Books view to read it."); return null; }
+    let now = await keys();
+    if (!now.jev || !now.work) {
+      now = (await enterKeys()) || {};
+      if (!now.jev || !now.work) { vscode.window.showWarningMessage("The reading needs both keys: Jev's and the work model's."); return null; }
+    }
+    const started = await client.request("novel/startReading", { id: book.id }).catch((error) => { vscode.window.showErrorMessage(error.message); return null; });
+    if (started) { books.refresh(); followReading(book.id, book.title); }
+    return started;
+  };
+
   context.subscriptions.push(
     log, problems, { dispose: () => client.stop() },
     booksView,
@@ -211,6 +262,9 @@ async function activate(context) {
     vscode.commands.registerCommand("novel.showRecord", record),
     vscode.commands.registerCommand("novel.findReferences", (node) => references(node.symbol.uri)),
     vscode.commands.registerCommand("novel.read", read),
+    vscode.commands.registerCommand("novel.enterKeys", enterKeys),
+    vscode.commands.registerCommand("novel.runReading", runReading),
+    vscode.commands.registerCommand("novel.stopReading", (node) => node?.book && ask("novel/stopReading", { id: node.book.id }).then(refresh)),
     vscode.commands.registerCommand("novel.openFile", (node) => node?.book?.fileUri && vscode.commands.executeCommand("revealInExplorer", vscode.Uri.parse(node.book.fileUri))),
     vscode.languages.registerDocumentSymbolProvider(selector, { provideDocumentSymbols: async (document) => {
       const shape = (node) => { const symbol = new vscode.DocumentSymbol(node.name, node.detail || "", symbolKind(node.kind), toRange(node.range), toRange(node.selectionRange)); symbol.children = (node.children || []).map(shape); return symbol; };
@@ -243,7 +297,10 @@ async function activate(context) {
   }
   for (const document of vscode.workspace.textDocuments) await diagnose(document);
   await follow(vscode.window.activeTextEditor);
-  return { client, books, booksView, cast, scan, refresh, read, readers };
+  // A reading already running (started from a terminal, or before the editor reconnected) is followed too.
+  const tree = await books.load();
+  for (const book of [...tree.universes.flatMap((universe) => universe.books), ...tree.unsorted]) if (book.job?.state === "running") followReading(book.id, book.title);
+  return { client, books, booksView, cast, scan, refresh, read, readers, enterKeys, runReading };
 }
 
 function deactivate() {}

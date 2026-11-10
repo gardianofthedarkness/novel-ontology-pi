@@ -20,6 +20,13 @@ async function check() {
   const bookNodes = (await Promise.all(roots.map((node) => api.books.getChildren(node)))).flat();
   assert.ok(bookNodes.length > 0, "the folder has books");
   for (const node of bookNodes) assert.ok(api.books.getTreeItem(node).label, "every book has a label");
+  // A book with no reading offers the play button (its reading); the keys' state is answered without values.
+  const unread = bookNodes.filter((node) => api.books.getTreeItem(node).contextValue === "book-unread");
+  const keys = await api.client.request("novel/keys");
+  assert.ok("jev" in keys && "work" in keys && Object.values(keys).every((value) => value === null || typeof value === "string" && value.length < 20), "only where each key is from");
+  const commands = await vscode.commands.getCommands(true);
+  for (const name of ["novel.enterKeys", "novel.runReading", "novel.stopReading", "novel.read"]) assert.ok(commands.includes(name), `${name} is registered`);
+  step("reading buttons", { unread: unread.length, withReading: bookNodes.filter((node) => api.books.getTreeItem(node).contextValue === "book").length });
 
   // Every book opens into chapters; one with a reading opens further into scenes and cards.
   const read = bookNodes.find((node) => node.book.reading) || null, any = read || bookNodes[0];

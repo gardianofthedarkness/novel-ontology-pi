@@ -14,6 +14,7 @@ import { fileURLToPath, pathToFileURL } from "node:url";
 import { recordOf, type OutlineNode, type Span } from "./book.js";
 import { folderTree, scanFolder } from "./folder.js";
 import { readerBook, readerDocument, readerLine, readerPortrait } from "./reader.js";
+import { keyStatus, readingStatus, setKey, startReading, stopReading } from "./reading.js";
 import { NovelWorkspace, type OpenBook } from "./workspace.js";
 
 type Json = Record<string, unknown>;
@@ -76,6 +77,13 @@ export class NovelServer {
       case "novel/read": return readerBook(this.ws, String(params.id));
       case "novel/readDocument": return readerDocument(this.ws, String(params.id), Number(params.item));
       case "novel/readLine": return readerLine(this.ws, String(params.id), String(params.sentence));
+      // One-click readings (docs/v3/reading.md): the keys' state (never a value), a key kept, a book's reading started,
+      // where it stands, stopped.
+      case "novel/keys": return keyStatus();
+      case "novel/setKey": return setKey(String(params.which), String(params.value ?? ""));
+      case "novel/startReading": return startReading(this.ws.folder, String(params.id));
+      case "novel/reading": return readingStatus(this.ws.folder, String(params.id));
+      case "novel/stopReading": return stopReading(this.ws.folder, String(params.id));
       case "novel/record": {
         const open = await this.ws.book(String(params.id)), symbol = open.index?.symbol(String(params.entity));
         return symbol ? { uri: entityUri(open, symbol.id, symbol.label), label: symbol.label } : null;
@@ -169,6 +177,8 @@ export class NovelServer {
       entry.fileUri = file && !file.missing ? pathToFileURL(join(this.ws.folder, file.path)).href : null;
       entry.problems = open?.index?.problems.length ?? 0;
       entry.symbols = open?.index?.symbols.filter((symbol) => !symbol.unnamed).length ?? 0;
+      const job = entry.missing ? null : await readingStatus(this.ws.folder, String(entry.id)).catch(() => null);
+      entry.job = job ? { state: job.state, now: job.now ?? null, steps: job.steps.length, estimate: job.estimate, error: job.error ?? null } : null;
     };
     for (const universe of tree.universes) for (const book of universe.books) await dress(book);
     for (const file of tree.unsorted) await dress(file);

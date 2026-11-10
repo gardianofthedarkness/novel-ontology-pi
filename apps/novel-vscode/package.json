@@ -2,7 +2,7 @@
   "name": "novel-workbench",
   "displayName": "Novel Workbench",
   "description": "The opened folder as a workspace of novels: universes, books, chapters and scenes in the explorer; characters, places and things as symbols with their records and every line that refers to them; a processed book read as published, its sentences coloured by kind and its names marked.",
-  "version": "0.4.0",
+  "version": "0.5.0",
   "publisher": "novel-ontology-pi",
   "private": true,
   "license": "MIT",
@@ -16,6 +16,17 @@
   "activationEvents": [
     "onStartupFinished"
   ],
+  "capabilities": {
+    "untrustedWorkspaces": {
+      "supported": "limited",
+      "description": "The workbench only reads the folder's books and runs its own language server. A folder's own settings for the server's or Node's path are not used until the folder is trusted.",
+      "restrictedConfigurations": [
+        "novel.serverPath",
+        "novel.nodePath"
+      ]
+    },
+    "virtualWorkspaces": false
+  },
   "contributes": {
     "viewsContainers": {
       "activitybar": [
@@ -41,7 +52,7 @@
     "viewsWelcome": [
       {
         "view": "novel.books",
-        "contents": "No books are known in this folder yet.\n[Scan this folder](command:novel.scan)\nThe scan finds every EPUB and text file under the folder and keeps what it finds in a hidden .novel folder. Your files are never moved or changed."
+        "contents": "No books are known in this folder yet.\n[Scan this folder](command:novel.scan)\nThe scan finds every EPUB and text file under the folder and keeps what it finds in a hidden .novel folder. Your files are never moved or changed.\n[Enter API Keys](command:novel.enterKeys)\nWith Jev's and the work model's keys, the play button beside a book runs its reading on this Mac."
       },
       {
         "view": "novel.cast",
@@ -81,12 +92,35 @@
         "title": "Read",
         "category": "Novel",
         "icon": "$(book)"
+      },
+      {
+        "command": "novel.enterKeys",
+        "title": "Enter API Keys",
+        "category": "Novel",
+        "icon": "$(key)"
+      },
+      {
+        "command": "novel.runReading",
+        "title": "Run the Reading",
+        "category": "Novel",
+        "icon": "$(play)"
+      },
+      {
+        "command": "novel.stopReading",
+        "title": "Stop the Reading",
+        "category": "Novel",
+        "icon": "$(debug-stop)"
       }
     ],
     "menus": {
       "view/title": [
         {
           "command": "novel.scan",
+          "when": "view == novel.books",
+          "group": "navigation"
+        },
+        {
+          "command": "novel.enterKeys",
           "when": "view == novel.books",
           "group": "navigation"
         }
@@ -110,6 +144,21 @@
           "command": "novel.read",
           "when": "view == novel.books && viewItem =~ /^(book|chapter|scene|part|card)$/",
           "group": "navigation"
+        },
+        {
+          "command": "novel.runReading",
+          "when": "view == novel.books && viewItem == book-unread",
+          "group": "inline"
+        },
+        {
+          "command": "novel.runReading",
+          "when": "view == novel.books && viewItem =~ /^book(-unread)?$/",
+          "group": "reading"
+        },
+        {
+          "command": "novel.stopReading",
+          "when": "view == novel.books && viewItem == book-reading",
+          "group": "inline"
         }
       ],
       "commandPalette": [
@@ -127,6 +176,14 @@
         },
         {
           "command": "novel.openFile",
+          "when": "false"
+        },
+        {
+          "command": "novel.runReading",
+          "when": "false"
+        },
+        {
+          "command": "novel.stopReading",
           "when": "false"
         }
       ],

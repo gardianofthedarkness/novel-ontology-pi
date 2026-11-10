@@ -77,3 +77,10 @@ reading's judgement, not a fact: before you repeat one that matters, read the li
 A problem `credit-not-backed` is a line credited to someone the scene never names and the scene before does not have:
 often a description read as the wrong person, sometimes a title that really is theirs. It does not catch every wrong
 credit (a person the scene names in passing can still be credited wrongly). Check each against the text the same way.
+
+## Readings made in the folder
+
+A book with no reading can be read on this Mac with `novel folder read <folder> <file>`: it starts the reading in a
+process of its own and returns at once; `novel folder reading <folder> <file>` says where it is (`--stop` stops it). It
+is paid (about $0.35 a volume) and needs both model keys (`novel folder keys <folder>` says whether they are set). The
+user runs readings from the editor's play button; run one only when the user asks you to. See docs/v3/reading.md.
