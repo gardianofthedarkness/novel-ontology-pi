@@ -68,3 +68,16 @@ test('a step asks the models directly: the host\'s local observer is left out, t
   assert.deepEqual([env.JEV_ENDPOINT, env.WORK_LLM_BASE_URL, env.TYPESAFE_API_KEY, env.JEV_MODEL, env.WORK_LLM_MODEL], [undefined, undefined, 'k', 'jev-1.14.0', 'deepseek-chat']);
   assert.equal(stepEnvironment({ JEV_ENDPOINT: 'https://example.test/jev' }).JEV_ENDPOINT, 'https://example.test/jev', 'another endpoint stays');
 });
+
+test('a step run again after it failed knows it (the director then sets the dead run\'s edits aside)', async () => {
+  const { novel } = await library(), at = placesOf(novel);
+  await writeFile(at.state, JSON.stringify({ book: 'vol-2', steps: { prepare: { status: 'done' }, workspace: { status: 'failed' } } }));
+  await execute(novel, ['workspace']);
+  assert.equal(JSON.parse(await readFile(at.state, 'utf8')).steps.workspace.failedBefore, true);
+  const direct = STEPS.find(step => step.id === 'direct');
+  await mkdir(join(novel, 'stage', 'world'), { recursive: true }); await writeFile(join(novel, 'stage', 'world', 'script.json'), JSON.stringify({ scenes: [{ id: 's1' }, { id: 's2' }] }));
+  await writeFile(at.state, JSON.stringify({ book: 'vol-2', steps: { direct: { status: 'running', failedBefore: true } } }));
+  assert.ok((await direct.commands(at))[0].args.includes('--discard-edits'));
+  await writeFile(at.state, JSON.stringify({ book: 'vol-2', steps: { direct: { status: 'running' } } }));
+  assert.ok(!(await direct.commands(at))[0].args.includes('--discard-edits'));
+});

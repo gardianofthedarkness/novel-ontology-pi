@@ -117,7 +117,9 @@ export const STEPS = [
     done: () => false, commands: async at => {
       const script = await json(join(at.novel, 'stage', 'world', 'script.json')), first = script?.scenes?.[0]?.id, last = script?.scenes?.at(-1)?.id;
       if (!first || !last) throw new Error('no world script to run');
-      return [node('world-engine/director/director.mjs', at.novel, '--reading', at.data, '--from', first, '--to', last, '--live')];
+      // A run that died left the library off its snapshot: the next attempt sets those edits aside (the director snapshots them as a guard).
+      const died = !!readJson(at.state)?.steps?.direct?.failedBefore;
+      return [node('world-engine/director/director.mjs', at.novel, '--reading', at.data, '--from', first, '--to', last, '--live', ...(died ? ['--discard-edits'] : []))];
     } },
   { id: 'kept', paid: false, why: 'the run re-stranded, this book registered and its damage kept for the next book',
     done: () => false, commands: async at => {
@@ -154,7 +156,7 @@ export async function execute(novelDir, ids, { log = () => {} } = {}) {
     if (!step) throw new Error(`no step ${id}`);
     if (step.who === 'pi') { log(`${id}: the agent's step; stopping here`); break; }
     const state = await stateOf(at);
-    state.steps[id] = { status: 'running', pid: process.pid, started: new Date().toISOString() };
+    state.steps[id] = { status: 'running', pid: process.pid, started: new Date().toISOString(), ...(state.steps[id]?.status === 'failed' || state.steps[id]?.failedBefore ? { failedBefore: true } : {}) };
     await save(at, state);
     try {
       if (step.act) await step.act(at);

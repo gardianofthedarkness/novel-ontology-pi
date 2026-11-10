@@ -537,7 +537,18 @@ export async function direct(novelDir, { reading, readingPath = null, prefilm = 
       };
       // One layer's walk: one draw of the path integral and six more from the same field.
       const walkIn = (scene, key, from, targets, how, layer) => {
-        let field = E.solve(scene.placeId, key, targets, how, from[0], 40, layer);
+        let field;
+        try { field = E.solve(scene.placeId, key, targets, how, from[0], 40, layer); } catch (error) {
+          // A walk between two cities kilometres apart (volume 2, W16: unit 144) would lay a street grid too large for the
+          // engine (more edges than a Map holds). Off the grid it is a journey the story cuts: they arrive where the text
+          // puts them, as a jump or a flight does (`teleport`), counted on the walk.
+          if (!(error instanceof RangeError)) throw error;
+          const f0 = W.nodePos(world, from[0]), far = id => { const t = W.nodePos(world, id); return Math.hypot(t.x - f0.x, t.z - f0.z); };
+          const target = [...targets].sort((a, b) => far(a) - far(b))[0], path = [from[0], target];
+          path.ensemble = []; path.how = 'teleport'; path.cut = 'too far for the street grid'; walk.cut = (walk.cut ?? 0) + 1;
+          if (asking) asking.cut = (asking.cut ?? 0) + 1;
+          return path;
+        }
         const built = E.graphOf(W.nodePos(world, from[0]));
         let path = E.sampleWalk(built.graph, field, from[0], from[1], seeded(key));
         // The way may leave the 40 m round the walk (a basement's stair at the far end of its building, a mall's entrance):
