@@ -1,0 +1,79 @@
+---
+name: novel-folder
+description: Arrange an opened folder of novels (EPUB and text files) into universes and reading order, and answer who someone is and where they are cited, with the `novel folder` commands. Use when asked to sort a folder of books, to set up a novel workspace, or to look up a character, place or thing and the lines that refer to it.
+---
+
+# The opened folder as a workspace of novels
+
+The folder the editor has open is the workspace. Its books stay where they are: you never move, rename or edit the
+user's files. The arrangement is kept in a hidden `.novel/workspace.json` that only the `novel folder` commands write.
+The editor's Novels view shows the same arrangement and updates when a command changes it.
+
+Every command is `novel folder <verb> <folder> ...` and prints JSON (add `--pretty` to read it). A file is named by its
+path, the end of its path, or its id (`f_...`). None of these commands calls a model or costs anything.
+
+## 1. Arrange the folder
+
+1. `novel folder scan <folder>` finds every EPUB and text file under the folder. Run it first, and again after files
+   are added, moved or removed (a moved or renamed book keeps its place: it is known by its content).
+2. `novel folder show <folder> --opening 400` lists the universes, their books in order, and the unsorted files, each
+   with its title, its chapter titles and its first 400 characters. Read these before deciding anything.
+3. Decide which files are books of the same world. Go by the evidence in the text: a shared series title, volume
+   numbers, the same people and places in the openings and chapter titles. A file name alone is weak evidence.
+4. Make each universe and say why: `novel folder universe <folder> "<name>" --why "<what the books share>"`.
+5. Put each book in, in reading order: `novel folder put <folder> <file> <universe> [--at N] [--title "<text>"]`.
+   Order by volume number when the titles give one, else by what the text says of its own order.
+6. Leave a file unsorted when it is not a novel (notes, a list, a fragment) or when you cannot tell where it belongs,
+   and say so in your report. `novel folder take <folder> <file>` takes a book back out.
+7. `novel folder show <folder>` again, and report the arrangement and every file you left unsorted with the reason.
+
+## 2. Link a reading that already exists
+
+A book's cast, references and problems come from a reading. Where one exists already (a v2 library's novel folder):
+
+`novel folder link <folder> <file> <novel-dir> [--reading <data.json>]`
+
+The command refuses a reading made from another book (it looks for the reading's text in the file). Do not use
+`--force` to get past that: find the right book instead. Linking only reads the library; nothing is written to it.
+
+A link that succeeds says which text the book is shown as. `sameText: true`: the file's own text. `sameText: false`
+with "another extraction of this book": the reading was made from an older extraction of the same book, so the book is
+shown as the reading's stored text. Both are success; chapter counts can differ slightly between the two texts.
+
+## 3. Look things up
+
+| Question | Command |
+| --- | --- |
+| What is in this book? | `novel folder chapters <folder> <file> [--depth chapters\|parts\|cards]` |
+| Who and what is in it? | `novel folder cast <folder> <file> [--query <words>] [--category person\|place\|thing\|concept] [--limit N]` |
+| Who is this? | `novel folder who <folder> <file> <name or id>` (the record: names, first appearance, counts, other books) |
+| Where are they cited? | `novel folder refs <folder> <file> <name or id> [--how named\|described\|speaks\|acts\|addressed\|mentioned] [--chapter N] [--scene N] [--guesses] [--via] [--universe] [--from N] [--limit N]` |
+| What does the text say there? | `novel folder line <folder> <file> <line id> [--around N]` |
+| What does the reading doubt? | `novel folder problems <folder> <file> [--limit N]` |
+
+Numbers and names in the output:
+
+- `chapter` counts from 1 in the order `novel folder chapters` lists them, front matter included when the text has
+  some; `chapterTitle` beside it is the chapter's own title, so quote the title, not the number. `--chapter N` filters
+  by the same number. `scene` counts from 1 through the whole book.
+- `chapters --depth chapters` gives each chapter with `inside`: how many scenes it holds (with a reading) or marked
+  parts (without). `--depth parts` lists those scenes or parts; `--depth cards` goes down to cards.
+- `cast` is ordered by the number of lines that refer to each entry, most first, and counts unnamed people and crowds
+  too (`--category person` leaves places, things and concepts out).
+- `refs` shows 30 lines unless `--limit` says more; `references` is the full count, `more` what is left after the ones
+  shown, `--from N` starts further in. `--guesses` keeps only the guesses, `--via` only the lines reached through a
+  wording, `--how` one way of referring.
+- `who` gives `first`: where they are first named. `firstReference` appears when an earlier line already refers to
+  them (by a description, or as the one spoken to).
+
+Reading a reference: `how` says in what way the line refers to them (`named`: their name is in the line; `speaks`,
+`acts`: the reading credits the line to them; `addressed`: they are spoken to; `described`: by a description). `via` is
+the wording the reading went through ("the girl"); it comes with any of these, not only with speaking. `confidence` is
+the model's own score for that answer. `guess: true` marks an answer the reading left unassigned and kept only as its
+best candidate; it is not a confidence threshold, and a settled credit can carry a low score. A reference is the
+reading's judgement, not a fact: before you repeat one that matters, read the line and the lines around it with
+`novel folder line` (each line there carries its scene number) and say whether the text bears it out.
+
+A problem `credit-not-backed` is a line credited to someone the scene never names and the scene before does not have:
+often a description read as the wrong person, sometimes a title that really is theirs. It does not catch every wrong
+credit (a person the scene names in passing can still be credited wrongly). Check each against the text the same way.

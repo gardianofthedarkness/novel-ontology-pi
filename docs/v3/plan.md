@@ -13,9 +13,12 @@
 > ai harnesses naturally becomes the side panel console thing. This basically combines what we have in v1 and v2, but
 > just now they all become extensions and features of this unified workspace." — the user, 2026-11-10
 
-Status: a plan, not started (the user, 2026-11-10: "Don't start yet"). Decided so far: the real editor (§1.3), the
-agent sets a miniloop's step length (§2), a Unity render client launched by the extension (§1.4, my decision at the
-user's "You can decide").
+Status: started 2026-11-10 with the workspace on the opened folder, the language server and the extension's shell (P1,
+built: [workspace.md](workspace.md)), on the user's word: "I would say yes, but not in volume 1 or volume 2, but the same
+open folder vscode has. It scans through every epub or text file in the opened folder, and when we use agent clis to
+arrange them, they are separated into universes and sorted out, and expandable into Chapters and smaller parts just like
+how vscode manage repos". Decided before: the real editor (§1.3), the agent sets a miniloop's step length (§2), a Unity
+render client launched by the extension (§1.4, my decision at the user's "You can decide"; not started).
 
 ## 0. What v3 is
 
@@ -64,7 +67,11 @@ Claude Code session.
 
 ### 1.3 The pieces
 
-1. **A novel language server** over a library: the book's chapters as documents; symbols, definitions, references,
+0. **The opened folder is the workspace** (the user, 2026-11-10; built, workspace.md): every EPUB and text file under
+   the folder the editor has open is found by a scan; an agent arranges them with commands into universes, each with
+   its books in order; a book opens into chapters, scenes and cards as a repository opens into folders and files. The
+   files are never moved: the arrangement is a hidden state file, and a file is known by its content.
+1. **A novel language server** over that folder: each book a document; symbols, definitions, references,
    hover, outline, semantic kinds, inlay hints, problems, quick fixes. It speaks the standard protocol, so any editor
    and the web can use it. Read-only over what v2 already made, at first.
 2. **The extension**: the explorer's views (the cast, the units, the strands, the album), the commands, the live
@@ -158,12 +165,12 @@ form trips it, and whether its result holds against the text.
 
 | Phase | What | Proof |
 | --- | --- | --- |
-| P0 | this plan, corrected by the user; not started until the user says | |
-| P1 | the render protocol for one render unit and the Unity client's proof (§1.4) | volume 1's city drawn from the protocol, frames a second against the web page |
-| P2 | the language server, read-only, on volumes 1 and 2 as v2 left them: documents, symbols, definitions, references, hover, outline, problems | a test session answers citation questions through it; I read its answers against the text |
-| P3 | the extension's shell: explorer views, the launched world tied to the cursor | a scene opened beside its world |
-| P4 | the unit finder and small Jev loops, the agent setting each step's length (volume 1's first quarter), stepped from the debugger | errors per step against W15's |
-| P5 | the side panel, problems with quick fixes, the volume's steps as tasks | a test session does a look pass from the panel's commands |
+| P0 | this plan, corrected by the user | |
+| P1 (built 2026-11-10) | the workspace on the opened folder, the language server, read-only (documents, symbols, definitions, references, hover, outline, speaker hints, problems), the `novel folder` commands, the extension's shell (workspace.md) | the extension run inside the editor on both books; a test session arranges a folder and answers citation questions, its answers read against the text |
+| P2 | the unit finder (render-units.md) as a view of the workspace: a book's render units beside its chapters | volume 2's units, set against its 25 crossings |
+| P3 | the render protocol for one render unit and the Unity client's proof (§1.4); the launched world tied to the cursor | volume 1's city drawn from the protocol, frames a second against the web page; a scene opened beside its world |
+| P4 | small Jev loops, the agent setting each step's length (volume 1's first quarter), stepped from the debugger; a reading made in the workspace itself (`.novel/`), no library | errors per step against W15's |
+| P5 | the side panel, problems with quick fixes (a correction is a change to canon with a reason), the volume's steps as tasks | a test session does a look pass from the panel's commands |
 | P6 | volume 2 again, on v3 | the run W16 could not finish |
 | later | writing: continuity warnings while typing, completion that knows the world; headset builds | |
 
@@ -172,5 +179,7 @@ form trips it, and whether its result holds against the text.
 - The workbench: the real editor (the user).
 - A miniloop's step length: the agent's (the user).
 - The world's frontend: a Unity render client behind a render protocol, the web page kept slim (§1.4; mine to decide).
-- To start P1: the user's go, the Unity editor installed (a download, the user's Unity account), and which headset comes
+- The first build: the language server and the extension on the opened folder, before the engine client (the user,
+  2026-11-10; my recommendation, since it needs no download and everything else hangs off it).
+- To start P3: the user's go, the Unity editor installed (a download, the user's Unity account), and which headset comes
   first when that time comes (Quest needs no paid seat; Vision Pro needs Unity Pro).

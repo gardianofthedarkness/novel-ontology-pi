@@ -70,6 +70,7 @@ import { worldAnswer, worldBatch, worldPool } from "./commands/extract/worldComm
 import { castAsk, castMerge, castReview, castSheet, castShow, sky } from "./commands/extract/castCommands.js";
 import { strandsInherit, strandsKeep, strandsRegister, strandsSet, strandsShow } from "./commands/extract/strandCommands.js";
 import { volumeDone, volumeLog, volumeRun, volumeStatus } from "./commands/extract/volumeCommands.js";
+import { folderCommand } from "./commands/v3/folderCommands.js";
 import { settingsDiff, settingsExplain, settingsProfileApply, settingsProfileList, settingsProfileSave, settingsSet, settingsShow, settingsUnset } from "./commands/extract/settingsCommands.js";
 import { warehouseAdd, warehouseFetch, warehouseFind, warehouseInteract, warehouseList, warehouseRefresh, warehouseShow, warehouseUse } from "./commands/extract/warehouseCommands.js";
 import { lookContext } from "./commands/extract/lookCommands.js";
@@ -163,6 +164,7 @@ const COMMANDS: Record<string, string> = {
   "novel world log <novel-dir> --scene|--person|--card <id> [--run <id>]": "The world log of the last director run: who was where, moves, meetings, blasts, and the laws' verdicts (read-only)",
   "novel world held <novel-dir> [--run <id>] [--budget N]": "A director run's held items (what the laws could not settle, and the user's notes) into the review pool, one batch per scene by reach",
   "novel world apply <novel-dir>": "The main agent's answers into the pins the director plays by, under the laws (what they turn back returns to the pool)",
+  "novel folder scan|show|universe|put|take|link|unlink|chapters|cast|who|refs|line|problems|serve <folder> …": "v3: the opened folder as a workspace of novels (docs/v3/workspace.md): every EPUB and text file under it found (scan); the folder as universes, their books in order and the unsorted files, with each file's first lines for sorting (show [--opening N]); a universe made, renamed or removed (universe <name> [--why t] [--rename n] [--remove]); a file put into a universe at a place in its order, or taken out (put <file> <universe> [--at N] [--title t]; take <file>); an existing reading linked to a book, read-only (link <file> <novel-dir> [--reading data.json]; unlink); a book's chapters and smaller parts (chapters <file> [--depth chapters|parts|cards]); its people, places, things and concepts (cast <file> [--query t]); one entry's record (who <file> <name or id>); every line that refers to it, with how and how sure (refs <file> <name or id> [--how h] [--chapter N] [--scene N] [--guesses] [--via] [--universe] [--limit N], 30 shown unless --limit says more); a line with the lines around it (line <file> <line id>); the reading's doubtful credits (problems <file>); the language server over stdio (serve)",
   "novel volume status|run|log|done <novel-dir> …": "A whole volume step by step (novel-volume skill): each step's status (status); the steps from the first not done up to the agent's look pass, or one step, or up to a step, started in the background (run [--step <id> | --until <id>]); a step's log (log <step> [--lines N]); the agent's look pass marked done (done look --why t)",
   "novel strands register|inherit|set|keep|show <novel-dir> …": "What a book carries into the next, per strand (docs/v2/borrow-and-spawn.md §4.5): the book's strands at its end into the universe's registry (register [--run <id>]); at the next book's reading each open strand of the last book inherited (its damage to buildings that are not nominated stays) or closed (they stand whole) (inherit [--work] [--dry]); the main agent's override (set <strand key> inherited|closed --why t [--into <key>]); a run's damage into the universe building by building (keep --run <id>); the registry and the damage in force (show)",
   "novel cast show|merge|sheet|ask|review <novel-dir> …": "The cast's review: the cast and their ability sheets (show [<char>]); two entries made one person in the reading, its views, the ontology and the universe's sheets (merge <keep> <merged> --reason t [--reading <data.json>]... [--dry]); one person's ability sheet (sheet <char> --sheet '<JSON>' | --none --reason t [--evidence <ids>]); two people raised as one for the agent (ask <a> <b> --why t); the cast's questions in batches in the world's review pool (review [--size N] [--least-cards N] [--send <console-dir>]), answered with novel world answer, done by novel world apply",
@@ -808,6 +810,11 @@ async function main(): Promise<void> {
     if (!text) throw new Error(`Usage: novel source ${sub} <novel-dir> <${sub === "grep" ? "regex" : "text"}> [--limit N]`);
     if (!Number.isInteger(limit) || limit < 1 || limit > 50) throw new Error("--limit must be a whole number from 1 to 50.");
     out(await (sub === "grep" ? sourceGrep(novelDir, text, limit) : sourceSimilar(novelDir, text, limit)), pretty);
+    return;
+  }
+
+  if (cmd === "folder") {
+    out(await folderCommand(positional.slice(1)), pretty);
     return;
   }
 
