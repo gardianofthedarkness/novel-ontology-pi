@@ -121,10 +121,14 @@ export function decide({ candidates, strands, checked = null }) {
 }
 
 /** The work model's check of a match: the candidate's last lines against the new strand's first. */
-async function workCheck(work, { lastLines, firstLines }) {
-  const prompt = JSON.stringify({ task: 'strand-inherit', question: 'Does the second passage go on from the first one: the same story line, carried on (yes), or another one (no)? Answer as JSON {"inherits": true|false, "reason": "..."}', first: lastLines, second: firstLines });
-  const reply = await work.generateWithUsage({ prompt, maxTokens: 200 }).catch(() => null);
-  try { const body = JSON.parse(reply?.content ?? 'null'); return typeof body?.inherits === 'boolean' ? body : null; } catch { return null; }
+export async function workCheck(work, { lastLines, firstLines }) {
+  const system = 'You compare the end of one book\'s story line with the start of a story line in the next book of the series. Answer only as JSON {"inherits": true|false, "reason": "<one short sentence>"}.';
+  const prompt = JSON.stringify({ task: 'strand-inherit', question: 'Does the second passage go on from the first one: the same story line, carried on (true), or another one (false)?', first: lastLines, second: firstLines });
+  const request = { system, prompt, jsonSchema: { type: 'object' }, maxTokens: 200 };
+  // A metered client (cachedWork) answers generateWithUsage; the plain one (workModelFromEnv) generate.
+  let content = null;
+  try { content = work.generateWithUsage ? (await work.generateWithUsage(request)).content : await work.generate(request); } catch { return null; }
+  try { const body = JSON.parse(content ?? 'null'); return typeof body?.inherits === 'boolean' ? body : null; } catch { return null; }
 }
 
 /** Decides the new book's inheritance from the last book's open strands, at its reading. */

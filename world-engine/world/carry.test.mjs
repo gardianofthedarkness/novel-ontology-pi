@@ -98,3 +98,13 @@ test('register, keep, set and the damage in force over a library on disk', async
   assert.deepEqual(registry.decisions['vol-2'].map(decision => [decision.candidate, decision.inherited, decision.by]), [['vol-1:u1', true, 'agent'], ['vol-1:u3', false, 'agent']]);
   await assert.rejects(setDecision(second, 'vol-1:zz', true, 'no'), /not an open strand/);
 });
+
+test('the work model\'s check takes a plain client (generate) or a metered one (generateWithUsage), and no answer is no check', async () => {
+  const { workCheck } = await import('./carry.mjs');
+  const plain = { async generate(request) { assert.match(request.system, /JSON/); return '{"inherits":false,"reason":"another city"}'; } };
+  const metered = { async generateWithUsage() { return { content: '{"inherits":true,"reason":"the same two"}' }; } };
+  assert.deepEqual(await workCheck(plain, { lastLines: ['a'], firstLines: ['b'] }), { inherits: false, reason: 'another city' });
+  assert.deepEqual(await workCheck(metered, { lastLines: [], firstLines: [] }), { inherits: true, reason: 'the same two' });
+  assert.equal(await workCheck({ async generate() { return 'not json'; } }, { lastLines: [], firstLines: [] }), null);
+  assert.equal(await workCheck({ async generate() { throw new Error('down'); } }, { lastLines: [], firstLines: [] }), null);
+});
