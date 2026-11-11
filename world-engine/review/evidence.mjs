@@ -91,7 +91,7 @@ export const recall = (pack, cited) => (cited.length ? cited.filter(line => pack
 // who-speaks (§12's fixes, the user 2026-11-07: "Fix it"): one speaker for one quote, the speaker among the options, and
 // each candidate's voice. W12: 7 of Jev's 11 confident errors were one quote run given to 10032 (who marks her lines
 // with "Misaka"), 12 lines' right speaker was not among the options, and 4 lines of one shout split.
-const OPENS = new Set(['“', '「']), CLOSES = new Set(['”', '」']);
+const OPENS = new Set(['\u201c', '\u300c']), CLOSES = new Set(['\u201d', '\u300d']);
 export const QUOTE_MOST = 12;
 
 /** Each line inside a quotation, by the line its quotation opens on (a quote left open more than 12 lines is dropped). */
