@@ -136,10 +136,11 @@ which script writes it; the tests fail when one is stale (<code>npm test</code> 
 <li><a href="#console-layout">4.3 The layout</a></li>
 <li><a href="#reader">4.4 The reader</a></li>
 <li><a href="#readings">4.5 One-click readings and keys</a></li>
-<li><a href="#console-next">4.6 Still to bring into the console</a></li>
-<li><a href="#mobile">4.7 Phones and tablets</a></li>
-<li><a href="#v1-frontends">4.8 v1's frontends, for the record</a></li>
-<li><a href="#vscode">4.9 VS Code, set aside</a></li>
+<li><a href="#worlds">4.6 Worlds in the console</a></li>
+<li><a href="#console-next">4.7 Still to bring into the console</a></li>
+<li><a href="#mobile">4.8 Phones and tablets</a></li>
+<li><a href="#v1-frontends">4.9 v1's frontends, for the record</a></li>
+<li><a href="#vscode">4.10 VS Code, set aside</a></li>
 </ul>
 </li>
 <li><a href="#reading">5. The reading</a><ul>
@@ -648,7 +649,7 @@ each source got its own workspace (block ids restart at <code>b0001</code> per f
 identity failed closed: Jev and the agent see labels, code resolves labels to ids, ambiguity is refused. v3 keeps the
 content addressing, the separation of the four orders and the per-book stored source; the folder replaces the catalog.
 Its live view (series organised in the orbital explorer, durable facts → public snapshot → SSE) went with the playground
-(<a href="#v1-frontends">§4.8</a>).</p>
+(<a href="#v1-frontends">§4.9</a>).</p>
 <h1 id="console">4. The console</h1>
 <p><span id="plan"></span></p>
 <blockquote>
@@ -657,7 +658,7 @@ those ontology things, can be done like a vscode way ... a unified console for r
 novels. All the ai harnesses naturally becomes the side panel console thing." — the user, 2026-11-10</p>
 </blockquote>
 <h2 id="editor-map">4.1 An editor's ideas, mapped onto a novel</h2>
-<p>The console is organised by an editor's ideas; the editor itself was set aside (<a href="#vscode">§4.9</a>).</p>
+<p>The console is organised by an editor's ideas; the editor itself was set aside (<a href="#vscode">§4.10</a>).</p>
 <table>
 <thead>
 <tr>
@@ -907,11 +908,44 @@ a paid reading of a volume took about 2 minutes.</p>
 <p><strong>Keys</strong> are kept in <code>~/.config/novel-ontology/secrets.json</code> (folder 700, file 600): Jev's under <code>typesafe</code> (where <code>novel
 jev login</code> keeps it), the work model's under <code>work-llm</code>. Nothing answers a key's value; the window only learns whether
 each is set. <span class="st designed">Designed</span> moving them into the Mac's Keychain (Electron's safe storage).</p>
-<h2 id="console-next">4.6 Still to bring into the console</h2>
+<h2 id="worlds">4.6 Worlds in the console: World · Live, Copy to edit, the Review view</h2>
+<p><span class="st built">Built</span> (0.8.0; the user, 2026-11-10: "Let's continue with the rest of p3"). The rest of v1's
+console comes in through the worlds a folder holds.</p>
 <ul>
-<li><span class="st designed">Designed</span> <strong>The rest of v1's console</strong> (P3): the review's batches, settings (the
-  handles generated from the settings schema, <a href="#settings">§14.1</a>), the warehouse, and World · Live's page as the interim
-  world view until the world client (<a href="#world-client">§12</a>).</li>
+<li><strong>A world</strong> is a v2 library (<code>universe/</code> and its books' workspaces in <code>vol-&lt;n&gt;/novel</code>, with the director's
+runs; <a href="#universe-snapshots">§ universe snapshots</a>). The novel server finds them in a folder, in the folder itself or up to two
+levels below it, and in the folder's own <code>.novel/worlds/</code> (<code>novel/worlds</code>, <code>src/server/worlds.ts</code>). The Library
+lists them under <strong>Worlds</strong>, each book with its runs and the run its page plays.</li>
+<li><strong>A world's book opens World · Live in the middle</strong>, as a book opens the reader: v1's page
+(<code>tools/pi-review/sim-world.html</code>) on the console's origin at <code>app://console/world/&lt;id&gt;/play/...</code>, each answer made by
+the functions v1's viewer used, for that book's workspace (<code>apps/novel-console/src/world.js</code> calling <code>sim-play.mjs</code>
+and <code>sim-settings.mjs</code>). It brings v1's panels: the run's cards and their why, the review's items, notes, Settings,
+Warehouse, Buildings, Cuts, the Jev debugger, Dev and Replay. Its own read mode is left out: the console's reader is the
+book's view.</li>
+<li><strong>Read only</strong> when the console did not make the world (a library from the Pi hosts, such as library 16):
+every change (a note, a setting, a warehouse part, a terrain step, the review's steps, an agent) is refused.</li>
+<li><strong>Copy to edit</strong>: an editable copy in the folder's <code>.novel/worlds/</code>, made by v2's own export and import
+(<code>novel/copyWorld</code>): the world's latest finished state (its newest <code>after</code>, <code>manual</code> or <code>imported</code> snapshot) with its
+run pages, each book's text checked by sha256. The run's live record, which World · Live plays and snapshots do not
+carry, is cloned beside it (APFS <code>cp -c</code>; Node's copy wrote the bytes). The world copied is only read.</li>
+<li><strong>The Review view</strong> (a left-strip icon, for the world book shown): what the run held for an answer
+(<a href="#world-first-design">§ world-first design</a>): the batches waiting, the answers with their reasons, applied or turned back, the
+items still open. Its free steps: <strong>Make batches</strong> (<code>novel world held</code>) and <strong>Apply the answers</strong>
+(<code>novel world apply</code>: answers into pins under the laws). <strong>Ask &lt;the chat's agent&gt; to answer the waiting</strong>:
+Claude Code or Pi, as Arrange is (<a href="#arrange">§3.3</a>), after the same token warning, shown live in the chat; its only
+commands are the review's own on that book (<code>novel world pool|batch|answer|log</code>, <code>novel reading</code>, <code>novel source
+grep|similar|epub</code>, <code>novel cast show</code>; Pi's scope is <code>permitReview</code> in <code>tools/pi-review/folder-scope.mjs</code>). A Pi
+review session keeps its task beside it (<code>&lt;session&gt;.task.json</code>), so a message from the chat continues the same review.</li>
+<li><strong>As the user</strong> (0.8.0 from its DMG, opened as Finder does, the user's own profile and keys): each folder loads
+on its own, so one macOS still holds at its folder prompt (each new ad hoc signed build asks again) holds no other folder
+nor its worlds; the keys are drawn first; a waiting message fills only an empty Library.</li>
+</ul>
+<p>Measured 2026-11-10 on library 16: volume 1 plays W15's run (engine v3, 1,600 chunks, 946 buildings, 21 strands);
+Copy to edit 22 s (volume 1 at W15 with Pi's 50 answers; volume 2 has no finished run to copy); Review: 77 open,
+50 answered; Make batches gave 12; stand-in agents answered through the chat (Pi and Claude Code).</p>
+<h2 id="console-next">4.7 Still to bring into the console</h2>
+<ul>
+<li><span class="st built">Built</span> (0.8.0) <strong>The rest of v1's console</strong> (P3): the review's batches, settings (the handles generated from the settings schema, <a href="#settings">§14.1</a>), the warehouse, and World · Live's page as the interim world view until the world client (<a href="#world-client">§12</a>), through the worlds a folder holds (<a href="#worlds">§4.6</a>). <span class="st designed">Designed</span>, still to build: the second pass that plays applied answers (paid: Jev), and a world built for a book read in the console (the volume runner's steps on its reading, the look pass by the chat's agent; paid).</li>
 <li><span class="st designed">Designed</span> Semantic colours by line kind, <strong>lenses</strong> over a scene (its strand, its
   render unit, "show in the world"), <strong>quick fixes</strong> on problems (a correction is a change to canon with a reason),
   <strong>rename</strong> as a merge of two entries; starting and continuing Codex, Gemini and Pi sessions from the chat; an icon;
@@ -926,9 +960,9 @@ each is set. <span class="st designed">Designed</span> moving them into the Mac'
   affect, and events downstream) and centrality, each against the strongest character in scope. These are view metrics,
   never ontology facts: sharing an exchange is evidence of contact, not a relation. It fits v3's Characters view as a
   mode beside the paths.</li>
-<li><span class="st proposed">Proposed</span> <strong>Phones and tablets</strong> (<a href="#mobile">§4.7</a>).</li>
+<li><span class="st proposed">Proposed</span> <strong>Phones and tablets</strong> (<a href="#mobile">§4.8</a>).</li>
 </ul>
-<h2 id="mobile">4.7 Phones and tablets</h2>
+<h2 id="mobile">4.8 Phones and tablets</h2>
 <p><span class="st proposed">Proposed</span> 2026-11-11, paused by the user while a home server is set up. Earlier: a phone
 reached the reader in VS Code on vscode.dev through a tunnel (<code>code tunnel</code>, GitHub's device flow); set aside the same
 day: "it's so hard to use vscode experience wise so bad especially in the phone".</p>
@@ -948,7 +982,7 @@ day: "it's so hard to use vscode experience wise so bad especially in the phone"
   computer at home, or a small cloud server; reached privately (Tailscale, or HTTPS with a login). The phone's
   <code>novelHost</code> then speaks HTTP to it instead of the Electron bridge.</li>
 </ul>
-<h2 id="v1-frontends">4.8 v1's frontends, for the record</h2>
+<h2 id="v1-frontends">4.9 v1's frontends, for the record</h2>
 <p><span id="playground-frontend"></span><span id="playground-views"></span><span id="playground-orbital-layout"></span>
 <span id="playground-spatial-layout"></span><span id="playground-events-watch"></span><span id="places-world"></span>
 <span id="spiral-timelines"></span><span id="character-web"></span>
@@ -970,7 +1004,7 @@ day: "it's so hard to use vscode experience wise so bad especially in the phone"
   that played the book beside it, clips for phones. Their read mode became the reader; their world became World · Live
   and then the world client.</li>
 </ul>
-<h2 id="vscode">4.9 VS Code, set aside</h2>
+<h2 id="vscode">4.10 VS Code, set aside</h2>
 <p><span class="st superseded">Superseded</span> (2026-11-10). The extension (<code>archive/novel-vscode</code>: Books and Cast views,
 hover, definitions, references, workspace symbols, inlay hints, problems, the reader as a webview) worked in the desktop
 editor, but the editor's interface was hard to use for reading a novel, and on a phone through a tunnel it was not
@@ -2193,7 +2227,7 @@ place's own</strong> (<code>places.&lt;id&gt;</code> in either), read through <c
 limit), knob (taste or calibration), physics (a measured constant), structure (changing it changes everything),
 presentation. <strong>Handles</strong>: a Settings panel generated from the schema (groups with their <code>about</code>, each key's value by
 layer); the warehouse's slots are settings too, so they resolve, log, diff and snapshot alike. In v3 the console's
-settings are this registry (<a href="#console-next">§4.6</a>).</p>
+settings are this registry (<a href="#console-next">§4.7</a>).</p>
 <h1 id="testing">15. Testing</h1>
 <ul>
 <li><strong>Tests that cost nothing</strong> (founding): sectioning unit tests, the miniloop with a mocked Jev returning recorded
@@ -2342,7 +2376,7 @@ settings are this registry (<a href="#console-next">§4.6</a>).</p>
 <tr>
 <td>2026-11-10</td>
 <td>the phone through a VS Code tunnel</td>
-<td>set aside; reading packs proposed (<a href="#mobile">§4.7</a>)</td>
+<td>set aside; reading packs proposed (<a href="#mobile">§4.8</a>)</td>
 <td>the experience on a phone</td>
 </tr>
 <tr>
