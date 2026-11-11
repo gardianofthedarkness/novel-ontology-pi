@@ -75,6 +75,11 @@ evidence, not Jev's), so the Library's **Arrange with an agent** row (and the fo
 | after | the Library shows each universe with its series as header rows; the chat shows the session the agent worked in |
 | signed out | nothing runs in the agent's place: a signed-out Claude Code says so in the chat (sign in with `claude auth login`, or pick another agent); Pi without the work model's key asks for it |
 
+**Result (2026-11-10).** Pi, asked from the app as the user would ask (Novel Console 0.7.0 from its DMG, the user's
+own keys), arranged ~/Documents in 79 s with 15 commands: it kept the two universes and put the seven books still
+unsorted into their series in volume order, two editions of one series in two languages joined. The user then added
+more books, and the agent put them "in the exact order I needed": the user counts arranging universes as done.
+
 ## 6. Not yet
 
 - DOCX import.
