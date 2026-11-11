@@ -27,9 +27,9 @@ const repository = resolve(dirname(fileURLToPath(import.meta.url)), '..', '..');
 export const PICKER_MODEL = 'jev-1.14.0';
 /** three.js for a player page, from the app's own dependency: only the files the page imports (path beside the page → file in the repository). */
 export const VENDOR_FILES = {
-  'three.module.js': 'apps/playground/node_modules/three/build/three.module.js',
-  'three.core.js': 'apps/playground/node_modules/three/build/three.core.js',
-  'addons/controls/OrbitControls.js': 'apps/playground/node_modules/three/examples/jsm/controls/OrbitControls.js',
+  'three.module.js': 'node_modules/three/build/three.module.js',
+  'three.core.js': 'node_modules/three/build/three.core.js',
+  'addons/controls/OrbitControls.js': 'node_modules/three/examples/jsm/controls/OrbitControls.js',
 };
 /** How many pictures of one question the live page shows. */
 export const LIVE_PICTURES = 4;
