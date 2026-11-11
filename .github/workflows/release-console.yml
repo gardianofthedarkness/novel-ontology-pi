@@ -1,18 +1,15 @@
 name: Release Novel Console
 
 # Builds the Mac app (Apple Silicon DMG) and publishes it as a GitHub Release.
-# Runs when a version tag such as v0.7.0 is pushed. The tag must match
-# apps/novel-console/package.json's version.
+# Runs when a version tag such as v0.7.0 is pushed (the tag must match
+# apps/novel-console/package.json's version), or by hand from the Actions tab
+# ("Run workflow" on a branch), which tags that branch's commit v<version>.
 
 on:
   push:
     tags:
       - "v*"
   workflow_dispatch:
-    inputs:
-      tag:
-        description: "Tag to release (for example v0.7.0); it must already exist"
-        required: true
 
 permissions:
   contents: write
@@ -24,25 +21,23 @@ concurrency:
 jobs:
   dmg:
     runs-on: macos-14
-    env:
-      TAG: ${{ inputs.tag || github.ref_name }}
     steps:
       - uses: actions/checkout@v4
-        with:
-          ref: ${{ inputs.tag || github.ref }}
 
       - uses: actions/setup-node@v4
         with:
           node-version: 22
 
-      - name: Check the tag matches the app's version
+      - name: Work out the tag from the app's version
         run: |
           VERSION=$(node -p "require('./apps/novel-console/package.json').version")
-          if [ "$TAG" != "v$VERSION" ]; then
-            echo "::error::Tag $TAG does not match apps/novel-console/package.json version $VERSION"
+          TAG="v$VERSION"
+          if [ "$GITHUB_REF_TYPE" = "tag" ] && [ "$GITHUB_REF_NAME" != "$TAG" ]; then
+            echo "::error::Tag $GITHUB_REF_NAME does not match apps/novel-console/package.json version $VERSION"
             exit 1
           fi
           echo "VERSION=$VERSION" >> "$GITHUB_ENV"
+          echo "TAG=$TAG" >> "$GITHUB_ENV"
 
       - name: Install
         run: |
@@ -74,5 +69,5 @@ jobs:
           if gh release view "$TAG" >/dev/null 2>&1; then
             gh release upload "$TAG" "$DMG" --clobber
           else
-            gh release create "$TAG" "$DMG" --title "Novel Console $VERSION" --notes-file notes.md
+            gh release create "$TAG" "$DMG" --target "$GITHUB_SHA" --title "Novel Console $VERSION" --notes-file notes.md
           fi
