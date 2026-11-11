@@ -1,4 +1,4 @@
-// Fill operators (src/v2/world/fillOps.ts; milestones M8c; docs/v2/models-and-settings.md §4; after gkNextEngine's layout kit): what a place's fill
+// Fill operators (src/v2/world/fillOps.ts; milestones M8c; docs/v3/design.html#models-and-settings §4; after gkNextEngine's layout kit): what a place's fill
 // scatters, the setting `fill.ops` (per universe, book or place). Structures stay the fill's and the text's, never
 // scattered (the article's lesson: random buildings never look lived in); the operators put the small things of a street:
 // trees, street lights, benches, bins, parked cars, bollards. Each operator is a line an agent can read and change:

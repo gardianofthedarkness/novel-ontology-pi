@@ -38,7 +38,7 @@ export const EM_PAIRS_PER_CHARACTER = 3;
 export const EM_PAIRS_PER_CALL = 12;
 const PASSAGE_CHARS = 160;
 /**
- * World-first books (docs/world-first-design.md) have no review: EM at birth approves its own match at this "same" or above
+ * World-first books (docs/v3/design.html#world-first-design) have no review: EM at birth approves its own match at this "same" or above
  * (the text not showing two people), without the names having to tie them: an epithet ("刺猬头少年") shares no form with
  * the name it stands for. The merge says so in its audit. Below it, the match still goes to an identity packet.
  */

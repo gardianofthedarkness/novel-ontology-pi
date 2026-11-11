@@ -1,4 +1,4 @@
-// The strand builder bound for a book (docs/v2/strands.md §0; milestones M17e): the TypeScript builder (groupStrands,
+// The strand builder bound for a book (docs/v3/design.html#strands §0; milestones M17e): the TypeScript builder (groupStrands,
 // strandBeats, strandsDocument) and the built world's place tree, read from the terrain registry: where the engine built
 // a place the text left "somewhere in the city". No scale is set: a strand's area is read from its scenes. One binding
 // for the director, the pre-film casts, why-walk and the book's own strands file, so every reader of strands is handed

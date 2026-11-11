@@ -1,4 +1,4 @@
-// The vehicles' own models (the settei cast's 'a car': docs/v2/directing/casts/settei.md; which one a vehicle is, the
+// The vehicles' own models (the settei cast's 'a car': docs/v3/design.html#directing-notes; which one a vehicle is, the
 // transport specialist's: world-engine/digest/transport.mjs), baked as the buildings are (bake-geometry.mjs) into
 // src/data/vehicleModels.json, all CC0 1.0:
 //  - KayKit City Builder Bits 1.0: five cars (car-hatchback, car-sedan, car-stationwagon, car-taxi, car-police);

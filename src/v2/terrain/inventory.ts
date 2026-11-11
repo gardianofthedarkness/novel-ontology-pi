@@ -1,5 +1,5 @@
 /**
- * The building level's inventory and its search (docs/v2/borrow-and-spawn.md §6; the user, 2026-11-01): a universe has too
+ * The building level's inventory and its search (docs/v3/design.html#borrow-and-spawn §6; the user, 2026-11-01): a universe has too
  * many kinds of building to offer Jev them all, so a building's name and the sentences round it in its scenes are searched
  * against the inventory (config/terrain/building-types.json), and Jev chooses among the ten nearest, given the scenes.
  *

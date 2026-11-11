@@ -1,4 +1,4 @@
-// System 2 (docs/v2/world-ontology.md §5, Track B W3; the user, 2026-11-02): the same context falls to an LLM request when
+// System 2 (docs/v3/design.html#world-ontology §5, Track B W3; the user, 2026-11-02): the same context falls to an LLM request when
 // confidence is low. Jev answers first; every question it answers below 0.5 goes to the work model with the very same
 // composed state and the same question, and the work model's answer is the one used (Jev's stays when the work model
 // gives none). Both are recorded. The work model reads text only: the pictures Jev saw are named in the state but not

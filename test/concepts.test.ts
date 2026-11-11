@@ -5,7 +5,13 @@ import { test } from "node:test";
 import { CONCEPTS, LAYERS, STAGES } from "../src/v2/concepts.js";
 
 // Run from the repository's root (npm test): every pointer of the concept map must still hold, or the map has gone stale.
-const holds = (pointer: string) => { const [file, text] = pointer.split("#"), path = resolve(process.cwd(), file); return existsSync(path) && readFileSync(path, "utf8").includes(text); };
+// A design pointer (`docs/v3/design.html#<section> · <journal> §<heading>`) holds when the design has that section.
+const holds = (pointer: string) => {
+  const [file, text] = pointer.split("#"), path = resolve(process.cwd(), file);
+  if (!existsSync(path)) return false;
+  const body = readFileSync(path, "utf8");
+  return file === "docs/v3/design.html" ? body.includes(`id="${text.split(" · ")[0]}"`) : body.includes(text);
+};
 
 test("the concept map holds: each concept in a layer, its code and its design where it says, what it builds on known", () => {
   const ids = new Set(CONCEPTS.map((concept) => concept.id));
@@ -21,4 +27,13 @@ test("the concept map holds: each concept in a layer, its code and its design wh
 test("the stages hold every layer once", () => {
   const layers = STAGES.flatMap((stage) => stage.layers);
   assert.deepEqual([...layers].sort(), Object.keys(LAYERS).sort(), "each layer in one stage");
+});
+
+// The design's sections written from the code (docs/v3/design.html §17.3, §17.4) must be what the code writes today.
+test("the design's concept map and street compatibility sections are current", async () => {
+  const { spawnSync } = await import("node:child_process");
+  for (const script of ["experiments/v2/concepts-page.mjs", "experiments/v2/compat-page.mjs"]) {
+    const run = spawnSync(process.execPath, [script, "--check"], { cwd: process.cwd(), encoding: "utf8" });
+    assert.equal(run.status, 0, `run node ${script}: ${run.stdout}${run.stderr}`);
+  }
 });

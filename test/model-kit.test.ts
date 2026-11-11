@@ -5,7 +5,7 @@ import { test } from "node:test";
 import { LANDSCAPES } from "../src/v2/world/landscape.js";
 import { MODELS } from "../src/v2/world/useModels.js";
 
-// The model table (config/models.json, docs/v2/model-kit.md) against the library and the buildings the world makes, read
+// The model table (config/models.json, docs/v3/design.html#model-kit) against the library and the buildings the world makes, read
 // from the repository's root (npm test).
 const read = (...path: string[]) => JSON.parse(readFileSync(resolve(process.cwd(), ...path), "utf8"));
 const library = read("apps", "playground", "src", "data", "architectureModels.json"), street = read("config", "terrain", "street.json");

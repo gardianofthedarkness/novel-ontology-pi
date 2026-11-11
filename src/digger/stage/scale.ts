@@ -11,7 +11,7 @@ import type { DecisionModel } from "../../ground/connectors/jev.js";
  * Jev, not a package: on 66 places of the toaru vols 1–4 snapshot, Jev was
  * right on 64; the name's generic part (通名) on 44 to 54, silent on bare
  * proper names; the books' embedding model on 43; a Chinese NER only told
- * areas from sites (docs/stage-simulation-design.md). Without Jev, the
+ * areas from sites (docs/v3/design.html#stage-simulation-design). Without Jev, the
  * generic part stands where it says something, and the place is asked again
  * once Jev is available.
  *

@@ -1,5 +1,5 @@
 /**
- * Interaction sheets (milestones M15; docs/v2/models-and-settings.md §11; the user, 2026-11-09: large things "should be
+ * Interaction sheets (milestones M15; docs/v3/design.html#models-and-settings §11; the user, 2026-11-09: large things "should be
  * also configured in the warehouse for interactability"). What a part does in the world besides being seen: whether it
  * blocks a walk where it stands, which layer it lives in, how many it seats, what its crash or explosion does to what it
  * hits when the text says it crashes (a degree as the digest's damage words, 0 to 4, and a radius), what it becomes when

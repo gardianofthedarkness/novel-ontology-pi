@@ -1,10 +1,10 @@
-// The street compatibility reference page (docs/v2/street-compatibility.html; docs/v2/world-engine-v2.md §2.0.15), made
-// from the code's own tables, so it is made again whenever they change: which street kinds may share ground (OVERLAPS in
+// The street compatibility tables (docs/v3/design.html §17.4, between <!-- compat:start --> and <!-- compat:end -->; a
+// page of its own for the published site), made from the code's own tables, so they are made again whenever they change: which street kinds may share ground (OVERLAPS in
 // src/v2/context/terrainModes.ts), which building uses each street kind's buildings take (LANDSCAPES' uses in
 // src/v2/world/landscape.ts), the words that give a building its use (the language profile, src/v2/rules/language.ts),
 // and which 3D models stand for each use (src/v2/world/useModels.ts, over apps/playground/src/data/architectureModels.json).
 //
-//   npm run build && node experiments/v2/compat-page.mjs [out.html]
+//   npm run build && node experiments/v2/compat-page.mjs [--check | out.html]
 import { readFile, writeFile } from 'node:fs/promises';
 import { execFileSync } from 'node:child_process';
 import { dirname, join, resolve } from 'node:path';
@@ -180,8 +180,21 @@ footer { font-size: 12px; color: var(--muted); }
 `;
 }
 
+/** The design's section: the page's tables, without its head (which carries the commit and the day). */
+export async function compatSection() { const page = await compatPage(); return page.slice(page.indexOf('</header>') + '</header>'.length, page.indexOf('<footer>')).trim(); }
+
 if (import.meta.url === pathToFileURL(process.argv[1]).href) {
-  const out = process.argv[2] ?? join(repository, 'docs', 'v2', 'street-compatibility.html');
-  await writeFile(out, await compatPage());
-  console.log(`written ${out}`);
+  const out = process.argv[2];
+  if (out && out !== '--check') { await writeFile(out, await compatPage()); console.log(`written ${out}`); }
+  else {
+    const START = '<!-- compat:start -->', END = '<!-- compat:end -->', file = join(repository, 'docs', 'v3', 'design.html'), before = await readFile(file, 'utf8');
+    const a = before.indexOf(START), b = before.indexOf(END);
+    if (a < 0 || b < a) throw new Error('no compat markers in docs/v3/design.html');
+    const after = `${before.slice(0, a + START.length)}\n${await compatSection()}\n${before.slice(b)}`;
+    if (after !== before) {
+      if (out !== '--check') await writeFile(file, after);
+      console.log(`${out === '--check' ? 'stale' : 'written'}: docs/v3/design.html (compat)`);
+      if (out === '--check') process.exit(1);
+    }
+  }
 }

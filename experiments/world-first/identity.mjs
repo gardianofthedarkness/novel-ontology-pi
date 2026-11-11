@@ -1,4 +1,4 @@
-// Identity in a world-first book (docs/world-first-design.md §11, decision 4). There is no review, so EM's matches cannot
+// Identity in a world-first book (docs/v3/design.html#world-first-design §11, decision 4). There is no review, so EM's matches cannot
 // wait in identity packets (cast/packets/um_*): its confident ones are merged automatically with a flag, unless the world
 // has the two in two places at once. The same goes for the world's own evidence from each scene, where Jev says which named
 // person an epithet ("刺猬头少年", "白衣修女") is. The one kept is the one with a proper name (not a description of a person),

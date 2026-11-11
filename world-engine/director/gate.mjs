@@ -1,4 +1,4 @@
-// M3 (docs/v2/next-steps.md A6): the gate over a reading. Every block of twelve sentences, with its block types (M2),
+// M3 (docs/v3/design.html#next-steps A6): the gate over a reading. Every block of twelve sentences, with its block types (M2),
 // its sentences' kinds (M1) and the reading's signals in it, read by the registry's mixed index (firing()); the beats
 // smoothed per strand (beats.mjs); who leads each beat (lead()). Casts co-fire wherever their evidence is. Writes
 // gate.json beside the reading and, with --docs, the strip page and the vault note (numbers and ids only, no text).
@@ -89,7 +89,7 @@ pick.onchange=draw;draw();document.getElementById("cov").innerHTML="<tr><th>Cast
 
 /** The vault note: coverage, and each scene's beats with their leads (to check on the strip). */
 export function gateNote(gate, title) {
-  const label = id => DIRECTORS[id]?.label ?? id, lines = [`<!-- Written by world-engine/director/gate.mjs from the reading; run it again, never edit this. -->`, '', `# ${title}`, '', 'The gate over volume 1 (M3): each cast\'s mixed index over the blocks, the beats decoded per scene, the lead of each beat. The strip: [gate-volume-1.html](gate-volume-1.html). Back to [Directing](Directing.md).', '', '## How much each cast reads', '', '| Cast | Share of the volume |', '|---|---|'];
+  const label = id => DIRECTORS[id]?.label ?? id, lines = [`<!-- Written by world-engine/director/gate.mjs from the reading; run it again, never edit this. -->`, '', `# ${title}`, '', 'The gate over volume 1 (M3): each cast\'s mixed index over the blocks, the beats decoded per scene, the lead of each beat. The strip: [gate-volume-1.html](gate-volume-1.html). The directing notes: [design §17.2](../v3/design.html#directing-notes).', '', '## How much each cast reads', '', '| Cast | Share of the volume |', '|---|---|'];
   for (const [id, share] of Object.entries(gate.coverage)) lines.push(`| ${CASTS[id].label} | ${Math.round(share * 100)}% |`);
   lines.push('', '## Beats by scene', '', '| Scene | Beats (type → lead) |', '|---|---|');
   for (const scene of [...new Set(gate.beats.map(beat => beat.scene))]) lines.push(`| ${scene} | ${gate.beats.filter(beat => beat.scene === scene).map(beat => `${BLOCK_TYPES[beat.type] ? beat.type : '?'} → ${label(beat.lead)}${beat.with.length ? ` (with ${beat.with.map(label).join(', ')})` : ''}`).join('; ')} |`);
@@ -106,10 +106,11 @@ if (process.argv[1] === fileURLToPath(import.meta.url)) {
   const gate = gateOf(windowsOf(reading), { strandOf: scene => forkOf.get(scene) ?? null });
   await writeFile(join(dirname(resolve(readingPath)), 'gate.json'), JSON.stringify({ version: 1, ...gate }));
   if (values.docs) {
-    const folder = join(repository, 'docs', 'v2', 'directing');
+    // The run's evidence, beside the other reports (docs/reports/).
+    const folder = join(repository, 'docs', 'reports');
     await mkdir(folder, { recursive: true });
     await writeFile(join(folder, 'gate-volume-1.html'), stripPage(gate, 'Gate · Volume 1'));
-    await writeFile(join(folder, 'Gate.md'), gateNote(gate, 'Gate · Volume 1'));
+    await writeFile(join(folder, 'gate-volume-1.md'), gateNote(gate, 'Gate · Volume 1'));
   }
   console.log(JSON.stringify({ windows: gate.windows.length, beats: gate.beats.length, coverage: gate.coverage }));
 }

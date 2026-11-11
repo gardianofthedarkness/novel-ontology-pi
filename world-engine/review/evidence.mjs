@@ -1,4 +1,4 @@
-// Evidence packs for the review by Jev (docs/v2/jev-review.md §4, R2): for each held item, the lines the answer can rest on.
+// Evidence packs for the review by Jev (docs/v3/design.html#jev-review §4, R2): for each held item, the lines the answer can rest on.
 // Measured on W12 against the 409 lines Pi cited (2026-11-06): the lines ±20 round the item, opened by id, then each
 // person's names searched by nearness within ±100 lines, up to 50 lines, hold 90% of them (±10 and 50: 87%; ±30 and 60:
 // 93%), in packs of about 63 lines. Embedding search (bge-small; bge-m3 dense, learned sparse and ColBERT, fused or not)

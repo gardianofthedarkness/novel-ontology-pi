@@ -1,4 +1,4 @@
-// The review by Jev measured against Pi's answers (docs/v2/jev-review.md §8): pack recall on the lines Pi cited (free), and
+// The review by Jev measured against Pi's answers (docs/v3/design.html#jev-review §8): pack recall on the lines Pi cited (free), and
 // for an answers file of world-engine/review/jev-review.mjs, agreement with Pi per kind, how sure against how often right
 // (the calibration that sets §6's thresholds), and the disagreements to read. `--settled <json>` (item → the answer the
 // text supports, read by hand where the two disagree) scores against that instead of Pi alone.

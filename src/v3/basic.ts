@@ -1,5 +1,5 @@
 /**
- * The basic layer: what a book is, read from its file with no model asked (docs/v3/basic.md; the user, 2026-11-10: "a basic
+ * The basic layer: what a book is, read from its file with no model asked (docs/v3/design.html#basic; the user, 2026-11-10: "a basic
  * layer no model call scans the basic layer of that real folder"). For every book the scan finds: its title, author and
  * language; its series and volume number, read from the title; its chapters, paragraphs and lines (the reading's own
  * sentence cutter); how many lines are in quotes; its pictures; the spans that look like names by fixed patterns (honorifics

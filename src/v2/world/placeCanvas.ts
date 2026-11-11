@@ -24,14 +24,14 @@ export interface Unit { id: string; label: string; kind: "building" | "street" |
 /**
  * temporary: an unnamed area holding what is known only to lie somewhere in a larger place, until the text names it.
  * dwelling: the area of the central build a place the ontology puts in no larger one dwells in, until it is named.
- * pool: a sampling pool's area (docs/v2/world-engine-v2.md §2.0.11): it holds what that area has that is not nominated,
+ * pool: a sampling pool's area (docs/v3/design.html#world-engine-v2 §2.0.11): it holds what that area has that is not nominated,
  * its members kept POOL_SPACING apart, and grows as they come.
- * embedded: a manifold of its parent's own ground (docs/v2/borrow-and-spawn.md §8: a district of a city of manifolds): it
+ * embedded: a manifold of its parent's own ground (docs/v3/design.html#borrow-and-spawn §8: a district of a city of manifolds): it
  * stands exactly at its kept offset inside the parent's ground, its own ground a patch of the parent's; it is never pushed
  * and pushes nothing, the fading of the patches being how it meets its neighbours.
  */
 /**
- * `plane`: the layer it lies in (docs/v2/terrain-levels.md §3.3; absent: the surface). A place in another layer is never
+ * `plane`: the layer it lies in (docs/v3/design.html#terrain-levels §3.3; absent: the surface). A place in another layer is never
  * picked as the area a surface building is sampled into, dwells in, or is hosted by: adding one changes nothing on top.
  */
 export interface CanvasPlace { id: string; label: string; scale: string; parent: string | null; at: Point; landscape: Landscape | null; units: Unit[]; r: number; born: number; embedded?: boolean; fixed?: boolean; temporary?: boolean; dwelling?: string; pool?: string; plane?: string }
@@ -133,7 +133,7 @@ export function addUnit(canvas: Canvas, placeId: string, unit: Omit<Unit, "at"> 
 }
 
 /**
- * Where a pool samples a member (docs/v2/world-engine-v2.md §2.0.14, the user's design): the free spot nearest the members
+ * Where a pool samples a member (docs/v3/design.html#world-engine-v2 §2.0.14, the user's design): the free spot nearest the members
  * already in it that continuity ties it to, the more ties the nearer (nearest the mean of their spots, each counted by
  * its ties, leaning toward the pool's middle), kept as far from the others as any member; undefined when it is tied to
  * none of them, and it takes the free spot nearest the pool's middle.
@@ -147,7 +147,7 @@ export function tiedSpot(canvas: Canvas, placeId: string, unit: Pick<Unit, "id" 
 }
 
 /**
- * Street buildings (docs/v2/world-engine-v2.md §2.0.15, the user's design): a building of a pool that continuity ties to
+ * Street buildings (docs/v3/design.html#world-engine-v2 §2.0.15, the user's design): a building of a pool that continuity ties to
  * one of the pool's streets dwells in one of that street's buildings of its own use (a café in a café), the most tied
  * street first, one building each, picked by its id: no model is asked. A building whose use none of the streets it is
  * tied to has is left for Jev to plant (`forJev`); one with no use known, or tied to no street, stays where it was
@@ -168,7 +168,7 @@ export function dwellInStreets(place: CanvasPlace, streets: Map<string, Building
 }
 
 /**
- * What is there first (docs/v2/world-engine-v2.md §2.0.21, the user's design): a building of a place that dwells nowhere yet
+ * What is there first (docs/v3/design.html#world-engine-v2 §2.0.21, the user's design): a building of a place that dwells nowhere yet
  * dwells in one of the buildings the place's ground made of its use (`made`, in the place's frame, each with its use), the
  * nearest to where it was sampled; the scarcest uses first, one building each, so the most are held. A building of a use the
  * ground has none of left is marked for Jev. `taken`: the lots already dwelt in (the streets' first).

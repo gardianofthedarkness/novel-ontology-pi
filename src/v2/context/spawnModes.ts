@@ -1,5 +1,5 @@
 /**
- * Jev's spot question for spawning (docs/v2/spawning.md §4; the user, 2026-11-01): where in its scene's place each person or
+ * Jev's spot question for spawning (docs/v3/design.html#spawning §4; the user, 2026-11-01): where in its scene's place each person or
  * thing the rules could not place is when the scene begins, a choice over the place's spots as built (its floors, its
  * roof, under the street, the street in front, the composite parts inside it), read from the scene's own text. One
  * request a scene, no picture.

@@ -1,5 +1,5 @@
 /**
- * Nearness in story time (docs/v2/spawning.md §2; the user, 2026-11-01): two scenes are close when they are on the same day,
+ * Nearness in story time (docs/v3/design.html#spawning §2; the user, 2026-11-01): two scenes are close when they are on the same day,
  * in the same or the next part of it. Read from the time tree's nodes (`t:y1:12-24:evening`, a clock time by its hour).
  */
 const SLOTS: Record<string, number> = { "late-night": 0, dawn: 1, "early-morning": 1, morning: 2, noon: 3, afternoon: 4, evening: 5, night: 6 };

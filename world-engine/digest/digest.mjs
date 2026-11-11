@@ -1,4 +1,4 @@
-// The summarizer (Track A, docs/v2/next-steps.md A1–A3) and the measurements a passage carries (the user, 2026-11-03:
+// The summarizer (Track A, docs/v3/design.html#next-steps A1–A3) and the measurements a passage carries (the user, 2026-11-03:
 // "everytime we observe, we actually get multiple state updates, some are subtle and sure, some are confirmed"; a roof
 // over someone puts them indoors). The work model reads the text; nothing here is played.
 // - The scene digest, once per scene, in reading order: what happens, what the background is doing, each person's routine

@@ -1,4 +1,4 @@
-// Could an expressway ride over the city fill's arterials? (docs/v2/highway-research.md §2)
+// Could an expressway ride over the city fill's arterials? (docs/v3/design.html#highway-research §2)
 //
 // For a few cities of the plain fill (src/v2/world/cityFill.ts), born with radius r0:
 // - the arterial net: segments, km, median segment, junction degrees;

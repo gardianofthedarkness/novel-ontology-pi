@@ -65,10 +65,10 @@ record remains available in the keyboard-accessible index.
 This is a **local sample replay**. Review actions update the sample UI;
 they do not approve or write real CLI ChangeSets. The real `novel watch`
 SSE adapter and initial snapshot are still separate integration work;
-see `docs/playground-events-watch.md` at the repository root.
+see `docs/v3/design.html#playground-events-watch` at the repository root.
 
 The original interaction model is described in
-`docs/system1/playground-frontend.html` in the repo root; this README
+`docs/v3/design.html#system1-playground-frontend` in the repo root; this README
 documents the current archive presentation.
 
 ## Run it

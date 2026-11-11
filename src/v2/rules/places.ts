@@ -1,5 +1,5 @@
 /**
- * The place rules (docs/v2/world-model.md §2.1, §4, §5): the tree's graded law, the place recommender's evidence weights,
+ * The place rules (docs/v3/design.html#world-model §2.1, §4, §5): the tree's graded law, the place recommender's evidence weights,
  * and what place EM takes by rule rather than asking Jev. Code only: a rule never calls a model, and nothing here is
  * particular to a language (that is language.ts).
  */

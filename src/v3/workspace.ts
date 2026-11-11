@@ -1,6 +1,6 @@
 /**
  * The opened folder's books, loaded once and kept until the state or a reading changes: what the language server and the
- * `novel folder` commands both answer from (docs/v3/workspace.md).
+ * `novel folder` commands both answer from (docs/v3/design.html#workspace).
  */
 import { stat } from "node:fs/promises";
 import { isAbsolute, join, resolve } from "node:path";

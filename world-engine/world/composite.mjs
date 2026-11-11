@@ -1,5 +1,5 @@
 /**
- * Composite buildings in the world (docs/v2/borrow-and-spawn.md §6; the user, 2026-11-01): where a part stands inside its
+ * Composite buildings in the world (docs/v3/design.html#borrow-and-spawn §6; the user, 2026-11-01): where a part stands inside its
  * host as the host stands now, and the markers of the buildings and parts the terrain kept, on what stands. Plain data in,
  * plain data out: the export (export-strand-demo.mjs) calls these for each place and once for the page.
  */

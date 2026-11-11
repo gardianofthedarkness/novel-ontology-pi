@@ -2,7 +2,7 @@
 
 # Gate · Volume 1
 
-The gate over volume 1 (M3): each faculty's mixed index over the blocks, the beats decoded per scene, the lead of each beat. The strip: [gate-volume-1.html](gate-volume-1.html). Back to [Directing](Directing.md).
+The gate over volume 1 (M3): each faculty's mixed index over the blocks, the beats decoded per scene, the lead of each beat. The strip: [gate-volume-1.html](gate-volume-1.html). The directing notes: [design §17.2](../v3/design.html#directing-notes).
 
 ## How much each faculty reads
 

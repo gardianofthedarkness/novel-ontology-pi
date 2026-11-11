@@ -1,5 +1,5 @@
 /**
- * `novel model nominate|list|brief|write|put|check|use|show` (milestones M10; docs/v2/models-and-settings.md §3): the
+ * `novel model nominate|list|brief|write|put|check|use|show` (milestones M10; docs/v3/design.html#models-and-settings §3): the
  * book's important things as OpenSCAD models, nominated without a model call, written by the work model (`write`) or by
  * the agent itself (`brief`, then `put`), every one held to the contract (`check`). JSON out, bounded.
  */

@@ -7,7 +7,7 @@
 //      begins where Jev holds it more likely than not.
 //   2. the type: every segment of a scene in one document, one choice of the nine block types each, its whole
 //      distribution kept with its confidence.
-// Asked so, Jev over-cuts (every one-line shift; the first test, docs/v2/directing/Decisions.md M14). Two tunings, neither
+// Asked so, Jev over-cuts (every one-line shift; the first test, docs/v3/milestones.html#director-decisions M14). Two tunings, neither
 // with a length rule:
 //   --mode starts   the scene tiler's way (segmentation.ts tileScenes: Jev finds a boundary choosing where the next one
 //                   begins): from where a stretch begins, which sentence begins the next stretch of another kind, or

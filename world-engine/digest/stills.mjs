@@ -1,4 +1,4 @@
-// The stills cast (docs/v2/stills.md; the user, 2026-11-05: "we need to provide any cast who analyze the pictures enough
+// The stills cast (docs/v3/design.html#stills; the user, 2026-11-05: "we need to provide any cast who analyze the pictures enough
 // context to extract useful information out of it"). A pre-film cast after the reading and its notes: each of the book's
 // story pictures, with its faces lettered and its text read (tools/album-portraits/stills.py), the book's portraits as a
 // gallery, and the text around it both ways (the units before and after the one it stands in, raw, with their people,

@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /**
- * Terrain spawning on the world engine (docs/v2/visual-context-engine.md §5; the user's call, 2026-10-31: built on the
+ * Terrain spawning on the world engine (docs/v3/design.html#visual-context-engine §5; the user's call, 2026-10-31: built on the
  * engine and the place tree we have, not beside them). The world is the engine's own: export-strand-demo.mjs in its
  * world-only mode (the canvas of places from the place tree, the central build and its default spawns, each place's
  * landscape filled, the streamed lots with their skeleton buildings). So are both players: Jev looks through the engine
@@ -23,7 +23,7 @@
  * A part's height and a basic shape are kept but not drawn yet (the engine's ground is flat). Every question with its
  * pictures is on the live record (stage/simulation/live: Jev's questions). Jev's answers are cached (stage/terrain/cache).
  *
- * `spawn` (docs/v2/borrow-and-spawn.md, the user's design of 2026-11-01): borrowing and spawning by type instead of pools.
+ * `spawn` (docs/v3/design.html#borrow-and-spawn, the user's design of 2026-11-01): borrowing and spawning by type instead of pools.
  * Level by level, every city, then every district, then every street, named and unnamed alike in the order the text first
  * comes to them: a part Jev gave a kind borrows the slot of that kind its holder has that raises the characters' travel
  * least, or spawns one where it can borrow nothing (src/v2/terrain); a level ends with the moves that lower the travel, its
@@ -48,7 +48,7 @@ import { setting } from '../../dist/src/v2/settings.js';
 
 const repository = resolve(dirname(fileURLToPath(import.meta.url)), '..', '..'), load = path => import(pathToFileURL(`${repository}/${path}`).href);
 const round = value => Math.round(value * 10) / 10;
-/** An unnamed place's words, without its scene (two of the same words are the same place: world-engine-v2.md §2.0.12). */
+/** An unnamed place's words, without its scene (two of the same words are the same place: docs/v3/design.html#world-engine-v2 §2.0.12). */
 const baseName = label => String(label).replace(/ \(scene \d+\)$/, '');
 /** The basic shapes the terrain faculty may place besides the manifolds (the user's list, 2026-10-31). */
 export const SHAPES = {
@@ -59,7 +59,7 @@ export const SHAPES = {
 const OVERVIEW = [1440, 900], MAP = [1024, 1024], ZOOMS = 2, CELL = setting('grid.cell'), FLOOR = setting('grid.floor'), OPEN = new Set(['district', 'street']);
 /** The core the terrain-height question looks through, half its width over its highest slice (at least 40 m): the slices stand apart, the core reads beside them. */
 const { share: CORE, least: CORE_MIN } = setting('view.core');
-/** What the terrain view shows (docs/v2/world-engine-v2.md §2.0.16), said with every overview Jev is shown. */
+/** What the terrain view shows (docs/v3/design.html#world-engine-v2 §2.0.16), said with every overview Jev is shown. */
 const SEEN = 'The buildings are cyan holograms of their kinds (towers, office blocks, malls, apartments, schools, shops), as tall as they are; rooms and stairs show only where people are. The volumes below the street are underground halls and passages.';
 /** No fog: a map straight down reads every metre of its ground alike. */
 const CLEAR = { near: 1e6, far: 2e6 };
@@ -74,7 +74,7 @@ export async function terrainSpawn(novelDir, { jev: given = null, run = false, p
   // Every Jev request is composed by the context engine (the user's call): the terrain modes, from the reading's stores.
   const { ask } = await load('dist/src/v2/context/engine.js'), T = await load('dist/src/v2/context/terrainModes.js');
   const { continuityTies, universeOf } = await load('dist/src/v2/extraction/pools.js');
-  // The zoom engine (docs/v2/visual-context-engine.md §4.1): every frame Jev is shown and every box it answers.
+  // The zoom engine (docs/v3/design.html#visual-context-engine §4.1): every frame Jev is shown and every box it answers.
   const Z = await load('dist/src/v2/context/zoom.js'), { LANDSCAPES, formsFor, formsTaking, averageOverMedian } = await load('dist/src/v2/world/landscape.js');
   const inputs = await stageInputs(novelDir), [line] = await simStrandList(novelDir);
   if (!line) throw new Error('Terrain spawning needs the world loop\'s line: a world-first book with its world script and staged scenes.');
@@ -87,7 +87,7 @@ export async function terrainSpawn(novelDir, { jev: given = null, run = false, p
   const name = id => inputs.names[id] ?? id, scaleOf = id => inputs.scale?.places[id]?.scale ?? null;
   const tree = new Map(inputs.placeTree.map(place => [place.id, place]));
   const data2 = reading ? JSON.parse(await readFile(join(reading, 'v2', 'data.json'), 'utf8').catch(() => 'null')) : null;
-  // The underground note on each place (docs/v2/terrain-levels.md §8.5; experiments/v2/underground-notes.mjs), beside the
+  // The underground note on each place (docs/v3/design.html#terrain-levels §8.5; experiments/v2/underground-notes.mjs), beside the
   // reading: a city or a district the note puts under the street is offered the underground's slices too.
   const underNotes = JSON.parse(await readFile(notesPath ?? (reading ? join(reading, 'v2', 'underground-notes.json') : '/nonexistent'), 'utf8').catch(() => 'null'));
   // The layer a place lies in, the manifold model's third dimension (terrain-levels §3.3): a place the note puts under the
@@ -137,7 +137,7 @@ export async function terrainSpawn(novelDir, { jev: given = null, run = false, p
   const terrainFile = join(novelDir, 'stage', 'terrain.json');
   const terrain = JSON.parse(await readFile(terrainFile, 'utf8').catch(() => 'null')) ?? { sites: {} };
   terrain.version = 2; terrain.model = jev.modelId; terrain.sites ??= {}; terrain.order ??= []; terrain.shapes ??= {};
-  // A universe's terrain (docs/v2/world-engine-v2.md §2.0.15): a named place kept in one book is kept under its exact name
+  // A universe's terrain (docs/v3/design.html#world-engine-v2 §2.0.15): a named place kept in one book is kept under its exact name
   // for every later book of the universe, so only the first pays; a rerun of the same book asks again.
   const universe = universeOf(novelDir), registryFile = join(universe.dir, 'terrain.json');
   const registry = JSON.parse(await readFile(registryFile, 'utf8').catch(() => 'null')) ?? { version: 1, places: {} };
@@ -155,7 +155,7 @@ export async function terrainSpawn(novelDir, { jev: given = null, run = false, p
   const CP = spawn ? await load('dist/src/v2/terrain/composite.js') : null, tenancies = CP ? CP.loadTenancies() : {};
   const LEVELS = ['city', 'district', 'street', 'building'], bookId = universe.book, resolver = spawn ? S.defaultResolver() : null;
   if (spawn) { terrain.mode = 'spawn'; terrain.book = bookId; registry.slots ??= {}; terrain.slots = registry.slots; }
-  // The map's log, by book (docs/v2/borrow-and-spawn.md §8.8): every change to the map in order, so a book can be played again.
+  // The map's log, by book (docs/v3/design.html#borrow-and-spawn §8.8): every change to the map in order, so a book can be played again.
   const mapLogFile = join(universe.dir, 'maps', `${bookId}.json`);
   const mapLog = spawn ? JSON.parse(await readFile(mapLogFile, 'utf8').catch(() => 'null')) ?? { book: bookId, entries: [] } : null;
   const logMap = entry => { if (mapLog) mapLog.entries.push({ n: mapLog.entries.length + 1, at: new Date().toISOString(), ...entry }); };
@@ -246,7 +246,7 @@ export async function terrainSpawn(novelDir, { jev: given = null, run = false, p
     const within = (id, city) => { for (let at = parentOf(id), n = 0; at && n < 12; at = parentOf(at), n++) if (at === city) return true; return false; };
     const mentions = label => sentences.filter(sentence => sentence.text.includes(label)).length, firstAt = label => sentences.findIndex(sentence => sentence.text.includes(label));
     const cities = Object.keys(inputs.scale?.places ?? {}).filter(id => scaleOf(id) === 'city').map(id => ({ id, label: name(id), mentions: mentions(name(id)) })).filter(city => city.mentions).sort((a, b) => b.mentions - a.mentions);
-    // A sampling pool (docs/v2/world-engine-v2.md §2.0.11) comes where the text first mentions one of its members (an
+    // A sampling pool (docs/v3/design.html#world-engine-v2 §2.0.11) comes where the text first mentions one of its members (an
     // unnamed place by its scene's first sentence), an empty one where its area is first named.
     const world = inputs.world?.places ?? {}, sentenceAt = new Map(sentences.map((sentence, n) => [sentence.id, n]));
     const sceneAt = new Map((data2?.scenes ?? []).map(scene => [scene.id, sentenceAt.get(scene.sentences?.[0]) ?? -1]));
@@ -254,7 +254,7 @@ export async function terrainSpawn(novelDir, { jev: given = null, run = false, p
       const ats = Object.entries(world).filter(([, place]) => place.parent === id || place.near === id).map(([, place]) => (place.scene ? sceneAt.get(place.scene) ?? -1 : firstAt(place.label))).filter(at => at >= 0);
       return ats.length ? Math.min(...ats) : firstAt(name(world[id]?.pool ?? ''));
     };
-    // What a pool holds at an area's level is a real place (it has a belonging and a full tree: docs/v2/world-engine-v2.md
+    // What a pool holds at an area's level is a real place (it has a belonging and a full tree: docs/v3/design.html#world-engine-v2
     // §2.0.12): Jev processes it like a named one, where its scene first comes. Another book's members are only markers.
     const isMember = id => id.startsWith('unnamed:') && String(world[id]?.parent ?? '').startsWith('pool:');
     const atOf = id => (world[id]?.pool ? poolAt(id) : isMember(id) ? sceneAt.get(world[id].scene) ?? -1 : firstAt(name(id)));
@@ -276,7 +276,7 @@ export async function terrainSpawn(novelDir, { jev: given = null, run = false, p
     const holderOf = (part, city) => { const parent = parentOf(part.id); return parent && parent !== part.id && (within(parent, city.id) || parent === city.id) ? parent : city.id; };
     // The order (the user's call, 2026-10-31): the largest level first, every city, then every district, then every
     // street; within a level, the order the text first names them. A city is asked its kind and height only (it is the map).
-    // Spawn mode's helpers (docs/v2/borrow-and-spawn.md). Where a kept area stands: its holder's node plus its kept offset,
+    // Spawn mode's helpers (docs/v3/design.html#borrow-and-spawn). Where a kept area stands: its holder's node plus its kept offset,
     // never a built node of its own (run 10's lesson: the canvas packs places apart).
     const siteBox = (id, site) => { const node = site.parent && Array.isArray(site.toward) && Array.isArray(site.size) ? nodeOf(site.parent) : null; return node ? Z.turnedBox([node.x + site.toward[0], node.z + site.toward[1]], site.size, site.turn ?? 0) : site.box; };
     const keptIn = id => Object.entries(terrain.sites).filter(([, site]) => site.parent === id && Array.isArray(site.box) && site.by !== 'pool').map(([sid, site]) => siteBox(sid, site));
@@ -397,7 +397,7 @@ export async function terrainSpawn(novelDir, { jev: given = null, run = false, p
       syncSlots(); await replace(terrainFile, JSON.stringify(terrain, null, 1)); await mkdir(join(universe.dir, 'maps'), { recursive: true }); await replace(registryFile, JSON.stringify(registry, null, 1));
       await replace(mapLogFile, JSON.stringify(mapLog, null, 1)); reshape();
     };
-    // The building level's slots (docs/v2/borrow-and-spawn.md §6): every street's buildings as the world just built them (its
+    // The building level's slots (docs/v3/design.html#borrow-and-spawn §6): every street's buildings as the world just built them (its
     // form's, or the city's lots on its ground for a street that took a road or a crossing), a slot of its use each, at its
     // offset from the street. A slot a building holds stays as it is; the
     // spares are the form's again after every street level, so they follow the street.
@@ -672,7 +672,7 @@ export async function terrainSpawn(novelDir, { jev: given = null, run = false, p
       // The streets' buildings, as their forms build them, are the building level's slots (§6).
       if (level === 'street' && !planes) { const made = formSlots(); await saveSlots(); await live.outcome({ subject: 'streets', text: `${made.spares} building slots from the streets' forms (${made.held} held by buildings already)` }); }
     };
-    // Spawn mode (docs/v2/borrow-and-spawn.md §2.6): level by level, the named and the unnamed alike in the order the text
+    // Spawn mode (docs/v3/design.html#borrow-and-spawn §2.6): level by level, the named and the unnamed alike in the order the text
     // first comes to them; each level ends (`end`) with its moves, its spares placed and its areas' children spawned.
     const levelParts = level => Object.keys(inputs.scale?.places ?? {}).filter(id => scaleOf(id) === level && !id.startsWith('elsewhere:') && !id.startsWith('slot:'))
       .map(id => ({ id, label: name(id), scale: level, at: id.startsWith('unnamed:') ? sceneAt.get(world[id]?.scene) ?? -1 : firstAt(name(id)) })).filter(part => part.at >= 0)
@@ -744,7 +744,7 @@ export async function terrainSpawn(novelDir, { jev: given = null, run = false, p
       if (keptBefore(part.id)) continue;
       // A pool's member: Jev is asked its kind, then where it lies (anywhere in its district, its pin a suggestion), then its height.
       const isCity = part.scale === 'city', sampled = isMember(part.id), cityNode = nodeOf(city.id);
-      // In spawn mode a part moves to the area of the slot it borrows (docs/v2/borrow-and-spawn.md §2.3) once it is decided.
+      // In spawn mode a part moves to the area of the slot it borrows (docs/v3/design.html#borrow-and-spawn §2.3) once it is decided.
       let holder = isCity ? city.id : holderOf(part, city);
       const holderNode = nodeOf(holder) ?? cityNode, heldBy = holder;
       let slotChosen = null;
@@ -787,7 +787,7 @@ export async function terrainSpawn(novelDir, { jev: given = null, run = false, p
       const pinsOf = which => { const scene = world[which.id]?.scene; return Object.entries(world).filter(([id, place]) => ['building', 'room'].includes(place.scale) && (within(id, which.id) || (sampled && scene && place.scene === scene))).length; };
       const areas = (extra = []) => [
         // A place not kept yet is a pin where the engine has it (its circle is the room it takes, not its size: the user's
-        // call, docs/v2/world-engine-v2.md §2.0.14); a part already kept is drawn once, as its kept box (below).
+        // call, docs/v3/design.html#world-engine-v2 §2.0.14); a part already kept is drawn once, as its kept box (below).
         ...kin.filter(node => node.id !== city.id && !Array.isArray(terrain.sites[node.id]?.box)).map(node => ({ pin: [node.x, node.z], label: tag(node.id, node.dwelling ? `${node.label} (sampled: the text puts it nowhere)` : node.label), color: node.id === holder ? 0x7ce6ff : 0xffd36e, textColor: node.id === holder ? '#7ce6ff' : '#ffd36e', tag: tierOf(node.scale) })),
         ...(pinAt ? [{ pin: pinAt, label: `${part.label} · ${sampled ? 'suggested' : 'now'}`, color: 0x9fb4c3, textColor: '#c9d6df', tag: Z.tagScale(null, 'street', true) }] : []),
         // A kept pool's box is its circle's (sampled, not Jev's): a pin where the engine has it now; the boxes Jev drew, outlined.
@@ -908,7 +908,7 @@ export async function terrainSpawn(novelDir, { jev: given = null, run = false, p
       const width = Z.LADDER[part.scale]?.sizes ?? [60, 600], fallback = (width[0] + width[1]) / 4, at = holderNode ?? anchor;
       // A city's box is its own circle as the engine has it (the map is the city).
       const spotOf = node => [round(node.x - node.r), round(node.z - node.r), round(node.x + node.r), round(node.z + node.r)];
-      // Compatibility (docs/v2/world-engine-v2.md §2.0.15, code, before Jev is asked): a kept place this one's kind may not
+      // Compatibility (docs/v3/design.html#world-engine-v2 §2.0.15, code, before Jev is asked): a kept place this one's kind may not
       // overlap (OVERLAPS: a square, nothing; what lies below the street, anything). A member's pin on one moves to the
       // nearest open space near it.
       // Of another level, a place the tree does not put it in (nor it in that place) is a clash as before.
@@ -922,7 +922,7 @@ export async function terrainSpawn(novelDir, { jev: given = null, run = false, p
         if (first) for (let d = 8; d < 3000 && !open; d += 8) for (let k = 0; k < 32 && !open; k++) { const t = k / 32 * Math.PI * 2, point = [round(pinAt[0] + Math.cos(t) * d), round(pinAt[1] + Math.sin(t) * d)]; if (!onto(point)) open = point; }
         if (open) { await live.outcome({ subject: part.label, text: `repinned ${Math.round(Math.hypot(open[0] - pinAt[0], open[1] - pinAt[1]))} m: ${why(...first)}` }); pinAt = open; }
       }
-      // A pool's member (docs/v2/world-engine-v2.md §2.0.13, §2.0.15): between its kind and its height, Jev boxes where it
+      // A pool's member (docs/v3/design.html#world-engine-v2 §2.0.13, §2.0.15): between its kind and its height, Jev boxes where it
       // lies and how large it is, on a map of its whole district (its pin a suggestion, the places it is tied to marked).
       // The zoom engine: the district's extent (kept, else its kept parts' span, else its circle), the frames for a street there
       // (one when the district fits at a street's scale, else the district for context and a work frame at the street's
@@ -960,7 +960,7 @@ export async function terrainSpawn(novelDir, { jev: given = null, run = false, p
         box = fromMap(areaReply?.box, top.map) ?? [at.x - fallback, at.z - fallback, at.x + fallback, at.z + fallback];
         boxBy = areaReply;
       } else if (spawn) {
-        // Borrowing and spawning by type (docs/v2/borrow-and-spawn.md §2.3–2.5): sized by its pins as below; then the slot of
+        // Borrowing and spawning by type (docs/v3/design.html#borrow-and-spawn §2.3–2.5): sized by its pins as below; then the slot of
         // its kind it raises the characters' travel least by (an unplaced one where the program would place it), or a spawn
         // where nothing can be borrowed. The slot's area holds it from now on; the level's moves come when the level ends.
         const [w, d] = sizeFor(part.scale, ground, pinsOf(part)), placements = new Map(), plane = planeOfPart(part.id, part.scale);
@@ -1097,7 +1097,7 @@ export async function terrainSpawn(novelDir, { jev: given = null, run = false, p
       // from 200 m, a dwelling area's to 60 m: terrainTops), through a core of the area at its middle; red dotted cuts
       // through the buildings the engine stands there for now.
       // The underground's slices first (below the street), then the kind's own: the picture spans them all.
-      // Spawn mode asks the kind's standard plus an addition, as averages (docs/v2/borrow-and-spawn.md §8.9).
+      // Spawn mode asks the kind's standard plus an addition, as averages (docs/v3/design.html#borrow-and-spawn §8.9).
       const kindManifold = T.terrainKind(part.scale, kind)?.manifold, factor = spawn && kindManifold ? averageOverMedian(kindManifold) : null;
       // As averages, the kind's minimum a hard gate (§8.9; the user, 2026-11-01): a city or a district is never under the
       // street, unless the underground note puts it there (terrain-levels §8.5, the user, 2026-11-05: "Jev never picks

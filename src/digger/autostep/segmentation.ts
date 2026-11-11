@@ -317,7 +317,7 @@ const KIND_LABELS: Record<SentenceKind, string> = {
   narration: "looks, feelings, mood, commentary, background",
 };
 /**
- * Block types (docs/v2/next-steps.md A4–A6, M2; the user, 2026-11-03): what a stretch of about twelve sentences is about,
+ * Block types (docs/v3/design.html#next-steps A4–A6, M2; the user, 2026-11-03): what a stretch of about twelve sentences is about,
  * no longer a dialogue or an action but what the director's faculties listen for. Asked in the kinds pass, one question a
  * block (12 sentences, moving 6 at a time), its whole distribution kept with its top three and its confidence. The same
  * nine as world-engine/director/specialists.mjs BLOCK_TYPES.

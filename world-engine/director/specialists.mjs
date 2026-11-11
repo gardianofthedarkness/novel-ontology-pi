@@ -1,4 +1,4 @@
-// The director as specialists (docs/v2/next-steps.md A4–A5; the user, 2026-11-03): "jev can be asked for different
+// The director as specialists (docs/v3/design.html#next-steps A4–A5; the user, 2026-11-03): "jev can be asked for different
 // questions based on what the input director sees... we can split our directors into specialist". One registry, in
 // code, of what reads the text (the pre-film casts, the work model), what fires them (Jev's block types and the
 // reading's own signals), and which specialist director each one feeds (the questions Jev is asked on pictures, the
@@ -114,7 +114,7 @@ export const FLOW = [
   { step: 'next run', what: 'the review\'s answers become pins; canon, pins and the smoothing are where the next run starts from', code: 'world-engine/review/review.mjs' },
 ];
 
-/** The gates (docs/v2/world-ontology.md §7b). */
+/** The gates (docs/v3/design.html#world-ontology §7b). */
 export const GATES = {
   applied: 'written by canon without review: a law checks it and nothing broke',
   held: 'held for the review first; written once answered (some move to applied once audits show they are right)',
@@ -134,7 +134,7 @@ export const LOG_KINDS = {
   building: { built: false, what: 'a building\'s look, floors, uses and rooms' },
 };
 
-/** The laws a state can be checked by (physics-laws.md): built ones, and L14 (recorded as it plays) and L15 (proposed). */
+/** The laws a state can be checked by (docs/v3/design.html#physics-laws): built ones, and L14 (recorded as it plays) and L15 (proposed). */
 export const LAWS = {
   L1: 'continuity by strand', L2: 'two places at once', L5: 'travel time', L6: 'talk needs nearness', L9: 'actors are there', L10: 'reachable',
   L11: 'bodies', L12: 'abilities', L13: 'destruction', L14: 'stated facts hold (recorded as it plays)', L15: 'a thing in one place or one hand at a time (proposed)',

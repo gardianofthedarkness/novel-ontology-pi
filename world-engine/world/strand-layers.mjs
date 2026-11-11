@@ -1,4 +1,4 @@
-// Physics per strand (docs/v2/strands.md §4; milestones M17c; the user, 2026-11-09: "The destructions and physics
+// Physics per strand (docs/v3/design.html#strands §4; milestones M17c; the user, 2026-11-09: "The destructions and physics
 // engine doesn't interfere another strand. If the time is the same by mentioning the two groups united, the strands
 // reunify into one"). The world's damage is a layer per strand over the built world:
 //

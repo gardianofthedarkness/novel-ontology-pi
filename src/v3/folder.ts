@@ -1,5 +1,5 @@
 /**
- * The opened folder as a workspace of novels (docs/v3/workspace.md; the user, 2026-11-10: "the same open folder vscode
+ * The opened folder as a workspace of novels (docs/v3/design.html#workspace; the user, 2026-11-10: "the same open folder vscode
  * has. It scans through every epub or text file in the opened folder, and when we use agent clis to arrange them, they are
  * separated into universes and sorted out, and expandable into Chapters and smaller parts just like how vscode manage
  * repos").

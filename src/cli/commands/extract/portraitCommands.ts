@@ -77,7 +77,7 @@ export async function portraitReadiness(novelDir: string) {
   if (sourceHash(text) !== source.sha256) throw new Error("Stored source changed; restore before portrait assignment");
   const blocks = cutBlocks(text, source.blockSize);
   // A v2 book's characters come from its v2 reading (the canon it wrote), not from reviewed v1 packets per block: the
-  // reading done is the volume's extraction finished (docs/v2/universe-snapshots.md; src/v2/album.ts).
+  // reading done is the volume's extraction finished (docs/v3/design.html#universe-snapshots; src/v2/album.ts).
   const manifest = JSON.parse(await readFile(join(novelDir, "ontology", "manifest.json"), "utf8").catch(() => "{}"));
   if (manifest.v2Reading) return readinessAfterExtraction(novelDir, blocks.length);
   const audit = await rows(join(novelDir, "events.jsonl"));

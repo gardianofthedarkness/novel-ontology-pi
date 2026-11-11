@@ -1,4 +1,4 @@
-// Re-stranding after smoothing (docs/v2/strands.md §0 and §5; milestones M17d, M17f; the user, 2026-11-09: "there maybe
+// Re-stranding after smoothing (docs/v3/design.html#strands §0 and §5; milestones M17d, M17f; the user, 2026-11-09: "there maybe
 // overstranding and we could need restrand after smoothing"; "As long as the group splits on different things and no
 // longer interact with each other on semantic scale, they become two strands"). The text's strands are the reading's:
 // a unit's group is whom the text has acting in it. A run knows more: where each person stood, card by card, smoothed

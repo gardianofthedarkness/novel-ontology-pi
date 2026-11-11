@@ -1,4 +1,4 @@
-// Spawning positions (docs/v2/spawning.md; src/v2/spawning/positions.ts): where each person and each thing of every scene
+// Spawning positions (docs/v3/design.html#spawning; src/v2/spawning/positions.ts): where each person and each thing of every scene
 // stands when it begins, on the world the terrain built (the last build's page), by the rules; no model call yet. Reads
 // stage/world/script.json, stage/world/strands.json (experiments/v2/strands.mjs), stage/terrain.json and
 // stage/simulation/live/page.json; writes stage/world/spawn.json.
@@ -54,7 +54,7 @@ export async function spawnBook(novelDir, { reading = null } = {}) {
   };
   const entries = new Map(strands.scenes.map(scene => [scene.id, scene.entries])), starts = P.spawnScenes(script.scenes, entries, target);
   // Jev's spot question, composed (no call): for each scene, those the rules could only put on a random floor of a
-  // building, a choice over its spots, read from the scene's text (docs/v2/spawning.md §4).
+  // building, a choice over its spots, read from the scene's text (docs/v3/design.html#spawning §4).
   const names = new Map([...(reading?.chart?.entities ?? []).map(entity => [entity.id, entity.proper?.[0] ?? entity.names?.[0] ?? entity.id]), ...(reading?.slots ?? []).map(slot => [slot.id, slot.label])]);
   const nameOf = id => names.get(id) ?? script.places[id]?.label ?? id;
   const text = await loadWorkspaceSentences(novelDir), sceneLines = new Map((reading?.scenes ?? []).map(scene => [scene.id, scene.sentences.map(id => ({ id, text: text.get(id)?.text ?? '' }))]));

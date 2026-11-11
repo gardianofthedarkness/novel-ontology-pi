@@ -102,7 +102,7 @@ export async function bookChecklist(novelDir: string, options: { input?: string;
     counts: { blocks: blocks.length, applied: blocks.length - missingBlocks.length, awaitingReview: blockReview.length, scenes: scenes.length, entities: entities.length },
     next: blockReview.length ? blockReview.map((changeset) => reviewCommand(changeset.id)) : missingBlocks.length ? [options.input ? `novel ingest ${dir} ${quote(options.input)}` : `novel ingest ${dir} <the assigned input>  (continues at ${missingBlocks[0]})`] : [] });
 
-  // A v2 workspace (docs/v2/world-engine-v2.md §2.0): its canon is the v2 reading (experiments/v2/workspace.mjs), written
+  // A v2 workspace (docs/v3/design.html#world-engine-v2 §2.0): its canon is the v2 reading (experiments/v2/workspace.mjs), written
   // whole, not block by block through the gate; its identities are the reading's unified EM.
   if (manifest.v2Reading) Object.assign(items.at(-1)!, { status: "done", next: [], note: `v2 reading of ${manifest.v2Reading.at}: scenes, cards, entities and events written as canon (${manifest.v2Reading.out}).` });
 
@@ -203,7 +203,7 @@ export async function bookChecklist(novelDir: string, options: { input?: string;
     counts: { built: !!graph }, next: !graph || graph.mtimeMs < newest ? [`novel graph build ${quote(join(novelDir, "ontology"))}`] : [] });
 
   // A world-first workspace: story time, scene places, the place tree, strands and in-book causality are the world's
-  // (docs/world-first-design.md), done once its world script is written; these faculties are never asked. A v2 reading's
+  // (docs/v3/design.html#world-first-design), done once its world script is written; these faculties are never asked. A v2 reading's
   // workspace has it from the reading (experiments/v2/workspace.mjs); an older one from the v1 world loop.
   if (manifest.worldFirst) {
     const script = await exists(join(novelDir, "stage", "world", "script.json"));

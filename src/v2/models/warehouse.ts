@@ -1,5 +1,5 @@
 /**
- * The model warehouse (milestones M10g–i; docs/v2/models-and-settings.md §8.3–8.4): one registry of sources outside any
+ * The model warehouse (milestones M10g–i; docs/v3/design.html#models-and-settings §8.3–8.4): one registry of sources outside any
  * library (`~/claude-world-first/model-packs/warehouse.json`, or NOVEL_WAREHOUSE), each a folder of SCAD kits or glTF
  * files with a catalogue of evaluated records in gkNextEngine's shape (name, category, footprint, height, triangles,
  * ok), built here with OpenSCAD and the playground's glTF reader. A part is `<source>:<part>`; `kit` (gkNextEngine's

@@ -6,7 +6,7 @@ import { unzipAll } from "../../../digger/intake/album/zip.js";
 import { loadWorkspaceSentences } from "./timeplaceCommands.js";
 
 /**
- * The review CLI's reading side (docs/v2/world-ontology.md §7, Track B W5): what a main agent reads to answer the world's
+ * The review CLI's reading side (docs/v3/design.html#world-ontology §7, Track B W5): what a main agent reads to answer the world's
  * held items — the v2 reading of a card, a scene or a line (`novel reading`), the world log (`novel world log`), the
  * original EPUB as published (`novel source epub`) — and the developer's side of the review: the held items of a run
  * into the pool by scene (`novel world held`), answers into pins under the laws (`novel world apply`). Read-only except

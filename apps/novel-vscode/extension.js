@@ -1,4 +1,4 @@
-// The Novel Workbench: the opened folder as a workspace of novels (docs/v3/workspace.md). A thin shell over the novel
+// The Novel Workbench: the opened folder as a workspace of novels (docs/v3/design.html#workspace). A thin shell over the novel
 // language server: it starts the server, shows its tree in the explorer, hands the editor's questions (outline, hover,
 // definition, references, problems) to it, and opens a processed book in the reader. No dependency: the client side of the protocol is the few lines below.
 const vscode = require("vscode");
@@ -98,7 +98,7 @@ class CastTree {
   }
 }
 
-// The reader (docs/v3/reader.md): a processed book read as published, in a webview: its EPUB a document at a time, each
+// The reader (docs/v3/design.html#reader): a processed book read as published, in a webview: its EPUB a document at a time, each
 // sentence coloured by its kind, names, descriptions and times marked, the speaker before a spoken line, and the notes
 // (every record of a tapped sentence). The page asks the language server through here; nothing else reaches it.
 const READER_ASKS = new Set(["novel/read", "novel/readDocument", "novel/readLine", "novel/readPortrait"]);

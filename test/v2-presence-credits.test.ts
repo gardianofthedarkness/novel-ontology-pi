@@ -1,4 +1,4 @@
-// Credits checked against their unit (src/v2/rules/presence.ts corroborateCredits; docs/v2/strands.md §0.6): a credit
+// Credits checked against their unit (src/v2/rules/presence.ts corroborateCredits; docs/v3/design.html#strands §0.6): a credit
 // through a description or as the one spoken to puts a person in a unit only when the unit names them or credits them
 // strongly, or the unit before names or credits them. Aliases (one person per description, named with it somewhere) and
 // people the text only describes (slots) are strong.

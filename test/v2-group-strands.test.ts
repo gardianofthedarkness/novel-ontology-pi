@@ -1,4 +1,4 @@
-// Strands by interaction (src/v2/extraction/strands.ts groupStrands; docs/v2/strands.md §0; milestones M17e; the user,
+// Strands by interaction (src/v2/extraction/strands.ts groupStrands; docs/v3/design.html#strands §0; milestones M17e; the user,
 // 2026-11-09: "As long as the group splits on different things and no longer interact with each other on semantic scale,
 // they become two strands. When they reunited the strands become one. Whether scale is building street what ever depends
 // on the context"). A scene's group is whom it has acting; a split is part of a group acting while the rest next appears

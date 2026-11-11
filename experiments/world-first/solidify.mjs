@@ -1,4 +1,4 @@
-// The Solidifier, world first (docs/world-first-design.md §10–11), over a world script (run.mjs):
+// The Solidifier, world first (docs/v3/design.html#world-first-design §10–11), over a world script (run.mjs):
 // - Lineage instead of in-book causality: what led up to an event, from the world alone, with no calls. That means the
 //   events before it on the clock that share its actors, the events at its place, and the dialogues its actors heard
 //   (as parties, or listeners of a group or public node). Newest first. A flashback's events lead only within the past.

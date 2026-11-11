@@ -5,7 +5,7 @@ import { shapeHall } from "../src/v2/world/underground.js";
 import { FLOATING, terrainHeights, terrainThickness } from "../src/v2/context/terrainModes.js";
 import { withSlots, type KeptSlot } from "../src/v2/terrain/tree.js";
 
-// The building level (docs/v2/borrow-and-spawn.md §6, §8.9): a street's buildings as its form builds them are its building
+// The building level (docs/v3/design.html#borrow-and-spawn §6, §8.9): a street's buildings as its form builds them are its building
 // slots; a building that borrows one stands in that street; floating objects asked their distance from the ground and
 // their thickness.
 const street = (type: string, w: number, d: number) => patchFromBox(type as never, "p0", "loc_t", { x0: -w / 2, z0: -d / 2, x1: w / 2, z1: d / 2 }, { by: "jev" });

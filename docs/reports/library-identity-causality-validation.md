@@ -19,7 +19,7 @@ PRs #46 and #47 are not included or modified by this follow-up.
 | Bounded cross-book causality with independent evidence review | `src/solidifier/causality/universe.ts`, CLI command and scoped Pi access |
 | Live library hierarchy and causal metadata | `tools/pi-review/library-live.mjs`, `universe-causality-live.mjs`, frontend library model |
 | Directed universe causal arrows | `causalProjection.ts`, `OrbitalExplorer.tsx`, `OrbitalGraph.tsx`, library-orbit regressions |
-| Read-only review intervention audit | `tools/pi-review/review-impact.mjs`, `docs/review-impact.md` |
+| Read-only review intervention audit | `tools/pi-review/review-impact.mjs`, `docs/reports/review-impact.md` |
 | Album access for assigned EPUBs and live projection | Scoped album access helpers, runner and `liveAlbum.ts` |
 
 Paths in the frontend rows are under `apps/playground/src/`.
@@ -51,7 +51,7 @@ suite above uses that setting. Linux CI does not use macOS's `/var` alias.
 The previously completed read-only identity compatibility check paged **6,367
 facts from 28 applied packets**, across three existing workspaces, in **332
 bounded pages** with no errors. **60 source/proposal/ontology hashes remained
-unchanged**. See `identity-flow.md` for the binding contract and flow diagram.
+unchanged**. See `docs/v3/design.html#identity-flow` for the binding contract and flow diagram.
 
 The protected live frontend was checked against the existing owner runtime,
 not a static fixture or replay. At the observation point, three valid accepted

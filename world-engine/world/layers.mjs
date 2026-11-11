@@ -1,4 +1,4 @@
-// The walk's bands (docs/v2/terrain-levels.md §8.1–8.2): the street with what lies just under it (basements, malls, the
+// The walk's bands (docs/v3/design.html#terrain-levels §8.1–8.2): the street with what lies just under it (basements, malls, the
 // subway), and the halls more than 20 m down (storm water, deep facilities, a street laid 30 m under). All of these are the
 // shallow layer, real halls with real depths (the user, 2026-11-05); the deep layer is a virtual space with no depth of its
 // own, left by the virtual elevator. The bands are the solver's: each is walked on its own, and a walk whose targets lie in

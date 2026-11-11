@@ -1,5 +1,5 @@
 /**
- * Slots, borrowing and spawning (docs/v2/borrow-and-spawn.md §2.2–2.5, §4; the user's design, 2026-11-01). An area of a
+ * Slots, borrowing and spawning (docs/v3/design.html#borrow-and-spawn §2.2–2.5, §4; the user's design, 2026-11-01). An area of a
  * decided kind spawns typed slots one level down (config.ts); a mention Jev gave a kind borrows a slot of that kind in its
  * holder, or spawns one when none can be borrowed, one level at a time in narrative order, keeping the characters' travel
  * least. What it decides is which slot each mention takes; where the slots stand is the engine's (placement, then the

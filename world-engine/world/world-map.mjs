@@ -1,10 +1,10 @@
-// A top-down map picture of the world around a point, for Jev's box questions (docs/world-first-design.md §7–8): where
+// A top-down map picture of the world around a point, for Jev's box questions (docs/v3/design.html#world-first-design §7–8): where
 // someone starts, where a nominated room is, where a group gathers. North is up and one picture is `2 × radius` metres
 // across. It shows the ground (dark), the roads (grey), every lot standing there (blue, darker the taller, with its
 // outline), and the people already placed (red dots), so Jev can place someone among them. With a `floor`, it is a slice
 // of the buildings at that floor: each one's rooms (light, outlined), its corridors and stairs (mid-grey), and a building
-// too low to reach it as its roof, so a box on it picks a room. With `under` (one of Jev's three underground choices, docs/
-// underground-design.md §6.1), it is what lies there from above: the halls of that choice by kind (and every building's
+// too low to reach it as its roof, so a box on it picks a room. With `under` (one of Jev's three underground choices,
+// docs/v3/design.html#underground-design §6.1), it is what lies there from above: the halls of that choice by kind (and every building's
 // basement just under the street), with their pillars, in the dark of the ground. Plain Node: a small PNG writer, no browser.
 import { deflateSync } from 'node:zlib';
 import { CORRIDOR, MASS, cellIndex } from '../../dist/apps/playground/src/data/skeleton.js';

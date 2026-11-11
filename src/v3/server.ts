@@ -1,5 +1,5 @@
 /**
- * The novel language server (docs/v3/workspace.md): the opened folder's books answered as an editor asks about source.
+ * The novel language server (docs/v3/design.html#workspace): the opened folder's books answered as an editor asks about source.
  * It speaks the Language Server Protocol over stdio (JSON-RPC with Content-Length frames, written here: no dependency),
  * so any editor's client can use it, and a few requests of its own for the explorer (`novel/tree`, `novel/book`,
  * `novel/document`, `novel/scan`, `novel/cast`, and the reader's `novel/read`, `novel/readDocument`, `novel/readLine`, `novel/readPortrait`, `novel/record`,
@@ -70,7 +70,7 @@ export class NovelServer {
       case "initialized": case "textDocument/didChange": case "textDocument/didClose": case "$/cancelRequest": case "$/setTrace": case "workspace/didChangeConfiguration": case "workspace/didChangeWatchedFiles": return null;
       case "shutdown": return null;
       case "novel/scan": return scanFolder(this.ws.folder, Array.isArray(params.found) ? { found: params.found as ("epub" | "text")[] } : {});
-      // The basic layer (docs/v3/basic.md): a few books at a time, so the server answers between them; a book's own;
+      // The basic layer (docs/v3/design.html#basic): a few books at a time, so the server answers between them; a book's own;
       // series among the books not arranged; a series made a universe, its books in volume order; text files imported.
       case "novel/basicStep": return basicStep(this.ws.folder, Number(params.most ?? 3));
       case "novel/basic": { const state = await this.ws.current(); const file = state.files.find((entry) => entry.id === params.id || entry.path === params.id); return file ? readBasic(this.ws.folder, file.id) : null; }
@@ -89,12 +89,12 @@ export class NovelServer {
       case "novel/cast": return this.castOf(String(params.id), params as { query?: string; category?: string; limit?: number });
       case "novel/document": return this.document(String(params.uri));
       case "novel/problems": return this.diagnostics(String(params.uri));
-      // The reader (docs/v3/reader.md): the book as published with the reading's marks, a document of its EPUB, every
+      // The reader (docs/v3/design.html#reader): the book as published with the reading's marks, a document of its EPUB, every
       // record of one sentence; where a sentence stands in the book's document, and the sentence at a place in it.
       case "novel/read": return readerBook(this.ws, String(params.id));
       case "novel/readDocument": return readerDocument(this.ws, String(params.id), Number(params.item));
       case "novel/readLine": return readerLine(this.ws, String(params.id), String(params.sentence));
-      // One-click readings (docs/v3/reading.md): the keys' state (never a value), a key kept, a book's reading started,
+      // One-click readings (docs/v3/design.html#readings): the keys' state (never a value), a key kept, a book's reading started,
       // where it stands, stopped.
       case "novel/keys": return keyStatus();
       case "novel/setKey": return setKey(String(params.which), String(params.value ?? ""));

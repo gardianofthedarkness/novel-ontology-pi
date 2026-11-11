@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""The stills cast's local preparation (docs/v2/stills.md; the user, 2026-11-05): for each of the book's pictures, its
+"""The stills cast's local preparation (docs/v3/design.html#stills; the user, 2026-11-05): for each of the book's pictures, its
 faces (lettered A, B, C … on a copy for Jev) and its text (OCR, each line with its box); and one sheet of the book's
 bound portraits, labelled P1, P2 …, for Jev to tell faces by. Panels are not cut (bright backgrounds read as gutters):
 Jev says which moment each face is in. Nothing is decided here: the stills cast asks Jev with this and the text around the picture.

@@ -1,7 +1,7 @@
 import type { DecisionAnswer, DecisionQuestion, DecisionState } from "../../ground/connectors/jev.js";
 
 /**
- * The context composing engine (docs/v2/context-engine.md; layer 3 of docs/v2/world-model.md): one way to compose the state
+ * The context composing engine (docs/v3/design.html#context-engine; layer 3 of docs/v3/design.html#world-model): one way to compose the state
  * of a Jev request. A mode is a recipe: its sources and their quotas, the order to cut in, how its questions are written.
  * A source ranks items for a focus from the stores; it never decides. The probe measures the focus's surroundings (each
  * stat 0..1) and the plan scales every quota by the complexity they come to (0.75 + 0.75 × complexity). The budget (the

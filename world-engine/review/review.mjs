@@ -1,4 +1,4 @@
-// The review (docs/v2/world-ontology.md §7, §7b; Track B W5): what the laws hold after a director run goes to a main
+// The review (docs/v3/design.html#world-ontology §7, §7b; Track B W5): what the laws hold after a director run goes to a main
 // agent (Pi, Codex or another; each with all the rights) as one bundle per scene, through v1's pool, batches and answers
 // (src/cli/commands/extract/worldCommands.ts). The agent reads the evidence with the review CLI (the reading, the world
 // log, the source and the original EPUB, the graph) and answers each item with one of its options and a reason; answers
@@ -33,7 +33,7 @@ export const OPTIONS = {
 };
 
 /**
- * Who says a line, as asked (docs/v2/jev-review.md §5, R1): the people there and whom the line is said to (W12: 12 of Pi's
+ * Who says a line, as asked (docs/v3/design.html#jev-review §5, R1): the people there and whom the line is said to (W12: 12 of Pi's
  * 37 "none of them" were the one spoken to, left off the list), a crowd as one option rather than one per member (up to 56
  * in W12), and the three ways it is no one listed, so "none of them" no longer erases who it was.
  */

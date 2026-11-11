@@ -3,7 +3,7 @@
 The v2 code that is TypeScript, one folder for each layer of the concept map (`concepts.ts`): reading and the place
 tree (extraction), terrain, the world, the context engine every Jev question goes through, and the code rules. The
 world engine's scripts that run them are in [world-engine/](../../world-engine/README.md), in the same layers. The
-guide from concept to design to code: [docs/v2/README.md](../../docs/v2/README.md).
+guide from concept to design to code: [docs/v3/design.html#v2-readme](../../docs/v3/design.html#v2-readme).
 
 | Folder | Layer | What it holds |
 | --- | --- | --- |

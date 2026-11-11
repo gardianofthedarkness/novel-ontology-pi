@@ -1,5 +1,5 @@
 /**
- * Tall buildings and the streets round them (docs/v2/borrow-and-spawn.md §8.11): above 100 m the taller the thicker, and
+ * Tall buildings and the streets round them (docs/v3/design.html#borrow-and-spawn §8.11): above 100 m the taller the thicker, and
  * a street wider the more towers stand round it, worked on a place's filled buildings and roads after the fill.
  */
 import type { Building, Point, Road } from "./cityFill.js";

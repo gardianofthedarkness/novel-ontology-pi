@@ -102,7 +102,7 @@ const hint = key => key.startsWith('skyscraper') ? 'a skyscraper' : key.startsWi
 
 /**
  * Call 0: which model or shape each thing is drawn as, picked from the labelled sheet (`keys` may end with switching theme).
- * Every thing on one sheet in one request (docs/v2/world-engine-v2.md §1): a structured state with the things keyed once
+ * Every thing on one sheet in one request (docs/v3/design.html#world-engine-v2 §1): a structured state with the things keyed once
  * (name, size, where the text mentions it), the sheet as picture "models", and a short question per thing that names it
  * by path. It was one request per thing: about 90 of a vol 1 pick's first 320 calls, before its first event.
  */

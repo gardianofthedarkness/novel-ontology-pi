@@ -1,9 +1,9 @@
 /**
- * Which model of the 3D library draws each building (docs/v2/model-kit.md). One table for the whole world, in
+ * Which model of the 3D library draws each building (docs/v3/design.html#model-kit). One table for the whole world, in
  * config/models.json: each use's models with the floors each can stand for (`fill`, and `named` for a building the story
  * names), the use of a fill building kind, of an engine role, and the models of an older world (only on ancient ground).
  * The library is apps/playground/src/data/architectureModels.json (Kenney's, KayKit's and Quaternius's CC0 kits, baked by
- * apps/playground/tools/*-models.mjs). The reference page docs/v2/street-compatibility.html is made from it
+ * apps/playground/tools/*-models.mjs). The reference page docs/v3/design.html#street-compatibility is made from it
  * (experiments/v2/compat-page.mjs).
  */
 import { readFileSync } from "node:fs";
@@ -66,7 +66,7 @@ function byFloors(table: Floors | undefined, building: { w: number; d: number; f
   return { model: nearest(models.filter((model) => off(model) === closest).map(([model]) => model), building, seed, sizes), off: closest };
 }
 /**
- * The model a building is drawn as (docs/v2/model-kit.md): on ancient ground, its kind's model of an older world; else,
+ * The model a building is drawn as (docs/v3/design.html#model-kit): on ancient ground, its kind's model of an older world; else,
  * of its use's models, those whose floors hold its own (a named building's own models first, when one holds it), the
  * nearest by proportions, one of them by a seed; null when its use has none (a plain block). A use none of whose models
  * comes within a floor of the building's yields to its kind's when that fits better (a "house" a street gave a ten-floor
@@ -87,7 +87,7 @@ export function modelFor(building: { kind: string; use?: string; w: number; d: n
   return mine?.model ?? null;
 }
 /**
- * The model of an engine lot or shell with no building model of its own (docs/v2/model-kit.md): its role's use, or, for a
+ * The model of an engine lot or shell with no building model of its own (docs/v3/design.html#model-kit): its role's use, or, for a
  * named building, what it was matched as (a school, a skyscraper); an office when neither has a use.
  */
 export function roleModel(lot: { role: string; w: number; d: number; floors: number; era?: string; named?: string }, seed: string, sizes: Record<string, number[]>, table: ModelTable = MODELS): string | null {

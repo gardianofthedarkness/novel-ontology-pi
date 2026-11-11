@@ -1,4 +1,4 @@
-// Through the air (docs/v2/terrain-levels.md §6.2, §6.0): a flight, a leap or a climb up a wall that the walk graph has
+// Through the air (docs/v3/design.html#terrain-levels §6.2, §6.0): a flight, a leap or a climb up a wall that the walk graph has
 // no way for, as points in metres. Before, each went in one straight line from where the person stood to the target,
 // through whatever stood between (the director's journeys: tower to tower in scene 26, scenes 162 and 168's leaps). The
 // page plays the points as straight segments at the move's own pace (strand-demo.html, a move's `air`).

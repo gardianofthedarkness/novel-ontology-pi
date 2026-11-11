@@ -1,5 +1,5 @@
 /**
- * `novel folder`: the opened folder as a workspace of novels, for an agent's command line (docs/v3/workspace.md; the user,
+ * `novel folder`: the opened folder as a workspace of novels, for an agent's command line (docs/v3/design.html#workspace; the user,
  * 2026-11-10: "when we use agent clis to arrange them, they are separated into universes and sorted out"). The language
  * server answers an editor from the same state and the same index.
  */

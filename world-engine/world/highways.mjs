@@ -1,4 +1,4 @@
-// A city's expressway (docs/v2/highway-research.md §3 and §7): which districts it links, where it runs, its ramps, and
+// A city's expressway (docs/v3/design.html#highway-research §3 and §7): which districts it links, where it runs, its ramps, and
 // what it does to the ground under it. The terrain cast's transport step builds it once and keeps it in the terrain
 // record (universe/terrain.json `highways`); a later build only adds what a new district needs (bounded repair: a kept
 // line never moves, the research's measure showed a 20 m squeeze can flip a rebuilt route by 120 m).

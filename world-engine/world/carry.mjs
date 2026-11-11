@@ -1,4 +1,4 @@
-// What a book carries into the next, per strand (docs/v2/borrow-and-spawn.md §4.5; milestones M16; the user, 2026-11-09:
+// What a book carries into the next, per strand (docs/v3/design.html#borrow-and-spawn §4.5; milestones M16; the user, 2026-11-09:
 // "The reason we do strands is because we need to determine when to preserve destruction of non nominated buildings and
 // when not to. At the reading stage of each book, we need to determine if we are inheriting any strands from last book or
 // not. If inherit, we preserve the destructions. If not, we close the strand, and destruction is recovered for the new

@@ -414,7 +414,7 @@ export class LadybugStore implements OntologyStore {
       ),
     );
     // The graph stores the queryable projection; evidence/actors live in
-    // the bundle JSONL (the complete record). See DESIGN.md storage split.
+    // the bundle JSONL (the complete record). See docs/v3/design.html#founding-design storage split.
     return rows.map((r) => ({
       id: r.id as string,
       timelineId: r.timeline_id as string,

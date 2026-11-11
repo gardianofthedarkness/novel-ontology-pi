@@ -13,7 +13,7 @@ Hosted Pi uses `novel review show|evidence|decide|apply` for every faculty.
 `--universe <id>`. Every decision uses `factId`, `accept|hold|reject` and a reason.
 Decisions stage only; explicit apply revalidates revision, source coverage and
 domain rules. New faculties register assertion support/validators, never another
-gate. See [the contract and compatibility boundaries](../../docs/unified-review.md).
+gate. See [the contract and compatibility boundaries](../../docs/v3/design.html#unified-review).
 
 The host supplies actionable migration errors for legacy `changeset facts|decide|
 approve`, `library decide` and `causality universe decide` commands. The legacy
@@ -45,7 +45,7 @@ this path. Private checkpoints and approval receipts are retained. Library
 membership does not combine book databases. Explicit `causality universe`
 commands add reviewed cross-file links in a separate universe ledger, with
 same-continuity scope, source-qualified IDs, bounded original-passage Jev
-batches and paged independent review. See [universe causality](../../docs/universe-causality.md).
+batches and paged independent review. See [universe causality](../../docs/v3/design.html#universe-causality).
 The runner derives private workspace/hash bindings from its authorized library
 job; the browser cannot provide arbitrary paths. Its public stream carries
 safe causal metadata and proposed/held/canon states, never raw review reasons.
@@ -66,7 +66,7 @@ order arrows. Source text, private reasons/evidence and workspace paths are not
 part of this public metadata. Existing viewer/control authentication and expiry
 are unchanged; no Pi prompt or automatic ingestion occurs.
 
-See [live library contract](../../docs/library-live.md). Registration/preparation
+See [live library contract](../../docs/v3/design.html#library-live). Registration/preparation
 remain host operations. To let hosted Pi organize already registered sources,
 add an explicit job capability before starting/restarting its idle worker:
 
@@ -194,7 +194,7 @@ delivery of complete fact values and source excerpts for the current packet
 and canonical-context revision. Missing/uncertain assertions remain held
 outside canon; code validates spans and references. Pi does not optimize
 segmentation or small event detection. Targeted replacements preserve unrelated
-speakers and state. See [the policy and commands](../../docs/semantic-review.md).
+speakers and state. See [the policy and commands](../../docs/v3/design.html#semantic-review).
 Legacy approval still requires every source line and proposal/note page.
 Receipts prove delivery, not comprehension or semantic accuracy.
 Canonical fixes retain private checkpoints; held/applied packets cannot be
@@ -210,7 +210,7 @@ rejects, explicit holds, unreviewed facts and repeated decision actions, separat
 card memberships/candidate-only memberships from legacy speaker turns. It excludes
 unapplied/stale packets and deduplicates copies. Interventions are not independently
 verified improvements; no accuracy rate or raw source/reason is emitted. See
-[review-impact findings](../../docs/review-impact.md).
+[review-impact findings](../../docs/reports/review-impact.md).
 
 ```sh
 NOVEL_REVIEW_HOME=/private/review-home node tools/pi-review/replay.mjs \

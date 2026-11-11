@@ -1,4 +1,4 @@
-// The smoother (docs/v2/world-ontology.md §5a "Back-propagation is Bayesian smoothing"; Track B W5b, the user and the
+// The smoother (docs/v3/design.html#world-ontology §5a "Back-propagation is Bayesian smoothing"; Track B W5b, the user and the
 // research handoff "Trap reconstruction", 2026-11-02): every person a particle whose place at each moment is a cloud,
 // smoothed over a director run with the action we define,
 //

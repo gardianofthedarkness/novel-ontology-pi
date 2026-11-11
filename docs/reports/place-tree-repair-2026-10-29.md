@@ -6,7 +6,7 @@
 
 The place tree grows unreliably: districts sit outside their city, and places at different levels look alike.
 
-An audit against Jev's scale tags (region › city › district › street › building › room; see [stage-simulation-design.md](../stage-simulation-design.md)) shows:
+An audit against Jev's scale tags (region › city › district › street › building › room; see [stage-simulation-design.md](../v3/design.html#stage-simulation-design)) shows:
 
 - **Missing parents, not wrong ones.**
   - Books 1–3 on the stage demo host have one link between equal levels, 学园都市 in 东京都, both tagged city, and it is right.

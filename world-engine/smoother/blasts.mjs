@@ -1,4 +1,4 @@
-// L18 · Destruction as a smoothed state (docs/v2/directing/L18-L19-plan.md; the user, 2026-11-03: "the destruction of
+// L18 · Destruction as a smoothed state (docs/v3/design.html#l18-l19-plan; the user, 2026-11-03: "the destruction of
 // building, is also quantum and back propagatable"). Each blast a run applied is a hidden variable: when it happened (a
 // card of its container, up to the one that told it) and how big (the sizes Jev was offered). Its observations:
 //   the telling card   the reading's sureness that this card breaks something, at that card; the rest spread over the

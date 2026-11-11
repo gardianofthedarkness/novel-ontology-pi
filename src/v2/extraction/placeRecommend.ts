@@ -4,7 +4,7 @@ import type { ReadingGraph } from "./readingGraph.js";
 import { EVIDENCE_WEIGHTS as WEIGHTS, FAR_LEVELS, LANGUAGE, mayHold, nameHolds, NEXT_SCALE, rankOf, SCALES } from "../rules/index.js";
 
 /**
- * The place recommender (docs/v2/world-model.md §4; layer 2): code over the stores, no model call. Places are a tree graded
+ * The place recommender (docs/v3/design.html#world-model §4; layer 2): code over the stores, no model call. Places are a tree graded
  * by scale, so what is asked of a place is one parent from a few larger places, or which place a description or a scene
  * means; this ranks the candidates and says why, and place EM (layer 4) takes the clear ones and asks Jev the rest, with
  * the context engine (layer 3) composing what Jev sees. The matter recommender (em.ts `recommend`) is its sibling for

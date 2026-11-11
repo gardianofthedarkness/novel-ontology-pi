@@ -1,7 +1,7 @@
 import type { DecisionQuestion, DecisionState } from "../../ground/connectors/jev.js";
 
 /**
- * What answer options mean, once a request (the user's call, 2026-10-31; docs/v2/world-engine-v2.md §2.0.5, measured):
+ * What answer options mean, once a request (the user's call, 2026-10-31; docs/v3/design.html#world-engine-v2 §2.0.5, measured):
  * Jev sends each choice question's options with their meanings, and each noul question with its yes and no. On vol 1 the
  * questions were most of what the reading sent (17.6 million characters for 2.3 million of states), because every
  * question repeated the same meanings: EM² the whole cast's, the sentence kinds the six kinds'. Here a meaning that two or

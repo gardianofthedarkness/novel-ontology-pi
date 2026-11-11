@@ -275,7 +275,7 @@ export function createPiConsole({ directory, agentEvents, controlToken, origin, 
     },
 
     /**
-     * A message from a producer on this machine (the world-first loop's review batches, docs/world-first-design.md §11):
+     * A message from a producer on this machine (the world-first loop's review batches, docs/v3/design.html#world-first-design §11):
      * into the same queue the HTTP route fills, with the same checks (Pi accepting messages, the console not expired).
      */
     submit(payload) {

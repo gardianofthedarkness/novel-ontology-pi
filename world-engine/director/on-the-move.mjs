@@ -1,6 +1,6 @@
 // Talk on the move (the user, 2026-11-08: "Yes that order, then highway/subway system": walking talk built into the
 // director now, riding once the terrain has a road system; the experiment: experiments/v2/moving-talk.mjs, options C and
-// P, and docs/v2/world-ontology.md §5a "Moving conversations").
+// P, and docs/v3/design.html#world-ontology §5a "Moving conversations").
 //
 // The director plays a walk and the talk on it as separate cards: the card that tells the walk takes the whole way, and
 // the talk cards after it stand still. Where the reading says people keep moving while they talk, this step spreads the

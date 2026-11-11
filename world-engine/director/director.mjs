@@ -1,4 +1,4 @@
-// The director's loop (docs/v2/director-camera.md; the user's design, 2026-11-02): a line's scenes played forward card by
+// The director's loop (docs/v3/design.html#director-camera; the user's design, 2026-11-02): a line's scenes played forward card by
 // card on the world the terrain built, people starting where spawning put them. Only dialogue and action cards are played:
 // - an action card: each person acting is asked, on the camera operator's shots (src/v2/context/camera.ts), which way they
 //   go (fourteen lettered arrows, stays, or with someone), then where (a spot inside the arrow's wedge), and only when no
@@ -39,7 +39,7 @@ import { overridesOf, setting } from '../../dist/src/v2/settings.js';
 const CELL = setting('grid.cell'), FLOOR = setting('grid.floor'), PRESENT = new Set(['speaks', 'acts', 'addressed']);
 // The digest's moves played: at least this sure (below it, motion read into a spoken line or a thought).
 const MOVE_SURE = setting('director.moveSure');
-// Human scale, the one unit kept (physics-laws.md §9): a person's height. Every other distance is a referent measured in
+// Human scale, the one unit kept (docs/v3/design.html#physics-laws §9): a person's height. Every other distance is a referent measured in
 // the world or a speed times the story's time.
 const BODY = setting('body.height');
 /** How far the layout artist and the checks look for a spot that agrees with the notes (metres; was 6 bodies, W10). */
@@ -405,7 +405,7 @@ export async function direct(novelDir, { reading, readingPath = null, prefilm = 
       // fact's spot is looked for among these only, never under a stair that lies outside every walk's window.
       const onFoot = (from, radius) => E.onFoot(from, Math.max(40, radius + 16));
       // The spots under the street a walk from a node reaches within UNDER_SEARCH, nearest first, the near-ground layer
-      // (to 25 m down, docs/v2/terrain-levels.md §8.1) ahead of the deep one.
+      // (to 25 m down, docs/v3/design.html#terrain-levels §8.1) ahead of the deep one.
       const downFrom = node => {
         const p = at(node), reach = onFoot(node, UNDER_SEARCH), under = around(p[0], p[2], UNDER_SEARCH).nodes.filter(entry => entry.type === FA.TYPE.underground && reach.has(entry.id));
         const d = entry => Math.hypot(entry.x - p[0], entry.y - p[1], entry.z - p[2]);
@@ -413,7 +413,7 @@ export async function direct(novelDir, { reading, readingPath = null, prefilm = 
       };
       // A move's walk: one draw of the path integral, and six more from the same field (the traces the player draws round it,
       // the spread of where the walk might have gone).
-      // Through the air (docs/v2/terrain-levels.md §6.2; world/air.mjs): a flight, a leap or a climb up a wall from one node to
+      // Through the air (docs/v3/design.html#terrain-levels §6.2; world/air.mjs): a flight, a leap or a climb up a wall from one node to
       // another as cells of the world, over the buildings round the way (their plans, their roofs at their full height);
       // the path says it goes through the air (`air`, its kind as `how`), with no ensemble.
       // Every building round the way, at its own level (a street laid underground's, a deep area's, a deck's: its roof at its
@@ -435,7 +435,7 @@ export async function direct(novelDir, { reading, readingPath = null, prefilm = 
         path[0] = from; if (path.at(-1) !== to) path.push(to);
         return Object.assign(path, { how: kind, air: true, ensemble: [] }, points.capped ? { capped: over.some(entry => entry.kind === 'hard') ? 'the hard ceiling' : 'the ground over it' } : {});
       };
-      // The hook of the underground (docs/underground-design.md §4.8): an area's halls come alive the first moment anyone
+      // The hook of the underground (docs/v3/design.html#underground-design §4.8): an area's halls come alive the first moment anyone
       // stands under it, and until then no blast reaches them. The director's moves never told the exporter (no blast of a
       // director run reached a hall: no cave-in, no hole); before each blast now, every node below the street that anyone
       // stands on or has walked through wakes its hall or basement (the exporter's own `wake`), once each.
@@ -527,7 +527,7 @@ export async function direct(novelDir, { reading, readingPath = null, prefilm = 
         }
         // A road vehicle drives the road graph where one joins the two ends (else the level ground, as before).
         if (/^ride:[^:]+:road$/.test(String(how))) { const driven = driveRoute(from, targets); if (driven) return driven; }
-        // The layers (docs/v2/terrain-levels.md §8.2): a walk with a target in its own layer is walked in that layer; one
+        // The layers (docs/v3/design.html#terrain-levels §8.2): a walk with a target in its own layer is walked in that layer; one
         // whose targets all lie in the other goes by a portal (a lift, a shaft, a ladder, the virtual elevator).
         const layerOf = id => (E.deepAt(id) ? 'deep' : 'near'), mine = layerOf(from[0]), same = targets.filter(id => layerOf(id) === mine);
         const path = same.length ? walkIn(scene, key, from, same, how, mine) : across(scene, key, from, targets, how, mine);
@@ -608,7 +608,7 @@ export async function direct(novelDir, { reading, readingPath = null, prefilm = 
       // The live world's snapshot with the cards in its notes (World · Live's Cards panel reads them there).
       // `focus`: where the live view's Follow Jev looks (the card's people), else the engine's own.
       const noted = (moment, focus = null, extend = null) => { const shot = E.snapshot(true); return { ...shot, moment, ...(focus ? { focus } : {}), notes: { ...shot.notes, director: payload(), ...(extend ? { extend } : {}) } }; };
-      // Streamed (docs/v2/world-engine-redesign.md §4): after every card, the scene's piece of the line (its starts and events so
+      // Streamed (docs/v3/design.html#world-engine-redesign §4): after every card, the scene's piece of the line (its starts and events so
       // far) in the live notes, which World · Live's frame plays on from where it is; the whole page only when the world grid
       // has changed (the frame then loads it, and takes the pieces after).
       const gridKey = () => `${page.world.NX}x${page.world.NZ}+${page.world.oi},${page.world.oj},${page.world.ok}`;
@@ -646,7 +646,7 @@ export async function direct(novelDir, { reading, readingPath = null, prefilm = 
       let before = null;
       const where = new Map(), lastSceneOf = new Map();
       const timeOf = id => (id ? reading.time?.scenes?.find(entry => entry.scene === id)?.node ?? null : null);
-      // Continuity per strand (L1, docs/v2/physics-laws.md; the user, 2026-11-02: it holds to a strand's end and never across
+      // Continuity per strand (L1, docs/v3/design.html#physics-laws; the user, 2026-11-02: it holds to a strand's end and never across
       // strands): someone comes into a scene from the scene the strands say they come from (stage/world/strands.json
       // `entries`), else from where they last stood in that strand; someone first in this strand is never carried in from
       // another one. Without strands, the one state of before.
@@ -689,14 +689,14 @@ export async function direct(novelDir, { reading, readingPath = null, prefilm = 
         record.scenes.push(sceneRecord);
         asking = sceneRecord;
         if (!run || !reads) continue;
-        // The scene is played in its strand's layer of the world (strand-layers.mjs; docs/v2/strands.md §4; milestones M17c):
+        // The scene is played in its strand's layer of the world (strand-layers.mjs; docs/v3/design.html#strands §4; milestones M17c):
         // what another strand broke, stood or caved in is not in it until the two unite; a split begins as a copy.
         { const entered = E.enter?.(scene.id);
           if (entered) {
             sceneRecord.layer = { strand: entered.layer, ...(entered.created ? { began: true } : {}), ...(entered.merged.length ? { united: entered.merged.map(entry => entry.strand) } : {}), ...(entered.switched || entered.merged.length ? { lots: entered.lots.length, things: entered.things.length, under: entered.cells.length + entered.marks.length } : {}), ...(entered.unseen.length ? { unseen: entered.unseen } : {}) };
             if (entered.switched || entered.merged.length) log(`${scene.id}: in strand ${entered.layer}${entered.created ? ' (begun)' : ''}${entered.merged.length ? `, united with ${entered.merged.map(entry => entry.strand).join(' ')}` : ''}: ${entered.lots.length} lots, ${entered.things.length} things, ${entered.cells.length + entered.marks.length} underground cells differ; ${entered.unseen.length} hits unseen`);
           } }
-        // The world state (docs/v2/world-engine-redesign.md §1): who stands where carries through the story. Someone seen before
+        // The world state (docs/v3/design.html#world-engine-redesign §1): who stands where carries through the story. Someone seen before
         // carries on from where they are; seen for the first time, they start at spawning's start (spawning happens once);
         // standing outside the scene's place, they travel to their start in it (walked; beyond 300 m they arrive off-page).
         const own = script.scenes.find(entry => entry.id === scene.id), spawned = spawn?.scenes?.find(entry => entry.id === scene.id);
@@ -810,7 +810,7 @@ export async function direct(novelDir, { reading, readingPath = null, prefilm = 
           // middle of its spawn box, on the open ground there.
           if ((anchor === null || anchor === undefined) && present.length && spawned?.target?.box) { const [x, z] = spawned.target.box; E.reach(x, z, 24); anchor = W.nodeNear(world, E.graphOf({ x, z }), x, z, 0) ?? null; }
         }
-        // A unit underground (docs/v2/terrain-levels.md §8.5: until each place carries the set dresser's note, the unit's own
+        // A unit underground (docs/v3/design.html#terrain-levels §8.5: until each place carries the set dresser's note, the unit's own
         // setting): its people start under the street. The anchor goes to the nearest spot below the street that a walk from
         // it reaches, in the near-ground layer first (§8.1); those standing above the street walk down to it (W12's units
         // 118–123: everyone started on the street, and every "underground" fact of theirs failed).
@@ -1939,7 +1939,7 @@ export async function direct(novelDir, { reading, readingPath = null, prefilm = 
           await talkNear();
           if (dg) { crowdCard(card); drift(); carry(); }
           if (read(card) && digestIn(dg.breaks, card).some(entry => entry.sure >= 0.7)) { cardRecord.breaks = true; cardRecord.breaksSaid = digestIn(dg.breaks, card).map(entry => entry.what); }
-          // Destruction (docs/v2/world-engine-redesign.md §3): a card the text says breaks something is asked where it hits (lettered
+          // Destruction (docs/v3/design.html#world-engine-redesign §3): a card the text says breaks something is asked where it hits (lettered
           // red spheres on the world as played) and how big (spheres of 4, 8, 16 and 32 m from two sides); the blast is applied
           // to the world and played before the next card.
           // L18: a blast the last pass's smoothing moved to this card (blasts.mjs), applied here at its smoothed size; at the
@@ -2231,7 +2231,7 @@ export async function direct(novelDir, { reading, readingPath = null, prefilm = 
       // What the laws held goes to the main agent (W5): one batch per scene by reach, sent to its console when one is given.
       const held = await R.holdForReview(novelDir, { run: id, name: who => names.get(who) ?? who, skip: speakers ? [] : ['who-speaks', 'audit', 'speaker'] }).catch(error => ({ error: String(error.message ?? error) }));
       record.review.held = { held: held.held, asked: held.asked, left: held.left, batches: held.batches?.length ?? 0, ...(held.error ? { error: held.error } : {}) };
-      // The review by Jev first (docs/v2/jev-review.md §16): what its policy lets stand is answered as Pi's answers are;
+      // The review by Jev first (docs/v3/design.html#jev-review §16): what its policy lets stand is answered as Pi's answers are;
       // the rest stays batched, and only batches with an item left go to the main agent.
       if (reviewer && held.batches?.length) {
         record.review.jev = await JR.reviewHeld(novelDir, { readingPath: reviewer.readingPath, decide: reviewer.decide, work: reviewer.work }).catch(error => ({ error: String(error.message ?? error) }));

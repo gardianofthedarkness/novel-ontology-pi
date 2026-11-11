@@ -1,4 +1,4 @@
-// The terrain cast's transport step (docs/v2/highway-research.md §8; roads-and-transit.md stage 2): each city's
+// The terrain cast's transport step (docs/v3/design.html#highway-research §8; docs/v3/design.html#roads-and-transit stage 2): each city's
 // expressway, built from the world as the terrain stands and kept. Kept in the universe's terrain registry
 // (universe/terrain.json `highways`, by city: it outlives the book, as slots do), mirrored in the book's terrain for the
 // export, and logged in the map's log by book. Run again, a city whose districts are all known keeps its highway as it
@@ -69,7 +69,7 @@ export async function terrainTransport(novelDir, { rebuild = false, dry = false,
     await mkdir(universe.dir, { recursive: true });
     await replace(registryFile, JSON.stringify(registry, null, 1));
     await replace(terrainFile, JSON.stringify(terrain, null, 1));
-    // The map's log (borrow-and-spawn.md §8.8): a highway built or repaired is a change to the map, in order.
+    // The map's log (docs/v3/design.html#borrow-and-spawn §8.8): a highway built or repaired is a change to the map, in order.
     const mapLogFile = join(universe.dir, 'maps', `${universe.book}.json`), mapLog = JSON.parse(await readFile(mapLogFile, 'utf8').catch(() => 'null')) ?? { book: universe.book, entries: [] };
     for (const entry of summary.filter((row) => row.op === 'built' || row.op === 'repaired')) mapLog.entries.push({ n: mapLog.entries.length + 1, at, highway: entry.city, op: entry.op, links: entry.links, deckKm: entry.deckKm, tunnelKm: entry.tunnelKm, ramps: entry.ramps });
     await mkdir(dirname(mapLogFile), { recursive: true }); await replace(mapLogFile, JSON.stringify(mapLog, null, 1));

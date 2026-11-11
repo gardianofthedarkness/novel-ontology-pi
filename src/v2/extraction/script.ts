@@ -26,7 +26,7 @@ import { levelOf } from "./spatial.js";
  * places: every named place with its parent in the place tree and its scale as far as the reading says it (a building or a
  * room by its type, else by its name, else one step above the largest place it holds: 日本 holding 东京都 is a region), and
  * every unnamed place found (a place, a building or a room of a scene: a big unnamed place as a street) with what holds it.
- * Since place EM (src/v2/placeEm.ts, docs/v2/world-model.md §5) the settings and the unnamed places are its: an unnamed
+ * Since place EM (src/v2/placeEm.ts, docs/v3/design.html#world-model §5) the settings and the unnamed places are its: an unnamed
  * place the text puts in a place is `held: "stated"`; one place EM put in its scene's setting is `held: "setting"`, which
  * the engine shows as sampled, blinking, until the text or Jev says where it is. A reading from before place EM: the tiers
  * below, and EM²'s place slots (`held: "em2"`, or `"scene"` for a guess).
@@ -34,7 +34,7 @@ import { levelOf } from "./spatial.js";
 /**
  * near: a named building or room the tree puts nowhere: the named area its scenes are set in most (where it is sampled
  * first); nears: every named area its scenes are set in (its possible pools, pools.ts). pool: a sampling pool's area
- * (docs/v2/world-engine-v2.md §2.0.11); pools: the pools a thing could be in, when picked among them; elsewhere: a pool
+ * (docs/v3/design.html#world-engine-v2 §2.0.11); pools: the pools a thing could be in, when picked among them; elsewhere: a pool
  * member from another book of the universe, standing as a marker.
  */
 export interface ScriptPlace { label: string; scale: string | null; parent: string | null; unnamed?: boolean; held?: "stated" | "setting" | "em2" | "scene"; scene?: string; near?: string; nears?: string[]; pool?: string; pools?: string[]; elsewhere?: string }
@@ -50,7 +50,7 @@ export interface ScriptScene {
   spatial?: { text: string; sentence: string; level: string | null; who: string[] }[];
 }
 /**
- * The things a scene's cards name, and who holds each (spawning, docs/v2/spawning.md §2): a thing in an action whose only
+ * The things a scene's cards name, and who holds each (spawning, docs/v3/design.html#spawning §2): a thing in an action whose only
  * actor is one person is that person's in the scene (the one most often so); else nobody's, and it stays where it is.
  */
 export function sceneThings(cards: { kind: string; entities: { id: string }[]; people: { id: string; how?: string[] }[] }[], category: (id: string) => string | undefined): { id: string; holder: string | null }[] {

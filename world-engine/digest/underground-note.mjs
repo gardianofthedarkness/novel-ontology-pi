@@ -1,4 +1,4 @@
-// The underground note on each place (docs/v2/terrain-levels.md §8.5): how likely the text puts a place below the street,
+// The underground note on each place (docs/v3/design.html#terrain-levels §8.5): how likely the text puts a place below the street,
 // gathered from what its units say, with no question of its own. Its evidence: the set dresser's setting of each unit
 // (settings.json, a unit called "underground"), and, where the pre-film notes are made, the underground facts on the
 // unit's people (prefilm.json). A view input kept per place like its scale, never canon.
@@ -38,7 +38,7 @@ export function undergroundNotes({ script, settings = {}, facts = {}, minUnits =
   return { places, noted: Object.keys(places).filter(id => places[id].noted) };
 }
 
-// The other layers by a place's name (docs/v2/terrain-levels.md §3.5): words that put it in the air (floating, an airship, a
+// The other layers by a place's name (docs/v3/design.html#terrain-levels §3.5): words that put it in the air (floating, an airship, a
 // city or a fortress in the sky) or in space (the universe, outer space, a satellite, a space station, the moon). A satellite
 // town is on the ground; a sky bridge or a roof garden (words of the air on a building) is the surface's, so the air's words
 // are whole compounds. In escapes: the books' words stay out of the repository's text.

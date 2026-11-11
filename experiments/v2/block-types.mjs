@@ -1,4 +1,4 @@
-// M2 for a reading made before blocks (docs/v2/next-steps.md A6): what each block of twelve sentences is about, asked of
+// M2 for a reading made before blocks (docs/v3/design.html#next-steps A6): what each block of twelve sentences is about, asked of
 // Jev on the same windows the kinds pass reads (a hundred sentences of a book block, the eight before as context), only
 // the block questions. Each block keeps its top three, its whole distribution and its confidence. Cached as the reading's
 // own decisions are, so a rerun pays only for what changed. Paid: one Jev request a window.

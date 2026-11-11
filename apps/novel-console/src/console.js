@@ -1,5 +1,5 @@
 "use strict";
-// The console's window (docs/v3/plan.md §1.5a): the library and the book are always there; every other view sits behind an
+// The console's window (docs/v3/design.html#plan §1.5a): the library and the book are always there; every other view sits behind an
 // icon on the right-hand strip, one at a time, the panel folding when its icon is pressed again (as VS Code's activity bar).
 // Time is an ordered tree, places an unordered one, characters and things movables at a place at a time; the Strands view
 // draws that as a git graph. The reading's details of a line (Jev's and the reading's records) are the debug view's.

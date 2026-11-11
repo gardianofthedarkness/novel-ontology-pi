@@ -1,7 +1,7 @@
 /**
  * The code rules of the v2 reading, in one folder (the user's call, 2026-10-31), so they can be generalized: rule zero
- * (DESIGN.md §6) is never to ask a model what code can compute exactly, and these are what code computes. A rule never
- * calls a model and never writes; the layers of docs/v2/world-model.md call it.
+ * (docs/v3/design.html#founding-design §6) is never to ask a model what code can compute exactly, and these are what code computes. A rule never
+ * calls a model and never writes; the layers of docs/v3/design.html#world-model call it.
  * - language.ts: what is particular to a language (locatives, what joins two places, the world's levels, the scale a
  *   place's name says), one profile per language (zh first);
  * - typing.ts: what code says of a typed string (a locative makes it spatial; the type most batches gave it);
@@ -19,7 +19,7 @@ export * from "./typing.js";
 export interface CodeRule {
   name: string;
   decides: string;
-  /** The layer of docs/v2/world-model.md §3 it serves. */
+  /** The layer of docs/v3/design.html#world-model §3 it serves. */
   layer: 1 | 2 | 3 | 4;
   /** Whether it reads a language's words (its words are in language.ts when it lives here). */
   language: boolean;

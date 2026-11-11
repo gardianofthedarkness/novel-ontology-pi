@@ -18,7 +18,7 @@ import { presenceDetector } from "./presence-detector.js";
  * per-window questions. The rest decide per window as before.
  *
  * The full catalog (state changes, event-worthiness, causal candidates,
- * foreshadowing, ...) lives in docs/system1/index.html as an open discussion
+ * foreshadowing, ...) lives in docs/v3/design.html#system1-index as an open discussion
  * list — each new functionality is one new patch added here.
  */
 export const PATCH_REGISTRY: DecisionPatch[] = [

@@ -1,4 +1,4 @@
-// What a book carries into the next, per strand (carry.mjs; milestones M16; docs/v2/borrow-and-spawn.md §4.5).
+// What a book carries into the next, per strand (carry.mjs; milestones M16; docs/v3/design.html#borrow-and-spawn §4.5).
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { mkdir, mkdtemp, readFile, writeFile } from 'node:fs/promises';

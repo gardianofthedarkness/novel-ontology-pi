@@ -1,4 +1,4 @@
-// The world log (docs/v2/world-ontology.md §3, §5a; Track B W1): what a director run did to the world, as records the
+// The world log (docs/v3/design.html#world-ontology §3, §5a; Track B W1): what a director run did to the world, as records the
 // laws and back-propagation read: who was present in each scene and where, every move, meeting and blast, each scene's
 // building. Every position says how it came to be (its rank: stated, met, answered, ruled; a pin will be above them all)
 // and what it was derived from (the record it carries on from, the people it is tied to), so a new anchor can re-derive

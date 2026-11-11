@@ -1,5 +1,5 @@
 /**
- * The director's questions (docs/v2/director-camera.md §2; the user's design, 2026-11-02): for one person in one action
+ * The director's questions (docs/v3/design.html#director-camera §2; the user's design, 2026-11-02): for one person in one action
  * card, which way they go (the fourteen lettered arrows, stays, or with someone), then where (a spot inside the chosen
  * arrow's wedge, or none of these), and only when no spot fits, a rough box on a plan, then the exact box and its height.
  * The text is the card's own lines as written, the lines before it, the scene's lines that name the mover or say where,
@@ -126,7 +126,7 @@ export const moveExactMode: Mode<HeightFocus, unknown> = {
 };
 
 /**
- * The director's pass (docs/v2/director-camera.md §7a; the user, 2026-11-02: a mini Jev call, not a word list): which
+ * The director's pass (docs/v3/design.html#director-camera §7a; the user, 2026-11-02: a mini Jev call, not a word list): which
  * narration and description sentences the animation should show. Each sentence is asked on its own with only the line
  * either side and the people present: does someone change place in it, do something visible where they are, or is there
  * nothing to show; and who. Batched by scene. The reading's sentence kinds stay as they are: a sentence the pass says moves
@@ -173,7 +173,7 @@ export const sceneGoesOnMode: Mode<GoesOnFocus, unknown> = {
 };
 
 /**
- * A dialogue card's kind (L6, docs/v2/physics-laws.md; the user, 2026-11-02: asked of Jev): face to face (two, or a
+ * A dialogue card's kind (L6, docs/v3/design.html#physics-laws; the user, 2026-11-02: asked of Jev): face to face (two, or a
  * group), remote (a phone, a message, a letter, telepathy), or one voice to everyone around. Asked from the card's lines
  * and who is present and how far apart, only where those it speaks to stand apart from the speaker: the kind decides
  * whether they come together (face to face) or stay where they are (remote, public).

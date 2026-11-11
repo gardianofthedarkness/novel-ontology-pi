@@ -1,5 +1,5 @@
 // The runtime workflow (the user, 2026-11-04: "runtime casts workflow ... model the workflows into strands and nodes";
-// docs/v2/directing/casts-jev-and-crew.md, "The runtime workflow"). As a studio tracks a production (the anime cut
+// docs/v3/design.html#casts-jev-and-crew, "The runtime workflow"). As a studio tracks a production (the anime cut
 // bag carried desk to desk; ShotGrid's and Kitsu's tasks, statuses and published versions):
 //
 //   each storyboard cut is a node carrying a chain of tasks, cut-wide or card by card:

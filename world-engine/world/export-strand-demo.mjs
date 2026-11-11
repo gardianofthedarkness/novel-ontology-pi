@@ -126,7 +126,7 @@ export async function strandDemo(novelDir, options) {
   // question asked (nobody is born by Jev; the engine's own starts reach each scene's place).
   const chosen = lineScenes.filter(scene => byIndex.get(scene.id) <= stop).map(scene => (options.worldOnly ? { ...scene, events: [] } : scene.id === options.until?.scene ? { ...scene, events: scene.events.slice(0, options.until.event + 1) } : scene));
   const timeline = forkTimeline(chosen, strandsHere);
-  // World-first (docs/world-first-design.md): the world script's dialogue nodes come in among each scene's events (a live
+  // World-first (docs/v3/design.html#world-first-design): the world script's dialogue nodes come in among each scene's events (a live
   // or a group node moves people: who came to whom, or where the group gathers); and Jev is asked at run time, in the
   // scene's composed context, where someone first seen starts (the level, then a box on a map of the place), who came to
   // whom when two people talking face to face are apart, and the box a group gathers in. Cached under stage/world/cache.
@@ -134,11 +134,11 @@ export async function strandDemo(novelDir, options) {
   // Terrain and spawns (world-engine/terrain/terrain.mjs), when they were asked: where Jev put each main site in the place that holds
   // it, and which scenes start anew (everyone present placed afresh, with the scene's environment in the question).
   const terrain = JSON.parse(await readFile(`${novelDir}/stage/terrain.json`, 'utf8').catch(() => 'null'));
-  // Spawning positions (world-engine/spawning/spawn.mjs, docs/v2/spawning.md): where each person begins each scene; the
+  // Spawning positions (world-engine/spawning/spawn.mjs, docs/v3/design.html#spawning): where each person begins each scene; the
   // player starts them there (its own start spots and grouping where spawning has nothing).
   const spawned = played?.spawn ?? JSON.parse(await readFile(`${novelDir}/stage/world/spawn.json`, 'utf8').catch(() => 'null'));
   const spawnAt = new Map((spawned?.scenes ?? []).flatMap(scene => scene.starts.filter(start => start.kind === 'person').map(start => [`${scene.id}|${start.who}`, start])));
-  // Borrowing and spawning by type (docs/v2/borrow-and-spawn.md): no pools; a spare or shared slot is an area of its level,
+  // Borrowing and spawning by type (docs/v3/design.html#borrow-and-spawn): no pools; a spare or shared slot is an area of its level,
   // a named place stands in its slot's area, an unnamed mention in the slot it shares this book (the tree changed in place).
   if (terrain?.mode === 'spawn') (await load('dist/src/v2/terrain/tree.js')).withSlots(inputs, Object.values(terrain.slots ?? {}), terrain.book, Object.fromEntries(Object.entries(terrain.sites ?? {}).filter(([, site]) => site.by === 'tenant' && site.parent).map(([id, site]) => [id, site.parent])));
   const spawnPlan = played?.spawn ?? JSON.parse(await readFile(`${novelDir}/stage/world/spawn.json`, 'utf8').catch(() => 'null'));
@@ -178,7 +178,7 @@ export async function strandDemo(novelDir, options) {
   // What each change of the world touched (the research handoff's bounded repair): a window whose box no change since its
   // build touches stays as it was built, with the walks solved on it; a change with no boxes touches every window.
   const dirty = [], changed = (boxes = null) => { shared.version++; dirty.push({ version: shared.version, boxes }); };
-  // Physics per strand (strand-layers.mjs; docs/v2/strands.md §4; milestones M17c): with the group builder's strands, what
+  // Physics per strand (strand-layers.mjs; docs/v3/design.html#strands §4; milestones M17c): with the group builder's strands, what
   // a scene breaks, stands or caves in is written to its strand's layer of the world, and a scene is played in its strand's
   // layer (`enterScene`). Null with strands of the earlier kind: one world for every line, as before.
   let layers = null, enteredScene = null;
@@ -267,7 +267,7 @@ export async function strandDemo(novelDir, options) {
     const box = { x0: Math.min(...points.map(p => p.x)) - pad, x1: Math.max(...points.map(p => p.x)) + pad, z0: Math.min(...points.map(p => p.z)) - pad, z1: Math.max(...points.map(p => p.z)) + pad };
     const built = graphOf({ x: (box.x0 + box.x1) / 2, z: (box.z0 + box.z1) / 2 }, Math.max(box.x1 - box.x0, box.z1 - box.z0) / 2);
     const spec = specOf(how, ({ step, arcCost }) => 0.6 * temperatureBound({ step, kappa: 1, lambda: 8, floorHeight: 3, arcCost }));
-    // The layers (docs/v2/terrain-levels.md §8.1–8.2): the street with what lies just under it, and the deep layer below
+    // The layers (docs/v3/design.html#terrain-levels §8.1–8.2): the street with what lies just under it, and the deep layer below
     // DEEP metres. A walk sees the deep layer only when one of its ends is there: a deep facility's lift (90 m at a flat
     // cost) inside a street walk's window made the solver scale its guide away, and long legs found no walk (W12).
     // The targets are part of the key: a retake reuses its walk's key with a new target in the same box, and was handed the
@@ -281,7 +281,7 @@ export async function strandDemo(novelDir, options) {
   };
   /**
    * Where a walk from a node can get to within `radius` metres: the same layers as `solve` sees and only the edges its way
-   * of going allows. A spot for a fact is picked only among these (docs/v2/terrain-levels.md §8.2; W12's units 118–123: a
+   * of going allows. A spot for a fact is picked only among these (docs/v3/design.html#terrain-levels §8.2; W12's units 118–123: a
    * basement or a hall 6 m off, whose way down lay outside every walk's window, was "no way there" card after card).
    */
   const reachable = new Map(), onFoot = (from, radius = 60, how = 'walk') => {
@@ -295,7 +295,7 @@ export async function strandDemo(novelDir, options) {
     return out;
   };
   /**
-   * The ways between the street's band and the halls more than DEEP metres down round two points (docs/v2/terrain-levels.md
+   * The ways between the street's band and the halls more than DEEP metres down round two points (docs/v3/design.html#terrain-levels
    * §3.4, §8.2): every edge of the walk graph that joins a node below DEEP to one above it. They are the halls' own ways (a
    * station's stairs, a facility's shaft: their `up`) and the world's dense virtual ones (world.ts `ways`: stairs or a lift
    * on every 40 m square of a floor); the band is the solver's, every real hall being the shallow layer. Each portal:
@@ -438,7 +438,7 @@ export async function strandDemo(novelDir, options) {
       size: chosen.size ? { pick: chosen.size.pick, confidence: chosen.size.confidence, top: top(chosen.size.distribution, 4) } : null, sphere: chosen.sphere ?? null, none: !!chosen.none };
     if (chosen?.none) { notes.impacts.none++; return; }
     // A fight underground: the blast is where its first actor stands, as big as Jev chose (else 4–8 m by its strength),
-    // and reaches only what is underground (docs/underground-design.md §4.2).
+    // and reaches only what is underground (docs/v3/design.html#underground-design §4.2).
     const fighter = W.nodePos(world, at[0]);
     if (fighter.y < -1) {
       const r = chosen?.sphere?.r ?? 2 + 2 * strength, round = value => Math.round(value * 10) / 10, under = underHit(fighter, r, strength);
@@ -471,7 +471,7 @@ export async function strandDemo(novelDir, options) {
     hits.set(event.id, { lot: index, strength: Math.round(strength * 100) / 100, point, box, destroyed: result.destroyed, cutOff: result.cutOff, cutRooms: result.cutRooms, under: underHit(point, half, strength) });
   };
   /**
-   * A blast reaching underground (docs/underground-design.md §4), only where the area is awake (§4.8): from a blast inside
+   * A blast reaching underground (docs/v3/design.html#underground-design §4), only where the area is awake (§4.8): from a blast inside
    * a hall, along the hall (the void channels it); from the street, only a shallow hall's roof under it, straight through the
    * ground. Each hall reached collapses (U.collapse): its piles close its cells; a shallow hall's cave may dent the street.
    */
@@ -655,7 +655,7 @@ export async function strandDemo(novelDir, options) {
     // Terrain spawning's answer for a place, where it was asked (stage/terrain.json): its ground's type wins over the
     // landscape step's, and its first patch is the size of Jev's box.
     // A sampling pool's ground is its default (the average of the places of its level in its area, terrain spawning's), and
-    // with none decided it stays empty: no ground, no default buildings (docs/v2/world-engine-v2.md §2.0.12).
+    // with none decided it stays empty: no ground, no default buildings (docs/v3/design.html#world-engine-v2 §2.0.12).
     const poolArea = id => worldScript?.places?.[id]?.pool ?? null;
     const terrainGround = id => { const site = terrain?.sites?.[id]; return site?.ground && LANDSCAPES[site.ground] ? site : null; };
     // A kept part's ground: its box, built round its median on its kind's manifold (terrain spawning's); a city's (no box) at its kind's own size.
@@ -667,7 +667,7 @@ export async function strandDemo(novelDir, options) {
     const LIFTED = new Set(['deep', 'air', 'space']), inLayer = (id, patch) => (patch && LIFTED.has(planeOf(id)) ? { ...patch, plane: planeOf(id) } : patch);
     const groundPatch = id => inLayer(id, ownGroundPatch(id));
     const ownGroundPatch = id => {
-      // A city of manifolds (docs/v2/borrow-and-spawn.md §8): its own patch is its open ground, at that ground's height.
+      // A city of manifolds (docs/v3/design.html#borrow-and-spawn §8): its own patch is its open ground, at that ground's height.
       const own = terrainGround(id), site = own?.open ? { ...own, ...own.open } : own, made = site?.median && site.manifold ? { median: site.median, manifold: manifoldOfSite(site) } : null;
       if (!site) return null;
       // A pool's ground is its members' span in its own frame (the zoom engine's pool extent), never a sampled square.
@@ -678,7 +678,7 @@ export async function strandDemo(novelDir, options) {
     // A street laid on a form its ground made (a road, the water: §2.0.21, step 3) runs along it: its size is its own
     // (long side first), its box the bounds of it turned.
     const turnedAs = (site, patch) => (typeof site.turn === 'number' ? { ...patch, shape: { ...patch.shape, turn: site.turn } } : patch);
-    // `plain` (terrain spawning, docs/v2/world-engine-v2.md §2.0.19): the map starts as the plain tree: a place has ground
+    // `plain` (terrain spawning, docs/v3/design.html#world-engine-v2 §2.0.19): the map starts as the plain tree: a place has ground
     // only once terrain kept it; no landscape step's ground, no ground by scale.
     const landscapeOf = (id, scale = scaleOf(id) ?? (ownGrids.has(id) ? kindOf(id) : 'district')) => {
       if (options.plain && !terrainGround(id)) { ground.set(id, { type: null, by: 'none' }); return null; }
@@ -700,7 +700,7 @@ export async function strandDemo(novelDir, options) {
     // Where the place tree said only the city (or nothing held an EM² place but its scene): an area picked by a seed, which the
     // live view shows blinking until the text or Jev says where it is (the user's call, 2026-10-31).
     const guessed = id => ['scene', 'setting'].includes(worldScript?.places?.[id]?.held), sampled = [];
-    // A named place standing on a manifold of its parent's ground (docs/v2/borrow-and-spawn.md §8: a district of a city of
+    // A named place standing on a manifold of its parent's ground (docs/v3/design.html#borrow-and-spawn §8: a district of a city of
     // manifolds) is embedded there at the manifold's vector, its ground a patch of the parent's (below), none of its own.
     // A street that took the ground's own road or crossing (street.json `takes`, laid on one: its site's `on`) builds no form:
     // the city's lots round it are its buildings (landscape.ts `takes`).
@@ -713,7 +713,7 @@ export async function strandDemo(novelDir, options) {
     const embeddedOf = id => { const site = terrain?.sites?.[id]; return terrain?.mode === 'spawn' && site?.mapped && Array.isArray(site.toward) ? { embedded: true, at: site.toward, ground: null, landscape: null } : {}; };
     const areas = placeTree.filter(place => areaScale(place.id)).map(place => ({ id: place.id, label: name(place.id), scale: areaScale(place.id), ground: groundPatch(place.id), parent: place.parentId ?? terrain?.sites?.[place.id]?.parent ?? null, proposed: place.proposedParentId ?? null, ...(poolArea(place.id) ? { pool: poolArea(place.id) } : {}), landscape: landscapeOf(place.id, areaScale(place.id)), plane: planeOf(place.id), ...embeddedOf(place.id) }));
     const dwelling = C.centralBuild(canvas, areas, toward), dwellingUnits = {};
-    // A pool's member (docs/v2/world-engine-v2.md §2.0.14): one Jev kept stands where its box put it; any other is sampled
+    // A pool's member (docs/v3/design.html#world-engine-v2 §2.0.14): one Jev kept stands where its box put it; any other is sampled
     // at the free spot nearest the members continuity ties it to (the characters going between their scenes), the more
     // ties the nearer; with none, nearest the pool's middle.
     // Continuity ties for the surface's layout: a tie to or from a place of another layer counts at its holder (standIn),
@@ -725,7 +725,7 @@ export async function strandDemo(novelDir, options) {
     })();
     const keptIn = (holder, id) => { const site = terrain?.sites?.[id]; return site?.parent === holder && Array.isArray(site.toward) ? [site.toward[0], site.toward[1]] : null; };
     const memberAt = (holder, unit) => { if (!canvas.places[holder]?.pool) return {}; const at = keptIn(holder, unit.id) ?? C.tiedSpot(canvas, holder, unit, ties[unit.id]); return at ? { at } : {}; };
-    // A building that borrowed a lot of its street's form (terrain spawning's building level, docs/v2/borrow-and-spawn.md §6)
+    // A building that borrowed a lot of its street's form (terrain spawning's building level, docs/v3/design.html#borrow-and-spawn §6)
     // stands on that lot exactly, at its offset from the street, and is not sampled; a tenant (a composite building's part)
     // at its host's.
     // A place the floating terrain moved (L19, world-engine/terrain/float.mjs; its site's `at`, beside the holder it was
@@ -793,7 +793,7 @@ export async function strandDemo(novelDir, options) {
       C.addUnit(canvas, holder, { ...unit, ...memberAt(holder, unit), ...(lot ?? {}), ...floatedAt(unit.id, holder) });
       if (!area) { dwellingUnits[place.id] = host; notes.build.dwelling.push(`${name(place.id)} in ${name(host)}`); }
     }
-    // Borrowing (docs/v2/world-engine-v2.md §2.0.12, §2.0.13): a pool's member Jev decided borrows its pool's ground in the
+    // Borrowing (docs/v3/design.html#world-engine-v2 §2.0.12, §2.0.13): a pool's member Jev decided borrows its pool's ground in the
     // box Jev gave it (its offset from the pool and its size, as kept), a patch of its kind on its median and manifold,
     // claiming lots before the pool's default; its marker stands at the box's middle. A later member of exactly the same
     // name is the same place: it stands where the first does; with the same kind and median it is one place, else it
@@ -860,7 +860,7 @@ export async function strandDemo(novelDir, options) {
       const { dwells, forJev } = C.dwellInStreets(pool, streets, ties, unit => buildingUseOf(unit.label), dwelt.get(pool.id) ?? dwelt.set(pool.id, new Set()).get(pool.id));
       notes.build.dwells = (notes.build.dwells ?? 0) + Object.keys(dwells).length; notes.build.forJev = (notes.build.forJev ?? 0) + forJev.length;
     }
-    // One city of manifolds (docs/v2/borrow-and-spawn.md §8): the manifolds a place's topology laid out are patches of its
+    // One city of manifolds (docs/v3/design.html#borrow-and-spawn §8): the manifolds a place's topology laid out are patches of its
     // own ground, each at its vector from the place's centre, at its unified height, claiming before the place's open
     // ground; their edges fade into each other and into it, so the city is one ground with no holes.
     // Every manifold under a place with ground of its own (a city), at the sum of the vectors down its chain (§8.5: a street
@@ -979,7 +979,7 @@ export async function strandDemo(novelDir, options) {
       if (landmark) return { ...b, use: entry.kind, landmark: landmark.id, floors: Math.max(1, Math.round(landmark.mesh.size[1] / 3)) };
       return { ...b, use: entry.kind, ...(floors ? { floors, ...(floors > tallest(entry.kind) + 1 ? { kind: floors >= 20 ? 'skyscraper' : 'tower' } : {}) } : {}) };
     };
-    // What stands apart (terrain spawning's building level, docs/v2/borrow-and-spawn.md §6): a rare kind with no lot of its
+    // What stands apart (terrain spawning's building level, docs/v3/design.html#borrow-and-spawn §6): a rare kind with no lot of its
     // own under its holder, and a ground shape, each where the characters' travel put it (its street's node plus its kept
     // offset). The rare building is drawn as a building of its own; both push the city's buildings round them outward, the
     // nearer the more. A floating shape merges into the buildings under it and pushes nothing.
@@ -1088,7 +1088,7 @@ export async function strandDemo(novelDir, options) {
     .concat(anchors.filter(anchor => anchor.own && anchor.role === 'station').map(anchor => ({ id: anchor.place, x: anchor.x, z: anchor.z })));
   const areaAt = (x, z) => macro.filter(node => !node.dwelling && !node.unbuilt && ['city', 'district', 'street'].includes(node.scale) && Math.hypot(x - node.x, z - node.z) <= node.r).sort((a, b) => a.r - b.r)[0]?.id ?? city?.id ?? null;
   // One storm-water system for the city: its own landscape's (a district's landscape keeps its malls and deep facilities).
-  // The terrain's shapes (docs/v2/world-engine-v2.md §2.0.17): each shape Jev kept (a platform, a ramp, a cut) stands where
+  // The terrain's shapes (docs/v3/design.html#world-engine-v2 §2.0.17): each shape Jev kept (a platform, a ramp, a cut) stands where
   // its part is now, as large as its box; one below the street is a hall that deep too (U.shapeHall).
   // A shape stands where terrain kept it (its site's offset from its holder's node), not where the canvas put its marker: a
   // raised platform moved among tall enough buildings stays there.
@@ -1113,7 +1113,7 @@ export async function strandDemo(novelDir, options) {
   // landscape has changed since (another fingerprint) is not that building any more. Derived view data, never canon.
   const damageLog = JSON.parse(await readFile(`${novelDir}/stage/simulation/world.json`, 'utf8').catch(() => 'null'));
   const sameLine = entry => entry.strand?.from === options.from && entry.strand?.to === options.to && (entry.strand?.fork ?? null) === (options.fork ?? null);
-  // Earlier books' damage in force in this book (carry.mjs; docs/v2/borrow-and-spawn.md §4.5; the user, 2026-11-09: "If
+  // Earlier books' damage in force in this book (carry.mjs; docs/v3/design.html#borrow-and-spawn §4.5; the user, 2026-11-09: "If
   // inherit, we preserve the destructions. If not, we close the strand, and destruction is recovered for the new book"):
   // every nominated building's, and another's only when its strand reached this book through inherited strands. They
   // stand before the book's first scene. NOVEL_CARRY_AS shows another book's carry (a proof's view).
@@ -1417,7 +1417,7 @@ export async function strandDemo(novelDir, options) {
     ];
   };
   /**
-   * Underground (docs/underground-design.md §6.1): what is under a point for one of Jev's three choices, a hall (its index)
+   * Underground (docs/v3/design.html#underground-design §6.1): what is under a point for one of Jev's three choices, a hall (its index)
    * or a building's basement (its lot), the one under the point, else the nearest within 30 m; and its node nearest the point.
    */
   const hallUnder = (choice, point) => {
@@ -1459,7 +1459,7 @@ export async function strandDemo(novelDir, options) {
     return handoff.from && !handoff.samePlace ? travel(scene, handoff.person, [node, 0], `${scene.id}|${handoff.person}`) : [node, 0];
   };
   /**
-   * The hook (docs/underground-design.md §4.8): an area's underground comes alive the first moment anyone stands on a node
+   * The hook (docs/v3/design.html#underground-design §4.8): an area's underground comes alive the first moment anyone stands on a node
    * under it (a hall's, or a basement's: the area its building's middle lies in); until then no blast reaches it.
    */
   const awake = new Map();
@@ -1719,7 +1719,7 @@ export async function strandDemo(novelDir, options) {
   };
   // The terrain stage (worldOnly) starts no scene: starting one reaches the ground round its people, and a place the terrain
   // has not built yet stood as an island of empty ground (the user, 2026-11-02); nothing is loaded, every building a shell.
-  // The world's layers by strand (M17c), when the strands are the group builder's (docs/v2/strands.md §3: each strand's
+  // The world's layers by strand (M17c), when the strands are the group builder's (docs/v3/design.html#strands §3: each strand's
   // `splitFrom`, `into` and `intoAt`). A lot of two strands that unite stands where it stands in both, then settles: what
   // lost its load path by the two together falls (structure.ts); rubble lies where either left it.
   if (layered(strandsHere)) {
@@ -1738,7 +1738,7 @@ export async function strandDemo(novelDir, options) {
   const { scenes: runs } = options.worldOnly ? { scenes: Object.fromEntries(chosen.map(scene => [scene.id, { starts: {}, events: [] }])) } : await walkTimeline(timeline, chosen, mover, { concurrency: 1, version: WALK_SEED });
   const data = assemble(runs);
   if (options.live) options.live(snapshot(true), data);
-  // The director's loop (world-engine/director/director.mjs, docs/v2/director-camera.md): the engine as it stands after the
+  // The director's loop (world-engine/director/director.mjs, docs/v3/design.html#director-camera): the engine as it stands after the
   // line's starts, handed on so the loop plays forward card by card on the same world (no export again, no replay): it adds
   // its cards to the chosen scenes, its moves to `moves` and its positions to `runs`, streams the world in with `reach`, and
   // calls `assemble` for the page as far as it has played.
@@ -1750,7 +1750,7 @@ export async function strandDemo(novelDir, options) {
  * A strand's simulation as a record other sessions and tools can read without the player: the buildings (places, lots,
  * skeletons), the things and where each placement stands, every move as points in the place's metres, and every hit with
  * its sphere, energy and the units it broke or brought down. Derived view data, never canon: it lives with the book under
- * `stage/simulation/` (docs/stage-simulation-records.md).
+ * `stage/simulation/` (docs/v3/design.html#stage-simulation-records).
  */
 export function simulationRecord(data, strand) {
   const CELL = 2, FLOOR = 3, round = value => Math.round(value * 100) / 100;
@@ -1807,7 +1807,7 @@ export async function simulationInputs(novelDir) {
  * first, or this one with `accept`) is the one readers take: copied to <strand>.json, where they look, and named in
  * index.json, which lists every run. A strand recorded before runs existed keeps that record as its first run. With `page`
  * (the player's data for the run), it is kept beside the record as <run>.page.json, so a host can play the run.
- * Derived view data, never canon (docs/stage-simulation-records.md).
+ * Derived view data, never canon (docs/v3/design.html#stage-simulation-records).
  */
 export async function keepRun(folder, strand, record, { inputs, accept = false, page = null }) {
   const index = JSON.parse(await readFile(`${folder}/index.json`, 'utf8').catch(() => '{"strands":{}}'));

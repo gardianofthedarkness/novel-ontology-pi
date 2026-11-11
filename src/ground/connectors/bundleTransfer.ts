@@ -13,7 +13,7 @@ import type { BundleManifest } from "./bundle.js";
 /**
  * Bundle export / import — moving the portable ontology bundle in and out.
  *
- * The bundle (DESIGN.md §3) is the source of truth: the novel folder with
+ * The bundle (docs/v3/design.html#founding-design §3) is the source of truth: the novel folder with
  * `source/`, `ontology/` (manifest.json + JSONL), `branches/<id>/` deltas
  * and the `changesets/` audit trail. The Ladybug graph (`graph.lbug`) is a
  * disposable rebuild (`novel graph build`), so it is NEVER exported.

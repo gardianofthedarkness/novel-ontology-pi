@@ -1,5 +1,5 @@
 /**
- * The zoom engine (docs/v2/visual-context-engine.md §4.1, the user's design, 2026-10-31): the one layer of the visual
+ * The zoom engine (docs/v3/design.html#visual-context-engine §4.1, the user's design, 2026-10-31): the one layer of the visual
  * context engine that decides what area Jev looks at and at what scale. Every frame a question is shown and every box Jev
  * answers goes through it: the scale ladder (each level's sizes and parent), extents (an area's kept box, never its canvas
  * circle where anything better is known), the frames (context and work), tags by tier, the free space to build in, and the
@@ -200,7 +200,7 @@ export function sanity(box: Box, level: Level, parent: { box: Box; name: string 
 /** How many buildings an area must hold for each of its pins: the pins are a third of what stands there. */
 export const PER_PIN = 3;
 /**
- * An area's size from its pins (docs/v2/world-engine-v2.md §2.0.21, the user's design): its kind's usual size (`usual`:
+ * An area's size from its pins (docs/v3/design.html#world-engine-v2 §2.0.21, the user's design): its kind's usual size (`usual`:
  * length and width, metres) holds `area × coverage / lot` buildings (`lot`: its kind's mean lot, m²); when that is fewer than
  * PER_PIN buildings a pin, it grows, its proportions kept, within its level's sizes. Says how many it holds and needs.
  */
@@ -230,7 +230,7 @@ export function turnedBox(at: [number, number], size: [number, number], turn = 0
   return [round(at[0] - w / 2), round(at[1] - d / 2), round(at[0] + w / 2), round(at[1] + d / 2)];
 }
 /**
- * Where an area goes (docs/v2/world-engine-v2.md §2.0.21, the user's framing: terrain at 2D is one optimization a part).
+ * Where an area goes (docs/v3/design.html#world-engine-v2 §2.0.21, the user's framing: terrain at 2D is one optimization a part).
  * Over a grid on the frame (`cells` a side), the middle of a box of `size` that sits inside the parent and overlaps none of
  * the `clashes` (places it may not share) nor lies mostly over any `crowds` (places it may only adjoin), at the least cost:
  * the mean distance to the places it is tied to (weighted by their ties), a third as much the distance from its suggested
@@ -262,7 +262,7 @@ export function placeArea(frame: Frame, parent: Box | null, size: [number, numbe
 }
 
 /**
- * Settling (docs/v2/world-engine-v2.md §2.0.22, the user's go-ahead after the placement handout): the areas the program
+ * Settling (docs/v3/design.html#world-engine-v2 §2.0.22, the user's go-ahead after the placement handout): the areas the program
  * placed in one area move together under ONE objective, in metres and ties, so each move lowers it and the sweeps stop:
  *   E = Σ t·|x_p − x_q| (placed pairs) + Σ t·|x_p − x_f| (fixed) + λ Σ |x_p − pin_p| + μ Σ ov(B_p, B_q) (pairs that may
  *       adjoin) − Σ ρ_p [p on a form of its kind],  ρ_p = max(w_p, d_p)·(W_p + λ)  (one own length, as ONTO_REACH).

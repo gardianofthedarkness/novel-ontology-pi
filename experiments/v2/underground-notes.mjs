@@ -1,4 +1,4 @@
-// The underground note on each place (docs/v2/terrain-levels.md §8.5; world-engine/digest/underground-note.mjs), as a
+// The underground note on each place (docs/v3/design.html#terrain-levels §8.5; world-engine/digest/underground-note.mjs), as a
 // reading step. Free: it asks nothing, it gathers the set dresser's settings (settings.json) and, where made, the pre-film
 // notes' underground facts (prefilm.json) by the world script's places. Run it after the set dresser and before the
 // terrain loop, which opens its underground slices to a noted city or district. Writes <reading>/underground-notes.json.
@@ -6,7 +6,7 @@
 // A library keeps the reading twice: --also writes the same notes beside another copy (the reading step's own output,
 // which the terrain loop reads by the book's manifest).
 //
-// The other layers (docs/v2/terrain-levels.md §3.5): a place's name may put it in the air or in space; --layer <place>=<layer>
+// The other layers (docs/v3/design.html#terrain-levels §3.5): a place's name may put it in the air or in space; --layer <place>=<layer>
 // answers by hand (surface, near, deep, air, space; `none` takes a hand's answer back). A hand's answers are kept when the
 // notes are made again.
 //

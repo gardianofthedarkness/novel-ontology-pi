@@ -1,4 +1,4 @@
-// The world back into the ontology (docs/v2/world-ontology.md §6, §7b; Track B W6): what a director run settled goes into
+// The world back into the ontology (docs/v3/design.html#world-ontology §6, §7b; Track B W6): what a director run settled goes into
 // canon's bundle (ontology/*.jsonl, last write wins by id), each kind by its gate. G0 (the laws) applies what is lawful
 // and agrees with the reading, or what the review (G1) decided; the rest is held and not written. Every write is logged
 // in stage/world/canon.jsonl with what it replaced, so a run's writes can be undone (`undoCanon`). No model calls.

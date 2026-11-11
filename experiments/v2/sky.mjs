@@ -1,4 +1,4 @@
-// The story sky as a pre-film step (world-engine/digest/sky.mjs; docs/v2/sky.md): Jev reads each sequence's surroundings
+// The story sky as a pre-film step (world-engine/digest/sky.mjs; docs/v3/design.html#sky): Jev reads each sequence's surroundings
 // for what they imply of the time of day and the weather (four sequences a request, cents, cached), and the rules join it
 // with the time tree, the headings, the weather words and the pictures, carried on and smoothed. Writes <reading>/v2/sky.json
 // (each unit's time of day, hour, weather, lying snow, and where each came from); the world's look reads it.

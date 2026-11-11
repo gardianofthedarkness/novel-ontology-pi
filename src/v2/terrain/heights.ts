@@ -1,5 +1,5 @@
 /**
- * Manifold unification at spawn (docs/v2/borrow-and-spawn.md §8.6; the user's design, 2026-11-01). Heights are averages,
+ * Manifold unification at spawn (docs/v3/design.html#borrow-and-spawn §8.6; the user's design, 2026-11-01). Heights are averages,
  * so a parent's average is its parts' averages weighted by their areas. When a part is placed, the others change so the
  * parent's average holds, a later height having the better right over an earlier one:
  *  - parts spawned at this moment (and the parent's own open ground, the first time) are set first, within their ranges;

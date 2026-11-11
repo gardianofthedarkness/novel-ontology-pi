@@ -1,4 +1,4 @@
-// Story strands of a v2 book (src/v2/extraction/strands.ts groupStrands; docs/v2/strands.md §0; the user, 2026-11-09: "As
+// Story strands of a v2 book (src/v2/extraction/strands.ts groupStrands; docs/v3/design.html#strands §0; the user, 2026-11-09: "As
 // long as the group splits on different things and no longer interact with each other on semantic scale, they become two
 // strands. When they reunited the strands become one"): the same builder the director plays (segments.mjs strandsFile),
 // on the units the director plays (segmentWorld over the reading: the credit checked, who acts in each unit), bound for

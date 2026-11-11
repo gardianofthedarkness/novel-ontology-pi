@@ -1,4 +1,4 @@
-// Novel Console (docs/v3/console.md; the user, 2026-11-10: "Let's do electron then"): our own Mac app for reading novels.
+// Novel Console (docs/v3/design.html#console; the user, 2026-11-10: "Let's do electron then"): our own Mac app for reading novels.
 // The window is the console; each library folder the user adds gets a novel server (dist/src/v3/server.js, the same JSON-RPC
 // the editor extension spoke) run by this app's own Node; the console and the reader are served from app:// so they share an
 // origin and nothing is loaded from outside. Keys go to the Mac's secure store through the reading module, never to a page.

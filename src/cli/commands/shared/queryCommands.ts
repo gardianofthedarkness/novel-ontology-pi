@@ -8,7 +8,7 @@ import type { CharacterStateAtPoint, Entity, OntEvent } from "../../../ground/on
 
 /**
  * The read-only browsing commands: `novel query`, `novel search`,
- * `novel timeline list|show` (DESIGN.md §7).
+ * `novel timeline list|show` (docs/v3/design.html#founding-design §7).
  *
  * All three are thin CLI surfaces over the EXISTING store and retrieval
  * APIs — no new retrieval behavior lives here:
@@ -20,7 +20,7 @@ import type { CharacterStateAtPoint, Entity, OntEvent } from "../../../ground/on
  * - timeline show → retrieval.forkPoints (events at/above an importance
  *                  floor, in the store's chronological order)
  *
- * Store location: the named forms in DESIGN.md §7 carry no path, so —
+ * Store location: the named forms in docs/v3/design.html#founding-design §7 carry no path, so —
  * like `novel changeset … <novel-dir>` — each command takes the novel
  * workspace directory and opens its built graph at
  * `<novel-dir>/ontology/graph.lbug`. A missing graph is a clear error,

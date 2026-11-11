@@ -1,4 +1,4 @@
-// The physics law engine (docs/v2/physics-laws.md; Track B W2, the user, 2026-11-02: all the laws together, logged only):
+// The physics law engine (docs/v3/design.html#physics-laws; Track B W2, the user, 2026-11-02: all the laws together, logged only):
 // each law a check over a played line, giving a verdict per thing it checks: ok, or a violation with why. Pure functions:
 // the line as played (`played`, below), the strands, the script, the reading's speakers and the abilities config in;
 // verdicts out. Nothing here changes a run; W4 makes the verdicts act.

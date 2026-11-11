@@ -1,4 +1,4 @@
-// Who says each line, settled by the world (docs/v2/world-ontology.md §6 "Speaker of a line", §7b class S; Track B W6).
+// Who says each line, settled by the world (docs/v3/design.html#world-ontology §6 "Speaker of a line", §7b class S; Track B W6).
 // The reading gives each spoken line its speaker when Jev was sure (EM²); below its threshold, no one, and Jev's own
 // guess kept as the answer it gave. The world played the line: it knows who was there and where. A line is settled
 //

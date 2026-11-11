@@ -1,5 +1,5 @@
 /**
- * Laying a parent's manifolds out by its topology (docs/v2/borrow-and-spawn.md §8.2–8.5; the user's design, 2026-11-01). A
+ * Laying a parent's manifolds out by its topology (docs/v3/design.html#borrow-and-spawn §8.2–8.5; the user's design, 2026-11-01). A
  * city is one ground of manifolds that fade into each other; each manifold keeps a vector from its parent's centre. New
  * ones go where the parent's energy is least:
  *

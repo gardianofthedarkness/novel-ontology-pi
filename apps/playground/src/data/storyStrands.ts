@@ -16,7 +16,7 @@ import type { StoryScene, TimePlaceProjection } from "./timePlace.js";
  * same chapter and place, preferring one that shares a place; carried links
  * are marked. A scene answered as "none of the known characters, but someone
  * else is there" stands alone instead: borrowing would put it on another
- * person's strand. Measured against hand-read gold (docs/story-strands.md), this
+ * person's strand. Measured against hand-read gold (docs/v3/design.html#story-strands), this
  * reaches about 0.85 of scene pairs; it is a view, not a stored fact.
  */
 export type StrandEdgeKind = "worldline" | "carried" | "flashback" | "time";

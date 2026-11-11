@@ -1,4 +1,4 @@
-// The chat panel's sessions (docs/v3/plan.md §1.5a): the agent hosts the adapter registry knows (src/adapters/hosts.ts),
+// The chat panel's sessions (docs/v3/design.html#plan §1.5a): the agent hosts the adapter registry knows (src/adapters/hosts.ts),
 // each host's existing sessions on this Mac read where the host keeps them, and a message sent on into a session when the
 // host's command line can resume it. Read: Claude Code (~/.claude/projects), Codex (~/.codex/sessions), Gemini CLI
 // (~/.gemini/tmp), Pi (~/.pi/agent/sessions and the console hosts' run folders). Continued: Claude Code, with `claude -p

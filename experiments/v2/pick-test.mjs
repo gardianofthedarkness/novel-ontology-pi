@@ -6,7 +6,7 @@
 //   vectors    the same, with an arrow drawn from you to each building;
 //   semantic   the same plain map, each letter described in words (floors, how far, which way on the map);
 //   thumbnails the same plain map, and a small close-up picture of each building;
-//   two turns  v1's two-turn lock (two-view-things.mjs, docs/stage-simulation-design.md; the user, 2026-11-03: "the two
+//   two turns  v1's two-turn lock (two-view-things.mjs, docs/v3/design.html#stage-simulation-design; the user, 2026-11-03: "the two
 //              turn height locking design in v1. Quantum applied to boxes"): turn 1 the plain map (a measurement of
 //              where), turn 2 the same lettered buildings from the side at two turns (a measurement of how high), and
 //              the answer the product of the two turns' whole distributions, each turn collapsing what the other cannot

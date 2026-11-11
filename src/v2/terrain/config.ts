@@ -1,5 +1,5 @@
 /**
- * The spawning configurations (docs/v2/borrow-and-spawn.md §2.1, §5; the user's design, 2026-11-01): what an area of each
+ * The spawning configurations (docs/v3/design.html#borrow-and-spawn §2.1, §5; the user's design, 2026-11-01): what an area of each
  * type spawns one level down. Read across the levels they make a tree: a city's kind gives districts of each kind and how
  * many, a district's kind streets, a street's kind buildings by density and use. The files in config/terrain/ are the
  * defaults; a configuration is resolved through a resolver, so a universe's own files, a place's own and a function or a

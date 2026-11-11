@@ -1,4 +1,4 @@
-// The road network vehicles drive (docs/v2/roads-and-transit.md stage 1, with the expressway of stage 2): a graph of its
+// The road network vehicles drive (docs/v3/design.html#roads-and-transit stage 1, with the expressway of stage 2): a graph of its
 // own, derived from the ground's roads and a city's kept highway, never a cost on the walk grid. People walk the walk
 // grid; vehicles drive this; the two meet at the kerb (the nearest street to where a ride starts and ends) and the
 // highway meets the streets only at its ramps.

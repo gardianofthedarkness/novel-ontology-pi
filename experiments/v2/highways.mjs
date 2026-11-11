@@ -1,4 +1,4 @@
-// A first try of the highway proposal (docs/v2/highway-research.md §3) on one city of a built page, and of the one-way
+// A first try of the highway proposal (docs/v3/design.html#highway-research §3) on one city of a built page, and of the one-way
 // effect of its ramps on the buildings (the user, 2026-11-08: "Let's try it out").
 //
 // The order has no loop: the highway reads the map (districts, their scenes, neighbouring cities), the ground's roads

@@ -1,4 +1,4 @@
-// Who is on the stage (docs/v2/world-ontology.md §5a; Track B W5b, the research handoff's injection, annihilation and
+// Who is on the stage (docs/v3/design.html#world-ontology §5a; Track B W5b, the research handoff's injection, annihilation and
 // detector efficiency): per person, a hidden on-or-off state at each scene of their strand, a two-state hidden Markov
 // chain smoothed forward and backward. Its readings:
 //

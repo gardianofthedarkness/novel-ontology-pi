@@ -155,7 +155,7 @@ const flight = (a, b) => {
 };
 const along = (a, b, arc, f) => { const t = f * arc.T; return { x: a.x + (b.x - a.x) * f, z: a.z + (b.z - a.z) * f, y: a.y + arc.v * Math.sin(ELEVATION) * t - G * t * t / 2 }; };
 const SPEED = { walk: 1.4, run: 3.6, sneak: 0.8, "climb up": 1.1, "go down": 1.4, fall: 1.6, dragged: 1.2, ride: 12 };
-// Through the air (docs/v2/terrain-levels.md §6.2): a move's `air` ranges [first, last, kind] are steps the director laid
+// Through the air (docs/v3/design.html#terrain-levels §6.2): a move's `air` ranges [first, last, kind] are steps the director laid
 // over the buildings (world/air.mjs), played straight at the kind's pace, never as a hop of their own.
 const AIR_SPEED = { flight: 15, leap: 8, climb: 1.5 };
 const airOf = (move, k) => move.air?.find(([first, last]) => k > first && k <= last)?.[2] ?? null;
@@ -282,7 +282,7 @@ host.prepend(renderer.domElement);
 window.__stageStarted = true;
 // How far the map reaches (a city's canvas can be kilometres across): the fog, the camera's range and its far plane follow it.
 const mapReach = Math.max(800, ...data.macro.map((node) => Math.max(Math.abs(node.x), Math.abs(node.z)) + node.r));
-// The terrain stage has its own view (docs/v2/world-engine-v2.md §2.0.15): its city is not modelled building by building,
+// The terrain stage has its own view (docs/v3/design.html#world-engine-v2 §2.0.15): its city is not modelled building by building,
 // so its fill is drawn brighter and the fog pushed far out, for Jev and the user to see each block and judge by the far ones.
 const terrainStage = data.stage === "terrain";
 const world = new THREE.Scene(); world.background = new THREE.Color(0x060c12); world.fog = terrainStage ? new THREE.Fog(0x060c12, Math.max(1200, mapReach * 1.5), Math.max(4000, mapReach * 4)) : new THREE.Fog(0x060c12, 400, Math.max(1600, mapReach * 1.6));
@@ -335,7 +335,7 @@ const daylight = { on: !capture, sky: new THREE.Color(0x060c12), day: 0, phase: 
 // The story sky (world-engine/digest/sky.mjs, sent by World · Live as play/sky.json): each unit's hour, weather (a kind, a
 // strength, the wind) and lying snow; the time tree's hours stand where it has none. The weather is general, the way games
 // key it (a weather state is a set of target parameters the look eases toward, blended with the time of day's keys, never
-// a branch per kind; docs/v2/sky.md): cloud (a greyer, flatter sky, a dimmer sun), rain, snow, fog (visibility), wind
+// a branch per kind; docs/v3/design.html#sky): cloud (a greyer, flatter sky, a dimmer sun), rain, snow, fog (visibility), wind
 // (slant and drift), lightning (flashes), wet (darker ground), and snow lying.
 // The story sky the page was made with (the director's `sky`), until World · Live sends its own.
 let skyUnits = data?.sky?.units ?? null;
@@ -451,7 +451,7 @@ const cloudLayer = cloudSheet(cloudUniforms);
 const highUniforms = { ...cloudUniforms, uCover: { value: 0 }, uBase: { value: 1900 }, uShape: { value: new THREE.Vector4(260, 4.5, 0.14, 0.25) }, uTone: { value: new THREE.Vector4(0.38, 0, 0.45, 0) }, uHaze: { value: 2.5 } };
 const cloudHigh = cloudSheet(highUniforms);
 for (const [layer, uniforms] of [[cloudLayer, cloudUniforms], [cloudHigh, highUniforms]]) { layer.position.y = uniforms.uBase.value; layer.frustumCulled = false; layer.renderOrder = layer === cloudHigh ? 8 : 9; layer.visible = false; world.add(layer); }
-// The clouds by the weather (the user, 2026-11-06: "first building the weather based clouds"; sky.md "Cloud types"): each
+// The clouds by the weather (the user, 2026-11-06: "first building the weather based clouds"; docs/v3/design.html#sky "Cloud types"): each
 // type at its height, of its form. Drawn heights are compressed to stay in view (the real ones: a low deck at 0.3 to 2 km,
 // a middle one at 2 to 7, cirrus at 6 to 12); the order and the gaps are kept. Each: base (m); size of its features (m);
 // stretch along the wind; edge softness; small detail; opacity; how dark its thick parts; how much it billows.
@@ -684,7 +684,7 @@ window.__cloudParts = (hide = []) => { const parts = { layer: cloudLayer, high: 
 window.__sky = (sky) => { if (sky?.strike) { flash.armed = true; flash.next = 0; } else if (sky?.cut) cutClouds(`test|${performance.now()}`, daylight.unit, controls.target, sky.cut); else if (sky !== undefined) { const { snap, ...held } = sky ?? {}; daylight.force = sky ? { sure: 1, daypart: daypartOfHour(held.hour ?? 12), ...held } : null; daylight.said = null; daylight.snap = snap ? 3 : 0; daylight.on = sky ? true : !capture; } return { force: daylight.force ?? null, ...Object.fromEntries(WX.map((key) => [key, Math.round(wx[key] * 100) / 100])), flash: flash.level, strikeIn: wx.lightning >= 0.2 ? Math.round(flash.next - performance.now()) / 1000 : null }; };
 const daypartOfHour = (hour) => (hour < 4.5 ? "late night" : hour < 7.5 ? "dawn" : hour < 11 ? "morning" : hour < 14 ? "midday" : hour < 17.5 ? "afternoon" : hour < 21 ? "evening" : "night");
 const camera = new THREE.PerspectiveCamera(42, 1, 0.5, Math.max(4000, mapReach * 4)), controls = new OrbitControls(camera, renderer.domElement);
-// The orbit (docs/v2/terrain-levels.md §3.5): where the world has a floor in orbit, the camera up there sees space: stars, a
+// The orbit (docs/v3/design.html#terrain-levels §3.5): where the world has a floor in orbit, the camera up there sees space: stars, a
 // black sky, and the ground's city out of sight below (the orbit's height is virtual, not 1200 m of air over the city).
 // From 700 m up it fades in, full from 1000 m; below that nothing changes.
 const ORBIT = (data.world?.underground?.halls ?? []).some((hall) => hall.layer === "space"), SPACE = new THREE.Color(0x010207), DARK = new THREE.Color(0x060c12);
@@ -705,7 +705,7 @@ function orbitTick() {
   world.background.lerp(SPACE, f); defaultFog.color.lerp(SPACE, f);
   defaultFog.near = defaultFog.near * (1 - f) + 250 * f; defaultFog.far = defaultFog.far * (1 - f) + 1000 * f;
 }
-// Ceilings (docs/v2/terrain-levels.md §8.3–8.6, stage 2). A ceiling belongs to the level someone is in:
+// Ceilings (docs/v3/design.html#terrain-levels §8.3–8.6, stage 2). A ceiling belongs to the level someone is in:
 // - each real hall's ceiling, the ground skin's underside, drawn only from below and fading out near the camera, with the
 //   holes blows broke in it; the holes themselves in the street, their walls the skin's thickness;
 // - the deep layer's hard ceiling, never drawn: only the marks blows left on it; its walls fade into the dark, no lid;
@@ -1117,7 +1117,7 @@ function buildPlace(id) {
       // A tile over a hole a blow broke in the ground skin goes when the hole opens (terrain-levels §8.4).
       for (const [i, j, , , when] of data.world.underground?.breaches ?? []) if (Math.floor(i / 16) === ci && Math.floor(j / 16) === cj) ceilings.tiles.push({ mesh: tiles, n: (j - cj * 16) * 16 + (i - ci * 16), at: bornAt(when), open: null });
     }
-    // The underground (docs/underground-design.md): each hall a translucent volume at its depth in its kind's colour (the
+    // The underground (docs/v3/design.html#underground-design): each hall a translucent volume at its depth in its kind's colour (the
     // subway teal, a mall amber, the storm water blue, a deep facility red, dressed in its model), with its pillars; every
     // building's basements under it (violet); the piles cave-ins left in halls and the dents in the street. Each shows from
     // the moment the ground above it was reached; a facility's name only while the street is seen through.
@@ -1126,7 +1126,7 @@ function buildPlace(id) {
     const tint = { station: mats.subway, tunnel: mats.subway, corridor: mats.subway, utility: mats.subway, mall: mats.arcade, tank: mats.water, channel: mats.water, lab: mats.facility, military: mats.facility, quantum: mats.facility, shelter: mats.facility, parking: mats.deep, basement: mats.deep };
     // The terrain view shows every hall, reached or not (§2.0.16): what lies below the street is part of the terrain.
     const show = (mesh, x, z, extra = {}) => { const at = atPoint(x, z) ?? (terrainStage ? 0 : undefined); if (at === undefined) return; group.add(mesh); chunks.push({ mesh, at, x, z, ...extra }); };
-    // The terrain view dresses its passages and malls in their models (docs/v2/world-engine-v2.md §2.0.17): a tunnel along each
+    // The terrain view dresses its passages and malls in their models (docs/v3/design.html#world-engine-v2 §2.0.17): a tunnel along each
     // box and bore of a passage, the mall over a mall's boxes, all of one model in one draw, in a lot shell's pale blue.
     // Which model dresses each hall kind: the page's (models.halls, a layered setting; milestones M13g), else the old constants.
     const UNDER_MODELS = data.hallModels ?? { corridor: "kk-tunnel", tunnel: "kk-tunnel", station: "kk-tunnel", utility: "kk-tunnel", mall: "kk-mall", shelter: "kk-military" }, underModels = new Map();
@@ -1233,7 +1233,7 @@ function buildPlace(id) {
     if (!lift && place.world) { const streets = (data.world.underground?.halls ?? []).filter((hall) => hall.street); if (streets.some((hall) => hall.boxes.some((box) => Math.abs(plan.x - box.x) < (box.w + w) / 2 && Math.abs(plan.z - box.z) < (box.d + d) / 2))) overStreet.push(parts); }
     lots.push({ parts, box: new THREE.Box3(new THREE.Vector3(Math.min(...xs), lift, Math.min(...zs)), new THREE.Vector3(Math.max(...xs), lift + h + 3, Math.max(...zs))) });
   }
-  // The terrain stage (docs/v2/world-engine-v2.md §2.0.18): every building no one has reached yet stands as its shell, the
+  // The terrain stage (docs/v3/design.html#world-engine-v2 §2.0.18): every building no one has reached yet stands as its shell, the
   // world's lot with its tiling, destruction and inside switched off, drawn exactly as a lot's shell above (the same
   // colours and opacities, its edges, a line round every floor), batched by model so thousands draw as fast as a few lots.
   // When people come near, its chunk materializes and it stands as a lot, inside and all.
@@ -1617,7 +1617,7 @@ function playBlows(segment, elapsed) {
     }
   });
 }
-// The smoother's clouds (docs/v2/world-ontology.md §5a, W5b), sent by World · Live for the card it shows: each person's
+// The smoother's clouds (docs/v3/design.html#world-ontology §5a, W5b), sent by World · Live for the card it shows: each person's
 // spots, bigger and brighter as they are likelier, and a dashed line from where they were played to where the smoothed
 // history has them. World metres, placed with the scene like the pawns.
 const clouds = new THREE.Group(); clouds.renderOrder = 2; world.add(clouds);
@@ -1700,7 +1700,7 @@ let shownNotice = false, shownPlace = null, shownSegment = null, pathLines = [],
 for (const id of Object.keys(data.places)) world.add(buildPlace(id).group);
 // The place tree's places as pins, and a trace above them for every move between places. A place's circle on the canvas
 // is the room it takes so far, not its size, so it is not drawn: what is built there is its extent (the user's call,
-// 2026-10-31: Jev sees what the user can see, and the circles misled its boxes; docs/v2/world-engine-v2.md §2.0.14).
+// 2026-10-31: Jev sees what the user can see, and the circles misled its boxes; docs/v3/design.html#world-engine-v2 §2.0.14).
 // A place the text does not put where it stands (sampled into an area by a seed, or dwelling where the tree says nothing)
 // is drawn in gold and blinks until the text or Jev places it (the user's call, 2026-10-31).
 const sampledSpots = [], clickable = [];
@@ -1709,7 +1709,7 @@ const sampledSpots = [], clickable = [];
  * the same at any zoom), and their colour.
  */
 const SKY = { region: { height: 1100, size: 0.075, colour: "#ffffff" }, city: { height: 750, size: 0.06, colour: "#ffffff" }, district: { height: 380, size: 0.042, colour: "#8fd6ff" }, street: { height: 150, size: 0.026, colour: "#c9e9f5" } };
-// A place's name is as large as its level (the zoom engine's tiers, docs/v2/visual-context-engine.md §4.1): a city's and a
+// A place's name is as large as its level (the zoom engine's tiers, docs/v3/design.html#visual-context-engine §4.1): a city's and a
 // district's large, so it is plain which district a place is in; a street's middling; a building's and a room's small.
 const TAG_SIZE = { region: 4, city: 4, district: 3.4, street: 1.8 };
 // Every place's pin and tag, by place: a director's shot keeps only the ones it is about (`only`).
@@ -1717,7 +1717,7 @@ const placeMarks = [];
 for (const [id, spot] of macroAt) {
   // On the terrain stage a pin also says whether it is settled (the user's call, §2.0.22): green once the program or Jev has
   // satisfied it (an area kept, a building standing or dwelling in one of its use), yellow and blinking while it waits.
-  // A spare slot (docs/v2/borrow-and-spawn.md §2.2: no place of the text has borrowed it) stands as ground and buildings
+  // A spare slot (docs/v3/design.html#borrow-and-spawn §2.2: no place of the text has borrowed it) stands as ground and buildings
   // with no pin, its name grey.
   const done = spot.status === "done" && !spot.spare, open = spot.status === "open", guess = !done && !!(spot.sampled || spot.dwelling || open), strand = !!data.places[id], size = spot.unbuilt ? 1.2 : TAG_SIZE[spot.scale] ?? 1.2;
   const pin = placePin(spot.cx, spot.cz, size, done ? 0x5fe08a : guess ? 0xffd36e : strand ? 0xffffff : 0x7ce6ff, done || strand || guess ? 0.9 : spot.temporary ? 0.3 : 0.6); if (!spot.spare) world.add(pin.group);
@@ -1818,7 +1818,7 @@ let decor = () => {};
   for (const [ax, az, bx, bz] of (data.landscapes ?? []).flatMap((entry) => entry.walls ?? [])) lines.push(ax, 0, az, bx, 0, bz, ax, 6, az, bx, 6, bz);
   if (lines.length) { const geometry = new THREE.BufferGeometry(); geometry.setAttribute("position", new THREE.Float32BufferAttribute(lines, 3)); world.add(new THREE.LineSegments(geometry, edge)); }
   // A street form's water (a waterfront: water down its length), and the bases of buildings built into others (a street's
-  // shops under a tower of the ground it landed on), a gold band to their own height (docs/v2/world-engine-v2.md §2.0.13).
+  // shops under a tower of the ground it landed on), a gold band to their own height (docs/v3/design.html#world-engine-v2 §2.0.13).
   const waters = (data.landscapes ?? []).flatMap((entry) => entry.waters ?? []);
   if (waters.length) {
     const sheets = new THREE.InstancedMesh(new THREE.BoxGeometry(1, 0.1, 1), new THREE.MeshBasicMaterial({ color: 0x2f7dff, transparent: true, opacity: 0.35, depthWrite: false }), waters.length);
@@ -1941,7 +1941,7 @@ let decor = () => {};
     for (const ramp of highway.ramps ?? []) for (const leg of ramp.legs) world.add(ramp.under ? new THREE.Mesh(ribbon(leg, 7, (n) => Math.max(0.3, leg[n][2])), tunnelLook) : inked(ribbon(leg, 7, (n) => Math.max(0.3, leg[n][2])), deckLook, rampEdge));
   }
 }
-// The terrain's shapes (docs/v2/world-engine-v2.md §2.0.17): each shape Jev kept stands as a hologram where its part is now,
+// The terrain's shapes (docs/v3/design.html#world-engine-v2 §2.0.17): each shape Jev kept stands as a hologram where its part is now,
 // as large as its box: a platform a deck on columns, a plateau or a rectangle a block, a hill a dome, a basin a hollow, a
 // cut a trench, a ramp a slope (down to its depth below the street, where its hall is in the underground), a sphere, a donut.
 {
@@ -2105,7 +2105,7 @@ const boxLines = new THREE.LineSegments(new THREE.EdgesGeometry(new THREE.BoxGeo
 /** Where the camera rests on a place, and a glide to it: out over both places, across, and down, like a hand on the mouse. */
 const poseFor = (id) => { const spot = macroAt.get(id) ?? { x: 0, z: 0 }, place = data.places[id], span = place.world ? 64 : Math.max(place.NX, place.NZ) * CELL; return { target: new THREE.Vector3(spot.x, 4, spot.z), position: new THREE.Vector3(spot.x + span * 0.45, span * 0.8, spot.z + span * 0.95) }; };
 /**
- * The line grown in place (docs/v2/world-engine-redesign.md §2, §4): a scene's starts and its events so far, each with its
+ * The line grown in place (docs/v3/design.html#world-engine-redesign §2, §4): a scene's starts and its events so far, each with its
  * moves as walked and its hit, the timeline built again. The director's page and World · Live's frame take the same pieces
  * (`grid`: the world grid they were made on; a frame on another grid waits for the page made on the new one). Live, the
  * frame held at the line's end plays the new piece on from there; a reader replaying an earlier card is left where they are.
@@ -2468,7 +2468,7 @@ function frame(now) {
   }
   // Follow (the user, 2026-11-05: "we want to at least stably watch what happens"): by default a steady view of each card's
   // people and where their walks end, from above at a slant, turned as the viewer left it, moving only when the people do;
-  // with Cuts, the photographer's shot of each card (the director's camera, docs/v2/director-camera.md) as it begins.
+  // with Cuts, the photographer's shot of each card (the director's camera, docs/v3/design.html#director-camera) as it begins.
   if (follow && cuts && segment.kind === "event" && cameraSegment !== segment && segment.event.camera) {
     cameraSegment = segment;
     const pose = producerPose(segment.scene.id, segment.event.camera);
@@ -2985,7 +2985,7 @@ if (capture) {
     return group;
   }
   /**
-   * Terrain spawning's layers (docs/v2/visual-context-engine.md §5): a ghost slice at a height, white and lettered;
+   * Terrain spawning's layers (docs/v3/design.html#visual-context-engine §5): a ghost slice at a height, white and lettered;
    * a red dotted line where a slice cuts a building; an area outlined and named on the ground. Boxes are in world metres.
    */
   /**
@@ -2998,7 +2998,7 @@ if (capture) {
     tag.material.sizeAttenuation = false; tag.scale.set(aspect * fraction, fraction, 1); return tag;
   }
   /**
-   * A direction arrow out of a person (docs/v2/director-camera.md §2a): a shaft and a head from `at` along `vector` for
+   * A direction arrow out of a person (docs/v3/design.html#director-camera §2a): a shaft and a head from `at` along `vector` for
    * `length` metres, in its colour, faint when blocked at once, its letter (and what it meets) at the tip.
    */
   function directionArrow(place, arrow, scale) {
@@ -3135,7 +3135,7 @@ if (capture) {
     /** How many of each inside part are drawn now (rooms, halls, room walls, corridors, stairs): for checking a still. */
     insideCounts() { const out = {}; world.traverse((part) => { if (part.isInstancedMesh) for (const name of ["room", "hall", "tall", "roomWall", "corridor", "stair"]) if (part.material === mats[name]) out[name] = (out[name] ?? 0) + part.count; }); return out; },
     /**
-     * The director's loop grows the line in place (docs/v2/world-engine-redesign.md §2): a scene's starts and its events
+     * The director's loop grows the line in place (docs/v3/design.html#world-engine-redesign §2): a scene's starts and its events
      * so far (each with its moves as walked, its hit), the timeline built again; returns when the last event ends.
      */
     extend: (piece) => extendLine(piece),
@@ -3154,7 +3154,7 @@ if (capture) {
     async capture({ id, scene, event, place, yaw = 0, hide = [], beams = [], boxes = [], solved = null, aim = null, elevation = null, mask = false, ghosts = [], form = null, focus = null, marker = null, radius = null, poles = [], topdown = null, beforeHit = false, spheres = [], pins = [], play = null, at = null, caption = null, frame = null, view = null, slices = [], cuts = [], areas = [], free = [], vague = null, labelScale = 1, dash = 2, arrows = [], wedge = null, people = false, only = null, mover = null, grid = null }) {
       // `play`: that many seconds into the event, its hit's effects on (to look at a destruction as it plays).
       // `at`: any moment of the strand, everything playing (to record a scene).
-      // Terrain spawning (docs/v2/visual-context-engine.md): a frame of its own size, an explicit camera in world metres,
+      // Terrain spawning (docs/v3/design.html#visual-context-engine): a frame of its own size, an explicit camera in world metres,
       // ghost slices, cuts, named areas, and the far city faded by fog; all undone by the next capture without them.
       host.style.width = frame ? `${frame[0]}px` : ""; host.style.height = frame ? `${frame[1]}px` : ""; resize();
       world.fog = vague ? new THREE.Fog(0x060c12, vague.near, vague.far) : defaultFog;
@@ -3184,7 +3184,7 @@ if (capture) {
       // Height poles for the sky: from the ground at each spot up to 60 m, marked at 10, 20, 40 and 60 m.
       for (const pole of poles) { const group = heightPole(place, pole); extras.push(group); world.add(group); }
       for (const slice of slices) { const group = terrainSlice(place, slice, labelScale); extras.push(group); world.add(group); }
-      // The director's shots (docs/v2/director-camera.md): a person's lettered direction arrows, and the chosen one's wedge.
+      // The director's shots (docs/v3/design.html#director-camera): a person's lettered direction arrows, and the chosen one's wedge.
       for (const arrow of arrows) { const group = directionArrow(place, arrow, labelScale); extras.push(group); world.add(group); }
       if (wedge) { const group = directionWedge(place, wedge); extras.push(group); world.add(group); }
       // A metre grid on the ground of a plan (`grid`: its box, its step), its step written in a corner.

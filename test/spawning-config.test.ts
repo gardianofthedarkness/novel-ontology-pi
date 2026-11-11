@@ -6,7 +6,7 @@ import { LANDSCAPES } from "../src/v2/world/landscape.js";
 import { TERRAIN_KINDS } from "../src/v2/context/terrainModes.js";
 import { LANGUAGE } from "../src/v2/rules/language.js";
 
-// The spawning configurations (docs/v2/borrow-and-spawn.md §5), read from the repository's root (npm test): every kind a
+// The spawning configurations (docs/v3/design.html#borrow-and-spawn §5), read from the repository's root (npm test): every kind a
 // file names must be one Jev can answer at its level, and every building use one the language profile or the landscapes know.
 const read = (name: string) => JSON.parse(readFileSync(resolve(process.cwd(), "config", "terrain", `${name}.json`), "utf8"));
 const isCount = (count: unknown) => (Number.isInteger(count) && (count as number) >= 0) || (Array.isArray(count) && count.length === 2 && count.every((n) => Number.isInteger(n) && n >= 0) && count[0] <= count[1]);
@@ -24,7 +24,7 @@ for (const [name, parent, level] of [["city", "city", "district"], ["district", 
         assert.ok(TERRAIN_KINDS[level][kind], `${type} spawns ${kind}, not a ${level} kind`);
         assert.ok(isCount(count), `${type}: ${kind} has a count or a range`);
       }
-      // Its topology (docs/v2/borrow-and-spawn.md §8.2): a ring for each kind it spawns, within the radius; pairs of kinds it spawns.
+      // Its topology (docs/v3/design.html#borrow-and-spawn §8.2): a ring for each kind it spawns, within the radius; pairs of kinds it spawns.
       if (entry.ring) for (const kind of Object.keys(spawns)) { const ring = (entry.ring as Record<string, number[]>)[kind]; assert.ok(ring && ring[0] >= 0 && ring[0] < ring[1] && ring[1] <= 1, `${type}: ${kind} has a ring within the radius`); }
       if (entry.open) assert.ok(LANDSCAPES[entry.open as keyof typeof LANDSCAPES], `${type}: its open ground is a landscape`);
       for (const [a, b, how] of (entry.pairs ?? []) as [string, string, string][]) assert.ok(spawns[a] !== undefined && spawns[b] !== undefined && ["near", "apart"].includes(how), `${type}: the pair ${a}, ${b}, ${how}`);

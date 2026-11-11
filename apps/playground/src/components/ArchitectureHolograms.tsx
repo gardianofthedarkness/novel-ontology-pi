@@ -340,7 +340,7 @@ function skeletonBoxes(place: SimulatedPlace): Record<Part, number[][]> {
 }
 
 /**
- * A place as the stage simulation recorded it (docs/stage-simulation-records.md), drawn the way the
+ * A place as the stage simulation recorded it (docs/v3/design.html#stage-simulation-records), drawn the way the
  * strand page draws it, as of the chosen moment: its grid of ground tiles; each lot at its footprint
  * and floors (a district's at the back of its disc, clear of the places inside), a faint shell (white
  * once the story has named it) over its walkable skeleton; a lot a hit has reached shows its walls and

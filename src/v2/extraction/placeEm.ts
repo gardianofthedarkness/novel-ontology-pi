@@ -11,7 +11,7 @@ import type { SpatialMention } from "./spatial.js";
 import type { Decide } from "./typing.js";
 
 /**
- * Place EM (docs/v2/world-model.md §5; layer 4): the places of the reading, decided as spacetime, apart from matter. Places
+ * Place EM (docs/v3/design.html#world-model §5; layer 4): the places of the reading, decided as spacetime, apart from matter. Places
  * are a tree graded by scale, so each named place needs one parent from a few larger candidates, and most descriptions of
  * places are a building or a room of the scene's own setting. The place recommender (layer 2) ranks; what it is sure of is
  * taken by rule, and Jev is asked only the rest, on a state the context engine (layer 3) composes, one request a batch:
@@ -42,7 +42,7 @@ export interface PlaceHabit { text: string; place: string; count: number }
 export interface Setting { scene: string; place: string | null; by: "environment" | "action" | "named" | "carried" | "raised" | "unnamed" | "jev" | "sequence" | "none"; confidence?: number }
 export interface Occupancy { who: string; place: string; scene: string; time: string | null; by: "setting" | "spatial"; level?: string | null; sentence?: string }
 export interface PlaceAsked { mode: string; keys: Record<string, string>; manifest: Manifest }
-/** The tree's laws, checked (docs/v2/world-model.md §2.1): n places, r roots, n − r links, no loop, every link graded by scale. */
+/** The tree's laws, checked (docs/v3/design.html#world-model §2.1): n places, r roots, n − r links, no loop, every link graded by scale. */
 export interface TreeLaws { places: number; roots: number; links: number; linksAreNMinusR: boolean; loops: number; ungraded: [string, string][] }
 /** occupancy: the text's evidence of who is where (the world engine's continuity holds occupancy itself). */
 export interface PlaceResult { places: PlaceParent[]; slots: UnnamedPlace[]; settings: Setting[]; occupancy: Occupancy[]; references: PlaceReference[]; habits: PlaceHabit[]; asked: PlaceAsked[]; laws: TreeLaws }

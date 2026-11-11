@@ -1,5 +1,5 @@
 /**
- * Spawning positions (docs/v2/spawning.md; the user's design, 2026-11-01): where each person and each thing of a scene
+ * Spawning positions (docs/v3/design.html#spawning; the user's design, 2026-11-01): where each person and each thing of a scene
  * stands when the scene begins, people and things in one pass, by rule. Plain data and arithmetic: the world comes in as
  * `target` (what a scene's place is, as built), the strands as `entries` (who comes into each scene from where).
  *

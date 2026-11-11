@@ -1,7 +1,7 @@
-// The v2 reading flow on a workspace's book (docs/v2/world-engine-v2.md §2, the user's sketch of 2026-10-30): the sentences
+// The v2 reading flow on a workspace's book (docs/v3/design.html#world-engine-v2 §2, the user's sketch of 2026-10-30): the sentences
 // go to scene tiling, sentence kinds and listing at once; then EM batch by batch, the card scan, each scene's context, story
 // time (time words, periods, the calendar) and EM² (who says or does each line, who each description of a person means).
-// Writes <out>/v2/ (the data as YAML, by docs/v2/schema.yaml: scenes, cards, chart, EM, contexts, roles, references, slots,
+// Writes <out>/v2/ (the data as YAML, by docs/v3/design.html#schema: scenes, cards, chart, EM, contexts, roles, references, slots,
 // facts, time, and log.yaml with every step's
 // requests and time) and <out>/base/ (the world loop's input: experiments/world-first/run.mjs runs on it as it is).
 // Jev's and the work model's replies are cached under <out>/cache, so a rerun pays only for what changed.

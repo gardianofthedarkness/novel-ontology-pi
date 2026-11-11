@@ -15,7 +15,7 @@ import { stageInputs } from "./stageCommands.js";
  * from, the engine version, the accepted run). No model calls: Jev's answers
  * the engine reads (movement spots, placements, impacts) come from the stage
  * reports, and where none exist it uses its stand-ins. Derived view data,
- * never canon (docs/stage-simulation-records.md). The host plays a book's
+ * never canon (docs/v3/design.html#stage-simulation-records). The host plays a book's
  * accepted runs (the viewer's `play/` page).
  *
  * `novel sim pick` simulates each story line live first, event by event in
@@ -65,7 +65,7 @@ async function repository(): Promise<string> {
  * one, each part's ground placed by Jev on the engine's own pictures (overview, zoom on a conflict, height on ghost slices),
  * kept as the engine's input (stage/terrain.json) and the world built again, watched in World · Live with the user's own
  * camera; in step mode (the default) the run waits for the user after each proposal, `--run` runs on, `--parts N` stops
- * after N parts. `--spawn` borrows and spawns by type instead of pools (docs/v2/borrow-and-spawn.md), level by level;
+ * after N parts. `--spawn` borrows and spawns by type instead of pools (docs/v3/design.html#borrow-and-spawn), level by level;
  * `--from city|district|street` drops that level and the levels under it, to run them again; `--until <level>` stops after it. `--sites` is the earlier step instead (which site holds which, and the
  * spawn plan: world-engine/terrain/terrain.mjs). Needs the world loop's script (a world-first book).
  */

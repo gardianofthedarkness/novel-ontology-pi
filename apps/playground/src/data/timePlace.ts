@@ -74,7 +74,7 @@ export interface TimePlaceProjection {
   calendar?: CalendarView | null;
   /** The buildings the story names at its places (novel stage objects): one entry per name at a place, with the scenes that name it in reading order. Not canon. */
   buildings?: PlaceBuilding[];
-  /** The stage simulation records (docs/stage-simulation-records.md), trimmed: each simulated place's lots, the things placed, the hits and who moved. Not canon. */
+  /** The stage simulation records (docs/v3/design.html#stage-simulation-records), trimmed: each simulated place's lots, the things placed, the hits and who moved. Not canon. */
   simulation?: PlaceSimulation;
 }
 /** A named building at a place: from the stage objects report (a model's reading, not reviewed) or, once reviewed, the ontology record it is (`entityId`). */

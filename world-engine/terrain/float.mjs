@@ -1,4 +1,4 @@
-// L19 · Floating places (docs/v2/directing/L18-L19-plan.md; the user, 2026-11-05: "move the place using the smoothing").
+// L19 · Floating places (docs/v3/design.html#l18-l19-plan; the user, 2026-11-05: "move the place using the smoothing").
 // The city is part of back-propagation: after a run, its places are moved so that the run's tracks and settings hold,
 // changing the city least.
 //

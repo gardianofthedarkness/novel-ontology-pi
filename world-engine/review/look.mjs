@@ -1,4 +1,4 @@
-// Looks for the review by Jev (docs/v2/jev-review.md §14; the user, 2026-11-07: Jev choosing how to observe and how
+// Looks for the review by Jev (docs/v3/design.html#jev-review §14; the user, 2026-11-07: Jev choosing how to observe and how
 // closely, then "do the with agility test"). Instead of one fixed pack, Jev starts from the item's own line and the few
 // lines round it, and chooses, look by look, what to read next or to answer: a menu the harness builds from what has been
 // read (Pi's W12 moves were nearly all of this kind: open lines by id, a name searched, who said what), each move said

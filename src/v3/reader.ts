@@ -1,5 +1,5 @@
 /**
- * The reader (docs/v3/reader.md; the user, 2026-11-10: "I really like how our read result html and the read button
+ * The reader (docs/v3/design.html#reader; the user, 2026-11-10: "I really like how our read result html and the read button
  * highlights different characters and types of the sentences and all notes etc and how the full epub is loaded. Can you
  * make that the same for processed files?"). A processed book read as published: its EPUB a document at a time, each
  * sentence the reading cites coloured by its kind, the names, descriptions and times marked where they stand with whom or

@@ -3,7 +3,7 @@ import { stageStream } from "./stream.js";
 import { setting } from "../settings.js";
 
 /**
- * The underground as halls in the ground (docs/underground-design.md): voids carved in soil or rock that the ground around
+ * The underground as halls in the ground (docs/v3/design.html#underground-design): voids carved in soil or rock that the ground around
  * them holds up, not buildings. What is here: the ground's bands, the halls' shapes, their generation (per landscape, and
  * the city's subway on its own logic), the two overlapping depth intervals Jev picks from and how a box finds its hall,
  * and the collapse after a blast (a confined blast, the roof-span test, the cave-in to a dome, a choke or a dent).
@@ -39,7 +39,7 @@ const LINED = setting<{ span: number; bond: number; pillarBond: number }>("under
 export const LINING = { span: LINED.span, bond: LINED.bond }, PILLAR_BOND = LINED.pillarBond;
 
 /**
- * What Jev picks underground (docs/underground-design.md §6.1): just under the street and deep underground, two depth
+ * What Jev picks underground (docs/v3/design.html#underground-design §6.1): just under the street and deep underground, two depth
  * intervals overlapping between 20 and 25 m (a hall belongs to each its span reaches); and the subway, a choice of its own.
  * The subway runs on its own logic, under buildings, so as part of the shallow interval it made a box find one hall only
  * 87–92% of the time (six generated cities); on its own, 99%, and the shallow interval without it 94–96%.
@@ -51,7 +51,7 @@ const SUBWAY_KINDS = new Set(["station", "tunnel", "corridor"]);
 export const intervalsOf = (hall: Pick<Hall, "depth" | "height"> & { kind?: string; layer?: Layer }): Interval[] => hall.layer ? [] : (hall.kind && SUBWAY_KINDS.has(hall.kind) ? ["subway"] : (["shallow", "deep"] as Interval[]).filter((key) => hall.depth - hall.height <= INTERVALS[key][1] && hall.depth >= INTERVALS[key][0]));
 export const HALL_LABEL: Record<HallKind, string> = { tunnel: "a subway tunnel", station: "a subway station", corridor: "a subway passage", mall: "an underground mall", tank: "a storm-water tank", channel: "a storm-water channel", lab: "an experiment lab", military: "a military bunker", quantum: "a quantum research facility", parking: "an underground car park", utility: "a utility tunnel", shelter: "a shelter", basement: "a basement" , deep: "the deep underground", deck: "a deck in the air", orbit: "a floor in orbit" };
 /**
- * The city's common underground spaces (docs/v2/world-engine-v2.md §2.0.17; the compatibility page) and the street kinds
+ * The city's common underground spaces (docs/v3/design.html#world-engine-v2 §2.0.17; the compatibility page) and the street kinds
  * each usually lies under ("*": any): transport (the subway's tunnels, stations and passages), commerce (an underground
  * shopping street, under a road or a station's plaza), parking, utilities (a utility tunnel, the storm water), a civil
  * defence shelter (often a car park too), a building's basement, and the deep facilities. A first map, for reference and
@@ -109,7 +109,7 @@ export function hallsOf(landscape: Landscape): Hall[] {
   const halls: Hall[] = layerFloors(landscape), modern = landscape.patches.filter((patch) => !patch.plane && LANDSCAPES[patch.type].era === "modern");
   // A part that lies under the street (terrain spawning: its median below 0): a hall that deep over its ground, a passage
   // along a linear part (a box patch: a street), a mall under any other; stairs up at its ends. The surface over it stays as
-  // it was: it lies in another layer (docs/v2/terrain-levels.md §3.3).
+  // it was: it lies in another layer (docs/v3/design.html#terrain-levels §3.3).
   for (const patch of modern.filter(underground)) {
     const depth = Math.max(4, -(patch.median ?? 0)), linear = patch.shape.family === "box", w = round(1.8 * patch.R), d = round(Math.max(8, linear ? 1.8 * patch.R * (patch.shape.aspect ?? 0.3) : 1.2 * patch.R));
     const kind = (patch.hall && patch.hall in LIES_UNDER ? patch.hall : linear ? "corridor" : "mall") as HallKind;
@@ -168,7 +168,7 @@ export function hallsOf(landscape: Landscape): Hall[] {
 /** The kind of floor each other layer has (§3.5). */
 export const LAYER_KIND: Record<Layer, HallKind> = { deep: "deep", air: "deck", space: "orbit" };
 /**
- * The floors of a landscape's patches in the other layers (docs/v2/terrain-levels.md §3.5): one for each layer, a hall at the
+ * The floors of a landscape's patches in the other layers (docs/v3/design.html#terrain-levels §3.5): one for each layer, a hall at the
  * layer's floor, open LAYER_ROOM metres up, holding its patches' circles and every building lifted onto it with a lane of 4 m
  * round them (landscape.ts layerBuildings); no pillars. The deep's and the orbit's are virtual. No stairs of its own: the
  * world joins every floor to the ground on its 40 m squares (world.ts ways, §3.4).
@@ -235,7 +235,7 @@ export function subwayOf(stops: { id: string; x: number; z: number }[], seed: st
 }
 
 /**
- * How surely a box finds its hall in an interval (docs/underground-design.md §6.1): for points drawn over the halls of the
+ * How surely a box finds its hall in an interval (docs/v3/design.html#underground-design §6.1): for points drawn over the halls of the
  * interval (by area), the share under exactly one hall of it. A box finds the hall under its middle, so this is the share
  * of boxes that find their hall without a tie. Basements count as halls here (pass them as boxes 3–9 m down).
  */
@@ -316,7 +316,7 @@ export function collapse(hall: Pick<Hall, "depth" | "height" | "lined" | "pillar
 }
 
 /**
- * The ceiling over a hall's floor (docs/v2/terrain-levels.md §8.3): it belongs to the level, not laid as geometry.
+ * The ceiling over a hall's floor (docs/v3/design.html#terrain-levels §8.3): it belongs to the level, not laid as geometry.
  *   skin  a hall with a real depth (the shallow layer): the ground over it, the street's slab with the hall's cover under it,
  *         its underside at the hall's top (`at`, metres, negative below the street); `cover` its thickness; `bond` what
  *         breaks it a cell at a time (the band its top lies in, and a lining's while unbroken: §8.4, soil 3 + 4);
@@ -352,7 +352,7 @@ export function breach(ceiling: Ceiling, cells: { i: number; j: number }[], cent
 }
 
 /**
- * A terrain shape kept below the street (terrain spawning: a cut, a ramp down, a basin; docs/v2/world-engine-v2.md
+ * A terrain shape kept below the street (terrain spawning: a cut, a ramp down, a basin; docs/v3/design.html#world-engine-v2
  * §2.0.17): a hall that deep over its box, a passage along a long one (three times as long as wide) and a hall under any
  * other, stairs up at its ends, so the underground shows what Jev placed there.
  */

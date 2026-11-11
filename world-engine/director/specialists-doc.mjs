@@ -1,6 +1,6 @@
-// The specialists' registry (specialists.mjs) written into the design: the tables of docs/v2/next-steps.md (A5) and the
-// sections of docs/v2/summarizer-faculties.html, each between its <!-- specialists:start --> and <!-- specialists:end -->
-// markers. Run after changing the registry; the docs are never edited there by hand.
+// The specialists' registry (specialists.mjs) written into the design: its section of docs/v3/design.html (§17.1),
+// between the <!-- specialists:start --> and <!-- specialists:end --> markers. Run after changing the registry; the
+// section is never edited there by hand.
 //   node world-engine/director/specialists-doc.mjs [--check]
 // --check: exits 1 if a doc differs from what the registry writes (for the tests).
 import { readFile, writeFile } from 'node:fs/promises';
@@ -24,27 +24,7 @@ export const lawsOf = entry => entry.laws.length ? entry.laws.join(', ') : '—'
 /** Each ontology file, and which directors' state reaches it. */
 export const intoFiles = () => { const out = new Map(); for (const [id, states] of Object.entries(STATE)) for (const entry of states) for (const to of [entry.to, entry.also].filter(Boolean)) { const file = FILE[target(to).base]; (out.get(file) ?? out.set(file, new Map()).get(file)).set(id, [...(out.get(file).get(id) ?? []), entry.state]); } return out; };
 
-/** The markdown for next-steps.md. */
-export function markdown() {
-  const lines = ['_Written from `world-engine/director/specialists.mjs` by `specialists-doc.mjs`; change the registry, not this._', ''];
-  lines.push('**Block types** (Jev, in the kinds pass, as one distribution a window):', '', '| Type | What it is | In volume 1 | Fires |', '|---|---|---|---|');
-  for (const [id, type] of Object.entries(BLOCK_TYPES)) lines.push(`| ${type.label} | ${type.means} | ${type.volume1} | ${[...(QUIET.includes(id) ? ['fires no reader'] : []), ...fires(id)].join(', ')} |`);
-  lines.push('', '**Pre-film casts** (the work model reads the text) and the directors that play them (own: the director\'s first cast):', '', '| Cast | Fired by | Writes | Read by | Status |', '|---|---|---|---|---|');
-  for (const [id, cast] of Object.entries(CASTS)) lines.push(`| ${cast.label} | ${firedBy(cast)} | ${cast.writes.join('; ')} | ${readers(id).map(entry => `${entry.label}${entry.own ? ' (own)' : ''}`).join(', ')} | ${cast.status} |`);
-  lines.push('', '**Specialist directors.** The stage manager always runs; action directors record action, read the scale cast and hold a camera (one of them leads each beat); state directors keep what rides with people and things, with no zoom and no camera:', '', '| Director | Kind | Plays | Zoom | Camera | Asks Jev | Status |', '|---|---|---|---|---|---|---|');
-  for (const director of Object.values(DIRECTORS)) lines.push(`| ${director.label} | ${director.kind} | ${director.role} | ${director.scale ? metres(director.scale) : '—'} | ${director.camera ?? '—'} | ${director.asks.map(ask => `${ask.name}${ask.status === 'built' ? ' (built)' : ask.status === 'partial' ? ' (partial)' : ''}`).join('; ')} | ${director.status} |`);
-  lines.push('', '**State and the ontology.** What each director keeps as it plays, and how it flows:', '', ...FLOW.map((step, n) => `${n + 1}. **${step.step}**: ${step.what} (\`${step.code}\`)`), '', 'Gates: ' + Object.entries(GATES).map(([gate, what]) => `**${gate}**, ${what}`).join('; ') + '.', '');
-  for (const [id, states] of Object.entries(STATE)) {
-    lines.push(`*${DIRECTORS[id].label}*`, '', '| State | World log | Laws | Smoothed | Into the ontology | Gate | Status |', '|---|---|---|---|---|---|---|');
-    for (const entry of states) lines.push(`| ${entry.state}${entry.what ? ` (${entry.what})` : ''} | ${entry.log ?? '—'}${entry.log && !LOG_KINDS[entry.log].built ? ' (new)' : ''} | ${lawsOf(entry)} | ${entry.smoothed ? 'yes' : ''} | ${lands(entry)}${entry.schema ? ' (new field)' : ''}${entry.note ? `; ${entry.note}` : ''} | ${entry.gate} | ${entry.status} |`);
-    lines.push('');
-  }
-  lines.push('Into each ontology file:', '', '| File | From |', '|---|---|');
-  for (const [file, by] of intoFiles()) lines.push(`| \`${file}.jsonl\` | ${[...by].map(([id, states]) => `${DIRECTORS[id].label} (${states.join(', ')})`).join('; ')} |`);
-  return lines.join('\n');
-}
-
-/** The HTML sections for the plan page: block types, the cast-to-director matrix, the casts, the directors. */
+/** The HTML section of the design: block types, the cast-to-director matrix, the casts, the directors. */
 export function html() {
   const pill = status => `<span class="pill ${status === 'built' ? 'always' : status === 'partial' ? 'damp' : 'fired'}">${status}</span>`;
   const ids = Object.keys(DIRECTORS);
@@ -96,7 +76,7 @@ if (process.argv[1] === fileURLToPath(import.meta.url)) {
   if (problems.length) { console.error(problems.join('\n')); process.exit(1); }
   const check = process.argv.includes('--check');
   let stale = 0;
-  for (const [file, inner] of [[join(repository, 'docs', 'v2', 'next-steps.md'), markdown()], [join(repository, 'docs', 'v2', 'summarizer-faculties.html'), html()]]) {
+  for (const [file, inner] of [[join(repository, 'docs', 'v3', 'design.html'), html()]]) {
     const before = await readFile(file, 'utf8'), after = between(before, inner);
     if (after === before) continue;
     stale++;

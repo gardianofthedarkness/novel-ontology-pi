@@ -1,5 +1,5 @@
 /**
- * Warehouse part references and the slot maps that hold them (milestones M10i; docs/v2/models-and-settings.md §8.4). A
+ * Warehouse part references and the slot maps that hold them (milestones M10i; docs/v3/design.html#models-and-settings §8.4). A
  * part is `<source>:<part>`: `kit:cw_wpn_ak` (gkNextEngine's kits), `pack:suburban-01` (the baked CC0 packs),
  * `own:m1234abcd` (the universe's own models), or any source registered with `novel warehouse add`. The three slot
  * settings are maps from a kind to a part; `checkPartMap` is what the settings schema holds them to (settings.ts).

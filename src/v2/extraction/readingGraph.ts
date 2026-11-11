@@ -2,7 +2,7 @@ import { Connection, Database } from "@ladybugdb/core";
 import type { QueryResult } from "@ladybugdb/core";
 
 /**
- * The reading's own graph (docs/v2/world-model.md §6): an in-memory Ladybug store built once the facts are settled, so the
+ * The reading's own graph (docs/v3/design.html#world-model §6): an in-memory Ladybug store built once the facts are settled, so the
  * recommenders and the context engine ask the reading by Cypher, as the world engine asks the workspace's graph once canon
  * is written (src/ground/ontology/retrieval.ts). It holds the entities (with a place's scale), the scenes in reading order,
  * which places each scene names (and whether in its environment), and the facts with what each is about. A store of

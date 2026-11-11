@@ -3,7 +3,7 @@
 > Design update: dialogue cards now represent multi-person exchanges, not
 > single-speaker turns. The sentence-speaker results below describe the old
 > implementation and do not measure the new contract. See
-> [dialogue-card benchmarking](../dialogue-card-benchmark.md).
+> [dialogue-card benchmarking](dialogue-card-benchmark.md).
 
 ## Motivation: prior fresh three-chapter run
 
@@ -34,7 +34,7 @@ The semantic gate separates source-valid text organization from consequential
 assertions. It defaults uncertain facts to hold outside canon, permits unrelated
 supported work to proceed, binds decisions to source/proposal/canonical-context
 revisions, and prevents presence repairs from rewriting dialogue or actors.
-See [policy and commands](../semantic-review.md).
+See [policy and commands](../v3/design.html#semantic-review).
 
 238 core and 34 optional Pi tests pass. Coverage includes actual local CLI and
 Ladybug queries, partial approvals, source-only identity forms, immutable approved

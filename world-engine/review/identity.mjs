@@ -1,4 +1,4 @@
-// Identity from the world (docs/v2/world-ontology.md §6 "EM merge or split", §7b class I; Track B W6): two identities never
+// Identity from the world (docs/v3/design.html#world-ontology §6 "EM merge or split", §7b class I; Track B W6): two identities never
 // present together, in the same strand, with the same people round them, may be one person. The reading names people
 // it knows (char_…) and keeps each scene's unnamed ones as slots of that scene (slot_<scene>_<n>: "the little girl"),
 // so the same person met twice is two slots, or a slot and a name. The world log knows who was where; these are its

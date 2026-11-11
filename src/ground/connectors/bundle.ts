@@ -22,7 +22,7 @@ export interface BundleManifest {
   decisionModel: string; // pinned Jev version
   blocksProcessed: number;
   /**
-   * A world-first workspace (docs/world-first-design.md): its base layer (scenes, events, dialogue exchanges, the
+   * A world-first workspace (docs/v3/design.html#world-first-design): its base layer (scenes, events, dialogue exchanges, the
    * roster) is applied without fact review (`novel ingest --base-layer`), and the world loop decides presence, place,
    * time and dialogue under its laws. Never set on a reviewed workspace.
    */

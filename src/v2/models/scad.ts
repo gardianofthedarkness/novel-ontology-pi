@@ -1,5 +1,5 @@
 /**
- * Models as code (milestones M10a; docs/v2/models-and-settings.md §3): OpenSCAD turns a model's code into a coloured mesh
+ * Models as code (milestones M10a; docs/v3/design.html#models-and-settings §3): OpenSCAD turns a model's code into a coloured mesh
  * (the manifold backend, OFF with a colour on each face); the mesh is measured, checked as a closed solid with
  * manifold-3d, and written for the player Y-up (OpenSCAD is Z-up: (x, y, z) → (x, z, -y); the front stays +x).
  */

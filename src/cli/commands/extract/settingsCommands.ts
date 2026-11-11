@@ -1,5 +1,5 @@
 /**
- * `novel settings show|explain|set|unset|diff` (milestones M8b; docs/v2/models-and-settings.md §4): the universal world
+ * `novel settings show|explain|set|unset|diff` (milestones M8b; docs/v3/design.html#models-and-settings §4): the universal world
  * generator schema (config/world.schema.json) for an agent, concise and context-aware. A value resolves defaults <
  * universe (<library>/universe/settings.json) < book (<novel>/stage/settings.json) < place (`places.<id>` in either).
  * `set` checks a value against the schema before it writes, writes it to the layer it belongs in, logs who and why, and

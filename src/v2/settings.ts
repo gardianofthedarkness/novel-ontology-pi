@@ -1,5 +1,5 @@
 /**
- * The universal world generator schema's resolver (config/world.schema.json; docs/v2/models-and-settings.md §4;
+ * The universal world generator schema's resolver (config/world.schema.json; docs/v3/design.html#models-and-settings §4;
  * milestones M8a; the user, 2026-11-09: "dig out the hard rules and make them into our universal world generator
  * schema"). Every number and rule the generator, the laws, the smoother, crowds and the director used to keep in code
  * is a key of the schema with its default; a value resolves through layers:

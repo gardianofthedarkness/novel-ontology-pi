@@ -1,4 +1,4 @@
-// An unpaid rehearsal of the director (docs/v2/next-steps.md A6, M13): the stand-in Jev and a work model that answers by
+// An unpaid rehearsal of the director (docs/v3/design.html#next-steps A6, M13): the stand-in Jev and a work model that answers by
 // rule, over a copy of a workspace (never the live one: the director writes its records there). It proves the loop runs
 // end to end at the volume's scale and counts what each milestone changed; it says nothing about how well Jev or the work
 // model would answer.

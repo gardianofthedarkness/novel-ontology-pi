@@ -6,7 +6,7 @@ import { defaultResolver, loadSpawning } from "../src/v2/terrain/config.js";
 import { unify } from "../src/v2/terrain/heights.js";
 import { energyOf, layOut, radiusOf, type Standing } from "../src/v2/terrain/topology.js";
 
-// One city of manifolds (docs/v2/borrow-and-spawn.md §8): its districts laid out by its topology, its heights unified.
+// One city of manifolds (docs/v3/design.html#borrow-and-spawn §8): its districts laid out by its topology, its heights unified.
 const metropolis = defaultResolver(loadSpawning())({ id: "c1", label: "a metropolis", level: "city", kind: "metropolis" })!;
 const six = [["cbd", 2], ["dwelling", 3], ["industrial", 1]].flatMap(([kind, n]) => Array.from({ length: n as number }, (_, k) => ({ id: `${kind}${k + 1}`, kind: kind as string, r: 300 })));
 const shareOf = (at: [number, number], R: number) => Math.hypot(at[0], at[1]) / R;

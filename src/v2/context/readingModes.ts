@@ -10,7 +10,7 @@ import { ENTITY_TYPES, type Detected } from "../extraction/typing.js";
 import type { Item, Mode, Source } from "./engine.js";
 
 /**
- * The context engine's reading modes (docs/v2/context-engine.md; layer 3 of docs/v2/world-model.md): the documents of the
+ * The context engine's reading modes (docs/v3/design.html#context-engine; layer 3 of docs/v3/design.html#world-model): the documents of the
  * reading's Jev requests — scene tiling, sentence kinds, typing, EM and whose a concept is, story time and a flashback's
  * continuation, and EM² — composed by the engine, as place EM's (placeModes.ts) and terrain's (terrainModes.ts) are (the user's call,
  * 2026-10-31: the engine serves every Jev request). What each request offers (EM's candidates, EM²'s cast, the facts) is

@@ -16,7 +16,7 @@ import type { Entity } from "../../../ground/ontology/types.js";
  *      and/or escalations (units the work LLM must adjudicate).
  *
  * Adding a functionality = adding a patch. The patch list itself is an
- * OPEN design topic (see DESIGN.md §Open questions); v1 ships the patches
+ * OPEN design topic (see docs/v3/design.html#founding-design §Open questions); v1 ships the patches
  * marked there, shaped so the rest slot in without a schema change.
  */
 export interface PatchContext {

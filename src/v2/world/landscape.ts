@@ -24,7 +24,7 @@ import { centroid, materialize, type Building, type Fabric, type FillParams, typ
 export const LANDSCAPE_VERSION = 1;
 export const LANDSCAPE_TYPES = ["skyscrapers", "commercial", "residential", "industrial", "harbour", "park", "stadium", "village", "castle", "farm"] as const;
 /**
- * The street level's landscapes (docs/v2/world-engine-v2.md §2.0.13), each with its own 3D form: a shopping street, a
+ * The street level's landscapes (docs/v3/design.html#world-engine-v2 §2.0.13), each with its own 3D form: a shopping street, a
  * modern commercial centre, an avenue, a square, a station front, an alley, a terrace (a residential street), a waterfront.
  * Built from a street area's box; kept apart from the district level's list, which the landscape step asks from.
  */
@@ -70,7 +70,7 @@ export const LANDSCAPES: Record<LandscapeType, Kind> = kindsOf(LANDSCAPE_TABLE);
 
 /**
  * A manifold: how a part's heights spread over its ground round the median Jev gives it (the user's calls, 2026-10-31:
- * every level's kinds have their own manifold; no hard caps; docs/v2/visual-context-engine.md §5.8). The local median
+ * every level's kinds have their own manifold; no hard caps; docs/v3/design.html#visual-context-engine §5.8). The local median
  * falls from the core to the edge as (r + core)^−gradient (r: 0 at the core, 1 at the edge), scaled so the median over
  * the patch's area is Jev's; a building is log-normal round it (σ = spread), or, one in 1/tail, from a Pareto tail of
  * index `index` above the local 90th percentile. Research: height falls with distance as a power (elasticity −0.25 to
@@ -86,7 +86,7 @@ export interface Patch {
   /** A pool's member's ground, borrowed from the pool's default where it stands: it claims lots before the default does. */
   borrowed?: boolean;
   /**
-   * The layer the patch lies in, where it is not the surface or the shallow underground (docs/v2/terrain-levels.md §3.5): the
+   * The layer the patch lies in, where it is not the surface or the shallow underground (docs/v3/design.html#terrain-levels §3.5): the
    * deep underground, the air, an orbit. It is filled as if it stood alone on the ground and lifted onto its layer's floor
    * (layerBuildings); `deck` a floor in the air raised over what stands under it (metres).
    */
@@ -149,9 +149,9 @@ export const membership = (patch: Patch, p: Point) => 1 / (1 + Math.exp(-insideB
  * (each patch with its own draw for the lot). The first claim wins; with none, the lot is open ground. A newer patch
  * only ever draws for lots every older patch passed over, so it never takes one an older patch has.
  */
-/** Patches in the order they claim ground: borrowed ones first (docs/v2/world-engine-v2.md §2.0.12), then by birth. */
+/** Patches in the order they claim ground: borrowed ones first (docs/v3/design.html#world-engine-v2 §2.0.12), then by birth. */
 /**
- * The patches of the surface, the layer the city's fabric is cut, owned and built on (docs/v2/terrain-levels.md §3.3: each
+ * The patches of the surface, the layer the city's fabric is cut, owned and built on (docs/v3/design.html#terrain-levels §3.3: each
  * layer is its own plane). A patch under the street lies in another layer: it claims no surface ground, cuts no block and
  * lends no height, so laying a street under the street leaves the surface as it was, building for building.
  */
@@ -233,7 +233,7 @@ const gaussian = (rng: () => number) => Math.sqrt(-2 * Math.log(Math.max(1e-9, r
 /** The z of a probability (a logistic approximation, close enough for a profile). */
 const probit = (u: number) => Math.log(Math.max(1e-6, u) / Math.max(1e-6, 1 - u)) / 1.702;
 /**
- * How far a manifold's average height over its ground stands above the median it is built from (docs/v2/borrow-and-spawn.md
+ * How far a manifold's average height over its ground stands above the median it is built from (docs/v3/design.html#borrow-and-spawn
  * §8.6: heights are kept as averages, the engine builds from medians): its buildings, spread evenly over its area, stand
  * at their local median (falling from the core) times their own draw (heightAt).
  */
@@ -260,7 +260,7 @@ export function withManifold(patch: Patch, median: number, manifold: Manifold): 
 /** A part that lies under the street (its median below 0): its surface is open, its floors a hall that deep (underground.ts). */
 export const underground = (patch: Patch) => !patch.plane && (patch.median ?? 0) < 0;
 /**
- * The layers beyond the surface and the shallow underground (docs/v2/terrain-levels.md §3.5), and each one's floor in metres
+ * The layers beyond the surface and the shallow underground (docs/v3/design.html#terrain-levels §3.5), and each one's floor in metres
  * above the street: the deep underground's virtual floor, 60 levels down, below every real hall (the deepest, 110 m); a deck
  * in the air above the towers; an orbit's virtual floor far above the air. A virtual floor stands open LAYER_ROOM metres up
  * (its depth or height is not a number: the room is the world's grid's, not the ground's).
@@ -272,7 +272,7 @@ export const LAYER_ROOM = setting<number>("layers.room");
 /** A layer's floor under these patches (metres above the street): a deck as high as the highest asked of it. */
 export const floorOf = (patches: Patch[], plane: Layer) => plane === "air" ? Math.max(LAYER_FLOOR.air, ...patches.map((patch) => patch.deck ?? 0)) : LAYER_FLOOR[plane];
 /**
- * The ground skin over a street laid underground (docs/v2/terrain-levels.md §8.4), metres: the street's slab and the soil
+ * The ground skin over a street laid underground (docs/v3/design.html#terrain-levels §8.4), metres: the street's slab and the soil
  * between it and the underground street's open air. Its buildings' roofs stay under it.
  */
 export const SKIN = setting<number>("layers.skin");
@@ -318,7 +318,7 @@ export function boulevardOf(patch: Patch): Road {
 export const bowlOf = (patch: Patch) => ({ x: patch.x, z: patch.z, w: Math.round(0.62 * patch.R), d: Math.round(0.46 * patch.R), angle: patch.shape.turn });
 
 /*
- * The street forms (docs/v2/world-engine-v2.md §2.0.13), in a patch's own frame: `along` its axis (a box's long side), and
+ * The street forms (docs/v3/design.html#world-engine-v2 §2.0.13), in a patch's own frame: `along` its axis (a box's long side), and
  * `across` it. A form is a few rectangles that never overlap (the world stands each as a lot of its own; two over one
  * another would leave one of them out), so a tower rising from a podium is the tower and the podium's wings round it.
  */
@@ -385,7 +385,7 @@ function rowBuilding(patch: Patch, lot: string, along: number, across: number, w
   const kind = LANDSCAPES[patch.type], [x, z] = ring === undefined ? at(patch, along, across) : [patch.x + Math.cos(along) * across, patch.z + Math.sin(along) * across];
   if (insideBy(patch, [x, z]) < -2 || rng() > kind.coverage) return null;
   const s = kind.axis || kind.band ? axisDepth(patch, [x, z]) : depthOf(patch, [x, z]), floors = Math.max(1, Math.round(drawHeight(patch, Math.max(0.02, s), rng) / 3));
-  // Its use from the street's list (docs/v2/world-engine-v2.md §2.0.15), by a stream of its own: the layout is as it was.
+  // Its use from the street's list (docs/v3/design.html#world-engine-v2 §2.0.15), by a stream of its own: the layout is as it was.
   const use = kind.uses?.length ? kind.uses[Math.floor(skeletonStream(patch.id, "use", lot)() * kind.uses.length)] : null;
   return { lot: `${patch.id}:${lot}`, x: round(x, 1), z: round(z, 1), w: round(w, 1), d: round(d, 1), angle: ring === undefined ? patch.shape.turn : round(along + Math.PI / 2, 3), floors, kind: kind.building(floors), ...(use ? { use } : {}) };
 }
@@ -436,7 +436,7 @@ export function formOf(patch: Patch, crossing: Road[] = [], ground: Patch[] = []
     const reach = (Math.abs(nx * ux + nz * uz) * b.w + Math.abs(nz * ux - nx * uz) * b.d) / 2;
     return segmentDistance([b.x, b.z], road.a, road.b) < road.width / 2 + reach + 1;
   });
-  // Building into the ground it lands on (docs/v2/world-engine-v2.md §2.0.13): where a building of an `into` street stands
+  // Building into the ground it lands on (docs/v3/design.html#world-engine-v2 §2.0.13): where a building of an `into` street stands
   // on taller ground of its place (its pool's default: a CBD), that ground's tower goes on above it, the street's building
   // its base (shops under a tower); a low street (an alley, a terrace) keeps its own low fabric.
   const into = (b: Building): Building => {
@@ -470,7 +470,7 @@ export function formOf(patch: Patch, crossing: Road[] = [], ground: Patch[] = []
       }
     }
     // Behind the frontage, rows of the street's own buildings back to its edge, a lane between: its ground is built to its
-    // density (config/terrain/street.json; docs/v2/borrow-and-spawn.md §6), not left open. A stream of their own, so the
+    // density (config/terrain/street.json; docs/v3/design.html#borrow-and-spawn §6), not left open. A stream of their own, so the
     // frontage is as it was.
     const back = skeletonStream(patch.id, "back", patch.type);
     for (const side of [-1, 1]) {
@@ -635,7 +635,7 @@ export interface LandscapeFill { fabric: Fabric; owner: Record<string, string>; 
 /** A place's ground filled from its landscape (and a window of it, when given): the fabric, which patch owns each lot, and castles' walls and keeps. */
 /** A place's fill; `scope.place` gives the place's own layer of the world generator schema (fill.streets; milestones M8c). */
 export function fillLandscape(landscape: Landscape, window?: { x0: number; z0: number; x1: number; z1: number }, scope: { place?: string | null } = {}): LandscapeFill {
-  // The other layers (docs/v2/terrain-levels.md §3.5): their patches are no part of the surface's fill (they claim, cut and
+  // The other layers (docs/v3/design.html#terrain-levels §3.5): their patches are no part of the surface's fill (they claim, cut and
   // lend nothing there); their buildings join the landmarks on their own floors (layerBuildings).
   if (landscape.patches.some((patch) => patch.plane)) {
     const surface = landscape.patches.filter((patch) => !patch.plane);
@@ -685,7 +685,7 @@ export function fillLandscape(landscape: Landscape, window?: { x0: number; z0: n
   return { fabric, owner, walls, keeps, landmarks, plazas, radius, waters };
 }
 /**
- * The buildings of a landscape's patches in the other layers (docs/v2/terrain-levels.md §3.5), each layer's patches filled
+ * The buildings of a landscape's patches in the other layers (docs/v3/design.html#terrain-levels §3.5), each layer's patches filled
  * as if they stood alone on the ground (their own fabric, forms, landmarks and keeps; nothing of the surface's) and lifted
  * onto the layer's floor (`y0`): what was their streets and plazas is that floor. A virtual floor's buildings stop under its
  * room. A patch under the street with no height of its own on the ground (Jev's median below 0) stands at its kind's middle.
@@ -703,7 +703,7 @@ export function layerBuildings(landscape: Landscape, window?: { x0: number; z0: 
 }
 
 /*
- * What a street is laid on where its ground already made it (docs/v2/world-engine-v2.md §2.0.21, step 3): an avenue on a
+ * What a street is laid on where its ground already made it (docs/v3/design.html#world-engine-v2 §2.0.21, step 3): an avenue on a
  * boulevard or an arterial road, a shopping street on a collector, an alley on a local road, a square or a centre on a
  * plaza, a waterfront on the water. A station or a residential street is laid on none: it is given an area of its own.
  */

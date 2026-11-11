@@ -130,7 +130,7 @@ export async function livePicture(workspace, file) {
 }
 
 /**
- * Terrain spawning's step (world-engine/terrain/terrain-spawn.mjs; docs/v2/visual-context-engine.md), from World · Live: `step` lets
+ * Terrain spawning's step (world-engine/terrain/terrain-spawn.mjs; docs/v3/design.html#visual-context-engine), from World · Live: `step` lets
  * a run waiting after a proposal go on by one, `run` lets it run on, `pause` makes it wait again after each proposal.
  */
 export async function terrainStep(workspace, mode) {

@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /**
- * Pi arranges a folder for Novel Console (docs/v3/basic.md §6): a fresh Pi session on the work model, its one tool a
+ * Pi arranges a folder for Novel Console (docs/v3/design.html#basic §6): a fresh Pi session on the work model, its one tool a
  * scoped bash that runs only `novel folder <verb> <folder> ...` with the verbs that sort books (never a reading, the
  * keys or an import) and reads the folder skill. It never moves or changes the user's files: the arrangement is the
  * folder's hidden state (.novel/workspace.json).

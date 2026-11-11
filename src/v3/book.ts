@@ -1,5 +1,5 @@
 /**
- * A book with a reading, as an editor reads source with its symbols (docs/v3/workspace.md): the text's sentences at their
+ * A book with a reading, as an editor reads source with its symbols (docs/v3/design.html#workspace): the text's sentences at their
  * offsets; the reading's people, places, things and concepts as symbols, each with a record (its definition); every line
  * that names, describes, quotes or addresses one as a reference, with how the reading reached it and how sure it is; the
  * outline of chapters, scenes and cards; the reading's doubtful credits as problems. Read-only over what the reading made.

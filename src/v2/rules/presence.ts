@@ -3,7 +3,7 @@ export const PRESENT_HOW: ReadonlySet<string> = new Set(["speaks", "acts", "addr
 export const isPresent = (person: { how: readonly string[] }) => person.how.some((how) => PRESENT_HOW.has(how));
 
 /**
- * Credits checked against their unit (docs/v2/strands.md §0.6; the user, 2026-11-09: "Yes let's fix it", on the reading
+ * Credits checked against their unit (docs/v3/design.html#strands §0.6; the user, 2026-11-09: "Yes let's fix it", on the reading
  * crediting people who are not there). A card credits a person as acting, speaking or spoken to through the roles of its
  * lines. A credit is **weak** when the role reached the person through a description (`via`: "the girl", "the Number
  * One", "the big sister") that is not one of that person's aliases, or when the person is the one spoken to. A weak credit

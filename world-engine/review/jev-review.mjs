@@ -1,4 +1,4 @@
-// The review by Jev (docs/v2/jev-review.md §3–§6, R3): each held item answered by Jev from its evidence pack, with the line
+// The review by Jev (docs/v3/design.html#jev-review §3–§6, R3): each held item answered by Jev from its evidence pack, with the line
 // that shows it; below 0.5 the same request goes to the work model (system 2, world-engine/director/system2.mjs) and its
 // answer is used; the laws check what is used; what cannot stand goes on to the main agent (Pi). Jev gives no prose, so the
 // line it picks is the answer's reason.
@@ -137,7 +137,7 @@ export function evidenceQuestion(focus, ids, verdict = null) {
   return { key: 'evidence', primitive: 'choice', instructions, options: [...lines, NO_LINE], optionHints: { ...Object.fromEntries(lines.map(id => [id, lineHint(fields.get(id))])), [NO_LINE]: 'none of these lines bears on the answer' } };
 }
 
-/** The mode (context-engine.md): the item kept, the lines in reading order, the people kept. */
+/** The mode (docs/v3/design.html#context-engine): the item kept, the lines in reading order, the people kept. */
 export function modeOf(kind) {
   return {
     name: `review:${kind}`, task: ['who-speaks', 'speaker'].includes(kind) ? TASK_SPEAKER : TASK,

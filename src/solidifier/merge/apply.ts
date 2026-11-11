@@ -7,7 +7,7 @@ import { digest, materializeSemantic } from "./semantic.js";
 /**
  * Applies an APPROVED ChangeSet to the ontology main graph.
  * This is the only code path from miniloop output to the store, and it is
- * only reachable after the main agent approves the merge (DESIGN.md
+ * only reachable after the main agent approves the merge (docs/v3/design.html#founding-design
  * §Merge gate). Held or revision-requested change sets never reach here.
  *
  * State materialization (v1, 2026-10-22): add_alias and set_state_change

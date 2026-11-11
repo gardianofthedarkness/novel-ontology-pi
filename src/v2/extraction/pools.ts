@@ -3,14 +3,14 @@ import { basename, dirname, join } from "node:path";
 import type { ReadingScript, ScriptPlace } from "./script.js";
 
 /**
- * Sampling pools (docs/v2/world-engine-v2.md §2.0.11, the user's design, 2026-10-31). Every nominated area (a named
+ * Sampling pools (docs/v3/design.html#world-engine-v2 §2.0.11, the user's design, 2026-10-31). Every nominated area (a named
  * region, city or district) has a pool one level below it (a pool city, a pool district, a pool street): its backup
  * area, whose terrain is the area's own by default. What the text mentions in an area without nominating it (place EM's
  * unnamed places held there; a named building or room the tree puts nowhere) stands in that area's pool, not in a named
  * sibling picked at random. Where a thing could be in several areas, their pools are even chances, picked once by a seed
  * and kept. The pools are permanent across the books of one universe: the universe's registry keeps every pool ever made,
  * keyed by its area's name, and its members by book, in the order they were placed. A rule of the tree (layer 4 of
- * docs/v2/world-model.md): it decides without a model, and the world engine lays the pools out (placeCanvas.ts).
+ * docs/v3/design.html#world-model): it decides without a model, and the world engine lays the pools out (placeCanvas.ts).
  */
 export const POOL_BELOW: Record<string, string> = { region: "city", city: "district", district: "street" };
 const RANK: Record<string, number> = { room: 0, building: 1, street: 2, district: 3, city: 4, region: 5 };
@@ -36,7 +36,7 @@ export function evenPick(seed: string, choices: string[]): string {
 }
 
 /**
- * How closely continuity ties places (docs/v2/world-engine-v2.md §2.0.14, the user's design, 2026-10-31): a scene's places
+ * How closely continuity ties places (docs/v3/design.html#world-engine-v2 §2.0.14, the user's design, 2026-10-31): a scene's places
  * are where it is set and the places set in it (place EM's unnamed places); two places are tied once for each character
  * who goes from the one's scene to the other's (two scenes in a row of that character's, in story order), and once for
  * each character in one scene set in both. Symmetric: ties[a][b] === ties[b][a].

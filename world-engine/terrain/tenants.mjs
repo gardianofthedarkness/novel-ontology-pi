@@ -1,5 +1,5 @@
 /**
- * Composite buildings at the building level (docs/v2/borrow-and-spawn.md §6; the user, 2026-11-01): a shop, a restaurant,
+ * Composite buildings at the building level (docs/v3/design.html#borrow-and-spawn §6; the user, 2026-11-01): a shop, a restaurant,
  * a cinema the text passes by joins a building of a use that holds such places (a mall, a tower's foot, a station, an
  * underground mall) under its holder, where the characters' travel is least: one kept at this level, or a spare lot of
  * that use. It takes no lot. Its floor and size: fixed for some types (config/terrain/composite.json), else one question

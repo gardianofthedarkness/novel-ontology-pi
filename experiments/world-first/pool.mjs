@@ -1,4 +1,4 @@
-// The world's review pool, from the world-first loop's side (docs/world-first-design.md §11; the CLI side is
+// The world's review pool, from the world-first loop's side (docs/v3/design.html#world-first-design §11; the CLI side is
 // src/cli/commands/extract/worldCommands.ts). What a scene leaves unsure or against a law becomes a pool item; every
 // `batch` open items are a batch, sent to the main agent (Pi, through its console's queue, as the host itself does)
 // while the world goes on. The agent answers from the original text; the world, between scenes, turns answers into pins

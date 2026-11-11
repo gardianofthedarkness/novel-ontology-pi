@@ -3,7 +3,7 @@
 > Historical speaker-attribution experiment, not the current product target.
 > The owner-approved design now uses multi-participant dialogue cards, with
 > no sentence-by-sentence speaker assignment. See the [current benchmark
-> contract](dialogue-card-benchmark.md) and DESIGN.md. Results below are kept
+> contract](dialogue-card-benchmark.md) and the design (docs/v3/design.html). Results below are kept
 > unchanged as historical evidence; none is a card-participant accuracy claim.
 
 23 October 2026. This report contains aggregate results only; private novel

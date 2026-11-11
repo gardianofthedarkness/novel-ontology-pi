@@ -1,5 +1,5 @@
 /**
- * An EPUB as published, for the reader (docs/v3/reader.md): one spine document at a time, its headings, paragraphs and
+ * An EPUB as published, for the reader (docs/v3/design.html#reader): one spine document at a time, its headings, paragraphs and
  * pictures kept, with scripts, styles, links and event attributes taken out and each picture inlined as a data URI (a
  * webview or a saved page loads nothing from outside). The same cleaning World · Live's reader used (tools/pi-review/
  * book-epub.mjs), on the workspace's file.

@@ -1,7 +1,7 @@
 import { scaleOfName } from "../../digger/stage/scale.js";
 
 /**
- * What the code rules need to know of a language (docs/v2/world-model.md §3; src/v2/rules/index.ts): the words and marks
+ * What the code rules need to know of a language (docs/v3/design.html#world-model §3; src/v2/rules/index.ts): the words and marks
  * that say where a place is against another, which level of the world a word points at, and what the generic part of a
  * place's name says of its scale. One profile per language; the reading uses LANGUAGE. A new language is a new profile
  * here, and no rule elsewhere changes.

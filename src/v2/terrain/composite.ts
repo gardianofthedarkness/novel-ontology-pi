@@ -1,5 +1,5 @@
 /**
- * Composite buildings (the user, 2026-11-01; docs/v2/borrow-and-spawn.md §6): a shop, a restaurant, a bar, a cinema the text
+ * Composite buildings (the user, 2026-11-01; docs/v3/design.html#borrow-and-spawn §6): a shop, a restaurant, a bar, a cinema the text
  * passes by is part of a larger building (a mall, a tower's foot, a station, an underground mall), not a building of its
  * own. It joins a host under its holder where the characters' travel is least and takes no lot. Its floor and size: fixed
  * for some types (a convenience store on floor one), else asked of Jev in one question; it stands at a random spot of that

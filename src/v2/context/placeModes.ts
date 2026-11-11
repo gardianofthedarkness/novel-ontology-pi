@@ -5,7 +5,7 @@ import type { ReadingGraph } from "../extraction/readingGraph.js";
 import type { Item, Mode } from "./engine.js";
 
 /**
- * The context engine's place modes (docs/v2/world-model.md §6): what Jev sees when place EM asks which place holds a place
+ * The context engine's place modes (docs/v3/design.html#world-model §6): what Jev sees when place EM asks which place holds a place
  * (`place-parent`), where a scene is set (`setting`), and which named place a description means (`place-ref`). Each is
  * asked only where the place recommender is unsure; its candidates are the options, with why each was put forward.
  * Evidence: the sentences that name the places, facts by Cypher over the reading's graph, the candidates' addresses.

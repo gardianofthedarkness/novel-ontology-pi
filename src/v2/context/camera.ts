@@ -1,5 +1,5 @@
 /**
- * The camera operator (docs/v2/director-camera.md; the user's design, 2026-11-02): the shots a move needs, planned in code
+ * The camera operator (docs/v3/design.html#director-camera; the user's design, 2026-11-02): the shots a move needs, planned in code
  * for Jev, the director, to answer on. A move is three steps: a direction (fourteen lettered arrows out of the person), a
  * spot inside the chosen arrow's wedge, and only when no spot fits, a box in two calls (c1 rough on a plan framed along the
  * arrow, c2 exact: the rough box's column from the side, its heights lettered, and the box zoomed top-down). Plain data and

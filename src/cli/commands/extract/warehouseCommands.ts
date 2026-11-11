@@ -1,5 +1,5 @@
 /**
- * `novel warehouse list|add|fetch|refresh|find|show|use` (milestones M10g–i; docs/v2/models-and-settings.md §8.3–8.4):
+ * `novel warehouse list|add|fetch|refresh|find|show|use` (milestones M10g–i; docs/v3/design.html#models-and-settings §8.3–8.4):
  * the model warehouse for an agent, concise and context-aware. Sources are registered folders of SCAD kits or glTF files
  * with a catalogue of evaluated records; parts are `<source>:<part>`; `use` connects a part to a slot of the world's
  * configuration through the settings schema. JSON out; nothing here asks a model; a download needs the user's OK.

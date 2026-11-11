@@ -84,7 +84,7 @@ test("terrain's ground: the sentences around the part's name in the scenes namin
   assert.deepEqual([state.standing, state.facts, state.environment, state.text], [{ dormitory: "a building" }, undefined, undefined, undefined], "what stands in it, and no facts or surroundings that are the city's");
   // The kinds go by level (the user's call): a district's, then the basic shapes; a commercial centre or a park is a street's.
   const district = ["cbd", "dwelling", "industrial", "harbour", "mountain", "oldtown", "village", "farmland", "donut"];
-  // Its kind only: where it lies and how large it is are the program's (docs/v2/world-engine-v2.md §2.0.21).
+  // Its kind only: where it lies and how large it is are the program's (docs/v3/design.html#world-engine-v2 §2.0.21).
   assert.deepEqual([Object.keys(state.kinds), composed.questions.map((question) => question.key), composed.questions[0].options], [district, ["kind"], district]);
   const street = await (await import("../src/v2/context/engine.js")).compose(T.terrainGroundMode, { ...focus, part: { ...focus.part, scale: "street" } }, stores);
   assert.deepEqual(Object.keys((street.state as Record<string, object>).kinds), ["shopping", "centre", "avenue", "square", "crossing", "station", "alley", "residential", "waterfront", "park", "stadium", "donut"]);
@@ -94,7 +94,7 @@ test("terrain's ground: the sentences around the part's name in the scenes namin
   assert.equal(T.TERRAIN_KINDS.district.cbd.ground, "skyscrapers");
   // Each kind its own manifold, and Jev gives its median (the user's calls): a CBD's medians, a mountain's tops.
   const cbd = T.terrainHeights("district", "cbd");
-  // A ring floats (docs/v2/borrow-and-spawn.md §8.9): asked first how far it is from the ground, the ground itself a slice.
+  // A ring floats (docs/v3/design.html#borrow-and-spawn §8.9): asked first how far it is from the ground, the ground itself a slice.
   assert.deepEqual([cbd.measure, cbd.slices[4], T.terrainHeights("district", "mountain").measure, T.terrainHeights("district", "mountain").slices[4].said, T.terrainHeights("district", "donut").measure, T.terrainHeights("district", "donut").slices[4].y],
     ["median", { letter: "E", y: 30, said: "about 10 floors" }, "top", "a hill", "elevation", 0]);
   // Below the street too (the user's call): every part is offered the underground's slices first, the deepest as A.

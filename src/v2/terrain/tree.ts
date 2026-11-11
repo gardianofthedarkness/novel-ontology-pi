@@ -1,5 +1,5 @@
 /**
- * The place tree with slots instead of pools (docs/v2/borrow-and-spawn.md §2.2–2.7), as terrain spawning and the world's
+ * The place tree with slots instead of pools (docs/v3/design.html#borrow-and-spawn §2.2–2.7), as terrain spawning and the world's
  * export both read it when a book's terrain is made by borrowing and spawning (stage/terrain.json `mode: "spawn"`):
  *  - no pools: a pool's members stand in the pool's own area (a place the text puts only in 学园都市 is held by 学园都市, and
  *    borrows among the slots under it: §2.5);

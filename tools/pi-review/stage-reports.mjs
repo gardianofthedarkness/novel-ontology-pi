@@ -31,7 +31,7 @@ const cells = list => Array.isArray(list) ? list.filter(Number.isInteger) : [];
 const units = list => Array.isArray(list) ? list.filter(unit => Array.isArray(unit) && unit.length >= 4 && unit.every(Number.isFinite)) : [];
 
 /**
- * The stage simulation records (stage/simulation/, docs/stage-simulation-records.md), each strand's
+ * The stage simulation records (stage/simulation/, docs/v3/design.html#stage-simulation-records), each strand's
  * accepted run, trimmed to what the Places map draws: per place its lots with their skeletons and rooms (the first strand's layout of
  * a place stands), the things placed there, the hits with the cells and units each lot lost, and who
  * moved between places. Null without records.

@@ -3,7 +3,7 @@ import { dirname, join, resolve } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 
 /**
- * What a book carries into the next, per strand (world-engine/world/carry.mjs; docs/v2/borrow-and-spawn.md §4.5;
+ * What a book carries into the next, per strand (world-engine/world/carry.mjs; docs/v3/design.html#borrow-and-spawn §4.5;
  * milestones M16; the user, 2026-11-09: "At the reading stage of each book, we need to determine if we are inheriting any
  * strands from last book or not. If inherit, we preserve the destructions. If not, we close the strand, and destruction
  * is recovered for the new book"). Each is the engine's, loaded from the repository this CLI runs from.

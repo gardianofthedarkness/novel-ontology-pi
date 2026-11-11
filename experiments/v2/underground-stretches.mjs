@@ -1,4 +1,4 @@
-// Underground stretches as places (docs/v2/terrain-levels.md §8.5; world-engine/digest/underground-note.mjs): a run of
+// Underground stretches as places (docs/v3/design.html#terrain-levels §8.5; world-engine/digest/underground-note.mjs): a run of
 // underground units filed under a whole city or district gets an unnamed underground place of its own, of the street's
 // scale, under that city or district. Free: it asks nothing. With --write it changes the reading and the world script:
 //   - the reading (data.json `places`): the place as a slot with its evidence lines, its units set there, and the people

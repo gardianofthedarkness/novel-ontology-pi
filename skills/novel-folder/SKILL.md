@@ -95,4 +95,4 @@ credit (a person the scene names in passing can still be credited wrongly). Chec
 A book with no reading can be read on this Mac with `novel folder read <folder> <file>`: it starts the reading in a
 process of its own and returns at once; `novel folder reading <folder> <file>` says where it is (`--stop` stops it). It
 is paid (about $0.35 a volume) and needs both model keys (`novel folder keys <folder>` says whether they are set). The
-user runs readings from the editor's play button; run one only when the user asks you to. See docs/v3/reading.md.
+user runs readings from the editor's play button; run one only when the user asks you to. See docs/v3/design.html#readings.

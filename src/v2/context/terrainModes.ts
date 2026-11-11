@@ -4,7 +4,7 @@ import { LANGUAGE } from "../rules/language.js";
 import type { Item, Mode, Source } from "./engine.js";
 
 /**
- * The context engine's terrain modes (docs/v2/visual-context-engine.md §5.6; layer 3 of docs/v2/world-model.md): what Jev
+ * The context engine's terrain modes (docs/v3/design.html#visual-context-engine §5.6; layer 3 of docs/v3/design.html#world-model): what Jev
  * sees when terrain spawning asks which city a part is in (`terrain-member`), where a part lies and what its ground is
  * (`terrain-ground`), where it lies closer up (`terrain-zoom`) and at what height (`terrain-height`). A part's ground is read
  * from the raw text of the scenes it is in (the user's call, 2026-11-01). Before, the things standing round it, the facts
@@ -105,11 +105,11 @@ const M = (gradient: number, spread: number, tail = 0, index = 5) => ({ gradient
 /**
  * The kinds of terrain a part may be, by its level (the user's calls, 2026-10-31): a city is what kind of city it is; a
  * district what a whole quarter is built as; a commercial centre, a park or a stadium is a street's. A built kind is the
- * engine's ground (a landscape type) with its own manifold (docs/v2/visual-context-engine.md §5.8): Jev gives its median
+ * engine's ground (a landscape type) with its own manifold (docs/v3/design.html#visual-context-engine §5.8): Jev gives its median
  * (`medians`, the slices it is offered), the engine draws the spread, with no cap. Natural ground and shapes are asked
  * their top (`tops`). The old-world kinds stay for older worlds. The gradients follow the research: about 0.3 city-wide,
  * steeper for a commercial core; the spreads are wide where heights vary most (a CBD, a city's whole skyline). Living
- * areas are an East Asian megacity's (the user's call, 2026-11-01; docs/v2/living-areas.md): a city's, a dwelling area's and a
+ * areas are an East Asian megacity's (the user's call, 2026-11-01; docs/v3/design.html#living-areas): a city's, a dwelling area's and a
  * residential street's heights start at three or four floors, with a tail of residential towers; another region's living
  * areas are an option for later.
  */
@@ -134,7 +134,7 @@ export const TERRAIN_KINDS: Record<string, Record<string, TerrainKind>> = {
     village: { hint: "a village of an older world: scattered low houses with gardens", ground: "village", manifold: M(0, 0.2), medians: [3, 4, 6, 8] },
     farmland: { hint: "farmland: wide fields with a few farmhouses", ground: "farm", manifold: M(0, 0.15), medians: [3, 4, 6] },
   },
-  // The street level's own kinds (docs/v2/world-engine-v2.md §2.0.12, §2.0.13): the street-level land use, each built as its
+  // The street level's own kinds (docs/v3/design.html#world-engine-v2 §2.0.12, §2.0.13): the street-level land use, each built as its
   // own street form (landscape.ts STREET_TYPES) on its own manifold; an avenue and a crossing take the city's own roads
   // (config/terrain/street.json `takes`). An underground passage is spatial, no street.
   street: {
@@ -150,7 +150,7 @@ export const TERRAIN_KINDS: Record<string, Record<string, TerrainKind>> = {
     park: { hint: "a park or an amusement park: lawns, gardens, rides, with a few pavilions", ground: "park", manifold: M(0, 0.4, 0.02), medians: [3, 5, 8, 12, 20] },
     stadium: { hint: "a stadium or a sports ground: a bowl with parking and a few halls round it", ground: "stadium", manifold: M(0, 0.2), medians: [15, 25, 35, 50] },
   },
-  // The building level's own kinds (docs/v2/borrow-and-spawn.md §6; the user, 2026-11-01: every level asked alike, its
+  // The building level's own kinds (docs/v3/design.html#borrow-and-spawn §6; the user, 2026-11-01: every level asked alike, its
   // type and its height): a building's use, as the streets' buildings take them (config/terrain/street.json) and the model
   // table draws them (config/models.json). A building's height is its own (no manifold) and its scenes' alone: every kind
   // is offered the same slices (BUILDING_FLOORS), nothing in its hint says how tall it is.
@@ -184,7 +184,7 @@ export const TERRAIN_KINDS: Record<string, Record<string, TerrainKind>> = {
   },
 };
 /**
- * Which kinds of a level a part may adjoin (docs/v2/world-engine-v2.md §2.0.15, §2.0.20): a first map at the street level,
+ * Which kinds of a level a part may adjoin (docs/v3/design.html#world-engine-v2 §2.0.15, §2.0.20): a first map at the street level,
  * each level's to be worked out later. Either side may name the other. Adjoining is touching, not lying over: a box mostly
  * over a compatible kept place is asked again, and compatible parts still overlapping are moved beside each other by the
  * export. What lies below the street (a cut, a basin, a part answered underground) lies under anything; a square, a park,
@@ -205,7 +205,7 @@ export const mayOverlap = (a: string | null | undefined, b: string | null | unde
 /** The heights a basic shape may rise to (metres). */
 const SHAPE_TOPS = [3, 6, 12, 25, 50, 100];
 /**
- * Floating objects (docs/v2/borrow-and-spawn.md §8.9; the user's idea): a platform, a sphere, a ring, a cavern neither stands
+ * Floating objects (docs/v3/design.html#borrow-and-spawn §8.9; the user's idea): a platform, a sphere, a ring, a cavern neither stands
  * on the ground nor fills a manifold. Each is asked twice: how far it is from the ground (its underside above the street;
  * under it, how deep its top lies), and how thick it is. None of them takes part in a manifold's average or in unification.
  */
@@ -246,7 +246,7 @@ export function terrainHeights(scale: string, kind: string, average?: { factor: 
   // A floating object is asked first how far it is from the ground (then its thickness: terrainThickness).
   if (!entry && FLOATING.has(kind))
     return { measure: "elevation", slices: [...UNDERGROUND.map(([y, under]): [number, string] => [y, `underground: its top ${-y} m down, ${under}`]), ...ELEVATIONS.map((y): [number, string] => [y, y === 0 ? "on the ground" : `its underside about ${Math.max(1, Math.round(y / 3))} floors up`])].map(([y, said], k) => ({ letter: LETTERS[k], y, said })) };
-  // As averages (docs/v2/borrow-and-spawn.md §8.9; `factor`: the kind's manifold's average over its median), the kind's
+  // As averages (docs/v3/design.html#borrow-and-spawn §8.9; `factor`: the kind's manifold's average over its median), the kind's
   // least average its minimum, a hard gate (the user, 2026-11-01): no slice below it. Under the street only where an area of
   // the level may lie there (`underground`: a passage at the street level, not a city or a district). Each slice keeps its
   // addition to the minimum (`offset`), for the question asked as one (the height probe).
@@ -347,14 +347,14 @@ export const terrainGroundMode: Mode<GroundFocus, TerrainStores> = {
   sources: [...sources<GroundFocus>("ground"), fixed("kinds", "kinds", (focus: GroundFocus) => focus.offered ?? terrainKinds(focus.part.scale, focus.shapes)) as Source<GroundFocus, TerrainStores>, fixed("pictures", "pictures", (focus: GroundFocus) => focus.pictures) as Source<GroundFocus, TerrainStores>],
   cutOrder: ["environment", "standing", "facts"],
   probe,
-  // Its kind only (docs/v2/world-engine-v2.md §2.0.21): where an area lies and how large it is are the program's (its pins,
+  // Its kind only (docs/v3/design.html#world-engine-v2 §2.0.21): where an area lies and how large it is are the program's (its pins,
   // its ties, free ground); a city is the map itself.
   questions: (focus, kept) => [{ key: "kind", primitive: "choice", instructions: `What kind of ${focus.part.scale} is ${focus.part.label} (the kinds are in kinds)?`, options: kept.kinds.map((item) => item.id), optionHints: Object.fromEntries(kept.kinds.map((item) => [item.id, String(item.fields)])) }],
   budget: BUDGET,
 };
 
 /**
- * Where a pool's member lies and how large it is (docs/v2/world-engine-v2.md §2.0.13): asked between its kind and its
+ * Where a pool's member lies and how large it is (docs/v3/design.html#world-engine-v2 §2.0.13): asked between its kind and its
  * height, on a map of its pool close up (where sampling put it, a grey pin; the members already kept outlined in white;
  * a pin is a point, never a size), with what the text says of it and of the places holding it.
  */

@@ -1,7 +1,7 @@
 /**
  * Block cutting — deterministic, code only.
  *
- * Ingestion rolls by chapter-or-long-block (DESIGN.md processing model).
+ * Ingestion rolls by chapter-or-long-block (docs/v3/design.html#founding-design processing model).
  * This module decides the units: first find chapter boundaries, then cut
  * each chapter into blocks of at most `targetChars`, always on paragraph
  * boundaries so a block never starts mid-paragraph. A chapter longer than

@@ -1,4 +1,4 @@
-// The director's shots for one person at a scene's start (docs/v2/director-camera.md §2), drawn by the camera operator
+// The director's shots for one person at a scene's start (docs/v3/design.html#director-camera §2), drawn by the camera operator
 // (src/v2/context/camera.ts) on the world as last built (stage/simulation/live/page.json), with no model call: a, the
 // fourteen lettered arrows; b, the chosen arrow and its wedge; c1, the plan framed along it; c2, a rough box's column from
 // the side with its heights lettered, and the box zoomed top-down. For looking at the shots before Jev answers on them.

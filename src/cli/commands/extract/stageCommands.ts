@@ -81,7 +81,7 @@ const worldFirstBook = async (novelDir: string) => !!(await readJson<{ worldFirs
 /** The main agent's answers on landscapes (stage/world/pins.json, written by the world loop): place id → landscape. */
 const landscapePins = async (novelDir: string) => (await readJson<{ landscape?: Record<string, string> }>(join(novelDir, "stage", "world", "pins.json")))?.landscape ?? {};
 /**
- * A world-first workspace stages the world, not the reviewed presence (docs/world-first-design.md): each scene's cast is
+ * A world-first workspace stages the world, not the reviewed presence (docs/v3/design.html#world-first-design): each scene's cast is
  * who the world has there (present, and those who stayed unseen), its place is the world's (an unnamed place becomes a
  * place of its own), and a scene the world has in the past is a flashback. Places and names are added for the unnamed.
  */

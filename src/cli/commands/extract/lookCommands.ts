@@ -1,5 +1,5 @@
 /**
- * `novel look context` (milestones M14; docs/v2/models-and-settings.md \u00a710): what the main agent needs for the look pass,
+ * `novel look context` (milestones M14; docs/v3/design.html#models-and-settings \u00a710): what the main agent needs for the look pass,
  * the step after a book's reading and before its terrain loop that sets the world generator for the book's places from
  * the text alone. The place tree top down (the book, its cities, districts, streets), each place with its environment
  * sentences (the reading's kinds), the words in them that a setting can answer, the warehouse parts the text names (a

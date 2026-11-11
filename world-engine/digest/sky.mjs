@@ -1,4 +1,4 @@
-// The story sky (docs/v2/sky.md; the user, 2026-11-05: "a Calendar weather system that unifies time change to theme change
+// The story sky (docs/v3/design.html#sky; the user, 2026-11-05: "a Calendar weather system that unifies time change to theme change
 // + weather change implicitly said in text"). One coarse time of day and one weather for each unit, in fixed types, each
 // with where it came from and how sure; what the world's look (strand-demo.html), the calendar and the casts read.
 //

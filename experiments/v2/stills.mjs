@@ -1,4 +1,4 @@
-// The stills cast as a pre-film step (world-engine/digest/stills.mjs; docs/v2/stills.md): each story picture of the book's
+// The stills cast as a pre-film step (world-engine/digest/stills.mjs; docs/v3/design.html#stills): each story picture of the book's
 // album, prepared locally (faces lettered, text read: tools/album-portraits/stills.py, NOVEL_PORTRAIT_PYTHON), asked of Jev
 // with the book's portraits and the text around it, one request a picture (paid, cents; cached). Writes beside the reading:
 // pictures.json (the notes: kinds, cards, who, where, when, what each text is; no words of the book) and pictures-text.json

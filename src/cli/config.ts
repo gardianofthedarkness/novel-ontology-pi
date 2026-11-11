@@ -2,7 +2,7 @@
  * Model-routing configuration — read from the environment, plus the
  * Jev key's secure-store resolution (src/connectors/secrets.ts).
  *
- * The user provides TWO APIs (see .env.example and DESIGN.md §1):
+ * The user provides TWO APIs (see .env.example and docs/v3/design.html#founding-design §1):
  * one work LLM (generation/extraction) and one decision model (Jev).
  * Keys are secrets: this module reports only whether a key is
  * configured, never its value, so `novel config` output is always

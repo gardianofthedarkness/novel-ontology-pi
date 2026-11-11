@@ -239,9 +239,9 @@ ${STAGES.map(stage).join('\n')}
     <a href="../terrain/"><b>The terrain run</b><span>Each part as Jev saw it, and the world it built.</span></a>
     <a href="concepts.html"><b>Concept map</b><span>Every concept we invented, with its code and its design.</span></a>
     <a href="street-compatibility.html"><b>Street compatibility</b><span>Which streets share ground, which buildings they take.</span></a>
-    <a href="${doc('docs/v2/README.md')}"><b>The guide by stage</b><span>From each concept to its design and its code.</span></a>
-    <a href="${doc('docs/v2/status.md')}"><b>Status</b><span>What each step decided, and what is open.</span></a>
-    <a href="${doc('docs/v2/whats-new.md')}"><b>What is new in v2</b><span>For a teammate catching up.</span></a>
+    <a href="${doc('docs/v3/design.html#v2-readme')}"><b>The guide by stage</b><span>From each concept to its design and its code.</span></a>
+    <a href="${doc('docs/v3/design.html#status')}"><b>Status</b><span>What each step decided, and what is open.</span></a>
+    <a href="${doc('docs/v3/design.html#whats-new')}"><b>What is new in v2</b><span>For a teammate catching up.</span></a>
   </div>
 </section>
 <footer>Made from <code>src/v2/concepts.ts</code> by <code>experiments/v2/terrain-io.mjs</code> at <a href="${GITHUB}/tree/${esc(ref)}">${esc(ref)}</a>.</footer>
@@ -283,7 +283,8 @@ export async function terrainIo(novelDir, outDir, { run = 'run 11', ref = 'terra
 
   const { STAGES, LAYERS, CONCEPTS } = await import(pathToFileURL(join(repository, 'dist/src/v2/concepts.js')).href);
   const { conceptsPage } = await import(pathToFileURL(join(repository, 'experiments', 'v2', 'concepts-page.mjs')).href);
-  const pages = { 'index.html': stagesPage({ STAGES, LAYERS, CONCEPTS, ref }), 'concepts.html': toGithub(await conceptsPage()), 'street-compatibility.html': toGithub(await readFile(join(repository, 'docs', 'v2', 'street-compatibility.html'), 'utf8')) };
+  const { compatPage } = await import(pathToFileURL(join(repository, 'experiments', 'v2', 'compat-page.mjs')).href);
+  const pages = { 'index.html': stagesPage({ STAGES, LAYERS, CONCEPTS, ref }), 'concepts.html': toGithub(await conceptsPage()), 'street-compatibility.html': toGithub(await compatPage()) };
   for (const [name, html] of Object.entries(pages)) { refuseText(`v2/${name}`, html); await writeFile(join(v2Dir, name), html); }
   return { parts: parts.length, unplaced: parts.filter(part => !part.id).map(part => part.subject), pictures: parts.reduce((sum, part) => sum + part.pictures.length, 0), calls: rows.filter(row => row.kind === 'ask').length, tokens };
 }

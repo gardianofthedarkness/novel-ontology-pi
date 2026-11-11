@@ -1,5 +1,5 @@
 // Adds the modern city's own models to the baked holograms (src/data/architectureModels.json), all CC0 1.0, so a modern
-// street is drawn as one (docs/v2/model-kit.md; which use takes which model is config/models.json):
+// street is drawn as one (docs/v3/design.html#model-kit; which use takes which model is config/models.json):
 //  - Kenney's City Kit (Suburban) 1.0: 21 detached houses (suburban-01 … suburban-21);
 //  - Kenney's City Kit (Industrial) 2.0: 20 factory, warehouse and workshop buildings (industrial-a … industrial-t);
 //  - KayKit City Builder Bits 1.0: the six blocks of flats and shops not baked before (kk-block-a … kk-block-f);

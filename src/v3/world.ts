@@ -1,5 +1,5 @@
 /**
- * A book's world as the console's Characters, Places and Strands views show it (docs/v3/plan.md §1.5a; docs/v2/world-model.md):
+ * A book's world as the console's Characters, Places and Strands views show it (docs/v3/design.html#plan §1.5a; docs/v3/design.html#world-model):
  * time an ordered tree (the calendar: story > year > day > part of day), places an unordered tree (what holds what),
  * people and things movables, each present at a place at a time scene by scene, and the strands: groups of movables that
  * stay together, splitting when the group parts and uniting when it meets again. Built from the reading alone, with the

@@ -14,7 +14,7 @@ import type {
  * The Pi agent never touches the DB directly, and the System 1 miniloop
  * NEVER writes through this interface — the miniloop accumulates proposals
  * into a ChangeSet, and only an approved merge applies them here
- * (see src/merge/changeset.ts and DESIGN.md §Merge gate).
+ * (see src/merge/changeset.ts and docs/v3/design.html#founding-design §Merge gate).
  *
  * Implementations: BundleStore (JSONL, the portable source of truth) and
  * LadybugStore (hot query engine rebuilt from the bundle). Keeping every

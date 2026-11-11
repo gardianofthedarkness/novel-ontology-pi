@@ -1,4 +1,4 @@
-// A reading made before its kinds kept their distributions (M1, docs/v2/next-steps.md A6; the user, 2026-11-03: top
+// A reading made before its kinds kept their distributions (M1, docs/v3/design.html#next-steps A6; the user, 2026-11-03: top
 // distributions and scores kept for sentences): each sentence's whole distribution over the kinds and its top three,
 // from the answers Jev gave in the reading's own decision cache. Nothing is asked again. The reading is rewritten in
 // place, its former self kept beside it as data.before-kind-scores.json.

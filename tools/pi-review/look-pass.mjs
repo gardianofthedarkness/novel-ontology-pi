@@ -1,4 +1,4 @@
-// The look pass's hook (milestones M14; docs/v2/models-and-settings.md §10): after a book's reading and before its terrain
+// The look pass's hook (milestones M14; docs/v3/design.html#models-and-settings §10): after a book's reading and before its terrain
 // loop, the main agent is told, in the workflow's own words and with no hint about the book, to set the world generator
 // for the book's places from the text (novel look context, then novel settings set | novel warehouse use ... --place).
 // The message goes to Pi's console the way the director's review batches do (review.mjs sendToAgent); the pass is done

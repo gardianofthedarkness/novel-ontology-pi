@@ -20,7 +20,7 @@ import { cutBlocks, splitChapters } from "../../../digger/intake/blocks.js";
  * tallies (references pointing at ids that do not exist in the bundle,
  * counted — never "fixed"). There are NO quality judgments, thresholds,
  * or semantic checks here: what the numbers mean is the maintainer's
- * call (DESIGN.md §9 tracks threshold questions separately).
+ * call (docs/v3/design.html#founding-design §9 tracks threshold questions separately).
  *
  * Data source: the bundle JSONL + manifest only — the bundle is the
  * source of truth and the Ladybug graph is a disposable rebuild of it

@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /**
- * Terrain and spawns before the world plays (the user's call, 2026-10-31; docs/v2/world-engine-v2.md §2.0.7), once the
+ * Terrain and spawns before the world plays (the user's call, 2026-10-31; docs/v3/design.html#world-engine-v2 §2.0.7), once the
  * whole extraction is done and the world loop has said where each scene happens:
  *
  * 1. Terrain: the book's main sites (the places its scenes happen in), in story order of their first scene, each placed in

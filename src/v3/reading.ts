@@ -1,5 +1,5 @@
 /**
- * A book's reading made in the workspace with one click (docs/v3/reading.md; the user, 2026-11-10: "I need to be able to
+ * A book's reading made in the workspace with one click (docs/v3/design.html#readings; the user, 2026-11-10: "I need to be able to
  * browse any novels on the mac ... When I enter the work model api and jev api, the reading phase work for a book is
  * automatically run by one click. You don't get involved, no agent is involved.")
  *

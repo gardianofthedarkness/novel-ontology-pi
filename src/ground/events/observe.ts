@@ -65,7 +65,7 @@ export function observeWork(work: WorkModel, emit: EventSink, scope: ObservedSco
 /**
  * Library-wide faculties (the atlas, universe causality) report their calls
  * to `<library>/telemetry/events.jsonl`. It is call telemetry only: library
- * activity itself stays derived from committed state (docs/library-live.md).
+ * activity itself stays derived from committed state (docs/v3/design.html#library-live).
  * A library that cannot take the folder runs unobserved, never fails.
  */
 export async function libraryCallSink(library: string): Promise<EventSink> {

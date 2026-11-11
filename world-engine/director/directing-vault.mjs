@@ -1,17 +1,19 @@
-// The directing notes of the docs vault (the user, 2026-11-03: a page per cast and per director, how each is asked and
-// what it may answer, kept in Obsidian): docs/ is the vault, docs/v2/directing/ these notes, all written from the code
-// (specialists.mjs, questions.mjs, the Jev modes, digest.mjs). Standard markdown links, so they read the same in
-// Obsidian and on GitHub. Run after changing any of them; never edit the notes by hand.
+// The directing notes (the user, 2026-11-03: a page per cast and per director, how each is asked and what it may
+// answer), written from the code (specialists.mjs, questions.mjs, the Jev modes, digest.mjs) into their section of
+// docs/v3/design.html (§17.2), between the <!-- directing:start --> and <!-- directing:end --> markers. Each note is
+// written as markdown (notes()) and rendered there with an anchor of its own: #cast-<id>, #director-<id>. Run after
+// changing any of them; never edit the section by hand.
 //   node world-engine/director/directing-vault.mjs [--check]
-import { mkdir, readFile, readdir, writeFile } from 'node:fs/promises';
+import { readFile, writeFile } from 'node:fs/promises';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { BLOCK_TYPES, QUIET, DIRECTORS, CASTS, FLOW, GATES, LAWS, LOG_KINDS, SIGNALS, STATE, registryProblems } from './specialists.mjs';
 import { CAST_ASKS, builtAsks, directorQuestions, scriptSupervisorAsks } from './questions.mjs';
 import { firedBy, fires, lands, lawsOf, metres, readers } from './specialists-doc.mjs';
 
-const repository = resolve(dirname(fileURLToPath(import.meta.url)), '..', '..'), folder = join(repository, 'docs', 'v2', 'directing');
+const repository = resolve(dirname(fileURLToPath(import.meta.url)), '..', '..'), design = join(repository, 'docs', 'v3', 'design.html');
 const HEAD = '<!-- Written by world-engine/director/directing-vault.mjs from the code; change the code, not this note. -->';
+const START = '<!-- directing:start -->', END = '<!-- directing:end -->';
 // Placeholders (<the mover>) are text, not tags: escaped wherever they are not in code.
 const safe = text => String(text ?? '').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 const cell = text => safe(text).replace(/\|/g, '\\|').replace(/\n/g, ' ');
@@ -54,7 +56,7 @@ function directorNote(id, questions) {
 
 function index() {
   return [yaml({ type: 'dashboard', aliases: ['Directing'], tags: ['directing'] }), HEAD, '',
-    '# Directing', '', 'The director as readers and specialists (docs/v2/next-steps.md A4–A5). Casts read the text (the work model); directors decide (Jev). Every note here is written from the code: `world-engine/director/specialists.mjs` and `questions.mjs`. The visual plan with volume 1\'s density strip and gate preview: [summarizer-faculties.html](../summarizer-faculties.html). The gate over volume 1 (M3): [Gate](Gate.md) and its strip [gate-volume-1.html](gate-volume-1.html). What needs the user\'s decision: [Decisions needed](Decisions.md). How Jev picks on a map, tested: [Pick test](Pick-test.md).', '',
+    '# Directing', '', 'The director as readers and specialists (design §8.2). Casts read the text (the work model); directors decide (Jev). Every note here is written from the code: `world-engine/director/specialists.mjs` and `questions.mjs`. The registry\'s tables: [the specialists\' registry](#registry). The gate over volume 1 (M3): [its note](../reports/gate-volume-1.md) and [its strip](../reports/gate-volume-1.html). How Jev picks on a map, tested: [the pick test](../reports/pick-test-2026-11-03.md).', '',
     '## Casts', '', '| Cast | Fired by | Read by | Status |', '|---|---|---|---|',
     ...Object.keys(CASTS).map(id => `| ${castLink(id, 'root')} | ${cell(firedBy(CASTS[id]))} | ${readers(id).map(entry => directorLink(entry.key, 'root')).join(', ')} | ${CASTS[id].status} |`), '',
     '## Directors', '', '| Director | Kind | Zoom | Plays | Status |', '|---|---|---|---|---|',
@@ -64,7 +66,7 @@ function index() {
     '## How state flows into the ontology', '', ...FLOW.map((step, n) => `${n + 1}. **${step.step}**: ${step.what} (\`${step.code}\`)`), '', ...Object.entries(GATES).map(([gate, what]) => `- **${gate}**: ${what}`), ''].join('\n');
 }
 
-/** Every note: path (under docs/v2/directing) → text. */
+/** Every note as markdown: its old path (under docs/v2/directing, now its anchor's name) → text. */
 export async function notes() {
   const problems = registryProblems();
   if (problems.length) throw new Error(problems.join('\n'));
@@ -74,17 +76,48 @@ export async function notes() {
   return out;
 }
 
-if (process.argv[1] === fileURLToPath(import.meta.url)) {
-  const check = process.argv.includes('--check'), written = await notes();
-  let stale = 0;
-  for (const [path, text] of written) {
-    const file = join(folder, path), before = await readFile(file, 'utf8').catch(() => null);
-    if (before === text) continue;
-    stale++;
-    if (!check) { await mkdir(dirname(file), { recursive: true }); await writeFile(file, text); }
-    console.log(`${check ? 'stale' : 'written'}: docs/v2/directing/${path}`);
+// The notes as HTML for the design: a minimal markdown renderer for what the notes use (headings, paragraphs, lists,
+// quotes, tables, bold, code, links). A note's own links become anchors in the same section.
+const anchor = path => path.replace(/^(\.\.\/)?(casts|directors)\/([\w-]+)\.md$/, (_, up, kind, id) => `#${kind === 'casts' ? 'cast' : 'director'}-${id}`).replace(/^(\.\.\/)?Directing\.md$/, '#directing-notes');
+const codeEsc = text => text.replace(/&(?!lt;|gt;|amp;)/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+const inline = text => text.split(/(`[^`]*`)/).map(part => part.startsWith('`') && part.endsWith('`') && part.length > 1 ? `<code>${codeEsc(part.slice(1, -1))}</code>`
+  : part.replace(/\*\*([^*]+)\*\*/g, '<b>$1</b>').replace(/\[([^\]]+)\]\(([^)]+)\)/g, (_, label, href) => `<a href="${anchor(href)}">${label}</a>`)).join('');
+const cells = row => row.replace(/^\||\|$/g, '').split(/(?<!\\)\|/).map(cell => inline(cell.trim().replace(/\\\|/g, '|')));
+export function noteHtml(id, text) {
+  const lines = text.replace(/^---\n[\s\S]*?\n---\n/, '').split('\n').filter(line => line !== HEAD), out = [];
+  for (let n = 0; n < lines.length;) {
+    const line = lines[n];
+    if (!line.trim()) { n++; continue; }
+    const heading = /^(#{1,3}) (.*)$/.exec(line);
+    if (heading) { const level = heading[1].length + 2; out.push(level === 3 ? `<h3 id="${id}">${inline(heading[2])}</h3>` : `<h${level}>${inline(heading[2])}</h${level}>`); n++; continue; }
+    if (line.startsWith('|')) {
+      const rows = []; while (n < lines.length && lines[n].startsWith('|')) rows.push(lines[n++]);
+      out.push(`<div class="scroll"><table><thead><tr>${cells(rows[0]).map(cell => `<th>${cell}</th>`).join('')}</tr></thead><tbody>${rows.slice(2).map(row => `<tr>${cells(row).map(cell => `<td>${cell}</td>`).join('')}</tr>`).join('')}</tbody></table></div>`);
+      continue;
+    }
+    if (line.startsWith('>')) { const quote = []; while (n < lines.length && lines[n].startsWith('>')) quote.push(lines[n++].replace(/^> ?/, '')); out.push(`<blockquote><p>${quote.map(inline).join('<br>')}</p></blockquote>`); continue; }
+    const item = /^(- |\d+\. )/;
+    if (item.test(line)) { const ordered = /^\d/.test(line), items = []; while (n < lines.length && item.test(lines[n])) items.push(lines[n++].replace(item, '')); out.push(`<${ordered ? 'ol' : 'ul'}>${items.map(entry => `<li>${inline(entry)}</li>`).join('')}</${ordered ? 'ol' : 'ul'}>`); continue; }
+    const para = []; while (n < lines.length && lines[n].trim() && !/^(#{1,3} |\||>|- |\d+\. )/.test(lines[n])) para.push(lines[n++]);
+    out.push(`<p>${inline(para.join(' '))}</p>`);
   }
-  // A note the code no longer writes (a cast or director removed) is stale too.
-  for (const sub of ['casts', 'directors']) for (const name of await readdir(join(folder, sub)).catch(() => [])) if (!written.has(`${sub}/${name}`)) { stale++; console.log(`no longer written: docs/v2/directing/${sub}/${name}`); }
-  if (check && stale) process.exit(1);
+  return `<section class="note-${id.split('-')[0]}">\n${out.join('\n')}\n</section>`;
+}
+
+/** The section of the design: the index, then a note per cast and per director. */
+export async function section() {
+  const written = await notes(), id = path => path === 'Directing.md' ? 'directing-index' : path.replace(/^casts\/(.*)\.md$/, 'cast-$1').replace(/^directors\/(.*)\.md$/, 'director-$1');
+  return [...written].map(([path, text]) => noteHtml(id(path), text)).join('\n');
+}
+
+if (process.argv[1] === fileURLToPath(import.meta.url)) {
+  const check = process.argv.includes('--check'), before = await readFile(design, 'utf8');
+  const a = before.indexOf(START), b = before.indexOf(END);
+  if (a < 0 || b < a) throw new Error('no directing markers in docs/v3/design.html');
+  const after = `${before.slice(0, a + START.length)}\n${await section()}\n${before.slice(b)}`;
+  if (after !== before) {
+    if (!check) await writeFile(design, after);
+    console.log(`${check ? 'stale' : 'written'}: docs/v3/design.html (directing)`);
+    if (check) process.exit(1);
+  }
 }

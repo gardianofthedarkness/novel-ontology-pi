@@ -5,7 +5,7 @@ import { LANDSCAPE_TYPES } from "../../../v2/world/landscape.js";
 import type { LandscapePick } from "../../../digger/stage/landscape.js";
 
 /**
- * The world's review pool (docs/world-first-design.md §11): what the world-first loop flags — a merge it made on world
+ * The world's review pool (docs/v3/design.html#world-first-design §11): what the world-first loop flags — a merge it made on world
  * evidence, presence it is unsure of, a dialogue or an actor the laws reject, two people whose traces run too alike —
  * waits in stage/world/pool.jsonl. Every few items make a batch (stage/world/batches/<id>.json) that the main agent is
  * sent while the world goes on. The agent answers each item from the original text (`novel source grep|similar`,

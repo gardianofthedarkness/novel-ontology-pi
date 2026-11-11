@@ -1,6 +1,6 @@
 // The crowd as a field (M9; the user, 2026-11-03: "crowd should be fields. They have pronounced states in different
 // situations, but the reason why we want them into field is because they could have potential influence back on our
-// characters such as slower moving speed"; docs/v2/directing/Crowd-M9.md). A crowd is the place's, not people: a number
+// characters such as slower moving speed"; docs/v3/design.html#crowd-m9). A crowd is the place's, not people: a number
 // of people over the walkable nodes of the place round its middle, carried by a few samples (each standing for many) that
 // the page draws. The director gives the crowd a state, never destinations; one motion law moves it, the state setting
 // what pulls (a potential over the walk graph), how fast and how much people follow each other:

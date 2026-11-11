@@ -1,5 +1,5 @@
 /* Novel Console: v1's World · Live palettes (night: deep navy, cyan, Jev's gold; day: its light one). The library and the
-   book are always there; the side bar, each of its views and the chat fold (docs/v3/plan.md §1.5a). */
+   book are always there; the side bar, each of its views and the chat fold (docs/v3/design.html#plan §1.5a). */
 :root {
   --bg: #060c12; --deep: #071019; --panel: #0b1620; --raised: #10212c; --chip: #0f2230; --field: #0b1a24;
   --ink: #d9e3ea; --dim: #8aa0b0; --line: #1d3442; --rule: #12232e;

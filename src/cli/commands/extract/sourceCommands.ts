@@ -5,7 +5,7 @@ import { loadWorkspaceSentences } from "./timeplaceCommands.js";
 
 /**
  * Searching a book's original text, sentence by sentence, for an agent answering the world's questions
- * (docs/world-first-design.md): `novel source grep` (a regular expression) and `novel source similar` (the passages
+ * (docs/v3/design.html#world-first-design): `novel source grep` (a regular expression) and `novel source similar` (the passages
  * most like a text). Every hit names its sentence and scene, so an answer can cite them. Read-only, no model calls.
  */
 const SNIPPET = 220;

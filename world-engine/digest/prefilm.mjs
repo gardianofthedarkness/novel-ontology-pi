@@ -166,7 +166,7 @@ export async function loadPrefilm(dir) {
   // it, its script supervisor the picture's facts (where its people are, who is near whom; basis `picture`).
   const pictures = await read('pictures.json').catch(() => null), pictured = merged && pictures ? (await import('./stills.mjs')).withPictures(merged, pictures) : merged;
   // And the underground note on each place (underground-notes.json, experiments/v2/underground-notes.mjs): a unit in a
-  // noted place starts under the street (docs/v2/terrain-levels.md §8.5).
+  // noted place starts under the street (docs/v3/design.html#terrain-levels §8.5).
   const underground = await read('underground-notes.json').catch(() => null);
   return pictured && underground ? { ...pictured, underground } : pictured;
 }

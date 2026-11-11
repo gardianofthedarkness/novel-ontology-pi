@@ -3,7 +3,7 @@ import { test } from "node:test";
 import { buildingsOf, defaultResolver, loadSpawning, pickCount, seeded, spawnsOf } from "../src/v2/terrain/config.js";
 import { admissible, chooseSlots, countsIn, spawnChildren, type LevelProblem, type Mention, type Point, type Slot } from "../src/v2/terrain/slots.js";
 
-// Borrowing and spawning by type (docs/v2/borrow-and-spawn.md), on plain data: one city, its districts' slots, books of mentions.
+// Borrowing and spawning by type (docs/v3/design.html#borrow-and-spawn), on plain data: one city, its districts' slots, books of mentions.
 const files = loadSpawning(), resolver = defaultResolver(files);
 const city = { id: "c1", label: "a metropolis", level: "city" as const, kind: "metropolis" };
 const within = (place: string, holder: string) => place === holder || (holder === "c1" && place.startsWith("c1"));

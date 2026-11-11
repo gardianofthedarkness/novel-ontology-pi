@@ -55,7 +55,7 @@ export function scriptStrands(script: ReadingScript): { strands: StoryStrands; t
 }
 
 /**
- * Strands by interaction (docs/v2/strands.md §0; milestones M17e; the user, 2026-11-09: "As long as the group splits on
+ * Strands by interaction (docs/v3/design.html#strands §0; milestones M17e; the user, 2026-11-09: "As long as the group splits on
  * different things and no longer interact with each other on semantic scale, they become two strands. When they reunited
  * the strands become one. Whether scale is building street what ever depends on the context"). A strand is a group, the
  * area its scenes are in (read from them, at whatever scale) and the stretch of story time it plays; one builder for the

@@ -6,7 +6,7 @@ import { BANDS, LINING, breach, ceilingOf, hallsOf, type Hall } from "../src/v2/
 import { EDGE } from "../apps/playground/src/data/pathIntegral.js";
 import { BLAST_ENERGY } from "../apps/playground/src/data/structure.js";
 
-// Stage 2 of docs/v2/terrain-levels.md: the ceilings (§8.3), the ground skin and its breaches (§8.4), the deep layer's hard
+// Stage 2 of docs/v3/design.html#terrain-levels: the ceilings (§8.3), the ground skin and its breaches (§8.4), the deep layer's hard
 // ceiling (§8.6).
 
 function source(halls: Hall[]): WorldSource {

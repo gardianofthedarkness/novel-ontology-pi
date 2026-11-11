@@ -88,7 +88,7 @@ const GRIDS: Record<ArchitectureKind, () => NavGrid> = {
 };
 
 /**
- * Under every place, Jev's three underground choices (docs/underground-design.md §6.1): just under the street (a
+ * Under every place, Jev's three underground choices (docs/v3/design.html#underground-design §6.1): just under the street (a
  * basement, an underground mall), the subway, and deep underground; reached from the basement, else the first way out.
  */
 const UNDERGROUND = [spot("under", "Just under the street", "underground just below the street: a building's basement, a car park, an underground mall", 0.2, -0.25, -0.2), spot("subway", "Subway", "the subway: a station, a platform, a tunnel", 0, -0.35, 0.3), spot("deep", "Deep underground", "deep underground: storm-water tanks and channels, a deep facility, a bunker, a lab", 0, -0.6, 0)];

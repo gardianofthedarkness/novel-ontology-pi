@@ -1,4 +1,4 @@
-// Which reviewer for which kind of held item (docs/v2/jev-review.md §15; the user, 2026-11-07: "Maybe in some category
+// Which reviewer for which kind of held item (docs/v3/design.html#jev-review §15; the user, 2026-11-07: "Maybe in some category
 // of question the mini harness of jev is enough, but for some it's not. Can we test it out?"). From answer files the
 // review runner wrote on the same items and the settled answers, each option per kind: how many answers stand without
 // Pi, how many of those are right, how many are right overall with Pi taking the rest, Pi's load, and the cost.

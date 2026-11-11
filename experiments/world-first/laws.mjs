@@ -1,4 +1,4 @@
-// The world's laws over events, things and knowledge (docs/world-first-design.md §4.7–4.9). Presence, place and time are
+// The world's laws over events, things and knowledge (docs/v3/design.html#world-first-design §4.7–4.9). Presence, place and time are
 // world.mjs's; these check what the base layer says people did against where the world has them:
 // - Actors are there: an event's actor the world does not have in the scene is added when Jev thought it likely (the
 //   presence was missed), and flagged otherwise.

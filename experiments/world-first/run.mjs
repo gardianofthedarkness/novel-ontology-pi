@@ -1,4 +1,4 @@
-// The world-first loop on a book's base layer (base.mjs), v2 (docs/world-first-design.md). Scene by scene in reading order,
+// The world-first loop on a book's base layer (base.mjs), v2 (docs/v3/design.html#world-first-design). Scene by scene in reading order,
 // Jev reads each scene in its composed context (compose.mjs) and the world (world.mjs) keeps its laws:
 //   1. who is in the scene and where (one call);
 //   2. event actors the world does not have there join when Jev thought them likely, else are flagged (laws.mjs);

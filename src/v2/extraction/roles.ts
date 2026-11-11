@@ -6,7 +6,7 @@ import { factEvidence, type FactLedger } from "./facts.js";
 import type { Decide } from "./typing.js";
 
 /**
- * EM² — who is this, here (the user's call, 2026-10-30; docs/v2/world-engine-v2.md §2.0.1). EM says once which entity a name
+ * EM² — who is this, here (the user's call, 2026-10-30; docs/v3/design.html#world-engine-v2 §2.0.1). EM says once which entity a name
  * is. A pronoun, 我 and 你, a description (少女, 那个刺猬头, 姐姐大人), a crowd (警备员们) or no word at all point at someone
  * only where they stand, so none of them enters the chart. Scene by scene in reading order, one Jev request a ROLE_BATCH
  * sentences asks:
@@ -15,7 +15,7 @@ import type { Decide } from "./typing.js";
  *   story or is background (an everyday thing is never an actor: the user's rule, 2026-10-30);
  * - of each description of a person or a crowd, who it means here; of each unnamed vehicle or weapon (那辆车, 手枪), which
  *   one it is here: a named one of the passage, or one of the scene's (a slot of its own, as an unnamed person's).
- * Places are not EM²'s (docs/v2/world-model.md §5): they are spacetime, a tree, and place EM (placeEm.ts) decides them;
+ * Places are not EM²'s (docs/v3/design.html#world-model §5): they are spacetime, a tree, and place EM (placeEm.ts) decides them;
  * EM² decides matter, whose relations are a graph.
  * The choices are the scene's cast: the people named in the passage, the scene and the one before, the people the
  * recommender expects, the world engine's present people when it has them, the people a description has meant before

@@ -1,10 +1,12 @@
-// The concept map's page (docs/v2/concepts.html), made from src/v2/concepts.ts: every abstract concept of the v2 build in
-// its layer, what it is, where it lives in code and where it is designed, what it builds on and what builds on it. It
-// refuses to write a page whose pointers no longer hold (test/concepts.test.ts checks the same on every `npm test`).
+// The concept map, made from src/v2/concepts.ts: every abstract concept of the v2 build in its layer, what it is, where it
+// lives in code and where it is designed, what it builds on and what builds on it. Written into its section of the design
+// (docs/v3/design.html §17.3, between <!-- concepts:start --> and <!-- concepts:end -->), or as a page of its own for the
+// published site (experiments/v2/terrain-io.mjs). It refuses to write when a pointer no longer holds
+// (test/concepts.test.ts checks the same on every `npm test`).
 //
-//   npm run build && node experiments/v2/concepts-page.mjs [out.html]
+//   npm run build && node experiments/v2/concepts-page.mjs [--check | out.html]
 import { existsSync, readFileSync } from 'node:fs';
-import { writeFile } from 'node:fs/promises';
+import { readFile, writeFile } from 'node:fs/promises';
 import { execFileSync } from 'node:child_process';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
@@ -12,22 +14,28 @@ import { fileURLToPath, pathToFileURL } from 'node:url';
 const repository = resolve(dirname(fileURLToPath(import.meta.url)), '..', '..');
 const esc = text => String(text).replace(/[&<>"]/g, char => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[char]);
 
-export async function conceptsPage() {
+const DESIGN = 'docs/v3/design.html', GITHUB_DESIGN = 'https://github.com/gardianofthedarkness/novel-ontology-pi/blob/v3/docs/v3/design.html';
+
+/** The page, or with { section: true } the design's section (no page around it, no search). */
+export async function conceptsPage({ section = false } = {}) {
   const { CONCEPTS, LAYERS, STAGES } = await import(pathToFileURL(join(repository, 'dist/src/v2/concepts.js')).href);
-  const holds = pointer => { const [file, text] = pointer.split('#'), path = join(repository, file); return existsSync(path) && readFileSync(path, 'utf8').includes(text); };
+  // A design pointer is `docs/v3/design.html#<section> · <journal> §<heading>`: it holds when the design has the section.
+  const holds = pointer => { const [file, text] = pointer.split('#'), path = join(repository, file); if (!existsSync(path)) return false; const body = readFileSync(path, 'utf8'); return file === DESIGN ? body.includes(`id="${text.split(' · ')[0]}"`) : body.includes(text); };
   const broken = CONCEPTS.flatMap(concept => [...concept.lives, ...concept.docs].filter(pointer => !holds(pointer)).map(pointer => `${concept.id}: ${pointer}`));
   if (broken.length) throw new Error(`The concept map no longer holds:\n${broken.join('\n')}`);
   const commit = (() => { try { return execFileSync('git', ['-C', repository, 'rev-parse', '--short', 'HEAD'], { encoding: 'utf8' }).trim(); } catch { return 'unknown'; } })();
   const byId = new Map(CONCEPTS.map(concept => [concept.id, concept]));
   const builtOnBy = id => CONCEPTS.filter(concept => concept.uses?.includes(id));
   const pointers = CONCEPTS.reduce((sum, concept) => sum + concept.lives.length + concept.docs.length, 0);
-  // A code pointer: the file and what it holds; a design pointer: the doc (relative to docs/v2) and its heading.
+  // A code pointer: the file and what it holds; a design pointer: the design's section, and the journal heading it came from.
   const code = pointer => { const [file, text] = pointer.split('#'); return `<li><code class="path">${esc(file)}</code> <code class="sym">${esc(text)}</code></li>`; };
-  const design = pointer => { const [file, text] = pointer.split('#'), href = file.startsWith('docs/v2/') ? file.slice('docs/v2/'.length) : `../../${file}`; return `<li><a href="${esc(href)}">${esc(file.split('/').pop())}</a> <span class="head">§ ${esc(text)}</span></li>`; };
-  const chip = id => { const concept = byId.get(id); return `<a class="chip ${esc(concept.layer)}" href="#${esc(id)}">${esc(concept.name)}</a>`; };
+  const design = pointer => { const [, text] = pointer.split('#'), [anchor, journal = ''] = text.split(' · '); return `<li><a href="${esc(section ? `#${anchor}` : `${GITHUB_DESIGN}#${anchor}`)}">§ ${esc(anchor)}</a> <span class="head">${esc(journal)}</span></li>`; };
+  // In the design the concepts' ids are prefixed, so none meets a section's.
+  const cid = id => section ? `concept-${id}` : id;
+  const chip = id => { const concept = byId.get(id); return `<a class="chip ${esc(concept.layer)}" href="#${esc(cid(id))}">${esc(concept.name)}</a>`; };
   const card = concept => {
     const on = concept.uses ?? [], by = builtOnBy(concept.id).map(other => other.id);
-    return `<article class="card" id="${esc(concept.id)}" data-layer="${esc(concept.layer)}" data-text="${esc(`${concept.name} ${concept.what} ${concept.id}`.toLowerCase())}">
+    return `<article class="card" id="${esc(cid(concept.id))}" data-layer="${esc(concept.layer)}" data-text="${esc(`${concept.name} ${concept.what} ${concept.id}`.toLowerCase())}">
   <header><h4>${esc(concept.name)}</h4>${concept.user ? '<span class="badge">the user\'s design</span>' : ''}</header>
   <p>${esc(concept.what)}</p>
   <div class="where"><div><span class="label">code</span><ul>${concept.lives.map(code).join('')}</ul></div><div><span class="label">design</span><ul>${concept.docs.map(design).join('')}</ul></div></div>
@@ -47,6 +55,9 @@ export async function conceptsPage() {
 ${stage.layers.map(layerSection).join('\n')}
 </section>`).join('\n');
 
+  if (section) return `<p class="note">${CONCEPTS.length} concepts · all ${pointers} pointers hold · ${CONCEPTS.filter(concept => concept.user).length} of the user's design.</p>
+<nav class="strip" aria-label="Stages and layers">${strip}</nav>
+${sections}`;
   return `<!doctype html>
 <html lang="en">
 <head>
@@ -151,7 +162,17 @@ mine.addEventListener('click', () => { mine.setAttribute('aria-pressed', String(
 }
 
 if (import.meta.url === pathToFileURL(process.argv[1]).href) {
-  const out = process.argv[2] ?? join(repository, 'docs', 'v2', 'concepts.html');
-  await writeFile(out, await conceptsPage());
-  console.log(`written ${out}`);
+  const out = process.argv[2];
+  if (out && out !== '--check') { await writeFile(out, await conceptsPage()); console.log(`written ${out}`); }
+  else {
+    const START = '<!-- concepts:start -->', END = '<!-- concepts:end -->', file = join(repository, DESIGN), before = await readFile(file, 'utf8');
+    const a = before.indexOf(START), b = before.indexOf(END);
+    if (a < 0 || b < a) throw new Error(`no concepts markers in ${DESIGN}`);
+    const after = `${before.slice(0, a + START.length)}\n${await conceptsPage({ section: true })}\n${before.slice(b)}`;
+    if (after !== before) {
+      if (out !== '--check') await writeFile(file, after);
+      console.log(`${out === '--check' ? 'stale' : 'written'}: ${DESIGN} (concepts)`);
+      if (out === '--check') process.exit(1);
+    }
+  }
 }

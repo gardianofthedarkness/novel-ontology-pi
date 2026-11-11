@@ -1,4 +1,4 @@
-// Building EM in a world-first book (docs/underground-design.md §9, the user's rules, 2026-10-30). The same building was
+// Building EM in a world-first book (docs/v3/design.html#underground-design §9, the user's rules, 2026-10-30). The same building was
 // placed several times: 飞镖酒吧 stood as its nominated place's real building and again as a box wherever a scene mentioned
 // it, because the objects step finds buildings in each scene apart. Here, for every building the objects step found in a
 // scene, Jev answers one choice in the scene's composed context: which building is it — the building this scene happens

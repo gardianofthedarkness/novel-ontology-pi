@@ -2,7 +2,7 @@
 
 The world engine's scripts: the second stage of v2, which builds the world the extraction read. They run on a built
 checkout (`npm run build`) and on a world-first workspace (`experiments/v2/workspace.mjs`). The guide:
-[docs/v2/README.md](../docs/v2/README.md).
+[docs/v3/design.html#v2-readme](../docs/v3/design.html#v2-readme).
 
 One folder for each layer of the concept map (`src/v2/concepts.ts`):
 

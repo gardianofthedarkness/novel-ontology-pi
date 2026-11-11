@@ -28,7 +28,7 @@ export const chunkBounds = (key: number) => { const ci = Math.floor(key / 65536)
 const nodeKey = (i: number, j: number, k: number) => cellKey(i, j) * 1024 + k + 64;
 
 /**
- * Underground (docs/underground-design.md): halls in the ground, not buildings.
+ * Underground (docs/v3/design.html#underground-design): halls in the ground, not buildings.
  * - Every building of 2 floors or more has basements under its footprint, a floor per 3 m (one; two from 10 floors; three
  *   from 20), down its stair core, with a car park's pillars on an 8 m grid.
  * - The halls of `source.underground` (stations and tunnels, malls, the storm-water tank and channels, deep facilities;
@@ -83,7 +83,7 @@ export interface WorldSource { buildings: SourceBuilding[]; roads: SourceRoad[];
  */
 /**
  * `k0`: the level its ground floor stands on (0 the street; negative for a building of a street laid underground, which
- * stands on that street's floor under the ground skin: docs/v2/terrain-levels.md §8). Its plan's level k is the world's k0 + k.
+ * stands on that street's floor under the ground skin: docs/v3/design.html#terrain-levels §8). Its plan's level k is the world's k0 + k.
  * Such a lot holds its cells in `lotBelow`, so a building on the street above keeps its own (one column, two buildings).
  */
 export interface WorldLot extends PlaceLot { source: string; manifold: string; era: string; height: number; born: number | string; place: string | null; frame?: { x: number; z: number; angle: number }; k0?: number }
@@ -95,7 +95,7 @@ export interface World {
   lotAt: Map<number, number>;
   /**
    * The cells buildings off the street's level hold, by cellKey: a street laid underground's, a deep area's, a deck's in the
-   * air, an orbit's (each lot's `k0` not 0); several in one column, each in its own levels (docs/v2/terrain-levels.md §3.5).
+   * air, an orbit's (each lot's `k0` not 0); several in one column, each in its own levels (docs/v3/design.html#terrain-levels §3.5).
    */
   lotBelow: Map<number, number[]>;
   ground: Map<number, number>;
@@ -104,7 +104,7 @@ export interface World {
   under: Map<number, { hall: number; k: number; pillar: boolean }[]>;
   /**
    * What cave-ins left: per hall, the pile on each of its cells (metres, by cellKey); and the dents in the ground (metres).
-   * `breaches`: the ground skin's cells a blow broke open (docs/v2/terrain-levels.md §8.4), by cellKey, each the hall it
+   * `breaches`: the ground skin's cells a blow broke open (docs/v3/design.html#terrain-levels §8.4), by cellKey, each the hall it
    * opens into: no ground there, a drop to the hall's floor, the sky over it. `marks`: where a blow reached the deep layer's
    * hard ceiling (§8.6) and stopped, metres.
    */
@@ -281,7 +281,7 @@ function materialize(world: World, ci: number, cj: number, born: number | string
 }
 
 /**
- * A building of the world no one has reached yet, as the lot it will stand as (docs/v2/world-engine-v2.md §2.0.18, the
+ * A building of the world no one has reached yet, as the lot it will stand as (docs/v3/design.html#world-engine-v2 §2.0.18, the
  * user's design): its footprint on the grid, its floors, its role and model, and nothing inside it. The same engine with
  * its tiling, its destruction and its inside (rooms, stairs, corridors) switched off: when people come near, its chunk
  * materializes and the building stands as a full lot, as ever.
@@ -330,13 +330,13 @@ export function nodeId(world: World, i: number, j: number, k: number): number {
 
 /** What each node is, from the last graph: 0 none, 1 outdoor, 2 circulation, 3 room, 4 roof, 5 underground, 6 rubble (L18); its lot; its ground. */
 /**
- * A way between a layer and the ground (docs/v2/terrain-levels.md §3.4): `foot` on the space's floor, `top` on the open
+ * A way between a layer and the ground (docs/v3/design.html#terrain-levels §3.4): `foot` on the space's floor, `top` on the open
  * ground above, stairs or a lift, its rise in metres and its cost each way. Virtual: the world's own, on every square.
  */
 export interface WorldWay { foot: number; top: number; hall: number; kind: "stairs" | "lift" | "launch"; rise: number; up: number; down: number }
 export interface WorldGraph { graph: MoveGraph; type: Uint8Array; lot: Int32Array; ground: Uint8Array; ways: WorldWay[] }
 /**
- * The ceiling over a cell of the world at level k (docs/v2/terrain-levels.md §8.3): the sky outdoors, on a roof, on a deck or
+ * The ceiling over a cell of the world at level k (docs/v3/design.html#terrain-levels §8.3): the sky outdoors, on a roof, on a deck or
  * an orbit's floor (and through a hole a blow broke in the skin: `open`); the floor above inside a building or a basement (a
  * slab, `at` its underside); a hall's own (underground.ts ceilingOf: the ground skin over a hall with a real depth, the deep
  * layer's hard ceiling a floor above its tallest building at least). `hall`: the hall the cell is in.
@@ -651,7 +651,7 @@ export function worldGraph(world: World, standing: Uint8Array[], things: PlacedT
     add(from, to, 0, 0, 2 + 8 * (levelOf(halls[tank].depth) - k) * FLOOR_HEIGHT, EDGE.climb, UP); add(to, from, 0, 0, 2 + (levelOf(halls[tank].depth) - k) * FLOOR_HEIGHT, EDGE.descend, DOWN);
   });
   // Ways between the layers, dense and virtual (the user, 2026-11-06: "general and dense enough virtual stairs and elevators
-  // that always connects the underground to the ground, for any layer"; docs/v2/terrain-levels.md §3.4): over every hall's
+  // that always connects the underground to the ground, for any layer"; docs/v3/design.html#terrain-levels §3.4): over every hall's
   // floor, one way on each WAY_EVERY m square of the world's grid, from the floor cell nearest the square's middle to the
   // nearest open ground above; stairs up to STAIRS_DEPTH m (a building's stairs, a floor's climb at a time), a lift deeper
   // (its rise at LIFT_SPEED and a wait, as metres walked). A hall that gets none so (the ground over it all built) gets one
@@ -751,7 +751,7 @@ export function worldSpot(spots: Record<string, number[]>, spot: string | null |
   const level = /^(?:floor|stairs)-(\d+)$/.exec(spot);
   if (level) { const key = `main:floor${level[1]}`; return spots[key]?.length ? key : spots["main:floor1"]?.length ? "main:floor1" : "avenue"; }
   if (["roof", "bell-tower", "keep-top", "tower-top"].includes(spot)) return spots["main:roof"]?.length ? "main:roof" : "rooftop";
-  // Underground, by Jev's three choices (docs/underground-design.md §6.1): just under the street (the scene's building's
+  // Underground, by Jev's three choices (docs/v3/design.html#underground-design §6.1): just under the street (the scene's building's
   // basement, a mall), the subway, and deep (the storm water, a deep facility); a kind the text names when there is one.
   const under = ["under", "subway", "tunnel", "arcade", "underground-mall", "mall-underground", "underground", "basement"], deep = ["deep", "water", "sewer", "drain", "facility", "lab"];
   if (under.includes(spot) || deep.includes(spot)) {
@@ -796,7 +796,7 @@ export const chunkGround = (world: World, key: number) => { const { ci, cj } = c
  */
 export function windowOf(graph: MoveGraph, box: { x0: number; z0: number; x1: number; z1: number }, keep?: (node: number) => boolean): { graph: MoveGraph; local: Int32Array; ids: Int32Array } {
   const local = new Int32Array(graph.nodes).fill(NOT), ids: number[] = [];
-  // `keep`: which nodes the walk may use besides being in the box (docs/v2/terrain-levels.md §8.2: a walk sees only the
+  // `keep`: which nodes the walk may use besides being in the box (docs/v3/design.html#terrain-levels §8.2: a walk sees only the
   // layers its ends are in, so a street walk never holds a deep facility's lift).
   for (let n = 0; n < graph.nodes; n++) if (graph.x[n] >= box.x0 && graph.x[n] <= box.x1 && graph.z[n] >= box.z0 && graph.z[n] <= box.z1 && (!keep || keep(n))) { local[n] = ids.length; ids.push(n); }
   const count = ids.length, offsets = new Int32Array(count + 1), to: number[] = [], dir: number[] = [], cost: number[] = [], kind: number[] = [];
@@ -813,7 +813,7 @@ export function windowOf(graph: MoveGraph, box: { x0: number; z0: number; x1: nu
 /**
  * The nodes a walk from `start` can get to on a graph (a window's own ids): every edge whose factor is finite, as the path
  * integral weighs them (walls closed unless `factors` opens them). A spot is chosen only among these, so a walk is never
- * sent where its window has no way (docs/v2/terrain-levels.md §8.2: a basement whose stair lies outside the window).
+ * sent where its window has no way (docs/v3/design.html#terrain-levels §8.2: a basement whose stair lies outside the window).
  */
 export function reachableIn(graph: MoveGraph, start: number, factors?: number[]): Uint8Array {
   const seen = new Uint8Array(graph.nodes);

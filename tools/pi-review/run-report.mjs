@@ -1,4 +1,4 @@
-// The run report (docs/v2/world-ontology.md §8, Track B W7; the user, 2026-11-02: read a run's changes without the
+// The run report (docs/v3/design.html#world-ontology §8, Track B W7; the user, 2026-11-02: read a run's changes without the
 // developer): one page per director run, in words. What the laws found and how each was settled, the review's questions
 // and the main agent's answers, what the run put into canon layer by layer (and how to take it back), who says each line,
 // what the smoothing moved, the world's own check. Rendered on the server from the workspace's records; no script, read

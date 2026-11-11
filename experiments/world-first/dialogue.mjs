@@ -1,4 +1,4 @@
-// Dialogue as events (docs/world-first-design.md §8). A dialogue node is a dialogue exchange: a span of one scene, on the
+// Dialogue as events (docs/v3/design.html#world-first-design §8). A dialogue node is a dialogue exchange: a span of one scene, on the
 // scene's timeline between the events around it. Its kind and its parties are Jev's, in the scene's composed context; the
 // rest is the world's:
 // - live: two people face to face. Both are in the scene: a party the world does not have there is added, unless that

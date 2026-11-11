@@ -1,5 +1,5 @@
 {
- "about": "The universal world generator schema (docs/v2/models-and-settings.md §4; milestones M8a). Every number and rule the world generator, the laws, the smoother, crowds and the director used to keep in code, with its default (today's value), unit, range, meaning, where it is used and which layers may override it: defaults < a universe's universe/settings.json < a book's stage/settings.json < a place's own (places.<id> in either). kind: hard (a gate or limit), knob (a choice of taste or calibration), physics (a measured constant), structure (the grid itself; changing it changes everything), presentation (what Jev or the viewer is shown). Tables are whole files, merged key by key over their defaults. Read through src/v2/settings.ts setting(key, scope). Infinity is written \"Infinity\".",
+ "about": "The universal world generator schema (docs/v3/design.html#models-and-settings §4; milestones M8a). Every number and rule the world generator, the laws, the smoother, crowds and the director used to keep in code, with its default (today's value), unit, range, meaning, where it is used and which layers may override it: defaults < a universe's universe/settings.json < a book's stage/settings.json < a place's own (places.<id> in either). kind: hard (a gate or limit), knob (a choice of taste or calibration), physics (a measured constant), structure (the grid itself; changing it changes everything), presentation (what Jev or the viewer is shown). Tables are whole files, merged key by key over their defaults. Read through src/v2/settings.ts setting(key, scope). Infinity is written \"Infinity\".",
  "version": 1,
  "layers": [
   "defaults",
@@ -44,7 +44,7 @@
   "body.height": {
    "default": 1.7,
    "unit": "m",
-   "meaning": "A person's height, the one human scale kept (physics-laws.md §9).",
+   "meaning": "A person's height, the one human scale kept (docs/v3/design.html#physics-laws §9).",
    "used": [
     "world-engine/director/director.mjs BODY"
    ],
@@ -1592,7 +1592,7 @@
   "director.backCredits": {
    "default": true,
    "unit": "on/off",
-   "meaning": "A credit the reading made through a description or as the one spoken to puts a person in a unit only when the unit names them, credits them strongly, or the unit before names or credits them (docs/v2/strands.md section 0.6). Off: every credit places its person, as before 2026-11-09.",
+   "meaning": "A credit the reading made through a description or as the one spoken to puts a person in a unit only when the unit names them, credits them strongly, or the unit before names or credits them (docs/v3/design.html#strands section 0.6). Off: every credit places its person, as before 2026-11-09.",
    "used": [
     "src/v2/rules/presence.ts corroborateCredits",
     "world-engine/director/segments.mjs segmentWorld",

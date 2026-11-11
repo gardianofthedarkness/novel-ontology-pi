@@ -3,7 +3,7 @@ import { test } from "node:test";
 import { closeInTime, floorByWords, spawnScenes, type Entry, type Target } from "../src/v2/spawning/positions.js";
 import type { ScriptScene } from "../src/v2/extraction/script.js";
 
-// Spawning positions (docs/v2/spawning.md): people and things in one pass, by rule.
+// Spawning positions (docs/v3/design.html#spawning): people and things in one pass, by rule.
 const scene = (id: string, place: string, present: string[], node: string, extra: Partial<ScriptScene> = {}): ScriptScene => ({ id, chapter: 0, place, placeBy: "environment", clock: [0, 0], present, stayed: [], firstSeen: [], timeline: [], at: { node, stated: true }, ...extra });
 const world: Record<string, Target> = {
   tower: { place: "tower", kind: "building", box: [0, 0, 40, 30, 0], bottom: 0, floors: 20 },

@@ -91,7 +91,7 @@ export function scenesAsSegments(reading) {
  */
 export function segmentWorld({ reading: given, script, spawn, backCredits = true }) {
   if (!given?.scenes?.length) return null;
-  // Credits a unit does not back leave their people described (rules/presence.ts corroborateCredits; docs/v2/strands.md
+  // Credits a unit does not back leave their people described (rules/presence.ts corroborateCredits; docs/v3/design.html#strands
   // §0.6; the setting director.backCredits): a reading made before the check gets it here, one made after is unchanged.
   if (backCredits && given.roles) { const backed = corroborateCredits(given.cards ?? [], given.roles, given.scenes); given = { ...given, cards: backed.cards, roles: backed.roles }; }
   const segments = scenesAsSegments(given), cards = alignCards(given.cards, segments), scriptScenes = new Map((script?.scenes ?? []).map(scene => [scene.id, scene]));
@@ -106,7 +106,7 @@ export function segmentWorld({ reading: given, script, spawn, backCredits = true
 
 /**
  * The strands file (stage/world/strands.json's shape) of a segment script, in story time (the user, 2026-11-03: "we need
- * to make it story objective time order, as strands become forks"), by interaction (docs/v2/strands.md §0; the user,
+ * to make it story objective time order, as strands become forks"), by interaction (docs/v3/design.html#strands §0; the user,
  * 2026-11-09: "As long as the group splits on different things and no longer interact with each other on semantic
  * scale, they become two strands"). The builder is the book's own (`groupStrands`, `strandBeats`, `strandsDocument`:
  * src/v2/extraction/strands.ts), bound with the built world's place tree by strand-builder.mjs; `reading` (cards and
