@@ -161,7 +161,23 @@ async function refresh(scan = false) {
   $("welcome").hidden = Boolean(current);
   render(); follow();
   for (const lib of libs) if (lib.exists) basicLayer(lib.path);
+  for (const lib of libs) if (lib.exists) host.worlds(lib.path).then((list) => { worldsOf.set(lib.path, list); render(); }).catch(() => {});
 }
+// Worlds (docs/v3/console.md §7): v2 libraries in a folder, and the worlds the console builds; each book's World · Live opens
+// in the middle, as a book does. A library the console did not make is read only.
+const worldsOf = new Map();
+let shownWorld = null;
+function openWorld(lib, world, book) {
+  if (current) closeBook();
+  shownWorld = { key: `${world.wid}|${book.volume}`, world, book };
+  $("welcome").hidden = true; $("reader").hidden = true;
+  $("worldframe").hidden = false;
+  $("worldframe").src = `app://console/world/${world.wid}/play/world?volume=${book.volume}`;
+  $("crumb").textContent = `${world.name} \u00b7 ${book.title ?? `volume ${book.volume}`}${world.readOnly ? " \u00b7 read only" : ""}`;
+  say(`${world.name}, volume ${book.volume}: World \u00b7 Live${world.readOnly ? " (read only: a library the console did not make)" : ""}.`);
+  render();
+}
+function closeWorld() { if (!shownWorld) return; shownWorld = null; $("worldframe").hidden = true; $("worldframe").src = "about:blank"; }
 // The basic layer (no model): every book of a folder read for its title, series, volume, chapters, lines, dialogue and
 // name-like spans, a few books at a time so the console keeps answering; then the series found among books not arranged.
 const basicRunning = new Set(), seriesOf = new Map();
@@ -326,6 +342,17 @@ function render() {
         action: actionButton("Arrange", "", `Make "${series.name}" a universe, its books in volume order`, () => arrangeSeries(lib.path, series)) }));
     }
     if (data.unsorted.length) { tree.append(node({ depth: 1, name: `Not arranged · ${data.unsorted.length}`, cls: "group" })); for (const book of data.unsorted) tree.append(...bookRow(lib.path, book, 2)); }
+    const worldList = worldsOf.get(lib.path) ?? [];
+    if (worldList.length) {
+      tree.append(node({ depth: 1, name: `Worlds \u00b7 ${worldList.length}`, cls: "group", title: "Libraries with a world built (terrain and the director's runs); each book's World \u00b7 Live opens in the middle" }));
+      for (const world of worldList) {
+        const key = `world:${world.wid}`, open = !expanded.has(`closed:${key}`);
+        tree.append(node({ depth: 2, chev: open, icon: "\u25cd", name: world.name, nameClass: "book", desc: `${world.books.length} ${world.books.length === 1 ? "book" : "books"}${world.readOnly ? " \u00b7 read only" : ""}`, cls: "world", title: world.root,
+          onClick: () => { toggle(`closed:${key}`); render(); } }));
+        if (open) for (const book of world.books) tree.append(node({ depth: 3, icon: "\u25b8", name: book.title ?? `Volume ${book.volume}`, desc: `${book.runs.length} ${book.runs.length === 1 ? "run" : "runs"}${book.accepted ? ` \u00b7 plays ${book.accepted}` : ""}`, cls: `world-book${shownWorld?.key === `${world.wid}|${book.volume}` ? " active" : ""}`,
+          title: `${book.workspace}\nOpen World \u00b7 Live for this book`, onClick: () => openWorld(lib, world, book) }));
+      }
+    }
     if (!data.universes.length && !data.unsorted.length) tree.append(node({ depth: 1, name: "No EPUB or text files here.", cls: "group" }));
   }
   tree.scrollTop = scroll;
@@ -355,6 +382,7 @@ async function addLibrary() {
 function openBook(folder, book, at) {
   const key = `${folder}|${book.id}`;
   if (current?.key === key) { if (at) $("reader").contentWindow.postMessage({ type: "reveal", sentence: at }, "*"); return; }
+  closeWorld();
   current = { key, folder, id: book.id, title: book.title, book };
   $("welcome").hidden = true; $("reader").hidden = false;
   $("reader").src = `app://console/reader?id=${encodeURIComponent(book.id)}${at ? `&at=${encodeURIComponent(at)}` : ""}`;

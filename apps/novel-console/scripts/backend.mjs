@@ -6,7 +6,7 @@ import { execFileSync } from "node:child_process";
 import { cpSync, existsSync, mkdirSync, readdirSync, renameSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { dirname, join, relative, resolve } from "node:path";
-import { fileURLToPath } from "node:url";
+import { fileURLToPath, pathToFileURL } from "node:url";
 
 const app = resolve(dirname(fileURLToPath(import.meta.url)), ".."), repository = resolve(app, "..", "..");
 const out = join(app, "build", "backend");
@@ -20,6 +20,14 @@ for (const name of readdirSync(join(repository, "dist")).filter((name) => name !
 // The engine's scripts (the reading's runner engine/reading/read.mjs and what it loads), without their tests.
 cpSync(join(repository, "engine"), join(out, "engine"), { recursive: true, dereference: true, filter: (from) => !from.endsWith(".test.mjs") });
 copy("config");
+// World · Live inside the console (src/world.js): v1's page and its helpers (the engine they load is copied above), and
+// the three.js files the engine's player imports, where engine/live/sim-jev.mjs VENDOR_FILES says they are.
+for (const name of ["sim-play.mjs", "sim-settings.mjs", "sim-world.html", "sim-live.html", "config.mjs", "album.mjs", "book-epub.mjs"]) copy(`tools/pi-review/${name}`);
+const { VENDOR_FILES } = await import(pathToFileURL(join(repository, "engine", "live", "sim-jev.mjs")).href);
+for (const rel of Object.values(VENDOR_FILES)) {
+  if (existsSync(join(repository, rel))) copy(rel);
+  else console.warn(`three.js is missing at ${rel}: the world's player will not draw until it is installed.`);
+}
 copy("apps/reader/reader.html");
 copy("skills/novel-folder");
 // Pi, for arranging a folder when Claude Code is signed out (tools/pi-review/folder-arrange.mjs and its packages).

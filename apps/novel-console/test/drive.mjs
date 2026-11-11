@@ -12,7 +12,7 @@ import { fileURLToPath } from "node:url";
 const here = dirname(fileURLToPath(import.meta.url)), appDir = resolve(here, "..");
 const argv = process.argv.slice(2), flag = (name) => { const at = argv.indexOf(name); return at >= 0 ? argv.splice(at, 2)[1] : null; };
 const take = (name) => { const at = argv.indexOf(name); if (at < 0) return false; argv.splice(at, 1); return true; };
-const arrange = take("--arrange"), agentArrange = take("--agent-arrange"), asUser = take("--as-user"), realAgent = take("--real-agent") || asUser;
+const arrange = take("--arrange"), worldStep = take("--world"), agentArrange = take("--agent-arrange"), asUser = take("--as-user"), realAgent = take("--real-agent") || asUser;
 const packaged = flag("--app"), pick = Number(flag("--book") ?? 1) - 1, agentTab = flag("--agent") ?? "claude-code"; flag("--shots");
 const shotsDir = (() => { const at = process.argv.indexOf("--shots"); return at >= 0 ? resolve(process.argv[at + 1]) : null; })();
 const folders = (argv[0] ?? "").split(",").filter(Boolean).map((folder) => resolve(folder));
@@ -91,6 +91,17 @@ try {
     await picture("1b-arranged");
   }
 
+  // A world (a v2 library in the folder): its first book's World \u00b7 Live in the middle, its data read, a change refused when read only.
+  if (worldStep) {
+    await until(() => run(`document.querySelectorAll("#tree .node.world-book").length || null`), "the folder's worlds", 60000);
+    const worldRows = await run(`[...document.querySelectorAll("#tree .node.world, #tree .node.world-book")].map((row) => row.textContent.replace(/[^\\x20-\\x7e]/g, "?").slice(0, 90))`);
+    await run(`document.querySelector("#tree .node.world-book").click()`);
+    const page = await until(() => run(`(() => { const doc = document.getElementById("worldframe").contentDocument; if (!doc || doc.title !== "World \u00b7 Live") return null; const counts = doc.getElementById("counts")?.textContent ?? "", where = doc.getElementById("where")?.textContent ?? ""; return counts || where ? { title: "World Live", counts: counts.replace(/[^\\x20-\\x7e]/g, "?").slice(0, 120), where: where.replace(/[^\\x20-\\x7e]/g, "?").slice(0, 120) } : null; })()`), "World \u00b7 Live's page", 60000).catch((error) => ({ error: error.message }));
+    await wait(4000);
+    const data = await run(`(async () => { const base = document.getElementById("worldframe").src.replace(/\\/play\\/world.*$/, ""); const get = async (name) => { const r = await fetch(base + "/play/" + name + "?volume=1"); return r.ok ? Object.keys(await r.json()).slice(0, 8) : r.status; }; const post = await fetch(base + "/play/settings?volume=1", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ key: "fill.streets", value: {}, why: "test" }) }); return { live: await get("live.json"), review: await get("review.json"), settings: await get("settings.json"), warehouse: await get("warehouse.json"), settingsChange: post.status }; })()`);
+    step("world", { worldRows, page, data, crumb: await run(`document.getElementById("crumb").textContent.replace(/[^\\x20-\\x7e]/g, "?")`) });
+    await picture("1e-world");
+  }
   if (agentArrange) {
     const before = await run(`[...document.querySelectorAll("#tree .node")].filter((row) => row.querySelector(".ic")?.textContent === "◎" && /books?$/.test(row.querySelector(".desc").textContent)).length`);
     // As a user: open the chat, pick the agent's tab there, then press the row's Ask.

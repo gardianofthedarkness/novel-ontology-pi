@@ -97,6 +97,13 @@ ipcMain.handle("importText", async (event, folder) => {
   return server.request("novel/import", { paths: picked.filePaths.map((file) => path.relative(folder, file)) });
 });
 ipcMain.handle("removeLibrary", (event, folder) => { servers.get(folder)?.stop(); servers.delete(folder); keep(libraries().filter((entry) => entry !== folder)); return listing(); });
+// The worlds in a library folder (v2 libraries; worlds the console builds), each registered for its page (world.js).
+const worlds = require("./world.js").createWorlds(backend);
+ipcMain.handle("worlds", async (event, folder) => {
+  if (!libraries().includes(folder)) throw new Error("That folder is not one of the console's libraries.");
+  const server = serverOf(folder); await server.ready;
+  return worlds.register(await server.request("novel/worlds", {}));
+});
 ipcMain.handle("ask", async (event, folder, method, params) => {
   if (!ALLOWED.has(method)) throw new Error(`The console does not ask ${method}.`);
   const server = serverOf(folder); await server.ready;
@@ -222,6 +229,7 @@ ipcMain.handle("version", () => ({ app: app.getVersion(), electron: process.vers
 function serve(request) {
   const url = new URL(request.url);
   if (url.host === "console" && url.pathname === "/reader") return reader(url);
+  if (url.host === "console" && url.pathname.startsWith("/world/")) return worlds.handle(request, url).catch((error) => { log("world", error.stack ?? error.message); return new Response(String(error.message ?? error), { status: 500 }); });
   if (url.host === "console") {
     const name = url.pathname.replace(/^\/+/, "") || "console.html";
     if (!/^[a-z-]+\.(html|css|js|svg)$/.test(name)) return new Response("Not found", { status: 404 });

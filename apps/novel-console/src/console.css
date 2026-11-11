@@ -98,12 +98,12 @@ code { font: 12px var(--mono); }
 @media (prefers-reduced-motion: reduce) { .spin { animation: none; } }
 
 .book { position: relative; min-width: 0; min-height: 0; background: var(--bg); display: grid; grid-template-rows: minmax(0, 1fr) auto; grid-template-columns: minmax(0, 1fr); }
-.book > .welcome { grid-row: 1; } .book > #reader { grid-row: 1; }
+.book > .welcome { grid-row: 1; } .book > #reader, .book > #worldframe { grid-row: 1; }
 .dock { grid-row: 2; min-width: 0; height: var(--dock-h, 320px); border-top: 1px solid var(--line); background: var(--panel); display: flex; flex-direction: column; min-height: 0; }
 .dock-head { display: flex; align-items: center; gap: 8px; padding: 5px 8px 5px 12px; font-size: 11.5px; letter-spacing: .07em; text-transform: uppercase; color: var(--dim); background: var(--deep); }
 .dock-head b { color: var(--ink); }
 .dock-body { overflow: auto; min-height: 0; flex: 1; padding: 6px 10px; }
-#reader { border: 0; width: 100%; height: 100%; display: block; }
+#reader, #worldframe { border: 0; width: 100%; height: 100%; display: block; }
 .welcome { max-width: 40em; margin: 9vh auto 0; padding: 0 28px; }
 .welcome h1 { font-size: 26px; letter-spacing: -.01em; margin: 0 0 10px; text-wrap: balance; }
 .welcome p { color: var(--dim); font-size: 14px; }
@@ -269,3 +269,5 @@ dialog .row { display: flex; justify-content: flex-end; gap: 8px; margin-top: 14
 .note.pick { border-left: 3px solid var(--accent); padding-left: 8px; }
 #live-action { border: 1px solid var(--accent); color: var(--accent); background: none; border-radius: 6px; padding: 4px 12px; cursor: pointer; }
 #live-action:hover { background: var(--accent); color: var(--bg, #0b1117); }
+.node.world .name { font-weight: 600; }
+.node.world-book .desc { color: var(--dim); }

@@ -16,6 +16,7 @@ contextBridge.exposeInMainWorld("novelHost", {
   reveal: (folder) => ipcRenderer.invoke("reveal", folder),
   version: () => ipcRenderer.invoke("version"),
   agents: () => ipcRenderer.invoke("agents"),
+  worlds: (folder) => ipcRenderer.invoke("worlds", folder),
   transcript: (key) => ipcRenderer.invoke("transcript", key),
   sendToSession: (key, text) => ipcRenderer.invoke("sendToSession", key, text),
 });

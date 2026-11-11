@@ -9,6 +9,7 @@
  * reading's stored source, is a virtual document `novel:/book/<file id>/<title>.txt`; an entity's record (its definition)
  * is `novel:/entity/<file id>/<entity id>/<label>.md`. Read-only.
  */
+import { findWorlds } from "./worlds.js";
 import { join } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { recordOf, type OutlineNode, type Span } from "../library/book.js";
@@ -75,6 +76,7 @@ export class NovelServer {
       case "novel/basicStep": return basicStep(this.ws.folder, Number(params.most ?? 3));
       case "novel/basic": { const state = await this.ws.current(); const file = state.files.find((entry) => entry.id === params.id || entry.path === params.id); return file ? readBasic(this.ws.folder, file.id) : null; }
       case "novel/series": return seriesSuggestions(this.ws.folder);
+      case "novel/worlds": return findWorlds(this.ws.folder);
       case "novel/arrange": {
         const name = String(params.name ?? "").trim(), files = (params.files as string[] | undefined) ?? [];
         if (!name || !files.length) throw new Error("A universe needs a name and its books.");
