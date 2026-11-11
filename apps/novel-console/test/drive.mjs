@@ -97,8 +97,11 @@ try {
     await run(`document.getElementById("t-chat").getAttribute("aria-pressed") === "true" || document.getElementById("t-chat").click()`);
     await until(() => run(`Boolean(document.querySelector('#hosts [data-host="${agentTab}"]'))`), "the chat's agents");
     await run(`document.querySelector('#hosts [data-host="${agentTab}"]').click()`);
-    const asked = await run(`[...document.querySelectorAll("#tree .node.agent-row")][0].querySelector(".act").textContent`);
-    await run(`[...document.querySelectorAll("#tree .node.agent-row")][0].querySelector(".act").click()`);
+    const asked = await run(`document.querySelector("#tree .node.ask-agent .act").textContent`);
+    await run(`document.querySelector("#tree .node.ask-agent .act").click()`);
+    // The token warning first (2026-11-11): the agent starts only when asked again there.
+    await until(() => run(`!document.getElementById("toast").hidden && Boolean(document.querySelector('#toast button[data-v="go"]'))`), "the token warning");
+    await run(`document.querySelector('#toast button[data-v="go"]').click()`);
     const started = Date.now();
     const midway = await until(() => run(`(() => { const steps = document.querySelectorAll("#chat-body .msg.step").length; return steps ? steps : /arranged by|stopped|signed out|cannot|Pick|its key/.test(document.getElementById("status").textContent + document.getElementById("chat-body").textContent) ? -1 : null; })()`), "the first command in the chat", realAgent ? 300000 : 30000);
     if (midway > 0) await picture("1c-agent-working");

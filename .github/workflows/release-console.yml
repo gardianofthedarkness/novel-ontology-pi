@@ -52,11 +52,18 @@ jobs:
         working-directory: apps/novel-console
         run: npm run dmg
 
+      - name: Pack the agent skill
+        run: |
+          mkdir -p apps/novel-console/release/kit
+          cp -R skills/novel-folder apps/novel-console/release/kit/
+          (cd apps/novel-console/release/kit && zip -qr "../novel-folder-skill-$VERSION.zip" novel-folder)
+
       - name: Publish the release
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
           DMG=$(ls apps/novel-console/release/Novel-Console-*-arm64.dmg)
+          SKILL="apps/novel-console/release/novel-folder-skill-$VERSION.zip"
           cat > notes.md <<EOF
           Novel Console $VERSION for Apple Silicon Macs (M1 or later).
 
@@ -64,10 +71,12 @@ jobs:
 
           **First open:** the app isn't notarized yet, so macOS blocks it once. Try to open it, click Done, then go to System Settings → Privacy & Security, click **Open Anyway** next to Novel Console, confirm and enter your password.
 
+          **Your own agent:** the app carries the \`novel\` command and the \`novel-folder\` skill. Press "Set up your agent" in the chat panel (⌘I) to install them for Claude Code, Codex or Pi. \`novel-folder-skill-$VERSION.zip\` is the same skill on its own, for an agent the app does not find; the command still comes from the app.
+
           See the [README](https://github.com/${GITHUB_REPOSITORY}#readme) for how to get started.
           EOF
           if gh release view "$TAG" >/dev/null 2>&1; then
-            gh release upload "$TAG" "$DMG" --clobber
+            gh release upload "$TAG" "$DMG" "$SKILL" --clobber
           else
-            gh release create "$TAG" "$DMG" --target "$GITHUB_SHA" --title "Novel Console $VERSION" --notes-file notes.md
+            gh release create "$TAG" "$DMG" "$SKILL" --target "$GITHUB_SHA" --title "Novel Console $VERSION" --notes-file notes.md
           fi

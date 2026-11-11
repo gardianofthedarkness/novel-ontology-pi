@@ -171,34 +171,3 @@ test("scene-cut card fragments share one membership fact and decision", () => {
   assert.ok(result.proposals.every(proposal => (proposal.payload as Scene).dialogues![0].participantIds[0] === cast[0].id));
 });
 
-test("real fact CLI backend persists independent decisions, aliases remap members, and Ladybug exposes cards", async context => {
-  const parent = await mkdtemp(join(tmpdir(), "dialogue-cards-"));
-  context.after(() => rm(parent, { recursive: true, force: true }));
-  const directory = join(parent, "novel");
-  await initWorkspace(directory);
-  const store = new BundleStore(join(directory, "ontology"));
-  for (const character of cast) await store.upsertEntity(character);
-  const { packet, scene } = packetFixture();
-  await saveChangeSet(directory, packet);
-  const page = await semanticPage(directory, packet.id);
-  assert.equal(page.unreviewed, 3);
-  const facts = semanticFacts(packet);
-  await decideFacts(directory, packet.id, page.revision, facts.map((fact, index) => ({ factId: fact.id, verdict: index === 2 ? "reject" : "accept", reason: "原文核对" })));
-  const decided = await semanticPage(directory, packet.id);
-  assert.equal(decided.unreviewed, 0);
-  assert.equal(decided.rejected, 1);
-  await promisify(execFile)(process.execPath, ["dist/src/cli/cli.js", "changeset", "approve", directory, packet.id]);
-  assert.deepEqual((await store.loadFile<Scene>("scenes.jsonl"))[0].dialogues![0].participantIds, [cast[0].id, cast[1].id]);
-  await mergeEntities(directory, cast[0].id, cast[1].id, "测试同一身份的审计重定向");
-  const updated = (await store.loadFile<Scene>("scenes.jsonl"))[0];
-  assert.deepEqual(updated.dialogues![0].participantIds, [cast[0].id]);
-  await removeEntity(directory, cast[0].id, "测试移除");
-  const graphPath = join(directory, "ontology", "graph.lbug");
-  await buildGraphFromBundle(join(directory, "ontology"), graphPath);
-  const graph = new LadybugStore(graphPath);
-  try {
-    const rows = await graph.run("MATCH (s:Scene) RETURN s.dialogue_cards_json AS cards");
-    assert.deepEqual(JSON.parse(String(rows[0].cards))[0].participantIds, []);
-    assert.deepEqual(await graph.run("MATCH (:Character)-[r:SPEAKS_TO]->(:Character) RETURN r"), []);
-  } finally { await graph.close(); }
-});

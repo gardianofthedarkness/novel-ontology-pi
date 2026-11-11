@@ -3,14 +3,23 @@ name: novel-folder
 description: Arrange an opened folder of novels (EPUB and text files) into universes and reading order, and answer who someone is and where they are cited, with the `novel folder` commands. Use when asked to sort a folder of books, to set up a novel workspace, or to look up a character, place or thing and the lines that refer to it.
 ---
 
-# The opened folder as a workspace of novels
+# A folder of novels as a workspace
 
-The folder the console (or the editor) has open is the workspace. Its books stay where they are: you never move, rename or edit the
-user's files. The arrangement is kept in a hidden `.novel/workspace.json` that only the `novel folder` commands write.
-The editor's Novels view shows the same arrangement and updates when a command changes it.
+A folder of books the user added to Novel Console is a workspace. Its books stay where they are: you never move, rename
+or edit the user's files. The arrangement is kept in a hidden `.novel/workspace.json` that only the `novel folder`
+commands write. Novel Console shows the same arrangement and updates when a command changes it, so the user can watch
+what you do there.
+
+## 0. The command
+
+`novel` comes with Novel Console: its "Set up your agent" button installs it as `~/.local/bin/novel`. If `novel` is not
+found, run `~/.local/bin/novel` instead. If that is missing too, tell the user to open Novel Console and press "Set up your
+agent" in its chat panel (⌘I); do not look for or install another `novel`.
 
 Every command is `novel folder <verb> <folder> ...` and prints JSON (add `--pretty` to read it). A file is named by its
-path, the end of its path, or its id (`f_...`). None of these commands calls a model or costs anything.
+path, the end of its path, or its id (`f_...`). None of these commands calls a model or costs anything, except
+`novel folder read` (section 4). `novel folder scan <folder>` lists what the folder holds; run it first on a folder
+Novel Console has not opened yet.
 
 ## 1. Arrange the folder
 
@@ -90,9 +99,10 @@ A problem `credit-not-backed` is a line credited to someone the scene never name
 often a description read as the wrong person, sometimes a title that really is theirs. It does not catch every wrong
 credit (a person the scene names in passing can still be credited wrongly). Check each against the text the same way.
 
-## Readings made in the folder
+## 4. Readings made in the folder
 
 A book with no reading can be read on this Mac with `novel folder read <folder> <file>`: it starts the reading in a
 process of its own and returns at once; `novel folder reading <folder> <file>` says where it is (`--stop` stops it). It
 is paid (about $0.35 a volume) and needs both model keys (`novel folder keys <folder>` says whether they are set). The
-user runs readings from the editor's play button; run one only when the user asks you to. See docs/v3/design.html#readings.
+user runs readings from Novel Console's ▶ button; run one only when the user asks you to, and say what it will cost
+first.

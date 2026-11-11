@@ -215,17 +215,3 @@ test("EPUB catalog uses metadata, supports bounded text evidence and preserves a
   assert.equal((await libraryPrepare(library, registered.source.id)).status, "already_prepared");
 });
 
-test("CLI exposes the separate library workflow and rejects incomplete/unknown flags", async (t) => {
-  const { library, plan } = await fixture(t);
-  const cli = join(dirname(fileURLToPath(import.meta.url)), "..", "..", "src", "cli", "cli.js");
-  const result = await execute(process.execPath, [cli, "library", "show", library]);
-  assert.equal(JSON.parse(result.stdout).sources.length, 3);
-  const revision = JSON.parse(result.stdout).revision;
-  const pending = JSON.parse((await execute(process.execPath, [cli, "library", "propose", library, "--organization", JSON.stringify(plan), "--revision", revision])).stdout);
-  const reread = JSON.parse((await execute(process.execPath, [cli, "library", "plan", library, pending.planId])).stdout);
-  assert.equal(reread.stale, false);
-  assert.equal(reread.revision, pending.revision);
-  await assert.rejects(execute(process.execPath, [cli, "library", "propose", library, "--organization", JSON.stringify("/private/unapproved-file"), "--revision", revision]), /must be a JSON object/);
-  await assert.rejects(execute(process.execPath, [cli, "library", "show", library, "--series"]), /Invalid or duplicate/);
-  await assert.rejects(execute(process.execPath, [cli, "library", "show", library, "--auto-approve"]), /Invalid or duplicate/);
-});

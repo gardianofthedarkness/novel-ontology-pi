@@ -8,6 +8,7 @@ contextBridge.exposeInMainWorld("novelHost", {
   removeLibrary: (folder) => ipcRenderer.invoke("removeLibrary", folder),
   importText: (folder) => ipcRenderer.invoke("importText", folder),
   arrangeWithAgent: (folder, options) => ipcRenderer.invoke("arrangeWithAgent", folder, options),
+  agentSetup: (apply) => ipcRenderer.invoke("agentSetup", apply),
   onAgentStep: (listener) => { ipcRenderer.on("agentStep", (event, step) => listener(step)); },
   ask: (folder, method, params) => ipcRenderer.invoke("ask", folder, method, params),
   keys: () => ipcRenderer.invoke("keys"),

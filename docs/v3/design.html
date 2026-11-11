@@ -509,7 +509,7 @@ still share, while its React interface was v1's playground), <code>skills/</code
 <code>config/</code> (the settings registry and the tables), <code>tools/</code> (the Pi host <code>tools/pi-review</code>,
 which also serves World · Live; the portrait cropper; the Muse relays), <code>experiments/world-first</code> (v1's
 experiment), <code>eval/</code>, <code>assets/</code>, and <code>archive/</code> (set aside, not maintained: the VS Code
-extension, the team playground's launcher and packaging).</p>
+extension, the team playground's launcher and packaging, v1's commands and skills, <a href="#skills">§13.1</a>).</p>
 <h1 id="workspace">3. The library: any folder as a workspace of novels</h1>
 <p><span id="basic"></span></p>
 <blockquote>
@@ -2143,9 +2143,28 @@ beside Jev's), the Buildings panel, the album's pictures, the sky, the timeline 
 </ul>
 <h1 id="agents">13. Agents, skills and adapters</h1>
 <h2 id="skills">13.1 Skills</h2>
-<p>Skills teach an agent the workflows; the CLI does the work. <code>skills/novel-ontology</code> is the canon for extraction and review
-(subskills mirror the CLI groups); <code>novel-library</code>, <code>novel-folder</code>, <code>novel-volume</code>, <code>novel-stage</code>, <code>novel-models</code>,
-<code>novel-portraits</code> each teach one job. A skill's description is its routing signal: kept tight.</p>
+<p>Skills teach an agent the workflows; the CLI does the work. A skill's description is its routing signal: kept tight.</p>
+<p><span class="st built">Built</span> (2026-11-11: "it could be turned into a cli+skill so user can install on their agent").
+The console is decoupled from agents: <strong>the user's own agent</strong> (Claude Code, Codex, Pi), signed in by itself, works in its own
+window with <code>skills/novel-folder</code> and the <code>novel</code> command, and the console shows what it does to the folder. Both ship
+inside the app: "Set up your agent" in the chat installs the command as <code>~/.local/bin/novel</code> (run by the app's own Node;
+rewritten when the app moves or updates) and copies the skill into <code>~/.claude/skills</code>, <code>$CODEX_HOME/skills</code> and
+<code>~/.pi/agent/skills</code> for the agents found; each release also carries the skill as a zip. The console cannot push to an agent's
+session: the agent acts when the user asks it, and the console watches. <strong>Arrange</strong> runs the command first (the series found by
+title, free, no model); asking an agent to arrange stays, behind a warning that it spends the agent's tokens (2026-11-11: "we
+should warn people that agent is specifically token consuming"). The chat lists only the agents with sessions on this Mac
+or that it can start.</p>
+<table><thead><tr><th>Skill</th><th>For</th><th>Status</th></tr></thead><tbody>
+<tr><td><code>novel-folder</code></td><td>the user's agent: arrange a folder, who is who, where they are cited, readings</td><td><span class="st built">Built</span>, shipped with the app</td></tr>
+<tr><td><code>novel-volume</code>, <code>novel-models</code></td><td>us: v2's world pipeline, a volume step by step; models and settings</td><td><span class="st legacy">Legacy</span></td></tr>
+<tr><td><code>novel-ontology</code>, <code>novel-library</code>, <code>novel-stage</code>, <code>novel-portraits</code></td><td>v1's extraction and review, library, stage and portraits</td><td><span class="st superseded">Superseded</span>: <code>archive/skills/</code></td></tr>
+</tbody></table>
+<p>v1's commands went to <code>archive/cli/</code> with the CLI as it stood (2026-11-11): <code>library</code>, <code>init</code>, <code>ingest</code>,
+<code>changeset</code>, <code>review</code>, <code>recall</code>, <code>miniloop</code>, <code>fix</code>, <code>causality</code>, <code>timeplace</code>, <code>stage</code>,
+<code>checklist</code>, <code>atlas</code>, <code>calendar</code>, <code>em</code>, <code>album</code>, <code>graph</code>, <code>query</code>, <code>search</code>,
+<code>state</code>, <code>timeline</code>, <code>bundle</code>, <code>section</code>, <code>blocks</code>, <code>watch</code>, and the unbuilt <code>fork</code> and
+<code>simulate</code>. Their modules that live code still imports stay in <code>src/</code>. <code>novel help</code> lists what is left: <code>folder</code>,
+the keys and models (<code>jev</code>, <code>llm</code>, <code>config</code>, <code>explain</code>), v2's world pipeline and our evaluations.</p>
 <h2 id="adapters">13.2 One adaptor, every agent host</h2>
 <p><span class="st built">Built</span> as a registry, the setup engine <span class="st designed">Designed</span>
 (<code>adapters/</code>, <code>src/adapters/hosts.ts</code>, decision 20). After REA's pattern (Oct 2026): one canonical skill set published

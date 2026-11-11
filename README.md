@@ -13,7 +13,7 @@ The app only adds a small hidden `.novel` folder next to them.
 - **Two API keys**, used when a book is read:
   - **Jev**, from TypeSafe AI.
   - **A work model**, from DeepSeek.
-- **Optional:** [Claude Code](https://claude.com/claude-code) or Pi, if you want an agent to tidy up your library for you.
+- **Optional:** an AI agent such as [Claude Code](https://claude.com/claude-code), Codex or Pi, if you want one to work with your library (see [Use it from your own agent](#use-it-from-your-own-agent)).
 
 ## Download and install
 
@@ -80,14 +80,37 @@ The icons down the left side open the different views:
 
 Other things you can do:
 
-- **Arrange with an agent.**
-  In the Library, this asks Claude Code or Pi to sort a folder into universes, series and reading order for you.
-  It only uses the app's own folder commands, and you can watch each step in the chat panel.
-  If you'd rather do it yourself, use **Arrange**.
-- **Chat panel.**
-  Open it with **⌘I** to see and continue your agent sessions.
+- **Arrange.**
+  In the Library, **Arrange all** sorts the series it finds by title into universes, each in volume order.
+  It's free and uses no AI.
+  Fix anything it missed by hand, or ask an agent (below).
 - **Day and night.**
   Click **◐** to switch between light and dark.
+
+## Use it from your own agent
+
+Novel Console comes with a `novel` command and a skill, so an AI agent you already use can work with your library.
+This works with Claude Code, Codex or Pi.
+Your agent stays signed in its own way, and the app never sees its login.
+
+1. Open the chat panel with **⌘I** and click **Set up your agent**.
+   This installs the `novel` command as `~/.local/bin/novel`.
+   It also adds the `novel-folder` skill to each of those agents it finds on your Mac.
+2. Start a new session of your agent and ask it things like:
+   - "Arrange the novels in ~/Books into universes and reading order."
+   - "In ~/Books, who is Ana and where is she first named?"
+3. Watch the result appear in Novel Console as the agent works.
+
+The chat panel also lists your agents' recent sessions.
+From the Library you can ask Claude Code or Pi to arrange a folder for you.
+
+> **Agents cost tokens.** An agent reads the books' openings and runs many commands to decide.
+> That uses your agent's own plan or API credit, which can add up on a big folder.
+> **Arrange all** is free, so try it first.
+
+The skill is also attached to each [release](https://github.com/gardianofthedarkness/novel-ontology-pi/releases/latest) as `novel-folder-skill-….zip`, for an agent the app doesn't detect.
+Put the `novel-folder` folder in that agent's skills folder.
+The `novel` command still comes from the app.
 
 ## Your privacy
 

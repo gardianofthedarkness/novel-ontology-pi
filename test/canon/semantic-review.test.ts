@@ -66,47 +66,6 @@ test("fact review excludes segmentation and event detection but retains identiti
   assert.ok(!result.proposals.some(proposal => ["add_relation", "set_state_change", "upsert_entity"].includes(proposal.kind)));
 });
 
-test("review pages expose semantic identity meaning and CLI decisions bind labels without editing stored proposals", async context => {
-  const parent = await mkdtemp(join(tmpdir(), "semantic-label-review-"));
-  context.after(() => rm(parent, { recursive: true, force: true }));
-  const directory = join(parent, "novel");
-  await initWorkspace(directory);
-  const { packet, first, second } = fixture();
-  const originalTurn = (packet.proposals.find(proposal => proposal.kind === "create_scene")!.payload as Scene).turns[0];
-  originalTurn.speakerId = second.id;
-  originalTurn.addresseeId = first.id;
-  const original = JSON.stringify(packet.proposals);
-  await saveChangeSet(directory, packet);
-  const page = await semanticPage(directory, packet.id);
-  assert.ok("facts" in page);
-  const rows = page.facts as { id: string; field: string; meaning: unknown }[];
-  assert.deepEqual(rows.find(fact => fact.field === "presence")?.meaning, ["小明", "小红"]);
-  const revision = page.revision;
-  const execute = promisify(execFile);
-  const cli = (...args: string[]) => execute(process.execPath, [resolve("dist/src/cli/cli.js"), ...args], { env: { ...process.env, WORK_LLM_API_KEY: "", TYPESAFE_API_KEY: "" } });
-  await cli("changeset", "decide", directory, packet.id, "--revision", revision, "--decisions", JSON.stringify([decision("first/identity"), decision("second/identity"), {
-    factId: "scene/turn/0", verdict: "accept", reason: "依据原文的人名核对", semanticReplacement: { speakerId: "小明", addresseeId: "小红" },
-  }]));
-  const state = packet.proposals.find(proposal => proposal.kind === "set_state_change")!.payload as unknown as StateChange;
-  await decideFacts(directory, packet.id, revision, [{ factId: "emotion/state", verdict: "accept", reason: "只修正状态归属的人名", semanticReplacement: { ...state, characterId: "小红", relationships: { 小明: 0.2 } } }]);
-  const stored = await loadChangeSet(directory, packet.id);
-  assert.equal(JSON.stringify(stored.proposals), original);
-  const corrected = stored.semanticReview!.decisions.find(entry => entry.factId === "emotion/state")!.replacement as StateChange;
-  assert.equal(corrected.characterId, second.id);
-  assert.deepEqual(corrected.relationships, { [first.id]: 0.2 });
-  assert.deepEqual(corrected.emotions, state.emotions);
-  const detail = await semanticPage(directory, packet.id, { factId: "emotion/state" });
-  assert.ok("meaning" in detail);
-  assert.deepEqual(detail.meaning, { character: "小红", relationships: { 小明: 0.2 } });
-  await assert.rejects(decideFacts(directory, packet.id, revision, [{ factId: "scene/turn/0", verdict: "accept", reason: "bad label", semanticReplacement: { speakerId: first.id, addresseeId: null } }]), /semantic identity label/);
-  await assert.rejects(decideFacts(directory, packet.id, "stale", [{ factId: "scene/turn/0", verdict: "accept", semanticReplacement: { speakerId: "小明", addresseeId: null } }]), /Stale/);
-  await cli("changeset", "approve", directory, packet.id);
-  const canonical = new BundleStore(join(directory, "ontology"));
-  assert.deepEqual((await canonical.loadFile<Scene>("scenes.jsonl"))[0].turns[0], { speakerId: first.id, addresseeId: second.id, sentenceIds: originalTurn.sentenceIds });
-  assert.equal((await canonical.loadFile<StateChange>("state-changes.jsonl"))[0].characterId, second.id);
-  assert.equal(JSON.stringify((await loadChangeSet(directory, packet.id)).proposals), original);
-});
-
 test("semantic identity edits reject ambiguous names, conflicting inputs, event reassignment and alias collisions", async context => {
   const parent = await mkdtemp(join(tmpdir(), "semantic-label-guards-"));
   context.after(() => rm(parent, { recursive: true, force: true }));
@@ -192,43 +151,6 @@ test("a model-generated identity form absent from source cannot pass even an acc
   (packet.proposals[0].payload as Entity).names.push({ text: "不存在的人", lang: "zh", kind: "alias" });
   packet.semanticReview = { version: 1, revision: semanticRevision(packet), decisions: [decision("first/identity")] };
   assert.throws(() => materializeSemantic(packet, []), /original source/);
-});
-
-test("real CLI pages, targeted decisions, partial approval and graph queries use no model calls", async context => {
-  const parent = await mkdtemp(join(tmpdir(), "semantic-cli-"));
-  context.after(() => rm(parent, { recursive: true, force: true }));
-  const directory = join(parent, "novel");
-  await initWorkspace(directory);
-  const { packet } = fixture();
-  await saveChangeSet(directory, packet);
-  const execute = promisify(execFile);
-  const cli = (...args: string[]) => execute(process.execPath, [resolve("dist/src/cli/cli.js"), ...args], { env: { ...process.env, WORK_LLM_API_KEY: "", TYPESAFE_API_KEY: "" } });
-  await assert.rejects(cli("changeset", "approve", directory, packet.id), /decisions are missing/);
-  assert.equal((await loadChangeSet(directory, packet.id)).status, "held");
-  const page = JSON.parse((await cli("changeset", "facts", directory, packet.id, "--limit", "20")).stdout);
-  assert.ok(page.facts.every((fact: { evidenceIds: string[] }) => fact.evidenceIds.some(id => page.evidence[id])));
-  assert.ok(page.facts.find((fact: { field: string; eventIds: string[] }) => fact.field === "actors").eventIds.every((id: string) => page.events[id]));
-  const decisions = [decision("first/identity"), decision("second/identity"), decision("scene/turn/0")];
-  await cli("changeset", "decide", directory, packet.id, "--revision", page.revision, "--decisions", JSON.stringify(decisions));
-  const approved = JSON.parse((await cli("changeset", "approve", directory, packet.id)).stdout);
-  assert.equal(approved.deferredFacts, 4);
-  assert.equal(approved.graph.entities, 2);
-  assert.equal(approved.graph.scenes, 1);
-  assert.equal(approved.graph.relations, 0);
-  const store = new BundleStore(join(directory, "ontology"));
-  assert.equal((await store.loadFile<Scene>("scenes.jsonl"))[0].turns[0].speakerId, "char_000001");
-  assert.equal((await store.loadFile<OntEvent>("events.jsonl"))[0].primaryActors.length, 0);
-  assert.equal((await store.loadFile("state-changes.jsonl")).length, 0);
-  const query = JSON.parse((await cli("query", directory, "MATCH (c:Character)-[:KNOWS]->(d:Character) RETURN c.id")).stdout);
-  assert.deepEqual(query.rows, []);
-  assert.match(query.epistemic, /unknown, not false/);
-  const held = JSON.parse((await cli("changeset", "facts", directory, packet.id, "--fact", "relationship/relation")).stdout);
-  assert.ok(held.sentences.length);
-  assert.equal(held.materialization, "held");
-  assert.equal(held.heldFacts, 4);
-  await assert.rejects(cli("changeset", "approve", directory, packet.id), /already approved/);
-  const counts = await loadExtractionCounts(directory, store);
-  assert.deepEqual(counts.reservedEntityIds.sort(), ["char_000001", "char_000002"]);
 });
 
 test("held identity ids stay reserved after partial application and no merged event is falsely emitted", async context => {

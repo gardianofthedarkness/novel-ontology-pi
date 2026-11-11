@@ -189,6 +189,32 @@ async function runPi({ folder, novel, skill, prompt, sessionFile = null, onStep 
     });
   });
 }
+// The user's own agent (the user, 2026-11-11: "it could be turned into a cli+skill so user can install on their agent"): the
+// app's `novel` command as ~/.local/bin/novel (run by this app's Node, so it needs nothing else installed) and the novel-folder
+// skill into each agent found on this Mac. The agent signs in by itself; the console never handles an agent's login.
+const SHIM_MARK = "# Novel Console's novel command";
+const userShim = () => path.join(os.homedir(), ".local", "bin", "novel");
+const shimText = () => `#!/bin/sh\n${SHIM_MARK} (installed by "Set up your agent"; rewritten when the app moves or updates).\nELECTRON_RUN_AS_NODE=1 exec "${process.execPath}" "${path.join(backend, "dist", "src", "cli", "cli.js")}" "$@"\n`;
+const ours = (file) => { try { return fs.readFileSync(file, "utf8").includes(SHIM_MARK); } catch { return false; } };
+const AGENT_SKILLS = () => [
+  { id: "claude-code", name: "Claude Code", home: path.join(os.homedir(), ".claude"), skills: path.join(os.homedir(), ".claude", "skills") },
+  { id: "codex", name: "Codex", home: process.env.CODEX_HOME || path.join(os.homedir(), ".codex"), skills: path.join(process.env.CODEX_HOME || path.join(os.homedir(), ".codex"), "skills") },
+  { id: "pi", name: "Pi", home: path.join(os.homedir(), ".pi"), skills: path.join(os.homedir(), ".pi", "agent", "skills") },
+];
+function agentSetup({ apply = false } = {}) {
+  const shim = userShim(), shimFree = !fs.existsSync(shim) || ours(shim);
+  if (apply && shimFree) { fs.mkdirSync(path.dirname(shim), { recursive: true }); fs.writeFileSync(shim, shimText(), { mode: 0o755 }); }
+  const skill = path.join(backend, "skills", "novel-folder");
+  const agents = AGENT_SKILLS().map((agent) => {
+    const found = fs.existsSync(agent.home), target = path.join(agent.skills, "novel-folder");
+    if (apply && found) { fs.mkdirSync(agent.skills, { recursive: true }); fs.cpSync(skill, target, { recursive: true, force: true }); }
+    return { id: agent.id, name: agent.name, found, installed: fs.existsSync(path.join(target, "SKILL.md")), skill: target };
+  });
+  return { command: shim, commandInstalled: ours(shim), commandTaken: !shimFree, agents };
+}
+// A command installed earlier follows the app (a new version, or the app moved).
+app.whenReady().then(() => { try { const shim = userShim(); if (ours(shim) && fs.readFileSync(shim, "utf8") !== shimText()) fs.writeFileSync(shim, shimText(), { mode: 0o755 }); } catch {} });
+ipcMain.handle("agentSetup", (event, apply) => agentSetup({ apply: Boolean(apply) }));
 ipcMain.handle("reveal", (event, folder) => { if (libraries().includes(folder)) shell.showItemInFolder(folder); });
 ipcMain.handle("version", () => ({ app: app.getVersion(), electron: process.versions.electron, backend: app.isPackaged ? "bundled" : backend }));
 

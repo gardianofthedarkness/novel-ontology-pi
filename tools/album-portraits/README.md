@@ -23,7 +23,7 @@ redistribution. On macOS the same stack runs as-is; Apple Vision
 
 ## Agent workflow
 
-Use the separate [`novel-portraits` skill](../../skills/novel-portraits/SKILL.md).
+Use the separate [`novel-portraits` skill](../../archive/skills/novel-portraits/SKILL.md).
 Import the matching EPUB album before extraction. After the whole volume has
 completed extraction and shared review/application:
 

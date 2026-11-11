@@ -185,8 +185,17 @@ async function basicLayer(folder) {
 const AGENT_NAMES = { "claude-code": "Claude Code", pi: "Pi" };
 const arrangingNow = new Map();
 let liveShown = null;
+/** Arrange (the default): every series found by title made a universe, with the novel command only; free. */
+async function arrangeAll(folder, found) { for (const series of found) await arrangeSeries(folder, series); }
+/** An agent costs tokens of its own (the user, 2026-11-11: "we should warn people that agent is specifically token
+ * consuming"): asked before every start, with the free way named. */
+async function agentWarned(name) {
+  const choice = await chooser(`Ask ${name} to arrange?`, `${name} reads the books' openings and runs many commands to decide. That spends ${name}'s own tokens (${name === "Pi" ? "the work model's key: usually a few cents" : "your plan's usage or API credit: can be a lot on a big folder"}). Arrange all is free: it groups the series found by title, with no model.`, [[`Ask ${name}`, "go"]]);
+  return choice === "go";
+}
 async function arrangeWithAgent(lib) {
   if (!hostsLoaded || !hostList.length) await loadHosts();
+  if (!arrangingNow.has(lib.path) && AGENT_NAMES[chosenHost] && !(await agentWarned(AGENT_NAMES[chosenHost]))) return;
   setPanel(true);
   if (arrangingNow.has(lib.path)) { paintLive(arrangingNow.get(lib.path)); return; }
   const agent = AGENT_NAMES[chosenHost] ? chosenHost : null, entry = hostList.find((item) => item.id === agent);
@@ -301,11 +310,14 @@ function render() {
         }
       }
     }
-    if (data.unsorted.length || data.universes.length || arrangingNow.has(lib.path)) {
+    const foundFirst = seriesOf.get(lib.path) ?? [];
+    if (foundFirst.length > 1) tree.append(node({ depth: 1, icon: "✦", name: "Arrange", desc: `${foundFirst.length} series found by title · free, no model`, cls: "agent-row", title: "Makes each series found by its titles a universe, its books in volume order (the novel command; no model, nothing spent). Fix the rest by hand or ask an agent.",
+      action: actionButton("Arrange all", "run", "Arrange every series found by title", () => arrangeAll(lib.path, foundFirst)) }));
+    if (arrangingNow.has(lib.path) || (data.unsorted.length || data.universes.length) && AGENT_NAMES[chosenHost]) {
       const busy = arrangingNow.has(lib.path);
       const agentName = AGENT_NAMES[busy ? arrangingNow.get(lib.path).agent : chosenHost];
-      tree.append(node({ depth: 1, icon: "✦", name: "Arrange with an agent", desc: busy ? `${agentName} is arranging…` : agentName ? `${agentName}, the agent open in the chat` : "pick Claude Code or Pi in the chat", cls: "agent-row", title: "The agent open in the chat (Claude Code or Pi; switch it there) arranges this folder into universes, series and reading order, with the folder's novel command only: your files are not changed",
-        action: busy ? actionButton(`<span class="spin"></span>`, "", "Show the arrangement in the chat", () => arrangeWithAgent(lib)) : actionButton(agentName ? `Ask ${agentName}` : "Ask", "run", `Ask ${agentName ?? "an agent"} to arrange this folder`, () => arrangeWithAgent(lib)) }));
+      tree.append(node({ depth: 1, icon: "✦", name: "Arrange with an agent", desc: busy ? `${agentName} is arranging…` : `${agentName} · spends its tokens`, cls: "agent-row ask-agent", title: "The agent open in the chat (Claude Code or Pi; switch it there) arranges this folder into universes, series and reading order, with the folder's novel command only: your files are not changed",
+        action: busy ? actionButton(`<span class="spin"></span>`, "", "Show the arrangement in the chat", () => arrangeWithAgent(lib)) : actionButton(`Ask ${agentName}`, "", `Ask ${agentName} to arrange this folder (it spends ${agentName}'s tokens)`, () => arrangeWithAgent(lib)) }));
     }
     const found = seriesOf.get(lib.path) ?? [];
     if (found.length) {
@@ -320,7 +332,7 @@ function render() {
 }
 const toggle = (key) => { if (expanded.has(key)) expanded.delete(key); else expanded.add(key); render(); };
 async function libraryMenu(lib) {
-  const choice = await chooser(lib.name, lib.path, [[`Ask ${AGENT_NAMES[chosenHost] ?? "an agent"} to arrange`, "agent"], ["Import a text file…", "import"], ["Show in Finder", "reveal"], ["Remove from the console", "remove"]]);
+  const choice = await chooser(lib.name, lib.path, [[`Ask ${AGENT_NAMES[chosenHost] ?? "an agent"} to arrange (spends its tokens)`, "agent"], ["Import a text file…", "import"], ["Show in Finder", "reveal"], ["Remove from the console", "remove"]]);
   if (choice === "agent") { arrangeWithAgent(lib); return; }
   if (choice === "import") { try { const report = await host.importText(lib.path); if (report) { say(`Imported: ${report.added.length} new ${report.added.length === 1 ? "book" : "books"}.`); await load(lib.path); render(); basicLayer(lib.path); } } catch (error) { say(error.message, true); } }
   if (choice === "reveal") host.reveal(lib.path);
@@ -617,14 +629,33 @@ async function loadHosts() {
   $("chat-count").textContent = ` · ${hostList.reduce((sum, entry) => sum + entry.sessions.length, 0)} sessions`;
   renderHosts(); if (openSession) showSession(openSession); else renderSessions();
 }
-function renderHosts() { $("hosts").innerHTML = hostList.map((entry) => `<button role="tab" data-host="${esc(entry.id)}" aria-selected="${entry.id === chosenHost}">${esc(entry.name)}<span class="k">${entry.sessions.length}</span></button>`).join(""); }
+const shownHosts = () => hostList.filter((entry) => entry.sessions.length || entry.starts || entry.id === chosenHost);
+function renderHosts() { $("hosts").innerHTML = shownHosts().map((entry) => `<button role="tab" data-host="${esc(entry.id)}" aria-selected="${entry.id === chosenHost}">${esc(entry.name)}<span class="k">${entry.sessions.length}</span></button>`).join(""); }
 const ago = (iso) => { const minutes = Math.round((Date.now() - Date.parse(iso)) / 60000); return minutes < 60 ? `${minutes} min ago` : minutes < 1440 ? `${Math.round(minutes / 60)} h ago` : `${Math.round(minutes / 1440)} d ago`; };
+// Your own agent: the novel command and the novel-folder skill installed for the agents found on this Mac; the agent then works
+// in its own window, signed in by itself, and the console shows what it does to the folder.
+let setupState = null;
+const setupStrip = () => {
+  const done = setupState?.commandInstalled && setupState.agents.some((agent) => agent.installed);
+  return `<div class="note setup"><b>Use your own agent</b><br>${done ? `Set up for ${esc(setupState.agents.filter((agent) => agent.installed).map((agent) => agent.name).join(", "))}: ask it to arrange or look things up in a folder with the <code>novel-folder</code> skill.` : "Install the <code>novel</code> command and its skill for Claude Code, Codex or Pi, then ask your agent in its own window."} <button class="chip" id="agent-setup">${done ? "Set up again" : "Set up your agent"}</button></div>`;
+};
+async function setUpAgents() {
+  try {
+    const report = await host.agentSetup(true); setupState = report;
+    const names = report.agents.filter((agent) => agent.installed).map((agent) => agent.name);
+    if (report.commandTaken) say(`${report.command} already exists and is not Novel Console's: left as it is. Your agent can still use the skill once that file is moved.`, true);
+    else say(names.length ? `Set up: the novel command (${report.command}) and the skill for ${names.join(", ")}. Start a new session of your agent to pick it up.` : `The novel command is installed (${report.command}), but no Claude Code, Codex or Pi was found on this Mac for the skill.`);
+    renderSessions(); renderHosts();
+  } catch (error) { say(plainError(error), true); }
+}
+host.agentSetup?.(false).then((report) => { setupState = report; }).catch(() => {});
 function renderSessions() {
   openSession = null; liveShown = null; $("chat-back").hidden = true; $("compose").hidden = true;
   const entry = hostList.find((item) => item.id === chosenHost);
   if (!entry) { $("chat-body").innerHTML = `<p class="note">No agent hosts are registered.</p>`; return; }
-  $("chat-body").innerHTML = `${entry.note ? `<p class="note">${esc(entry.note)}</p>` : ""}${entry.sessions.length ? entry.sessions.map((session) => `<div class="session" data-session="${esc(session.key)}"><span class="t">${esc(session.title)}</span><small>${esc(session.cwd ? session.cwd.split("/").slice(-2).join("/") : "")} · ${esc(ago(session.updated))}</small></div>`).join("") : `<p class="note">No sessions of ${esc(entry.name)} on this Mac.</p>`}`;
+  $("chat-body").innerHTML = `${setupStrip()}${entry.note ? `<p class="note">${esc(entry.note)}</p>` : ""}${entry.sessions.length ? entry.sessions.map((session) => `<div class="session" data-session="${esc(session.key)}"><span class="t">${esc(session.title)}</span><small>${esc(session.cwd ? session.cwd.split("/").slice(-2).join("/") : "")} · ${esc(ago(session.updated))}</small></div>`).join("") : `<p class="note">No sessions of ${esc(entry.name)} on this Mac.</p>`}`;
 }
+document.addEventListener("click", (event) => { if (event.target.closest("#agent-setup")) setUpAgents(); });
 async function showSession(key) {
   openSession = key; liveShown = null; $("chat-back").hidden = false;
   const entry = hostList.find((item) => item.sessions.some((session) => session.key === key)), session = entry?.sessions.find((item) => item.key === key);

@@ -101,7 +101,7 @@ test('all five concise skills load through the actual Pi resource loader without
   const { DefaultResourceLoader, SettingsManager } = await import('@earendil-works/pi-coding-agent');
   const directory = await mkdtemp(join(tmpdir(), 'library-skills-'));
   context.after(() => rm(directory, { recursive: true, force: true }));
-  const paths = [resolve('skills/novel-ontology/SKILL.md'), resolve('skills/novel-library/SKILL.md'), resolve('skills/novel-portraits/SKILL.md'), resolve('skills/novel-stage/SKILL.md'), resolve('skills/novel-models/SKILL.md')];
+  const paths = [resolve('archive/skills/novel-ontology/SKILL.md'), resolve('archive/skills/novel-library/SKILL.md'), resolve('skills/novel-portraits/SKILL.md'), resolve('skills/novel-stage/SKILL.md'), resolve('skills/novel-models/SKILL.md')];
   const loader = new DefaultResourceLoader({ cwd: directory, agentDir: directory, settingsManager: SettingsManager.inMemory({}), noExtensions: true, noContextFiles: true, noPromptTemplates: true, noThemes: true, additionalSkillPaths: paths });
   await loader.reload();
   const skills = loader.getSkills().skills;
