@@ -12,7 +12,7 @@ import { fileURLToPath } from "node:url";
 const here = dirname(fileURLToPath(import.meta.url)), appDir = resolve(here, "..");
 const argv = process.argv.slice(2), flag = (name) => { const at = argv.indexOf(name); return at >= 0 ? argv.splice(at, 2)[1] : null; };
 const take = (name) => { const at = argv.indexOf(name); if (at < 0) return false; argv.splice(at, 1); return true; };
-const arrange = take("--arrange"), worldStep = take("--world"), agentArrange = take("--agent-arrange"), asUser = take("--as-user"), realAgent = take("--real-agent") || asUser;
+const arrange = take("--arrange"), worldStep = take("--world"), copyStep = take("--copy-world"), reviewStep = take("--review"), noAsk = take("--no-ask"), agentArrange = take("--agent-arrange"), asUser = take("--as-user"), realAgent = take("--real-agent") || asUser;
 const packaged = flag("--app"), pick = Number(flag("--book") ?? 1) - 1, agentTab = flag("--agent") ?? "claude-code"; flag("--shots");
 const shotsDir = (() => { const at = process.argv.indexOf("--shots"); return at >= 0 ? resolve(process.argv[at + 1]) : null; })();
 const folders = (argv[0] ?? "").split(",").filter(Boolean).map((folder) => resolve(folder));
@@ -38,11 +38,21 @@ if (!pi && args.includes("--resume") && !process.env.NOVEL_COMMAND) { say({ type
 const file = pi ? (args[4] ?? join(args[3], "stand-in-" + Date.now() + ".jsonl")) : null;
 if (pi) { mkdirSync(args[3], { recursive: true }); if (!args[4]) writeFileSync(file, JSON.stringify({ type: "session", id: "stand-in-pi", cwd: folder }) + "\\n"); appendFileSync(file, JSON.stringify({ type: "message", message: { role: "user", content: [{ type: "text", text: process.env.NOVEL_ARRANGE_PROMPT ?? "" }] } }) + "\\n"); say({ session: file }); }
 else say({ type: "system", subtype: "init", session_id: "stand-in-session" });
-const list = run("basics", folder), loose = list.books.filter((book) => !book.placed).slice(0, 2);
-const made = run("universe", folder, "Stand-in world " + Date.now() % 100000, "--why", "the stand-in's test");
-for (const book of loose) run("put", folder, book.id, made.universe, "--series", book.seriesByTitle ?? "one");
-const text = "Stand-in arranged " + loose.length + " books into Stand-in world.";
-if (pi) { appendFileSync(file, JSON.stringify({ type: "message", message: { role: "assistant", content: [{ type: "text", text }] } }) + "\\n"); say({ result: text, sessionFile: file, commands: loose.length + 2, refused: 0, seconds: 1 }); }
+let text, commands;
+if (process.env.NOVEL_TASK === "review") {
+  // A review: the first waiting batch's first item answered with its first option, through the review's own commands.
+  const ws = process.env.NOVEL_WORKSPACE, cmd = (...rest) => { if (pi) say({ step: rest.join(" ") }); else say({ type: "assistant", message: { content: [{ type: "tool_use", name: "Bash", input: { command: [novel, ...rest].join(" ") } }] } }); return JSON.parse(execFileSync(novel, rest, { encoding: "utf8", env: { ...process.env, ELECTRON_RUN_AS_NODE: "" } })); };
+  const pool = cmd("world", "pool", ws), first = pool.waiting?.[0]?.batch;
+  const batch = first ? cmd("world", "batch", ws, first) : null, item = batch?.items?.[0];
+  if (item) cmd("world", "answer", ws, first, item.item, item.options[0], "--reason", "the stand-in's test answer");
+  text = item ? "Stand-in answered 1 item of batch " + first + "." : "Stand-in found no waiting batch."; commands = item ? 3 : 1;
+} else {
+  const list = run("basics", folder), loose = list.books.filter((book) => !book.placed).slice(0, 2);
+  const made = run("universe", folder, "Stand-in world " + Date.now() % 100000, "--why", "the stand-in's test");
+  for (const book of loose) run("put", folder, book.id, made.universe, "--series", book.seriesByTitle ?? "one");
+  text = "Stand-in arranged " + loose.length + " books into Stand-in world."; commands = loose.length + 2;
+}
+if (pi) { appendFileSync(file, JSON.stringify({ type: "message", message: { role: "assistant", content: [{ type: "text", text }] } }) + "\\n"); say({ result: text, sessionFile: file, commands, refused: 0, seconds: 1 }); }
 else say({ type: "result", result: text, session_id: "stand-in-session", total_cost_usd: 0 });
 `, { mode: 0o700 });
 // As the user (the user, 2026-11-10: "mimick user work environment ... Imagine you are the user when running tests"): the
@@ -101,6 +111,46 @@ try {
     const data = await run(`(async () => { const base = document.getElementById("worldframe").src.replace(/\\/play\\/world.*$/, ""); const get = async (name) => { const r = await fetch(base + "/play/" + name + "?volume=1"); return r.ok ? Object.keys(await r.json()).slice(0, 8) : r.status; }; const post = await fetch(base + "/play/settings?volume=1", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ key: "fill.streets", value: {}, why: "test" }) }); return { live: await get("live.json"), review: await get("review.json"), settings: await get("settings.json"), warehouse: await get("warehouse.json"), settingsChange: post.status }; })()`);
     step("world", { worldRows, page, data, crumb: await run(`document.getElementById("crumb").textContent.replace(/[^\\x20-\\x7e]/g, "?")`) });
     await picture("1e-world");
+  }
+  // A read-only world copied to edit: the copy found in the folder's .novel/worlds, opened, and a note on it accepted.
+  if (copyStep) {
+    const button = await until(() => run(`[...document.querySelectorAll("#tree .node.world .act")].find((item) => /Copy to edit/.test(item.textContent)) ? true : null`), "a world's Copy to edit", 60000);
+    await run(`[...document.querySelectorAll("#tree .node.world .act")].find((item) => /Copy to edit/.test(item.textContent)).click()`);
+    const started = Date.now();
+    await until(() => run(`[...document.querySelectorAll("#tree .node.world")].some((row) => !/read only/.test(row.textContent)) && !document.querySelector("#tree .node.world .spin") || null`), "the copy", 300000);
+    await until(() => run(`(() => { const doc = document.getElementById("worldframe").contentDocument; return doc?.title === "World \u00b7 Live" && (doc.getElementById("counts")?.textContent || doc.getElementById("where")?.textContent) ? true : null; })()`), "the copy's page", 60000).catch(() => null);
+    await wait(3000);
+    const note = await run(`(async () => { const base = document.getElementById("worldframe").src.replace(/\\/play\\/world.*$/, ""); const r = await fetch(base + "/play/notes?volume=1", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ card: "test-card", scene: "scene_000001", text: "a test note from the console's driver" }) }); return r.status; })()`);
+    step("copy to edit", { seconds: Math.round((Date.now() - started) / 1000), button, status: await run(`document.getElementById("status").textContent.replace(/[^\\x20-\\x7e]/g, "?")`), crumb: await run(`document.getElementById("crumb").textContent.replace(/[^\\x20-\\x7e]/g, "?")`), worlds: await run(`[...document.querySelectorAll("#tree .node.world")].map((row) => row.textContent.replace(/[^\\x20-\\x7e]/g, "?").slice(0, 80))`), noteOnCopy: note });
+    await picture("1f-copy");
+  }
+  // The Review view on an editable world: its counts, then the open items made into batches (free).
+  if (reviewStep) {
+    if (!copyStep) {
+      await until(() => run(`[...document.querySelectorAll("#tree .node.world")].find((row) => !/read only/.test(row.textContent)) ? true : null`), "an editable world", 60000);
+      await run(`(() => { const rows = [...document.querySelectorAll("#tree .node")]; const at = rows.findIndex((row) => row.classList.contains("world") && !/read only/.test(row.textContent)); rows.slice(at + 1).find((row) => row.classList.contains("world-book")).click(); })()`);
+      await wait(3000);
+    }
+    await run(`document.querySelector('#leftbar [data-left="review"]').click()`);
+    const before = await until(() => run(`(() => { const body = document.getElementById("l-review"); return body.querySelector(".keyrow") ? body.querySelector(".keyrow").textContent : null; })()`), "the review", 30000);
+    const canBatch = await run(`Boolean(document.querySelector('#l-review [data-step="held"]'))`);
+    if (canBatch) { await run(`document.querySelector('#l-review [data-step="held"]').click()`); await until(() => run(`/batches made|error|cannot/i.test(document.getElementById("status").textContent) || null`), "the batches", 120000); await wait(2000); }
+    const after = await run(`(() => { const body = document.getElementById("l-review"); return { counts: body.querySelector(".keyrow")?.textContent ?? "", batches: body.querySelectorAll(".batch").length, items: body.querySelectorAll(".review-item").length, answers: body.querySelectorAll(".review-item .answer").length }; })()`);
+    let answered = null;
+    if (!noAsk && await run(`Boolean(document.querySelector('#l-review [data-agent]'))`)) {
+      await run(`document.getElementById("t-chat").getAttribute("aria-pressed") === "true" || document.getElementById("t-chat").click()`);
+      await until(() => run(`Boolean(document.querySelector('#hosts [data-host="${agentTab}"]'))`), "the chat's agents");
+      await run(`document.querySelector('#hosts [data-host="${agentTab}"]').click()`); await wait(800);
+      const asked = await run(`document.querySelector('#l-review [data-agent]').textContent`);
+      await run(`document.querySelector('#l-review [data-agent]').click()`);
+      await until(() => run(`!document.getElementById("toast").hidden && Boolean(document.querySelector('#toast button[data-v="go"]'))`), "the token warning");
+      await run(`document.querySelector('#toast button[data-v="go"]').click()`);
+      await until(() => run(`/answered by|stopped|signed out|its key|cannot/.test(document.getElementById("status").textContent) && !document.querySelector("#chat-body .pending") || null`), "the review's answers", realAgent ? 1800000 : 60000);
+      await wait(2500);
+      answered = { asked, counts: await run(`document.querySelector("#l-review .keyrow")?.textContent ?? ""`), chat: await run(`(document.querySelector("#chat-body .note b")?.textContent ?? "").replace(/[^\\x20-\\x7e]/g, "?")`), status: await run(`document.getElementById("status").textContent.replace(/[^\\x20-\\x7e]/g, "?").slice(0, 200)`) };
+    }
+    step("review", { before, canBatch, after, answered, status: await run(`document.getElementById("status").textContent.replace(/[^\\x20-\\x7e]/g, "?").slice(0, 200)`) });
+    await picture("1g-review");
   }
   if (agentArrange) {
     const before = await run(`[...document.querySelectorAll("#tree .node")].filter((row) => row.querySelector(".ic")?.textContent === "◎" && /books?$/.test(row.querySelector(".desc").textContent)).length`);

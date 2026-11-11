@@ -93,7 +93,14 @@ function createWorlds(backend) {
     return missing();
   }
 
-  return { register, handle, known };
+  /** A world book's workspace and whether it is read only, by the world's id and the volume. */
+  function bookOf(wid, volume) {
+    const world = known.get(String(wid));
+    if (!world || !world.volumes.has(Number(volume))) throw new Error("That world's book is not open in the console.");
+    return { workspace: path.join(world.root, `vol-${Number(volume)}`, "novel"), readOnly: world.readOnly };
+  }
+
+  return { register, handle, known, bookOf };
 }
 
 module.exports = { createWorlds };

@@ -271,3 +271,8 @@ dialog .row { display: flex; justify-content: flex-end; gap: 8px; margin-top: 14
 #live-action:hover { background: var(--accent); color: var(--bg, #0b1117); }
 .node.world .name { font-weight: 600; }
 .node.world-book .desc { color: var(--dim); }
+.review-item .answer { margin-top: 4px; padding-left: 8px; border-left: 2px solid var(--accent); }
+.review-item .answer small { display: block; color: var(--dim); }
+.batch { margin: 6px 0 10px; }
+h4.mini { margin: 12px 0 4px; text-transform: uppercase; letter-spacing: .05em; font-size: 11px; color: var(--dim); }
+.chip.primary-chip { border-color: var(--accent); color: var(--accent); }

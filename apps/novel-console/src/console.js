@@ -48,8 +48,8 @@ document.addEventListener("keydown", (event) => {
 
 
 // ---------- The left strip (as VS Code's): Library, Outline, Search, Readings; the active icon folds the left panel. ----------
-const LEFT_TITLES = { library: "Library", outline: "Outline", search: "Search", characters: "Characters", places: "Places", strands: "Strands", record: "Record", problems: "Problems", debug: "Reading details", readings: "Readings" };
-const OWN_LEFT = new Set(["library", "outline", "search", "readings"]);
+const LEFT_TITLES = { library: "Library", outline: "Outline", search: "Search", characters: "Characters", places: "Places", strands: "Strands", record: "Record", problems: "Problems", debug: "Reading details", readings: "Readings", review: "Review" };
+const OWN_LEFT = new Set(["library", "outline", "search", "readings", "review"]);
 let leftView = remember.get("left", "library"), searchTimer = null, lastSearch = null;
 const leftOpen = () => !$("work").classList.contains("no-left");
 function setLeft(open) { $("work").classList.toggle("no-left", !open); remember.set("leftOpen", open); markLeft(); }
@@ -69,6 +69,7 @@ function renderLeft(view = leftView) {
   if (view === "outline") renderOutline();
   if (view === "search") renderSearch();
   if (view === "readings") renderReadings();
+  if (view === "review") renderReview();
   if (!OWN_LEFT.has(view)) renderView(view);
 }
 for (const button of document.querySelectorAll("#leftbar [data-left]")) button.addEventListener("click", () => showLeft(button.dataset.left, true));
@@ -154,14 +155,15 @@ async function load(folder) {
 async function refresh(scan = false) {
   // macOS asks a new app (and each new build) whether it may open folders like Documents, and nothing answers until the
   // user does; say so instead of showing an empty library.
-  const waiting = setTimeout(() => { say("Waiting for macOS: if it asks whether Novel Console may open files in your folders, press Allow (the prompt may be behind this window).", true); $("tree").innerHTML = `<p class="empty">Waiting for macOS to let Novel Console open your folders. Look for its prompt and press Allow.</p>`; }, 6000);
+  const waiting = setTimeout(() => { say("Waiting for macOS: if it asks whether Novel Console may open files in your folders, press Allow (the prompt may be behind this window).", true); if (!trees.size) $("tree").innerHTML = `<p class="empty">Waiting for macOS to let Novel Console open your folders. Look for its prompt and press Allow.</p>`; }, 6000);
   libs = await host.libraries();
-  for (const lib of libs) { if (!lib.exists) continue; if (scan) await ask(lib.path, "novel/scan").catch(() => {}); await load(lib.path); if (!expanded.has(lib.path) && !expanded.has(`closed:${lib.path}`)) expanded.add(lib.path); }
+  // Each folder on its own (a folder macOS still holds at its prompt does not hold the others), drawn as it comes.
+  await Promise.all(libs.filter((lib) => lib.exists).map(async (lib) => { if (scan) await ask(lib.path, "novel/scan").catch(() => {}); await load(lib.path); if (!expanded.has(lib.path) && !expanded.has(`closed:${lib.path}`)) expanded.add(lib.path); render();
+    // The folder's basic layer and worlds as soon as it has loaded, whatever the other folders are waiting for.
+    basicLayer(lib.path); host.worlds(lib.path).then((list) => { worldsOf.set(lib.path, list); render(); }).catch(() => {}); }));
   clearTimeout(waiting);
   $("welcome").hidden = Boolean(current);
   render(); follow();
-  for (const lib of libs) if (lib.exists) basicLayer(lib.path);
-  for (const lib of libs) if (lib.exists) host.worlds(lib.path).then((list) => { worldsOf.set(lib.path, list); render(); }).catch(() => {});
 }
 // Worlds (docs/v3/console.md §7): v2 libraries in a folder, and the worlds the console builds; each book's World · Live opens
 // in the middle, as a book does. A library the console did not make is read only.
@@ -175,8 +177,62 @@ function openWorld(lib, world, book) {
   $("worldframe").src = `app://console/world/${world.wid}/play/world?volume=${book.volume}`;
   $("crumb").textContent = `${world.name} \u00b7 ${book.title ?? `volume ${book.volume}`}${world.readOnly ? " \u00b7 read only" : ""}`;
   say(`${world.name}, volume ${book.volume}: World \u00b7 Live${world.readOnly ? " (read only: a library the console did not make)" : ""}.`);
-  render();
+  render(); if (leftView === "review") renderReview();
 }
+const copyingNow = new Set();
+async function copyWorld(lib, world) {
+  copyingNow.add(world.root); render();
+  say(`Copying ${world.name} to edit (its latest finished run; the world itself is only read)\u2026`);
+  try {
+    const copy = await host.copyWorld(lib.path, world.root);
+    worldsOf.set(lib.path, await host.worlds(lib.path));
+    say(`${copy.name}: an editable copy of ${world.name} (${copy.copiedFrom.snapshot}), in ${lib.name}/.novel/worlds.`);
+    const made = (worldsOf.get(lib.path) ?? []).find((entry) => entry.root === copy.root);
+    if (made?.books[0]) openWorld(lib, made, made.books[0]);
+  } catch (error) { say(plainError(error), true); }
+  finally { copyingNow.delete(world.root); render(); }
+}
+/**
+ * The Review view (docs/v3/console.md §7): what the shown world book's run held for an answer (docs/world-first-design.md
+ * §11): the batches waiting, the answers given and applied, the items still open; and the free steps: the open items made
+ * into batches, the answers applied (a second pass of the run, which pays Jev, plays them).
+ */
+async function renderReview() {
+  const body = $("l-review"), badge = $("badge-review");
+  if (!shownWorld) { body.innerHTML = `<p class="empty">Open a world's book (Library, Worlds) to see what its run held for an answer.</p>`; badge.hidden = true; return; }
+  const { world, book } = shownWorld;
+  if (!body.children.length || body.dataset.key !== shownWorld.key) body.innerHTML = `<p class="empty">Reading the review\u2026</p>`;
+  body.dataset.key = shownWorld.key;
+  const review = await host.worldReview(world.wid, book.volume).catch((error) => ({ error: plainError(error) }));
+  if (shownWorld?.world !== world || shownWorld?.book !== book) return;
+  if (review.error) { body.innerHTML = `<p class="empty">${esc(review.error)}</p>`; return; }
+  if (!review.worldFirst) { body.innerHTML = `<p class="empty">This book's world keeps no review pool.</p>`; return; }
+  const c = review.counts, waiting = review.batches.reduce((sum, batch) => sum + batch.items.length, 0);
+  badge.hidden = !waiting; badge.textContent = String(waiting);
+  setCount("review", String(waiting || c.open || 0));
+  const item = (entry) => `<div class="ref review-item"><span class="line">${esc(entry.question.length > 320 ? `${entry.question.slice(0, 320)}\u2026` : entry.question)}</span><small>${esc(entry.kind)}${entry.scene ? ` \u00b7 ${esc(entry.scene)}` : ""}${entry.options.length ? ` \u00b7 ${esc(entry.options.slice(0, 5).join(" / "))}${entry.options.length > 5 ? " \u2026" : ""}` : ""}</small>${entry.answer ? `<div class="answer"><b>\u2192 ${esc(entry.answer.verdict)}</b>${entry.status === "applied" ? " \u00b7 applied" : entry.status === "failed" ? " \u00b7 turned back by the laws" : ""}<small>${esc(entry.answer.reason.length > 400 ? `${entry.answer.reason.slice(0, 400)}\u2026` : entry.answer.reason)}</small></div>` : ""}</div>`;
+  const steps = review.readOnly ? `<p class="empty">Read only: a library the console did not make. Use <b>Copy to edit</b> on the world to answer and apply.</p>`
+    : `<div class="chips">${waiting ? (arrangingNow.has(`review:${world.wid}|${book.volume}`) ? `<button class="chip" data-agent="1"><span class="spin"></span> ${esc(AGENT_NAMES[arrangingNow.get(`review:${world.wid}|${book.volume}`).agent])} is answering\u2026</button>` : `<button class="chip primary-chip" data-agent="1" title="The agent open in the chat answers each waiting item from the original text, with the review's own commands on this book">Ask ${esc(AGENT_NAMES[chosenHost] ?? "an agent")} to answer the ${waiting} waiting</button>`) : ""}${c.open ? `<button class="chip" data-step="held" title="The run's held items into batches, one per scene (free)">Make batches of the open items</button>` : ""}${c.answered ? `<button class="chip" data-step="apply" title="The answers into pins, under the laws; a second pass of the run plays them (that pays Jev)">Apply the ${c.answered} answers</button>` : ""}</div>`;
+  body.innerHTML = `<p class="note">${esc(world.name)} \u00b7 ${esc(book.title ?? `volume ${book.volume}`)}</p>
+    <div class="keyrow">${["open", "batched", "answered", "applied", "failed"].filter((key) => c[key]).map((key) => `<span>${key === "batched" ? "waiting" : key} <b>${c[key]}</b></span>`).join("")}</div>
+    ${steps}
+    ${review.batches.length ? `<h4 class="mini">Waiting for an answer \u00b7 ${review.batches.length} ${review.batches.length === 1 ? "batch" : "batches"}</h4>${review.batches.map((batch) => `<div class="batch"><small class="muted">${esc(batch.batch)} \u00b7 ${batch.items.length} ${batch.items.length === 1 ? "item" : "items"}</small>${batch.items.map(item).join("")}</div>`).join("")}` : ""}
+    ${review.answered.length ? `<h4 class="mini">Answered \u00b7 ${review.answered.length}</h4>${review.answered.map(item).join("")}` : ""}
+    ${review.open.length ? `<h4 class="mini">Open \u00b7 not in a batch yet \u00b7 ${c.open}</h4>${review.open.slice(0, 60).map(item).join("")}${c.open > 60 ? `<p class="empty">The first 60 of ${c.open}.</p>` : ""}` : ""}`;
+}
+$("l-review").addEventListener("click", async (event) => {
+  if (event.target.closest("[data-agent]") && shownWorld) { answerReviewWithAgent(shownWorld.world, shownWorld.book); return; }
+  const step = event.target.closest("[data-step]")?.dataset.step; if (!step || !shownWorld) return;
+  const { world, book } = shownWorld;
+  event.target.disabled = true;
+  say(step === "held" ? "Making batches of the open items\u2026" : "Applying the answers under the laws\u2026");
+  try {
+    const result = await host.worldReviewStep(world.wid, book.volume, step);
+    const numbers = Object.entries(result ?? {}).filter(([, value]) => typeof value === "number").map(([key, value]) => `${key} ${value}`).join(", ");
+    say(step === "held" ? `${result?.batches?.length ?? 0} batches made (${result?.asked ?? 0} items asked).` : `Answers applied${numbers ? `: ${numbers}` : ""}.`);
+  } catch (error) { say(plainError(error), true); }
+  renderReview();
+});
 function closeWorld() { if (!shownWorld) return; shownWorld = null; $("worldframe").hidden = true; $("worldframe").src = "about:blank"; }
 // The basic layer (no model): every book of a folder read for its title, series, volume, chapters, lines, dialogue and
 // name-like spans, a few books at a time so the console keeps answering; then the series found among books not arranged.
@@ -205,39 +261,44 @@ let liveShown = null;
 async function arrangeAll(folder, found) { for (const series of found) await arrangeSeries(folder, series); }
 /** An agent costs tokens of its own (the user, 2026-11-11: "we should warn people that agent is specifically token
  * consuming"): asked before every start, with the free way named. */
-async function agentWarned(name) {
-  const choice = await chooser(`Ask ${name} to arrange?`, `${name} reads the books' openings and runs many commands to decide. That spends ${name}'s own tokens (${name === "Pi" ? "the work model's key: usually a few cents" : "your plan's usage or API credit: can be a lot on a big folder"}). Arrange all is free: it groups the series found by title, with no model.`, [[`Ask ${name}`, "go"]]);
+async function agentWarned(name, what = { ask: "arrange", how: "reads the books' openings and runs many commands to decide", free: "Arrange all is free: it groups the series found by title, with no model." }) {
+  const choice = await chooser(`Ask ${name} to ${what.ask}?`, `${name} ${what.how}. That spends ${name}'s own tokens (${name === "Pi" ? "the work model's key: usually a few cents" : "your plan's usage or API credit: can be a lot on a big folder"}). ${what.free ? ` ${what.free}` : ""}`, [[`Ask ${name}`, "go"]]);
   return choice === "go";
 }
-async function arrangeWithAgent(lib) {
+/**
+ * A task for the agent open in the chat (Claude Code or Pi), shown live in the chat: `key` names it while it runs, `path`
+ * is shortened to `name` in its commands, `label` and `request` head the chat, `invoke(options)` runs it on the Mac side,
+ * `after(reply)` refreshes what it changed, `done(reply)` says it in the status bar.
+ */
+async function runAgentTask(spec) {
   if (!hostsLoaded || !hostList.length) await loadHosts();
-  if (!arrangingNow.has(lib.path) && AGENT_NAMES[chosenHost] && !(await agentWarned(AGENT_NAMES[chosenHost]))) return;
+  if (!arrangingNow.has(spec.key) && AGENT_NAMES[chosenHost] && !(await agentWarned(AGENT_NAMES[chosenHost], spec.warn))) return;
   setPanel(true);
-  if (arrangingNow.has(lib.path)) { paintLive(arrangingNow.get(lib.path)); return; }
+  if (arrangingNow.has(spec.key)) { paintLive(arrangingNow.get(spec.key)); return; }
   const agent = AGENT_NAMES[chosenHost] ? chosenHost : null, entry = hostList.find((item) => item.id === agent);
   if (!agent || !entry?.starts) {
     renderSessions();
     $("chat-body").insertAdjacentHTML("afterbegin", `<p class="note pick">${agent ? esc(entry?.note ?? `${AGENT_NAMES[agent]} cannot be started on this Mac.`) : "Pick Claude Code or Pi above, then press Ask again: the console can start those two (Codex and Gemini not yet)."}</p>`);
     return;
   }
+  const base = { folder: spec.key, path: spec.path, name: spec.name, label: spec.label, request: spec.request, scope: spec.scope, agent };
   if (agent === "pi" && !(await host.keys().catch(() => ({}))).work) {
-    paintLive({ folder: lib.path, name: lib.name, agent, into: null, steps: [], reply: null, error: "Pi works on the work model, and its key is not entered yet. Enter it, then press Ask Pi again.", action: ["Enter the work model's key", () => enterKeys().then(() => render())] });
+    paintLive({ ...base, into: null, steps: [], reply: null, error: "Pi works on the work model, and its key is not entered yet. Enter it, then press Ask Pi again.", action: ["Enter the work model's key", () => enterKeys().then(() => render())] });
     say("Pi works on the work model: enter its key, then press Ask Pi again.", true);
     return;
   }
   const open = openSession?.startsWith(`${agent}|`) ? entry.sessions.find((item) => item.key === openSession) : null;
   const into = open && (open.continues || entry.continues) ? open.key : null;
-  const live = { folder: lib.path, name: lib.name, agent, into, intoTitle: open?.title ?? null, steps: [], session: null, reply: null, error: null };
-  arrangingNow.set(lib.path, live); render(); paintLive(live);
-  say(`${AGENT_NAMES[agent]} is arranging ${lib.name}${into ? " in the open session" : ""}; the chat shows each command.`);
+  const live = { ...base, into, intoTitle: open?.title ?? null, steps: [], session: null, reply: null, error: null };
+  arrangingNow.set(spec.key, live); render(); if (leftView === "review") renderReview(); paintLive(live);
+  say(`${AGENT_NAMES[agent]} is ${spec.label}${into ? " in the open session" : ""}; the chat shows each command.`);
   try {
-    const reply = await host.arrangeWithAgent(lib.path, { agent, session: into });
+    const reply = await spec.invoke({ agent, session: into });
     live.reply = reply;
-    seriesOf.set(lib.path, await ask(lib.path, "novel/series").catch(() => []));
-    await load(lib.path);
-    say(reply.signedOut ? reply.error : reply.error ? `${AGENT_NAMES[agent]} stopped: ${reply.error}` : `${lib.name} arranged by ${AGENT_NAMES[agent]}${reply.cost ? ` ($${Number(reply.cost).toFixed(2)})` : ""}${live.steps.length ? ` · ${live.steps.length} commands` : ""}.`, Boolean(reply.error));
+    await spec.after?.(reply);
+    say(reply.signedOut ? reply.error : reply.error ? `${AGENT_NAMES[agent]} stopped: ${reply.error}` : `${spec.done(AGENT_NAMES[agent])}${reply.cost ? ` ($${Number(reply.cost).toFixed(2)})` : ""}${live.steps.length ? ` \u00b7 ${live.steps.length} commands` : ""}.`, Boolean(reply.error));
   } catch (error) { live.error = plainError(error); say(live.error, true); }
-  finally { arrangingNow.delete(lib.path); render(); }
+  finally { arrangingNow.delete(spec.key); render(); if (leftView === "review") renderReview(); }
   // The session it worked in, as the chat shows any session; the live view when it is not found.
   if (liveShown !== live) return;
   const shown = live;
@@ -247,17 +308,32 @@ async function arrangeWithAgent(lib) {
   if (key && hostList.some((item) => item.sessions.some((session) => session.key === key))) { chosenHost = agent; remember.set("chatHost", agent); renderHosts(); await showSession(key); if (live.reply?.error) $("chat-body").insertAdjacentHTML("beforeend", `<div class="msg assistant failed">${esc(live.reply.error)}</div>`); }
   else paintLive(shown);
 }
+function arrangeWithAgent(lib) {
+  return runAgentTask({ key: lib.path, path: lib.path, name: lib.name, label: `arranging ${lib.name}`, request: `Arrange the novels in ${lib.path}: universes, series and reading order.`, scope: "the folder's novel command only; your files are not changed",
+    invoke: (options) => host.arrangeWithAgent(lib.path, options),
+    after: async () => { seriesOf.set(lib.path, await ask(lib.path, "novel/series").catch(() => [])); await load(lib.path); },
+    done: (who) => `${lib.name} arranged by ${who}` });
+}
+/** The chat's agent answers the waiting batches of the shown world book's review. */
+function answerReviewWithAgent(world, book) {
+  const name = `${world.name} \u00b7 ${book.title ?? `volume ${book.volume}`}`;
+  return runAgentTask({ key: `review:${world.wid}|${book.volume}`, path: book.workspace, name,
+    warn: { ask: "answer the review", how: "reads the original text for every waiting item and runs many commands to answer them", free: "Make batches and Apply are free; only the agent's answers spend tokens." }, label: `answering the review of ${name}`, request: `Answer the waiting review batches of ${name}, each item from the original text.`, scope: "the review's own commands on this book; the answers wait for your Apply",
+    invoke: (options) => host.answerReviewWithAgent(world.wid, book.volume, options),
+    after: async () => { if (leftView === "review") await renderReview(); },
+    done: (who) => `The review of ${name} answered by ${who}` });
+}
 /** An error from the Mac side as the user reads it (Electron wraps it in "Error invoking remote method ..."). */
 const plainError = (error) => String(error?.message ?? error).replace(/^Error invoking remote method '[^']*': /, "").replace(/^Error: /, "");
 /** An arrangement in the chat while it runs: the request, each command as the agent runs it, then its reply. */
 function paintLive(live) {
   liveShown = live; openSession = null; $("chat-back").hidden = false; $("compose").hidden = true;
-  const short = (text) => text.replace(/\S*\/\.novel\/bin\/novel/g, "novel").split(live.folder).join(live.name);
+  const short = (text) => text.replace(/\S*\/\.novel\/bin\/novel/g, "novel").split(live.path ?? live.folder).join(live.name);
   const steps = live.steps.slice(-80).map((step) => `<div class="msg step"><code>${esc(short(step))}</code></div>`).join("");
   const done = live.reply || live.error;
   const end = !done ? `<div class="msg assistant pending">${esc(AGENT_NAMES[live.agent])} is working… ${live.steps.length} ${live.steps.length === 1 ? "command" : "commands"} so far</div>`
     : `<div class="msg assistant${live.error || live.reply?.error ? " failed" : ""}">${esc(live.error ?? live.reply.error ?? live.reply.result ?? "")}${live.action ? `<div class="chips" style="margin-top:8px"><button class="chip" id="live-action">${esc(live.action[0])}</button></div>` : ""}</div>`;
-  $("chat-body").innerHTML = `<p class="note"><b>${esc(AGENT_NAMES[live.agent])} · arranging ${esc(live.name)}</b><br>${live.into ? `in the open session “${esc(live.intoTitle ?? "")}”` : "a new session"} · the folder's novel command only; your files are not changed</p><div class="msg user">Arrange the novels in ${esc(live.folder)}: universes, series and reading order.</div>${live.steps.length > 80 ? `<p class="note">… ${live.steps.length - 80} earlier commands</p>` : ""}${steps}${end}`;
+  $("chat-body").innerHTML = `<p class="note"><b>${esc(AGENT_NAMES[live.agent])} · ${esc(live.label ?? `arranging ${live.name}`)}</b><br>${live.into ? `in the open session “${esc(live.intoTitle ?? "")}”` : "a new session"} · ${esc(live.scope ?? "the folder's novel command only; your files are not changed")}</p><div class="msg user">${esc(live.request ?? `Arrange the novels in ${live.folder}: universes, series and reading order.`)}</div>${live.steps.length > 80 ? `<p class="note">… ${live.steps.length - 80} earlier commands</p>` : ""}${steps}${end}`;
   $("chat-body").scrollTop = $("chat-body").scrollHeight;
   if (live.action) $("live-action").addEventListener("click", live.action[1]);
 }
@@ -347,7 +423,9 @@ function render() {
       tree.append(node({ depth: 1, name: `Worlds \u00b7 ${worldList.length}`, cls: "group", title: "Libraries with a world built (terrain and the director's runs); each book's World \u00b7 Live opens in the middle" }));
       for (const world of worldList) {
         const key = `world:${world.wid}`, open = !expanded.has(`closed:${key}`);
+        const copying = copyingNow.has(world.root);
         tree.append(node({ depth: 2, chev: open, icon: "\u25cd", name: world.name, nameClass: "book", desc: `${world.books.length} ${world.books.length === 1 ? "book" : "books"}${world.readOnly ? " \u00b7 read only" : ""}`, cls: "world", title: world.root,
+          action: !world.readOnly ? null : copying ? actionButton(`<span class="spin"></span>`, "", "Copying\u2026", () => {}) : actionButton("Copy to edit", "", "An editable copy of its latest finished run in this folder's .novel/worlds (the world itself is only read)", () => copyWorld(lib, world)),
           onClick: () => { toggle(`closed:${key}`); render(); } }));
         if (open) for (const book of world.books) tree.append(node({ depth: 3, icon: "\u25b8", name: book.title ?? `Volume ${book.volume}`, desc: `${book.runs.length} ${book.runs.length === 1 ? "run" : "runs"}${book.accepted ? ` \u00b7 plays ${book.accepted}` : ""}`, cls: `world-book${shownWorld?.key === `${world.wid}|${book.volume}` ? " active" : ""}`,
           title: `${book.workspace}\nOpen World \u00b7 Live for this book`, onClick: () => openWorld(lib, world, book) }));
@@ -696,7 +774,7 @@ async function showSession(key) {
   $("compose").hidden = !continues;
   $("compose-note").textContent = !continues ? "" : session?.continues && entry?.id === "pi" ? `Sent to Pi in ${session.cwd ? session.cwd.split("/").pop() : "its folder"}, with the folder's novel command only.` : `Sent with ${entry.name}'s own command, in ${session?.cwd ? session.cwd.split("/").pop() : "its folder"}.`;
 }
-$("hosts").addEventListener("click", (event) => { const id = event.target.closest("[data-host]")?.dataset.host; if (!id) return; chosenHost = id; remember.set("chatHost", id); renderHosts(); renderSessions(); if (leftView === "library") render(); });
+$("hosts").addEventListener("click", (event) => { const id = event.target.closest("[data-host]")?.dataset.host; if (!id) return; chosenHost = id; remember.set("chatHost", id); renderHosts(); renderSessions(); if (leftView === "library") render(); if (leftView === "review") renderReview(); });
 $("chat-body").addEventListener("click", (event) => { const key = event.target.closest("[data-session]")?.dataset.session; if (key) showSession(key); });
 $("chat-back").addEventListener("click", () => renderSessions());
 $("chat-refresh").addEventListener("click", loadHosts);
@@ -767,4 +845,6 @@ for (const [which, key] of [["library", "--lib-w"], ["panel", "--panel-w"]]) { c
 setPanel(remember.get("panel", false));
 if (!LEFT_TITLES[leftView]) leftView = "library";
 showLeft(leftView); setLeft(remember.get("leftOpen", true));
-refresh().then(keyDots).then(() => { $("welcome").hidden = Boolean(current); renderView(leftView); });
+// The keys first: they do not wait for any folder (one macOS still holds at its prompt would hold them too).
+keyDots();
+refresh().then(() => { $("welcome").hidden = Boolean(current); renderView(leftView); });

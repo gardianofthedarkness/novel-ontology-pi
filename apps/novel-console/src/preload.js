@@ -17,6 +17,10 @@ contextBridge.exposeInMainWorld("novelHost", {
   version: () => ipcRenderer.invoke("version"),
   agents: () => ipcRenderer.invoke("agents"),
   worlds: (folder) => ipcRenderer.invoke("worlds", folder),
+  copyWorld: (folder, root) => ipcRenderer.invoke("copyWorld", folder, root),
+  worldReview: (wid, volume) => ipcRenderer.invoke("worldReview", wid, volume),
+  worldReviewStep: (wid, volume, step) => ipcRenderer.invoke("worldReviewStep", wid, volume, step),
+  answerReviewWithAgent: (wid, volume, options) => ipcRenderer.invoke("answerReviewWithAgent", wid, volume, options),
   transcript: (key) => ipcRenderer.invoke("transcript", key),
   sendToSession: (key, text) => ipcRenderer.invoke("sendToSession", key, text),
 });

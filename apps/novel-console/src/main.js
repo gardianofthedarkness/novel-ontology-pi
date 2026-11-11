@@ -104,6 +104,25 @@ ipcMain.handle("worlds", async (event, folder) => {
   const server = serverOf(folder); await server.ready;
   return worlds.register(await server.request("novel/worlds", {}));
 });
+// An editable copy of a read-only world, in the folder's own .novel/worlds (v2's export and import; the world is only read).
+ipcMain.handle("copyWorld", async (event, folder, root) => {
+  if (!libraries().includes(folder)) throw new Error("That folder is not one of the console's libraries.");
+  const server = serverOf(folder); await server.ready;
+  const found = await server.request("novel/worlds", {});
+  if (!found.some((world) => world.root === root)) throw new Error("That world is not in this folder.");
+  const copy = await server.request("novel/copyWorld", { root });
+  worlds.register(await server.request("novel/worlds", {}));
+  return copy;
+});
+// A world book's review (src/v3/worlds.ts reviewOf), and its free steps: held items into batches, answers applied.
+const worldsModule = () => import(pathToFileURL(path.join(backend, "dist", "src", "server", "worlds.js")).href);
+ipcMain.handle("worldReview", async (event, wid, volume) => { const book = worlds.bookOf(wid, volume); return { ...(await (await worldsModule()).reviewOf(book.workspace)), readOnly: book.readOnly }; });
+ipcMain.handle("worldReviewStep", async (event, wid, volume, step) => {
+  const book = worlds.bookOf(wid, volume);
+  if (book.readOnly) throw new Error("This world is read only (a library the console did not make): copy it to edit first.");
+  if (step !== "held" && step !== "apply") throw new Error("No such review step.");
+  return (await worldsModule()).reviewStep(book.workspace, step);
+});
 ipcMain.handle("ask", async (event, folder, method, params) => {
   if (!ALLOWED.has(method)) throw new Error(`The console does not ask ${method}.`);
   const server = serverOf(folder); await server.ready;
@@ -124,9 +143,12 @@ ipcMain.handle("sendToSession", async (event, key, text) => {
   // A Pi session the console started: continued by Pi in its folder, with the same one tool.
   if (String(key).startsWith("pi|")) {
     const session = agents.sessionOf(key);
-    if (!session.continues || !libraries().includes(session.cwd)) throw new Error("This Pi session can be read here but not continued.");
     if (!String(text ?? "").trim()) throw new Error("The message is empty.");
-    const reply = await runPi({ folder: session.cwd, novel: folderNovel(session.cwd), skill: folderSkill(), prompt: String(text), sessionFile: session.file });
+    // A review session goes on answering that book's review (its task is kept beside it), only while that world takes changes.
+    let task = null; try { task = JSON.parse(fs.readFileSync(`${session.file}.task.json`, "utf8")); } catch {}
+    const editable = task?.task === "review" && [...worlds.known.values()].some((world) => !world.readOnly && path.resolve(task.workspace).startsWith(`${world.root}/`));
+    if (!session.continues || !(editable || (task?.task !== "review" && libraries().includes(session.cwd)))) throw new Error("This Pi session can be read here but not continued.");
+    const reply = await runPi({ folder: session.cwd, novel: folderNovel(session.cwd), skill: folderSkill(), prompt: String(text), sessionFile: session.file, env: editable ? { NOVEL_TASK: "review", NOVEL_WORKSPACE: task.workspace } : {} });
     if (reply.error) throw new Error(reply.error);
     return { reply: reply.result };
   }
@@ -169,15 +191,44 @@ ipcMain.handle("arrangeWithAgent", async (event, folder, options = {}) => {
   arranging.set(folder, run);
   return run;
 });
+// The chat's agent answers a world book's review (the Review view): its waiting batches, each item from the original text,
+// through the review's own commands on that book (novel world pool|batch|answer|log, reading, source, cast show); the
+// answers are applied by the user (Apply), and a second pass plays them.
+ipcMain.handle("answerReviewWithAgent", async (event, wid, volume, options = {}) => {
+  const book = worlds.bookOf(wid, volume), key = `review:${wid}|${volume}`;
+  if (book.readOnly) throw new Error("This world is read only (a library the console did not make): copy it to edit first.");
+  if (arranging.has(key)) return arranging.get(key);
+  const agent = options.agent;
+  if (agent !== "claude-code" && agent !== "pi") throw new Error("Pick Claude Code or Pi in the chat: the console can start only those two.");
+  const session = options.session ? agents.sessionOf(options.session) : null;
+  if (session && (session.host !== agent || !session.continues)) throw new Error("That session cannot be continued here.");
+  const worldRoot = path.dirname(path.dirname(book.workspace)), novel = folderNovel(worldRoot), ws = book.workspace;
+  const prompt = [
+    `Answer the review of this book's world for Novel Console: ${ws}`,
+    `The novel command is ${novel}. Start with \`${novel} world pool "${ws}"\`, then for each waiting batch run \`${novel} world batch "${ws}" <batch id>\`: it lists the batch's items and says how to check each one against the original text (the reading, the world log, the source).`,
+    `Answer each item with \`${novel} world answer "${ws}" <batch id> <item> "<option>" --reason "<what the text says, with its line ids>"\`, the option written exactly as the item gives it.`,
+    "Never guess: when the text does not settle an item, choose the option that says so if there is one; otherwise leave the item unanswered and say why in your report.",
+    "These are the only commands you may run; they change nothing but the review's answers (the user applies them).",
+    "End with a short report: how many items you answered in each batch, and what you left and why.",
+  ].join("\n");
+  const onStep = (step) => { if (!event.sender.isDestroyed()) event.sender.send("agentStep", { folder: key, agent, ...step }); };
+  const allowed = ["world pool", "world batch", "world answer", "world log", "reading", "source grep", "source similar", "source epub", "cast show"].map((verb) => `Bash(${novel} ${verb}:*)`);
+  const run = (agent === "pi"
+    ? runPi({ folder: worldRoot, novel, skill: folderSkill(), prompt, sessionFile: session?.file, onStep, env: { NOVEL_TASK: "review", NOVEL_WORKSPACE: ws } })
+    : agents.startSession(prompt, session?.cwd ?? worldRoot, allowed, { NOVEL_COMMAND: novel, NOVEL_WORKSPACE: ws, NOVEL_TASK: "review" }, { resume: session?.id, onStep }).then((reply) => ({ ...reply, by: "claude-code" })))
+    .finally(() => arranging.delete(key));
+  arranging.set(key, run);
+  return run;
+});
 /** Pi on the work model (tools/pi-review/folder-arrange.mjs): a session of the console's own, new or continued, whose one tool
  * runs the folder's novel command; each step and the session's file go to onStep. */
-async function runPi({ folder, novel, skill, prompt, sessionFile = null, onStep = () => {} }) {
+async function runPi({ folder, novel, skill, prompt, sessionFile = null, onStep = () => {}, env = {} }) {
   const secrets = await import(pathToFileURL(path.join(backend, "dist", "src", "ground", "connectors", "secrets.js")).href);
   const key = process.env.WORK_LLM_API_KEY?.trim() || secrets.getStoredSecret("work-llm");
   if (!key) throw new Error("Pi works on the work model: enter its key with the key button, then press Ask again.");
   const script = process.env.NOVEL_CONSOLE_PI_RUNNER || path.join(backend, "tools", "pi-review", "folder-arrange.mjs");
   return new Promise((resolve, reject) => {
-    const child = spawn(process.execPath, [script, folder, novel, skill, agents.piConsoleSessions(), ...(sessionFile ? [sessionFile] : [])], { cwd: folder, stdio: ["ignore", "pipe", "pipe"], env: { ...process.env, ELECTRON_RUN_AS_NODE: "1", WORK_LLM_API_KEY: key, NOVEL_ARRANGE_PROMPT: prompt } });
+    const child = spawn(process.execPath, [script, folder, novel, skill, agents.piConsoleSessions(), ...(sessionFile ? [sessionFile] : [])], { cwd: folder, stdio: ["ignore", "pipe", "pipe"], env: { ...process.env, ELECTRON_RUN_AS_NODE: "1", WORK_LLM_API_KEY: key, NOVEL_ARRANGE_PROMPT: prompt, ...env } });
     let buffer = "", err = "", reply = null;
     const line = (text) => {
       let entry; try { entry = JSON.parse(text); } catch { return; }

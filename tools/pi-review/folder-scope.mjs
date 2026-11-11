@@ -39,3 +39,20 @@ export function permit(command, scope) {
   return { kind: 'novel', args: args.slice(1) };
 }
 
+
+// Answering a world book's review (Novel Console's Review view): the commands a batch's own instructions name, on that book.
+export const REVIEW = { world: new Set(['pool', 'batch', 'answer', 'log']), source: new Set(['grep', 'similar', 'epub']), cast: new Set(['show']), reading: null };
+
+/** What one command may do while answering a review: read the book's text, reading and world, and answer its batches. Throws Pi's refusal. */
+export function permitReview(command, scope) {
+  const args = words(command.trim());
+  const usage = `Run ONE command per call, no pipes or joins: ${scope.novel} world pool|batch|answer|log "${scope.workspace}" ..., ${scope.novel} reading "${scope.workspace}" card|scene|line <id>, ${scope.novel} source grep|similar|epub "${scope.workspace}" ..., ${scope.novel} cast show "${scope.workspace}" [<char>].`;
+  if (!args?.length) throw new Error(`Not a plain command. ${usage}`);
+  if (args[0] !== scope.novel && args[0] !== 'novel') throw new Error(`Only the novel command runs here. ${usage}`);
+  const group = args[1];
+  if (!Object.hasOwn(REVIEW, group)) throw new Error(`"novel ${group ?? ''}" is not for answering a review. ${usage}`);
+  const verbs = REVIEW[group], book = verbs ? args[3] : args[2];
+  if (verbs && !verbs.has(args[2])) throw new Error(`"novel ${group} ${args[2] ?? ''}" is not for answering a review. ${usage}`);
+  if (resolve(book ?? '') !== scope.workspace) throw new Error(`Work on this book only: "${scope.workspace}". ${usage}`);
+  return { kind: 'novel', args: args.slice(1) };
+}

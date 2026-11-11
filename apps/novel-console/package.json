@@ -1,7 +1,7 @@
 {
   "name": "novel-console",
   "productName": "Novel Console",
-  "version": "0.7.0",
+  "version": "0.8.0",
   "description": "A console for reading novels: any folder of books on the Mac as a library, readings with one click, the reader with its marks and notes.",
   "private": true,
   "license": "MIT",
