@@ -3,7 +3,7 @@ import { dirname, join, resolve } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 
 /**
- * What a book carries into the next, per strand (world-engine/world/carry.mjs; docs/v3/design.html#borrow-and-spawn §4.5;
+ * What a book carries into the next, per strand (engine/world/carry.mjs; docs/v3/design.html#borrow-and-spawn §4.5;
  * milestones M16; the user, 2026-11-09: "At the reading stage of each book, we need to determine if we are inheriting any
  * strands from last book or not. If inherit, we preserve the destructions. If not, we close the strand, and destruction
  * is recovered for the new book"). Each is the engine's, loaded from the repository this CLI runs from.
@@ -22,11 +22,11 @@ async function repository(): Promise<string> {
     const pkg = await readFile(join(directory, "package.json"), "utf8").then((text) => JSON.parse(text) as { name?: string }, () => null);
     if (pkg?.name === "novel-ontology-pi") return directory;
     const parent = dirname(directory);
-    if (parent === directory) throw new Error("The world engine is not installed beside this CLI (world-engine/world/carry.mjs).");
+    if (parent === directory) throw new Error("The world engine is not installed beside this CLI (engine/world/carry.mjs).");
     directory = parent;
   }
 }
-const carry = async () => import(pathToFileURL(join(await repository(), "world-engine", "world", "carry.mjs")).href) as Promise<CarryModule>;
+const carry = async () => import(pathToFileURL(join(await repository(), "engine", "world", "carry.mjs")).href) as Promise<CarryModule>;
 const readingAt = async (path?: string) => (path ? JSON.parse(await readFile(resolve(path), "utf8")) as unknown : null);
 
 /** `novel strands register <dir> [--run <id>]`: the book's strands at its end into the universe's registry. */

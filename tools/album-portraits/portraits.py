@@ -249,7 +249,7 @@ def main() -> int:
             claimed.add(best_i)
             records.append(portrait_record(ill, img, heads[best_i], W, H, c, ln["text"], ln["conf"], ln.get("matchKind", "substring")))
 
-    # The book's introduction (src/v2/extraction/front.ts; <novelDir>/ontology/intro-groups.json): the people one plate page
+    # The book's introduction (src/reading/front.ts; <novelDir>/ontology/intro-groups.json): the people one plate page
     # introduces. Where a picture's captions bound some of a page's people and exactly one of them is left with exactly one
     # face left unclaimed on it, that face is theirs (their caption was in the page's text, not in the picture).
     groups_path = novel_dir / "ontology" / "intro-groups.json"

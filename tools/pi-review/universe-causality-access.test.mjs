@@ -5,7 +5,7 @@ import { promisify } from 'node:util';
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import { join, resolve } from 'node:path';
 import { universeFixture } from '../../dist/test/helpers/universeFixture.js';
-import { loadUniverseContext, qualifyCausalUnit, universeCandidates } from '../../dist/src/solidifier/causality/universe.js';
+import { loadUniverseContext, qualifyCausalUnit, universeCandidates } from '../../dist/src/universe/causality/universe.js';
 import { createUniverseCausalityAccess } from './universe-causality-access.mjs';
 import { authorize } from './guard.mjs';
 import { createViewer } from './serve.mjs';

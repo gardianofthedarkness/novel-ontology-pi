@@ -116,7 +116,7 @@ const DERIVED: RegExp[] = [
 ];
 
 /**
- * The book's album (src/v2/album.ts; v1's album and portraits): its pictures and portraits are the published book's, as its
+ * The book's album (src/reading/album/inReading.ts; v1's album and portraits): its pictures and portraits are the published book's, as its
  * text is, and its records are made from them, never by a run; so is the reading's copy of it (reading/album, and
  * reading/front.json: the book's front and back matter, its own words). Kept with the book as its text is: never snapshotted,
  * restored, or exported (another user makes them from their own EPUB: novel album import, novel album assign).
@@ -125,7 +125,7 @@ const ALBUM = /^vol-[^/]+\/(?:novel\/(?:assets\/|ontology\/(?:illustrations\.jso
 
 /** How a library-relative path is kept: tracked state, a run's own file, derived (never kept), or the book's text. */
 export function classify(rel: string): { kind: Kind; run?: string } {
-  // The universe's face store (experiments/v2/stills.mjs): faces cut from the books' pictures, the books' art.
+  // The universe's face store (engine/casts/run/stills.mjs): faces cut from the books' pictures, the books' art.
   if (/^vol-[^/]+\/novel\/source\//.test(rel) || ALBUM.test(rel) || /^universe\/faces\//.test(rel)) return { kind: "source" };
   if (DERIVED.some(rule => rule.test(rel))) return { kind: "derived" };
   for (const rule of RUN_FILES) { const found = rel.match(rule); if (found) return { kind: "run", run: found[1] }; }

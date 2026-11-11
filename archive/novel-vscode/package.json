@@ -1,0 +1,227 @@
+{
+  "name": "novel-workbench",
+  "displayName": "Novel Workbench",
+  "description": "The opened folder as a workspace of novels: universes, books, chapters and scenes in the explorer; characters, places and things as symbols with their records and every line that refers to them; a processed book read as published, its sentences coloured by kind and its names marked.",
+  "version": "0.5.0",
+  "publisher": "novel-ontology-pi",
+  "private": true,
+  "license": "MIT",
+  "engines": {
+    "vscode": "^1.90.0"
+  },
+  "categories": [
+    "Other"
+  ],
+  "main": "./extension.js",
+  "activationEvents": [
+    "onStartupFinished"
+  ],
+  "capabilities": {
+    "untrustedWorkspaces": {
+      "supported": "limited",
+      "description": "The workbench only reads the folder's books and runs its own language server. A folder's own settings for the server's or Node's path are not used until the folder is trusted.",
+      "restrictedConfigurations": [
+        "novel.serverPath",
+        "novel.nodePath"
+      ]
+    },
+    "virtualWorkspaces": false
+  },
+  "contributes": {
+    "viewsContainers": {
+      "activitybar": [
+        {
+          "id": "novel",
+          "title": "Novels",
+          "icon": "media/book.svg"
+        }
+      ]
+    },
+    "views": {
+      "novel": [
+        {
+          "id": "novel.books",
+          "name": "Books"
+        },
+        {
+          "id": "novel.cast",
+          "name": "Cast"
+        }
+      ]
+    },
+    "viewsWelcome": [
+      {
+        "view": "novel.books",
+        "contents": "No books are known in this folder yet.\n[Scan this folder](command:novel.scan)\nThe scan finds every EPUB and text file under the folder and keeps what it finds in a hidden .novel folder. Your files are never moved or changed.\n[Enter API Keys](command:novel.enterKeys)\nWith Jev's and the work model's keys, the play button beside a book runs its reading on this Mac."
+      },
+      {
+        "view": "novel.cast",
+        "contents": "Open a book that has a reading to see its people, places and things."
+      }
+    ],
+    "commands": [
+      {
+        "command": "novel.scan",
+        "title": "Scan the Folder for Books",
+        "category": "Novel",
+        "icon": "$(refresh)"
+      },
+      {
+        "command": "novel.open",
+        "title": "Open",
+        "category": "Novel"
+      },
+      {
+        "command": "novel.showRecord",
+        "title": "Show Record",
+        "category": "Novel"
+      },
+      {
+        "command": "novel.findReferences",
+        "title": "Find Every Line That Refers to This",
+        "category": "Novel",
+        "icon": "$(references)"
+      },
+      {
+        "command": "novel.openFile",
+        "title": "Reveal the File",
+        "category": "Novel"
+      },
+      {
+        "command": "novel.read",
+        "title": "Read",
+        "category": "Novel",
+        "icon": "$(book)"
+      },
+      {
+        "command": "novel.enterKeys",
+        "title": "Enter API Keys",
+        "category": "Novel",
+        "icon": "$(key)"
+      },
+      {
+        "command": "novel.runReading",
+        "title": "Run the Reading",
+        "category": "Novel",
+        "icon": "$(play)"
+      },
+      {
+        "command": "novel.stopReading",
+        "title": "Stop the Reading",
+        "category": "Novel",
+        "icon": "$(debug-stop)"
+      }
+    ],
+    "menus": {
+      "view/title": [
+        {
+          "command": "novel.scan",
+          "when": "view == novel.books",
+          "group": "navigation"
+        },
+        {
+          "command": "novel.enterKeys",
+          "when": "view == novel.books",
+          "group": "navigation"
+        }
+      ],
+      "view/item/context": [
+        {
+          "command": "novel.findReferences",
+          "when": "view == novel.cast && viewItem == symbol",
+          "group": "inline"
+        },
+        {
+          "command": "novel.openFile",
+          "when": "view == novel.books && viewItem == book"
+        },
+        {
+          "command": "novel.read",
+          "when": "view == novel.books && viewItem == book",
+          "group": "inline"
+        },
+        {
+          "command": "novel.read",
+          "when": "view == novel.books && viewItem =~ /^(book|chapter|scene|part|card)$/",
+          "group": "navigation"
+        },
+        {
+          "command": "novel.runReading",
+          "when": "view == novel.books && viewItem == book-unread",
+          "group": "inline"
+        },
+        {
+          "command": "novel.runReading",
+          "when": "view == novel.books && viewItem =~ /^book(-unread)?$/",
+          "group": "reading"
+        },
+        {
+          "command": "novel.stopReading",
+          "when": "view == novel.books && viewItem == book-reading",
+          "group": "inline"
+        }
+      ],
+      "commandPalette": [
+        {
+          "command": "novel.open",
+          "when": "false"
+        },
+        {
+          "command": "novel.showRecord",
+          "when": "false"
+        },
+        {
+          "command": "novel.findReferences",
+          "when": "false"
+        },
+        {
+          "command": "novel.openFile",
+          "when": "false"
+        },
+        {
+          "command": "novel.runReading",
+          "when": "false"
+        },
+        {
+          "command": "novel.stopReading",
+          "when": "false"
+        }
+      ],
+      "editor/title": [
+        {
+          "command": "novel.read",
+          "when": "resourceScheme == novel && resourcePath =~ /^\\/book\\//",
+          "group": "navigation"
+        }
+      ]
+    },
+    "languages": [
+      {
+        "id": "novel",
+        "aliases": [
+          "Novel"
+        ]
+      }
+    ],
+    "configuration": {
+      "title": "Novel Workbench",
+      "properties": {
+        "novel.serverPath": {
+          "type": "string",
+          "default": "",
+          "description": "Path of the novel language server (dist/src/server/server.js of the novel-ontology-pi repository). Empty: the one beside this extension."
+        },
+        "novel.nodePath": {
+          "type": "string",
+          "default": "",
+          "description": "A Node.js (22 or later) to run the language server with. Empty: the editor's own."
+        },
+        "novel.scanOnOpen": {
+          "type": "boolean",
+          "default": true,
+          "description": "Scan the opened folder when it holds an EPUB or was scanned before."
+        }
+      }
+    }
+  }
+}

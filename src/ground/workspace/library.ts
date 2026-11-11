@@ -1,8 +1,8 @@
 import { randomUUID } from "node:crypto";
 import { link, lstat, mkdir, readFile, readdir, rename, rm, rmdir, unlink, writeFile } from "node:fs/promises";
 import { basename, dirname, extname, join, resolve } from "node:path";
-import { walkEpub } from "../../digger/intake/album/epub.js";
-import { importEpubAlbum } from "../../digger/intake/album/album.js";
+import { walkEpub } from "../../reading/album/epub.js";
+import { importEpubAlbum } from "../../reading/album/album.js";
 import { initWorkspace } from "./init.js";
 import { bindWorkspaceSource, sourceHash, storedSource } from "./source.js";
 

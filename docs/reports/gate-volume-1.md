@@ -1,4 +1,4 @@
-<!-- Written by world-engine/director/gate.mjs from the reading; run it again, never edit this. -->
+<!-- Written by engine/director/gate.mjs from the reading; run it again, never edit this. -->
 
 # Gate · Volume 1
 

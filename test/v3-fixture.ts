@@ -2,9 +2,9 @@ import { createHash } from "node:crypto";
 import { mkdir, mkdtemp, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { cutBlocks } from "../src/digger/intake/blocks.js";
-import { createZip } from "../src/digger/intake/album/zip.js";
-import { sectionBlock } from "../src/digger/intake/sectioning.js";
+import { cutBlocks } from "../src/reading/text/blocks.js";
+import { createZip } from "../src/reading/album/zip.js";
+import { sectionBlock } from "../src/reading/text/sectioning.js";
 
 export const KEEPER = `The Lighthouse Keeper
 

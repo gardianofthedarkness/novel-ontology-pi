@@ -97,7 +97,7 @@ One label was corrected after reading the scenes: 保安室 is the security room
 
 ## Built, and run on books 2 and 3
 
-**The repair is part of `novel timeplace tree <book> --propose`** (`src/digger/timeplace/placeTreeRepair.ts`). It runs after the pair sweep, as the test's "previous" policy:
+**The repair is part of `novel timeplace tree <book> --propose`** (`src/reading/v1/timeplace/placeTreeRepair.ts`). It runs after the pair sweep, as the test's "previous" policy:
 - **Its own text:** the current text and the nearest earlier text only.
 - **Jev picks** become PART_OF proposals in the sweep's pending place-tree packet, whatever their confidence.
 - **Jev "none"** goes into the packet's review notes, with the score's best candidate.

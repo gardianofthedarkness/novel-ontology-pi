@@ -2,7 +2,7 @@ import { mkdtemp, readFile, realpath, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { libraryAdd, libraryDecide, libraryInit, libraryPrepare, libraryPropose, libraryShow, type LibraryOrganization, type LibrarySource } from "../../src/ground/workspace/library.js";
-import { sectionBlock } from "../../src/digger/intake/sectioning.js";
+import { sectionBlock } from "../../src/reading/text/sectioning.js";
 import { sourceHash } from "../../src/ground/workspace/source.js";
 
 export async function universeFixture(context: { after: (callback: () => Promise<void>) => void }) {

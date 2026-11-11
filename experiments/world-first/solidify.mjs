@@ -63,7 +63,7 @@ export async function solidify(outDir, { novelDir = null, apply = false } = {}) 
   if (apply) {
     const manifest = JSON.parse(await readFile(join(novelDir, 'ontology', 'manifest.json'), 'utf8'));
     if (!manifest.worldFirst) throw new Error('--apply merges without review: only in a world-first workspace (novel init --world-first).');
-    const { mergeEntities } = await import(pathToFileURL(`${repository}/dist/src/solidifier/maintenance/fixes.js`).href);
+    const { mergeEntities } = await import(pathToFileURL(`${repository}/dist/src/canon/maintenance/fixes.js`).href);
     for (const pair of pairs.filter(entry => !entry.conflict)) {
       await mergeEntities(novelDir, pair.keep, pair.drop, `emFromWorld: never in a scene together, names overlap (${pair.names.join(' / ')}), companions shared (${pair.companions.join('、')}); merged with no conflict`);
       merged.push(pair);

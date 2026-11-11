@@ -5,9 +5,9 @@ import { fileURLToPath, pathToFileURL } from "node:url";
 import { loadPool, writePool } from "./worldCommands.js";
 
 /**
- * The cast's commands (world-engine/review/cast.mjs; the user, 2026-11-06: "Add the missing commands, and have the agent
+ * The cast's commands (engine/review/cast.mjs; the user, 2026-11-06: "Add the missing commands, and have the agent
  * review in batches"): a person and their sheet, two entries made one person, one person's ability sheet, a pair raised
- * for the agent, and the cast's questions in batches in the world's review pool. And the story sky (experiments/v2/sky.mjs)
+ * for the agent, and the cast's questions in batches in the world's review pool. And the story sky (engine/casts/run/sky.mjs)
  * as a command. Each is the engine's, loaded from the repository this CLI runs from.
  */
 interface CastModule {
@@ -25,11 +25,11 @@ async function repository(): Promise<string> {
     const pkg = await readFile(join(directory, "package.json"), "utf8").then((text) => JSON.parse(text) as { name?: string }, () => null);
     if (pkg?.name === "novel-ontology-pi") return directory;
     const parent = dirname(directory);
-    if (parent === directory) throw new Error("The world engine is not installed beside this CLI (world-engine/review/cast.mjs).");
+    if (parent === directory) throw new Error("The world engine is not installed beside this CLI (engine/review/cast.mjs).");
     directory = parent;
   }
 }
-const cast = async () => import(pathToFileURL(join(await repository(), "world-engine", "review", "cast.mjs")).href) as Promise<CastModule>;
+const cast = async () => import(pathToFileURL(join(await repository(), "engine", "review", "cast.mjs")).href) as Promise<CastModule>;
 
 /** `novel cast show <dir> [<char_…>]`: the cast with their cards and sheets, or one person with what the cast log did to them. */
 export async function castShow(novelDir: string, who?: string): Promise<Record<string, unknown>> {
@@ -66,7 +66,7 @@ export async function castAsk(novelDir: string, a: string, b: string, why?: stri
 export async function castReview(novelDir: string, options: { size?: number; least?: number; send?: string }): Promise<Record<string, unknown>> {
   const result = await (await cast()).castReview(novelDir, { size: options.size, least: options.least });
   if (!options.send) return result;
-  const review = await import(pathToFileURL(join(await repository(), "world-engine", "review", "review.mjs")).href) as { sendToAgent(novelDir: string, consoleDir: string): Promise<Record<string, unknown>> };
+  const review = await import(pathToFileURL(join(await repository(), "engine", "review", "review.mjs")).href) as { sendToAgent(novelDir: string, consoleDir: string): Promise<Record<string, unknown>> };
   return { ...result, sent: await review.sendToAgent(novelDir, options.send) };
 }
 
@@ -85,7 +85,7 @@ export async function sky(novelDir: string, sub: string, options: { dry?: boolea
     const units = Object.values(built.units ?? {}), tally = (key: (unit: Unit) => string | undefined) => units.reduce<Record<string, number>>((out, unit) => { const value = key(unit) ?? "unknown"; out[value] = (out[value] ?? 0) + 1; return out; }, {});
     return { file, built: built.at ?? true, units: units.length, dayparts: tally((unit) => unit.daypart?.value), weather: tally((unit) => `${unit.strength ?? "moderate"} ${unit.weather?.value ?? "unknown"}`), lyingSnow: units.filter((unit) => unit.lying).length, conflicts: units.filter((unit) => unit.conflict?.length).length };
   }
-  const script = join(await repository(), "experiments", "v2", "sky.mjs"), args = [script, novelDir, reading, ...(options.dry ? ["--dry"] : []), ...(options.cache ? ["--cache", options.cache] : [])];
+  const script = join(await repository(), "engine", "casts", "run", "sky.mjs"), args = [script, novelDir, reading, ...(options.dry ? ["--dry"] : []), ...(options.cache ? ["--cache", options.cache] : [])];
   const output = await new Promise<string>((done, fail) => {
     const child = spawn(process.execPath, args, { stdio: ["ignore", "pipe", "pipe"] });
     let text = "", errors = "";

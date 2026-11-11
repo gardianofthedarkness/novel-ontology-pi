@@ -1,2 +1,2 @@
-// The canvas of places lives with the stage (src/v2/world); the view reads the same module.
-export * from "../../../../src/v2/world/placeCanvas.js";
+// The canvas of places lives with the stage (src/world/built); the view reads the same module.
+export * from "../../../../src/world/built/placeCanvas.js";

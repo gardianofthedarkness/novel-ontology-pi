@@ -1,7 +1,7 @@
 import { jevFromEnv } from "../../../ground/connectors/jev.js";
-import { runIdentityAfterApply } from "../../../solidifier/identity/afterApply.js";
-import { openIdentityPackets } from "../../../solidifier/identity/afterApply.js";
-import { castScope, loadCast, STANDALONE } from "../../../solidifier/identity/cast.js";
+import { runIdentityAfterApply } from "../../../universe/identity/afterApply.js";
+import { openIdentityPackets } from "../../../universe/identity/afterApply.js";
+import { castScope, loadCast, STANDALONE } from "../../../universe/identity/cast.js";
 
 /** `novel em show <book>`: the book's place in the universe's shared character list, and identity matches awaiting review. */
 export async function emShow(novelDir: string, env: NodeJS.ProcessEnv = process.env) {

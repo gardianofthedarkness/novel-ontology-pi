@@ -396,7 +396,7 @@ test('read mode text: a block is found by its file name, a missing one is a 404 
 });
 
 test('read mode book: the EPUB a spine document at a time, made safe, its pictures served by their path in the book', async (context) => {
-  const { createZip } = await import('../../dist/src/digger/intake/album/zip.js');
+  const { createZip } = await import('../../dist/src/reading/album/zip.js');
   const { directory, start } = await fixture(context);
   const epub = join(directory, 'book.epub');
   await writeFile(epub, createZip([

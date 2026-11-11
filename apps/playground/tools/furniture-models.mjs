@@ -1,4 +1,4 @@
-// The rooms' furniture (the architect's rooms: world-engine/digest/rooms.mjs), baked as the vehicles are (bake-geometry.mjs)
+// The rooms' furniture (the architect's rooms: engine/casts/rooms.mjs), baked as the vehicles are (bake-geometry.mjs)
 // into src/data/furnitureModels.json, in metres (the kit's units are about 1.5 times a metre: a bed 3 long, a chair 1.26 tall;
 // scaled by 0.68), all CC0 1.0:
 //  - KayKit Furniture Bits 1.0 by Kay Lousberg (https://github.com/KayKit-Game-Assets/KayKit-Furniture-Bits-1.0).
@@ -9,7 +9,7 @@ import fs from "node:fs";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { bake, readGltf } from "./bake-geometry.mjs";
-import { FURNITURE_MODELS } from "../../../world-engine/digest/rooms.mjs";
+import { FURNITURE_MODELS } from "../../../engine/casts/rooms.mjs";
 
 const [root] = process.argv.slice(2);
 if (!root) throw new Error("Usage: furniture-models.mjs <dir holding the unzipped kit>");

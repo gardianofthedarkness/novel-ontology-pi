@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { mkdtemp, mkdir, writeFile, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { semanticRevision } from '../../dist/src/solidifier/merge/semantic.js';
+import { semanticRevision } from '../../dist/src/canon/gate/semantic.js';
 import { auditReviewImpact, summarizeReviewImpact } from './review-impact.mjs';
 
 function packet() {

@@ -4,7 +4,7 @@ import {
   addCorrection,
   loadCorrections,
   type Correction,
-} from "../../../solidifier/maintenance/corrections.js";
+} from "../../../canon/maintenance/corrections.js";
 import {
   addNameForm,
   appendAudit,
@@ -14,9 +14,9 @@ import {
   removeEvent,
   renameEntity,
   unrelate,
-} from "../../../solidifier/maintenance/fixes.js";
+} from "../../../canon/maintenance/fixes.js";
 import type { NameForm, RelationType } from "../../../ground/ontology/types.js";
-import { EXTRACTION_CONSTRAINTS_KEY, parseExtractionConstraints } from "../../../digger/extraction/constraints.js";
+import { EXTRACTION_CONSTRAINTS_KEY, parseExtractionConstraints } from "../../../reading/v1/extraction/constraints.js";
 
 export interface FixResult {
   status: "ok";

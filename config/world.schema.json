@@ -1,5 +1,5 @@
 {
- "about": "The universal world generator schema (docs/v3/design.html#models-and-settings §4; milestones M8a). Every number and rule the world generator, the laws, the smoother, crowds and the director used to keep in code, with its default (today's value), unit, range, meaning, where it is used and which layers may override it: defaults < a universe's universe/settings.json < a book's stage/settings.json < a place's own (places.<id> in either). kind: hard (a gate or limit), knob (a choice of taste or calibration), physics (a measured constant), structure (the grid itself; changing it changes everything), presentation (what Jev or the viewer is shown). Tables are whole files, merged key by key over their defaults. Read through src/v2/settings.ts setting(key, scope). Infinity is written \"Infinity\".",
+ "about": "The universal world generator schema (docs/v3/design.html#models-and-settings §4; milestones M8a). Every number and rule the world generator, the laws, the smoother, crowds and the director used to keep in code, with its default (today's value), unit, range, meaning, where it is used and which layers may override it: defaults < a universe's universe/settings.json < a book's stage/settings.json < a place's own (places.<id> in either). kind: hard (a gate or limit), knob (a choice of taste or calibration), physics (a measured constant), structure (the grid itself; changing it changes everything), presentation (what Jev or the viewer is shown). Tables are whole files, merged key by key over their defaults. Read through src/world/settings.ts setting(key, scope). Infinity is written \"Infinity\".",
  "version": 1,
  "layers": [
   "defaults",
@@ -13,9 +13,9 @@
    "unit": "m",
    "meaning": "The walk grid's cell: every place is built and walked on 2 m squares.",
    "used": [
-    "world-engine/director/director.mjs CELL",
-    "world-engine/laws/attacks.mjs CELL",
-    "world-engine/terrain/terrain-spawn.mjs CELL"
+    "engine/director/director.mjs CELL",
+    "engine/laws/attacks.mjs CELL",
+    "engine/terrain/terrain-spawn.mjs CELL"
    ],
    "layers": [],
    "kind": "structure",
@@ -29,10 +29,10 @@
    "unit": "m",
    "meaning": "One storey: a floor's height and the walk grid's vertical step.",
    "used": [
-    "world-engine/director/director.mjs FLOOR",
-    "world-engine/laws/attacks.mjs FLOOR",
-    "world-engine/terrain/terrain-spawn.mjs FLOOR",
-    "src/v2/spawning/positions.ts FLOOR"
+    "engine/director/director.mjs FLOOR",
+    "engine/laws/attacks.mjs FLOOR",
+    "engine/terrain/terrain-spawn.mjs FLOOR",
+    "src/world/spawning/positions.ts FLOOR"
    ],
    "layers": [],
    "kind": "structure",
@@ -46,7 +46,7 @@
    "unit": "m",
    "meaning": "A person's height, the one human scale kept (docs/v3/design.html#physics-laws §9).",
    "used": [
-    "world-engine/director/director.mjs BODY"
+    "engine/director/director.mjs BODY"
    ],
    "layers": [
     "universe"
@@ -71,7 +71,7 @@
    "unit": "m, m²",
    "meaning": "The city fill's street net and lots: super-block cell, arterial, collector and local road widths, block area and least block side, small and large lot areas.",
    "used": [
-    "src/v2/world/cityFill.ts FILL"
+    "src/world/built/cityFill.ts FILL"
    ],
    "layers": [
     "universe",
@@ -134,7 +134,7 @@
    "unit": "m² [least, most]",
    "meaning": "A building's footprint range by its type.",
    "used": [
-    "src/v2/world/cityFill.ts BUILDING_AREA"
+    "src/world/built/cityFill.ts BUILDING_AREA"
    ],
    "layers": [
     "universe",
@@ -148,8 +148,8 @@
    "unit": "operators",
    "meaning": "What a place's fill scatters besides its buildings (trees, street lights, benches, bins, parked cars, bollards, or any kind of your own that fill.props connects a part to): a list of operators scatter (on open ground, along streets, in plazas), line (along roads of a level, every so many metres) and ring (round a point); never inside a building or on a carriageway.",
    "used": [
-    "src/v2/world/fillOps.ts applyOps",
-    "world-engine/world/export-strand-demo.mjs props"
+    "src/world/built/fillOps.ts applyOps",
+    "engine/world/export-strand-demo.mjs props"
    ],
    "layers": [
     "universe",
@@ -163,8 +163,8 @@
    "unit": "part per prop kind",
    "meaning": "Which warehouse part draws each kind of street furniture the fill operators put down: the six built in (tree, street-light, bench, bin, car, bollard), or any kind of your own (wind-turbine, lantern) that a fill operator names in its `what`: a map kind -> <source>:<part> (novel warehouse find|use); a built-in kind with none is drawn as its plain shape, a kind of your own with none is not drawn.",
    "used": [
-    "src/v2/world/fillOps.ts PROP_KINDS",
-    "world-engine/world/export-strand-demo.mjs props"
+    "src/world/built/fillOps.ts PROP_KINDS",
+    "engine/world/export-strand-demo.mjs props"
    ],
    "layers": [
     "universe",
@@ -178,7 +178,7 @@
    "unit": "m",
    "meaning": "The tallest any building may be: a merge may lift a building past its type's cap, never past this.",
    "used": [
-    "src/v2/world/landscape.ts PEAK"
+    "src/world/built/landscape.ts PEAK"
    ],
    "layers": [
     "universe"
@@ -194,7 +194,7 @@
    "unit": "height / width",
    "meaning": "How many times its footprint's width a building may be tall.",
    "used": [
-    "src/v2/world/landscape.ts SLENDER"
+    "src/world/built/landscape.ts SLENDER"
    ],
    "layers": [
     "universe"
@@ -210,7 +210,7 @@
    "unit": "m",
    "meaning": "A skyscraper core whose mean height reaches this widens its plots and streets for the towers.",
    "used": [
-    "src/v2/world/landscape.ts SUPER_TALL"
+    "src/world/built/landscape.ts SUPER_TALL"
    ],
    "layers": [
     "universe",
@@ -232,7 +232,7 @@
    "unit": "share of R, m",
    "meaning": "A square's open middle: a share of its radius, kept between least and most.",
    "used": [
-    "src/v2/world/landscape.ts SQUARE"
+    "src/world/built/landscape.ts SQUARE"
    ],
    "layers": [
     "universe",
@@ -246,7 +246,7 @@
    "unit": "m",
    "meaning": "How far the city's lots keep from a compound (a centre's podium and plaza, a station's hall).",
    "used": [
-    "src/v2/world/landscape.ts CLEAR"
+    "src/world/built/landscape.ts CLEAR"
    ],
    "layers": [
     "universe",
@@ -264,7 +264,7 @@
    "unit": "m",
    "meaning": "The back lane between a street's rows behind its frontage.",
    "used": [
-    "src/v2/world/landscape.ts LANE"
+    "src/world/built/landscape.ts LANE"
    ],
    "layers": [
     "universe",
@@ -286,7 +286,7 @@
    "unit": "landscape kind",
    "meaning": "The ground a scale suggests when nothing larger has a landscape.",
    "used": [
-    "src/v2/world/landscape.ts GROUND_BY_SCALE"
+    "src/world/built/landscape.ts GROUND_BY_SCALE"
    ],
    "layers": [
     "universe",
@@ -303,7 +303,7 @@
    "unit": "m above the street",
    "meaning": "Where the deep underground, the air layer and space begin.",
    "used": [
-    "src/v2/world/landscape.ts LAYER_FLOOR"
+    "src/world/built/landscape.ts LAYER_FLOOR"
    ],
    "layers": [
     "universe"
@@ -315,7 +315,7 @@
    "unit": "m",
    "meaning": "The room a virtual layer gives a place.",
    "used": [
-    "src/v2/world/landscape.ts LAYER_ROOM"
+    "src/world/built/landscape.ts LAYER_ROOM"
    ],
    "layers": [
     "universe"
@@ -331,7 +331,7 @@
    "unit": "m",
    "meaning": "The ground skin over a street laid underground.",
    "used": [
-    "src/v2/world/landscape.ts SKIN"
+    "src/world/built/landscape.ts SKIN"
    ],
    "layers": [
     "universe"
@@ -347,7 +347,7 @@
    "unit": "m",
    "meaning": "Above this a building is as thick as its height needs (no side under height / slender); the tallest grown first.",
    "used": [
-    "src/v2/world/tall.ts TALL"
+    "src/world/built/tall.ts TALL"
    ],
    "layers": [
     "universe",
@@ -369,7 +369,7 @@
    "unit": "m, m, ratio",
    "meaning": "How tall buildings press the ones around them: reach, per, most.",
    "used": [
-    "src/v2/world/tall.ts AROUND"
+    "src/world/built/tall.ts AROUND"
    ],
    "layers": [
     "universe",
@@ -408,7 +408,7 @@
    "unit": "m",
    "meaning": "The ground in three bands by depth: unsupported span, what breaks it, its arch and bulk when it falls.",
    "used": [
-    "src/v2/world/underground.ts BANDS"
+    "src/world/built/underground.ts BANDS"
    ],
    "layers": [
     "universe"
@@ -424,7 +424,7 @@
    "unit": "m, bond",
    "meaning": "A reinforced lining's added span and bond; a pillar's bond.",
    "used": [
-    "src/v2/world/underground.ts LINING PILLAR_BOND"
+    "src/world/built/underground.ts LINING PILLAR_BOND"
    ],
    "layers": [
     "universe"
@@ -449,7 +449,7 @@
    "unit": "m [from, to]",
    "meaning": "The depth intervals Jev picks underground from: just under the street, the subway, deep.",
    "used": [
-    "src/v2/world/underground.ts INTERVALS"
+    "src/world/built/underground.ts INTERVALS"
    ],
    "layers": [
     "universe"
@@ -475,7 +475,7 @@
    "unit": "m",
    "meaning": "A hall's height by its kind.",
    "used": [
-    "src/v2/world/underground.ts HALL_HEIGHT"
+    "src/world/built/underground.ts HALL_HEIGHT"
    ],
    "layers": [
     "universe",
@@ -488,7 +488,7 @@
    "unit": "m",
    "meaning": "How deep a beam bores through the ground before the rock stops it.",
    "used": [
-    "src/v2/world/underground.ts BEAM_BORE"
+    "src/world/built/underground.ts BEAM_BORE"
    ],
    "layers": [
     "universe"
@@ -511,7 +511,7 @@
    "unit": "m",
    "meaning": "The least radius of a place of each scale before anything is built in it.",
    "used": [
-    "src/v2/world/placeCanvas.ts LEAST"
+    "src/world/built/placeCanvas.ts LEAST"
    ],
    "layers": [
     "universe",
@@ -524,7 +524,7 @@
    "unit": "m",
    "meaning": "The gap kept between sibling places on the canvas.",
    "used": [
-    "src/v2/world/placeCanvas.ts GAP"
+    "src/world/built/placeCanvas.ts GAP"
    ],
    "layers": [
     "universe",
@@ -545,7 +545,7 @@
    "unit": "m",
    "meaning": "How far apart a pool keeps its members, by their kind.",
    "used": [
-    "src/v2/world/placeCanvas.ts POOL_SPACING"
+    "src/world/built/placeCanvas.ts POOL_SPACING"
    ],
    "layers": [
     "universe",
@@ -568,7 +568,7 @@
    "unit": "share, weights",
    "meaning": "How a parent's manifolds lie: cover, blend at fading edges, how far a standing one may move, the objective's weights.",
    "used": [
-    "src/v2/terrain/topology.ts LAYOUT"
+    "src/world/terrain/topology.ts LAYOUT"
    ],
    "layers": [
     "universe",
@@ -585,7 +585,7 @@
    "unit": "share",
    "meaning": "How far one spawn may lower a part (and a damaged part), as a share of its average.",
    "used": [
-    "src/v2/terrain/heights.ts LIMIT"
+    "src/world/terrain/heights.ts LIMIT"
    ],
    "layers": [
     "universe",
@@ -602,7 +602,7 @@
    "unit": "lead",
    "meaning": "When a building's type is sure from the inventory: Jev's lead, or words with a lead.",
    "used": [
-    "src/v2/terrain/inventory.ts SURE"
+    "src/world/terrain/inventory.ts SURE"
    ],
    "layers": [
     "universe"
@@ -617,7 +617,7 @@
    "unit": "weight",
    "meaning": "Borrowing's objective: ties across parents, and the pull toward a pin.",
    "used": [
-    "src/v2/terrain/slots.ts CROSS_WEIGHT LAMBDA"
+    "src/world/terrain/slots.ts CROSS_WEIGHT LAMBDA"
    ],
    "layers": [
     "universe"
@@ -633,7 +633,7 @@
    "unit": "mass",
    "meaning": "How hard a place holds still when the float relaxes: unnamed, a slot, named.",
    "used": [
-    "world-engine/terrain/float.mjs MASS"
+    "engine/terrain/float.mjs MASS"
    ],
    "layers": [
     "universe"
@@ -651,7 +651,7 @@
    "unit": "m",
    "meaning": "How far a parent's picture for Jev reaches, by its scale.",
    "used": [
-    "world-engine/terrain/terrain.mjs HALF"
+    "engine/terrain/terrain.mjs HALF"
    ],
    "layers": [
     "universe"
@@ -666,7 +666,7 @@
    "unit": "share, m",
    "meaning": "The core the terrain-height question looks through: a share of the highest slice, at least least.",
    "used": [
-    "world-engine/terrain/terrain-spawn.mjs CORE CORE_MIN"
+    "engine/terrain/terrain-spawn.mjs CORE CORE_MIN"
    ],
    "layers": [
     "universe"
@@ -683,7 +683,7 @@
    "unit": "m",
    "meaning": "The sizes Jev picks an impact from.",
    "used": [
-    "world-engine/world/impact-choices.mjs SIZES"
+    "engine/world/impact-choices.mjs SIZES"
    ],
    "layers": [
     "universe"
@@ -720,8 +720,8 @@
    "unit": "metres and hex colour per prop kind",
    "meaning": "How each kind of street furniture is drawn when it has no warehouse part (fill.props): the plain shape's height in metres and its colour; a part in kit units is scaled to this height.",
    "used": [
-    "world-engine/world/export-strand-demo.mjs propLooks",
-    "world-engine/view/strand-demo.html PROP_LOOK"
+    "engine/world/export-strand-demo.mjs propLooks",
+    "engine/view/strand-demo.html PROP_LOOK"
    ],
    "layers": [
     "universe",
@@ -744,7 +744,7 @@
    "unit": "role",
    "meaning": "A named building kind's role in the world.",
    "used": [
-    "world-engine/world/export-strand-demo.mjs ROLE_OF"
+    "engine/world/export-strand-demo.mjs ROLE_OF"
    ],
    "layers": [
     "universe",
@@ -766,7 +766,7 @@
    "unit": "floors",
    "meaning": "Floors of a named building by its kind (stage architecture).",
    "used": [
-    "world-engine/world/export-strand-demo.mjs FLOORS_OF"
+    "engine/world/export-strand-demo.mjs FLOORS_OF"
    ],
    "layers": [
     "universe",
@@ -825,7 +825,7 @@
    "unit": "[role, floors]",
    "meaning": "A world-first spot's building: its role and floors.",
    "used": [
-    "world-engine/world/export-strand-demo.mjs BUILDING_OF"
+    "engine/world/export-strand-demo.mjs BUILDING_OF"
    ],
    "layers": [
     "universe",
@@ -864,7 +864,7 @@
    "unit": "cost factor",
    "meaning": "Edge-cost factors by way [walk, climb, descend, jump, fall, sky arc]: a fall is cheap only for someone falling.",
    "used": [
-    "world-engine/world/export-strand-demo.mjs FACTORS"
+    "engine/world/export-strand-demo.mjs FACTORS"
    ],
    "layers": [
     "universe"
@@ -885,7 +885,7 @@
    "unit": "m/min",
    "meaning": "The hologram navigator's speed by manner.",
    "used": [
-    "src/v2/world/holoNav.ts MANNER_SPEED"
+    "src/world/built/holoNav.ts MANNER_SPEED"
    ],
    "layers": [
     "universe"
@@ -907,7 +907,7 @@
    "unit": "km/h",
    "meaning": "Driving speed by road class.",
    "used": [
-    "world-engine/world/roads.mjs SPEEDS"
+    "engine/world/roads.mjs SPEEDS"
    ],
    "layers": [
     "universe",
@@ -924,7 +924,7 @@
    "unit": "s",
    "meaning": "The wait at a crossing with lights (signal) and at a T (give way).",
    "used": [
-    "world-engine/world/roads.mjs WAITS"
+    "engine/world/roads.mjs WAITS"
    ],
    "layers": [
     "universe",
@@ -938,7 +938,7 @@
    "unit": "m",
    "meaning": "Road ends closer than this are one junction.",
    "used": [
-    "world-engine/world/roads.mjs KEY"
+    "engine/world/roads.mjs KEY"
    ],
    "layers": [
     "universe"
@@ -968,7 +968,7 @@
    "unit": "m, ratio",
    "meaning": "The expressway: curve radius, deck half width and height, tunnel depth, ramp length, half width, offset and spacing, growth beta ratio, story share of a hub's mass, a gate's least mass, the ramps' pull on buildings and its reach.",
    "used": [
-    "world-engine/world/highways.mjs KNOBS"
+    "engine/world/highways.mjs KNOBS"
    ],
    "layers": [
     "universe",
@@ -997,7 +997,7 @@
    "unit": "per m",
    "meaning": "Building the expressway, per metre, by what lies under it (a lot: base + steep × √(min(1, H / height))), plus travel; a tunnel per metre and a portal at each end.",
    "used": [
-    "world-engine/world/highways.mjs COST"
+    "engine/world/highways.mjs COST"
    ],
    "layers": [
     "universe",
@@ -1019,7 +1019,7 @@
    "unit": "m/s",
    "meaning": "Speeds by way for the travel-time law (L5).",
    "used": [
-    "world-engine/laws/laws.mjs SPEED"
+    "engine/laws/laws.mjs SPEED"
    ],
    "layers": [
     "universe"
@@ -1043,7 +1043,7 @@
    "unit": "m, s, m/s",
    "meaning": "The virtual public transport: access run, wait, ride speed; a metro within a city, rail beyond.",
    "used": [
-    "world-engine/laws/laws.mjs TRANSIT"
+    "engine/laws/laws.mjs TRANSIT"
    ],
    "layers": [
     "universe",
@@ -1056,8 +1056,8 @@
    "unit": "m",
    "meaning": "Face to face: the distance of a live talk (L6).",
    "used": [
-    "world-engine/laws/laws.mjs LIVE",
-    "world-engine/smoother/smoother.mjs REACH.live"
+    "engine/laws/laws.mjs LIVE",
+    "engine/smoother/smoother.mjs REACH.live"
    ],
    "layers": [
     "universe"
@@ -1073,7 +1073,7 @@
    "unit": "m",
    "meaning": "A group's talk reach (the smoother).",
    "used": [
-    "world-engine/smoother/smoother.mjs REACH.group"
+    "engine/smoother/smoother.mjs REACH.group"
    ],
    "layers": [
     "universe"
@@ -1089,9 +1089,9 @@
    "unit": "m",
    "meaning": "A voice everyone around hears: public talk (L6); those within it at a scene start stand together.",
    "used": [
-    "world-engine/laws/laws.mjs EARSHOT",
-    "world-engine/director/director.mjs EARSHOT",
-    "world-engine/smoother/smoother.mjs REACH.public"
+    "engine/laws/laws.mjs EARSHOT",
+    "engine/director/director.mjs EARSHOT",
+    "engine/smoother/smoother.mjs REACH.public"
    ],
    "layers": [
     "universe"
@@ -1107,7 +1107,7 @@
    "unit": "people",
    "meaning": "People who may share a 2 m cell before it is a crowd (L11).",
    "used": [
-    "world-engine/laws/laws.mjs PER_CELL"
+    "engine/laws/laws.mjs PER_CELL"
    ],
    "layers": [
     "universe"
@@ -1130,7 +1130,7 @@
    "unit": "m",
    "meaning": "What a person can do without an ability or a weapon: a fist's reach, a throw's range.",
    "used": [
-    "world-engine/laws/attacks.mjs PERSON"
+    "engine/laws/attacks.mjs PERSON"
    ],
    "layers": [
     "universe"
@@ -1148,7 +1148,7 @@
    "unit": "m",
    "meaning": "How sure a position is by its rank (σ).",
    "used": [
-    "world-engine/smoother/smoother.mjs RANK_SIGMA"
+    "engine/smoother/smoother.mjs RANK_SIGMA"
    ],
    "layers": [
     "universe"
@@ -1166,7 +1166,7 @@
    "unit": "m, count",
    "meaning": "The smoother's talk σ, step, scene gap, cloud size and kept spots.",
    "used": [
-    "world-engine/smoother/smoother.mjs TALK_SIGMA STEP SCENE_GAP CLOUD KEEP"
+    "engine/smoother/smoother.mjs TALK_SIGMA STEP SCENE_GAP CLOUD KEEP"
    ],
    "layers": [
     "universe"
@@ -1178,7 +1178,7 @@
    "unit": "m",
    "meaning": "The most a scene start may move before the revision goes to the review.",
    "used": [
-    "world-engine/smoother/smoother.mjs REVISION_LIMIT"
+    "engine/smoother/smoother.mjs REVISION_LIMIT"
    ],
    "layers": [
     "universe"
@@ -1194,7 +1194,7 @@
    "unit": "probability",
    "meaning": "A line whose kind no one gave: face to face this likely.",
    "used": [
-    "world-engine/smoother/smoother.mjs LIVE_PRIOR"
+    "engine/smoother/smoother.mjs LIVE_PRIOR"
    ],
    "layers": [
     "universe"
@@ -1216,7 +1216,7 @@
    "unit": "probability",
    "meaning": "Who is on the stage: detection, false alarm, staying on, entering, first appearance.",
    "used": [
-    "world-engine/smoother/occupation.mjs ETA FALSE_ALARM STAY ENTER FIRST"
+    "engine/smoother/occupation.mjs ETA FALSE_ALARM STAY ENTER FIRST"
    ],
    "layers": [
     "universe"
@@ -1234,7 +1234,7 @@
    "unit": "ratio",
    "meaning": "How much each kind of mention says someone is there.",
    "used": [
-    "world-engine/smoother/occupation.mjs LR"
+    "engine/smoother/occupation.mjs LR"
    ],
    "layers": [
     "universe"
@@ -1246,7 +1246,7 @@
    "unit": "m",
    "meaning": "Where a gathering crowd holds from its focus (Hall's public distance).",
    "used": [
-    "world-engine/crowd/field.mjs RING"
+    "engine/crowd/field.mjs RING"
    ],
    "layers": [
     "universe"
@@ -1262,7 +1262,7 @@
    "unit": "m/s, people/m²",
    "meaning": "Weidmann's fundamental diagram: free speed, jam density, gamma.",
    "used": [
-    "world-engine/crowd/field.mjs FREE JAM GAMMA"
+    "engine/crowd/field.mjs FREE JAM GAMMA"
    ],
    "layers": [],
    "kind": "physics"
@@ -1278,7 +1278,7 @@
    "unit": "people/m²",
    "meaning": "People a square metre for a crowd's size (Fruin's levels of service).",
    "used": [
-    "world-engine/crowd/field.mjs DENSITY"
+    "engine/crowd/field.mjs DENSITY"
    ],
    "layers": [
     "universe",
@@ -1317,7 +1317,7 @@
    "unit": "ratio",
    "meaning": "Each crowd state's pace against walking, how much people follow, and noise.",
    "used": [
-    "world-engine/crowd/field.mjs MOTION"
+    "engine/crowd/field.mjs MOTION"
    ],
    "layers": [
     "universe"
@@ -1329,7 +1329,7 @@
    "unit": "count",
    "meaning": "The most samples a crowd is drawn with (a drawing budget).",
    "used": [
-    "world-engine/crowd/field.mjs SAMPLES"
+    "engine/crowd/field.mjs SAMPLES"
    ],
    "layers": [
     "universe"
@@ -1345,7 +1345,7 @@
    "unit": "probability",
    "meaning": "The digest's moves played when at least this sure.",
    "used": [
-    "world-engine/director/director.mjs MOVE_SURE"
+    "engine/director/director.mjs MOVE_SURE"
    ],
    "layers": [
     "universe"
@@ -1361,7 +1361,7 @@
    "unit": "m",
    "meaning": "How far the layout artist and the checks look for a spot that agrees with the notes.",
    "used": [
-    "world-engine/director/director.mjs FACT_SEARCH"
+    "engine/director/director.mjs FACT_SEARCH"
    ],
    "layers": [
     "universe"
@@ -1377,7 +1377,7 @@
    "unit": "m",
    "meaning": "How far round a unit's start a spot under the street is looked for.",
    "used": [
-    "world-engine/director/director.mjs UNDER_SEARCH"
+    "engine/director/director.mjs UNDER_SEARCH"
    ],
    "layers": [
     "universe"
@@ -1393,7 +1393,7 @@
    "unit": "m",
    "meaning": "The widest a crowd's field reaches round its anchor (W13's scene 249 crash).",
    "used": [
-    "world-engine/director/director.mjs CROWD_REACH"
+    "engine/director/director.mjs CROWD_REACH"
    ],
    "layers": [
     "universe"
@@ -1409,7 +1409,7 @@
    "unit": "m",
    "meaning": "The widest window a look round a point builds (W13's crash).",
    "used": [
-    "world-engine/director/director.mjs AROUND_MOST"
+    "engine/director/director.mjs AROUND_MOST"
    ],
    "layers": [
     "universe"
@@ -1429,8 +1429,8 @@
    "unit": "s, ×",
    "meaning": "A card lasts long enough to read its lines (say seconds a character, read at least); moves play demo× life.",
    "used": [
-    "world-engine/director/on-the-move.mjs SAY READ DEMO",
-    "world-engine/view/strand-demo.html SAY READ DEMO (own copy)"
+    "engine/director/on-the-move.mjs SAY READ DEMO",
+    "engine/view/strand-demo.html SAY READ DEMO (own copy)"
    ],
    "layers": [
     "universe"
@@ -1451,8 +1451,8 @@
    "unit": "m/s",
    "meaning": "The player's walking and running paces, and the slowest a paced piece goes.",
    "used": [
-    "world-engine/director/on-the-move.mjs PACE SLOWEST",
-    "world-engine/view/strand-demo.html SPEED (own copy)"
+    "engine/director/on-the-move.mjs PACE SLOWEST",
+    "engine/view/strand-demo.html SPEED (own copy)"
    ],
    "layers": [
     "universe"
@@ -1468,7 +1468,7 @@
    "unit": "s",
    "meaning": "Smooth mode: the camera's averaging window either side, the handover between groups, a walk's speed ramp.",
    "used": [
-    "world-engine/view/strand-demo.html SMOOTH_W SMOOTH_HAND wayAt (own copy)"
+    "engine/view/strand-demo.html SMOOTH_W SMOOTH_HAND wayAt (own copy)"
    ],
    "layers": [
     "universe"
@@ -1485,7 +1485,7 @@
    "unit": "scenes, sentences, count",
    "meaning": "Which things get a model of their own: seen in at least ownScenes scenes or named in at least ownMentions sentences (a kind that can have one), at most top a book; the rest bind to a warehouse part.",
    "used": [
-    "src/v2/models/models.ts nominate nominateBuildings"
+    "src/world/models/models.ts nominate nominateBuildings"
    ],
    "layers": [
     "universe",
@@ -1508,7 +1508,7 @@
    "unit": "m, ratio, count",
    "meaning": "The contract a model is checked against: its lowest point within max(ground, groundShare × its height) of z = 0; every piece within max(touch, touchShare × its longest side) of the body (else it floats); its longest side within sizeFactor of the reading's; at most triangles; written in at most tries; at most primitives shapes and $fn.",
    "used": [
-    "src/v2/models/contract.ts"
+    "src/world/models/contract.ts"
    ],
    "layers": [
     "universe"
@@ -1520,7 +1520,7 @@
    "unit": "part per vehicle kind",
    "meaning": "Which warehouse part draws a vehicle of each kind (a car, a van or a truck, a bus, a train or a carriage, a motorbike or a bicycle, a boat, a helicopter, an aircraft, a drone) when the thing has no model of its own: a map kind -> <source>:<part>; else the transport specialist's pick among the baked cars, else the page's form from parts.",
    "used": [
-    "world-engine/director/director.mjs carModel"
+    "engine/director/director.mjs carModel"
    ],
    "layers": [
     "universe",
@@ -1533,7 +1533,7 @@
    "unit": "part per thing kind",
    "meaning": "Which warehouse part a thing of each kind is bound to by novel model bind before the work model is asked (a small weapon, a handheld thing, a bag or a box, and any kind the nomination gives a part): a map kind -> <source>:<part>.",
    "used": [
-    "src/v2/models/models.ts pickParts"
+    "src/world/models/models.ts pickParts"
    ],
    "layers": [
     "universe",
@@ -1553,8 +1553,8 @@
    "unit": "model per hall kind",
    "meaning": "Which model dresses each kind of underground hall on the terrain stage (corridor, tunnel, station, utility, mall, shelter): a baked model's name or a warehouse part <source>:<part>; a kind with none is drawn as its plain box.",
    "used": [
-    "world-engine/world/export-strand-demo.mjs hallModels",
-    "world-engine/view/strand-demo.html UNDER_MODELS"
+    "engine/world/export-strand-demo.mjs hallModels",
+    "engine/view/strand-demo.html UNDER_MODELS"
    ],
    "layers": [
     "universe",
@@ -1568,7 +1568,7 @@
    "unit": "rules per vehicle kind",
    "meaning": "Which baked model (or warehouse part) a vehicle of a kind is drawn as, by the words of its name, before the built-in rules (taxi, police, ambulance, fire, truck): { \"<kind>\": { \"<regex over the name>\": \"<model or part>\" } }; checked in order, the first match wins. Empty: the built-in rules alone.",
    "used": [
-    "world-engine/digest/transport.mjs ruleModel"
+    "engine/casts/transport.mjs ruleModel"
    ],
    "layers": [
     "universe",
@@ -1579,9 +1579,9 @@
   "models.interact": {
    "default": {},
    "unit": "sheet per part or kind",
-   "meaning": "What a warehouse part does in the world besides being seen (milestones M15): whether it blocks a walk where it stands (solid), its layer (ground, air, water), how many it seats, what its crash does to what it hits when the text says it crashes or explodes (crash.degree 0 to 4 as the digest's damage words, crash.radius in metres), and what it becomes when broken (breaks: wreck, structure or none; wreck: the part drawn then). Keys are a part's reference or a kind; each value a partial sheet over the kind's defaults (src/v2/models/interact.ts).",
+   "meaning": "What a warehouse part does in the world besides being seen (milestones M15): whether it blocks a walk where it stands (solid), its layer (ground, air, water), how many it seats, what its crash does to what it hits when the text says it crashes or explodes (crash.degree 0 to 4 as the digest's damage words, crash.radius in metres), and what it becomes when broken (breaks: wreck, structure or none; wreck: the part drawn then). Keys are a part's reference or a kind; each value a partial sheet over the kind's defaults (src/world/models/interact.ts).",
    "used": [
-    "src/v2/models/interact.ts interactOf"
+    "src/world/models/interact.ts interactOf"
    ],
    "layers": [
     "universe",
@@ -1594,9 +1594,9 @@
    "unit": "on/off",
    "meaning": "A credit the reading made through a description or as the one spoken to puts a person in a unit only when the unit names them, credits them strongly, or the unit before names or credits them (docs/v3/design.html#strands section 0.6). Off: every credit places its person, as before 2026-11-09.",
    "used": [
-    "src/v2/rules/presence.ts corroborateCredits",
-    "world-engine/director/segments.mjs segmentWorld",
-    "src/v2/extraction/flow.ts (new readings: always on)"
+    "src/world/rules/presence.ts corroborateCredits",
+    "engine/director/segments.mjs segmentWorld",
+    "src/reading/flow.ts (new readings: always on)"
    ],
    "layers": [
     "universe",
@@ -1610,7 +1610,7 @@
    "file": "config/terrain/landscapes.json",
    "meaning": "Each landscape and street kind: hint, era, sizes, heights, lots, blocks, coverage, setback, shape, and which building a lot of so many floors is (steps).",
    "used": [
-    "src/v2/world/landscape.ts LANDSCAPES"
+    "src/world/built/landscape.ts LANDSCAPES"
    ],
    "layers": [
     "universe",
@@ -1621,7 +1621,7 @@
    "file": "config/terrain/building-types.json",
    "meaning": "Building types: words, uses and what each is.",
    "used": [
-    "src/v2/terrain/inventory.ts"
+    "src/world/terrain/inventory.ts"
    ],
    "layers": [
     "universe",
@@ -1632,7 +1632,7 @@
    "file": "config/terrain/city.json",
    "meaning": "What a city of each kind spawns (districts) and how they lie.",
    "used": [
-    "src/v2/terrain/config.ts"
+    "src/world/terrain/config.ts"
    ],
    "layers": [
     "universe",
@@ -1644,7 +1644,7 @@
    "file": "config/terrain/district.json",
    "meaning": "What a district of each kind spawns (streets).",
    "used": [
-    "src/v2/terrain/config.ts"
+    "src/world/terrain/config.ts"
    ],
    "layers": [
     "universe",
@@ -1656,7 +1656,7 @@
    "file": "config/terrain/street.json",
    "meaning": "A street kind's buildings: density and uses.",
    "used": [
-    "src/v2/terrain/config.ts"
+    "src/world/terrain/config.ts"
    ],
    "layers": [
     "universe",
@@ -1668,7 +1668,7 @@
    "file": "config/terrain/heights.json",
    "meaning": "Every building type's least floors and each area kind's least median, a hard gate.",
    "used": [
-    "src/v2/terrain/config.ts loadHeights"
+    "src/world/terrain/config.ts loadHeights"
    ],
    "layers": [
     "universe",
@@ -1679,7 +1679,7 @@
    "file": "config/terrain/composite.json",
    "meaning": "A building's tenants by floor (composite buildings).",
    "used": [
-    "src/v2/terrain/composite.ts"
+    "src/world/terrain/composite.ts"
    ],
    "layers": [
     "universe",
@@ -1690,7 +1690,7 @@
    "file": "config/models.json",
    "meaning": "Which model stands for each use, kind and role; old-world models only on ancient ground.",
    "used": [
-    "src/v2/world/useModels.ts"
+    "src/world/built/useModels.ts"
    ],
    "layers": [
     "universe",
@@ -1701,7 +1701,7 @@
    "file": "config/furniture.json",
    "meaning": "Each room kind's furniture as rules from the walls in (wall, grid, centre, around, back, corner, row, stools): the furniture kit's model names, by room type (the architect's rooms, digest/rooms.mjs).",
    "used": [
-    "world-engine/digest/rooms.mjs RECIPES"
+    "engine/casts/rooms.mjs RECIPES"
    ],
    "layers": [
     "universe",
@@ -1764,7 +1764,7 @@
   },
   "highway": {
    "about": "The expressway.",
-   "after": "The expressway is laid once by the terrain’s transport step and kept: rerun node world-engine/terrain/transport.mjs <novel> --rebuild for knobs and cost; the ramps’ pull on buildings applies at the next run."
+   "after": "The expressway is laid once by the terrain’s transport step and kept: rerun node engine/terrain/transport.mjs <novel> --rebuild for knobs and cost; the ramps’ pull on buildings applies at the next run."
   },
   "laws": {
    "about": "The physics laws’ numbers.",

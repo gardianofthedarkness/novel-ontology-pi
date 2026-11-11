@@ -3,7 +3,7 @@ import { readFile, readdir } from 'node:fs/promises';
 import { resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { isDeepStrictEqual } from 'node:util';
-import { semanticFacts, semanticRevision, validateStructure } from '../../dist/src/solidifier/merge/semantic.js';
+import { semanticFacts, semanticRevision, validateStructure } from '../../dist/src/canon/gate/semantic.js';
 
 const fingerprint = value => createHash('sha256').update(JSON.stringify(value)).digest('hex');
 const emptyCounts = () => ({ facts: 0, acceptedUnchanged: 0, acceptedChanged: 0, rejected: 0, explicitHolds: 0, unreviewed: 0, noopReplacements: 0, orderOnlyReplacements: 0, changedStateFields: {} });

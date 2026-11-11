@@ -3,7 +3,7 @@ import { dirname, join } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 
 /**
- * A whole volume, step by step (world-engine/volume/volume.mjs; the user, 2026-11-10: "Let's run a full volume 2 by asking
+ * A whole volume, step by step (engine/volume/volume.mjs; the user, 2026-11-10: "Let's run a full volume 2 by asking
  * pi agent to do so"): each step's status, a step or the steps up to one started in the background, a step's log, and the
  * agent's own step (the look pass) marked done. Each is the engine's, loaded from the repository this CLI runs from.
  */
@@ -19,11 +19,11 @@ async function repository(): Promise<string> {
     const pkg = await readFile(join(directory, "package.json"), "utf8").then((text) => JSON.parse(text) as { name?: string }, () => null);
     if (pkg?.name === "novel-ontology-pi") return directory;
     const parent = dirname(directory);
-    if (parent === directory) throw new Error("The world engine is not installed beside this CLI (world-engine/volume/volume.mjs).");
+    if (parent === directory) throw new Error("The world engine is not installed beside this CLI (engine/volume/volume.mjs).");
     directory = parent;
   }
 }
-const volume = async () => import(pathToFileURL(join(await repository(), "world-engine", "volume", "volume.mjs")).href) as Promise<VolumeModule>;
+const volume = async () => import(pathToFileURL(join(await repository(), "engine", "volume", "volume.mjs")).href) as Promise<VolumeModule>;
 
 export async function volumeStatus(novelDir: string): Promise<Record<string, unknown>> { return (await volume()).status(novelDir); }
 export async function volumeRun(novelDir: string, options: { step?: string; until?: string }): Promise<Record<string, unknown>> { return (await volume()).run(novelDir, { step: options.step ?? null, until: options.until ?? null }); }

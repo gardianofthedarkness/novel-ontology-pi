@@ -1,7 +1,7 @@
 import { jevFromEnv } from "../../../ground/connectors/jev.js";
 import { libraryCallSink, observeDecisions } from "../../../ground/events/observe.js";
-import { universeBindings } from "../../../solidifier/causality/universe.js";
-import { atlasContext, atlasSweep, atlasView } from "../../../solidifier/atlas/universeAtlas.js";
+import { universeBindings } from "../../../universe/causality/universe.js";
+import { atlasContext, atlasSweep, atlasView } from "../../../universe/atlas/universeAtlas.js";
 
 export const ATLAS_USAGE = "novel atlas sweep <library-dir> <universe-id> [--propose] [--no-jev] [--max-questions N] | novel atlas show <library-dir> <universe-id>";
 

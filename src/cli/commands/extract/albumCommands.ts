@@ -1,4 +1,4 @@
-import { importV2Album } from "../../../v2/album.js";
+import { importV2Album } from "../../../reading/album/inReading.js";
 /** `novel album` — EPUB illustration import + anchor listing + portrait finalization. */
 import { readFile } from "node:fs/promises";
 import { join } from "node:path";
@@ -7,14 +7,14 @@ import {
   picturesByBlock,
   resolveAnchors,
   type IllustrationRecord,
-} from "../../../digger/intake/album/album.js";
+} from "../../../reading/album/album.js";
 import {
   finalizePortraits,
   hostVisionFromEnv,
-} from "../../../digger/intake/album/portraits.js";
+} from "../../../reading/album/portraits.js";
 import { BundleStore } from "../../../ground/connectors/bundle.js";
 import type { EventSink } from "../../../ground/events/types.js";
-import type { Block } from "../../../digger/intake/blocks.js";
+import type { Block } from "../../../reading/text/blocks.js";
 import type { Entity } from "../../../ground/ontology/types.js";
 
 export async function albumImport(novelDir: string, epubPath: string) {

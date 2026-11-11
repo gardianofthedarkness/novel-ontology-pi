@@ -1,5 +1,5 @@
-import type { ChangeProposal } from "../../solidifier/merge/changeset.js";
-import type { IllustrationKind } from "../../digger/intake/album/album.js";
+import type { ChangeProposal } from "../../canon/gate/changeset.js";
+import type { IllustrationKind } from "../../reading/album/album.js";
 
 /** Transport facts, not the Playground's layout-dependent view model. */
 export type ProcessingEvent =

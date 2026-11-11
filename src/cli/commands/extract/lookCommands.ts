@@ -6,11 +6,11 @@
  * model written for this universe is named by its label), and the keys a place may set. Bounded; no model call.
  */
 import { resolve } from "node:path";
-import { schema } from "../../../v2/settings.js";
-import { ownParts, findParts, type Part } from "../../../v2/models/warehouse.js";
+import { schema } from "../../../world/settings.js";
+import { ownParts, findParts, type Part } from "../../../world/models/warehouse.js";
 import { loadWorkspaceSentences } from "./timeplaceCommands.js";
 import { stageInputs } from "./stageCommands.js";
-import { readingOf } from "../../../v2/models/models.js";
+import { readingOf } from "../../../world/models/models.js";
 
 export interface LookPlace { id: string; label?: string; parentId?: string | null; sceneIds: string[] }
 export interface LookInputs { places: LookPlace[]; scenes: { id: string; sentences: string[] }[]; kinds: Record<string, { kind: string }>; names?: Record<string, string> }

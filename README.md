@@ -30,18 +30,27 @@ original CLI.
 
 ## Where things live
 
+The code is grouped by the design's concepts; the full map is [design §2.5](docs/v3/design.html#code-map).
+
 ```
-apps/novel-console/  the Mac app (Electron): npm start, npm run dmg
-apps/reader/         the reader page
-src/v3/              the folder workspace, the basic layer, the novel server, the reader's data, one-click readings
-src/v2/              the reading (extraction/), the context engine (context/), terrain, the world, the code rules
-src/digger, solidifier, ground   v1's extraction, review gate and storage (the ground is still everyone's)
-src/cli/             the novel command
-world-engine/        the world engine's scripts: terrain, the director, digests, crowds, laws, the smoother, the views
-skills/              what an agent is taught (novel-folder, novel-ontology, novel-library, novel-volume, ...)
-adapters/            the skills and CLI in every agent host
-tools/, experiments/ the Pi host and its pages; runs and pages of the v2 reading and terrain
-docs/v3/             design.html and milestones.html
+src/        TypeScript, built to dist/
+  ground/     storage, connectors, the ontology's types, events, languages, errors, paths on disk
+  library/    any folder as a library: the workspace, the basic layer, books
+  server/     the novel server, the reader's data, one-click readings
+  reading/    the reading: text/, album/, the v2 flow; v1/ for v1's miniloop and faculties
+  context/    the context engine: every Jev request composed
+  universe/   one character list, calendar and causal ledger per universe
+  world/      the world model's rules, terrain, the built world, spawning, models, settings
+  play/       v1's stage faculties
+  canon/      the one review gate, corrections
+  cli/        the novel command
+engine/     the engine's scripts by the same concepts: reading/, casts/, terrain/, world/, director/, laws/, smoother/, review/, view/ ...
+test/       the tests by the same concepts
+apps/       Novel Console (novel-console/), the reader page (reader/), the playground's shared data and v1 interface (playground/)
+skills/     what an agent is taught;  adapters/  the skills and CLI in every agent host
+config/     the settings registry and tables;  tools/  the Pi host, the portrait cropper, the Muse relays
+archive/    set aside: the VS Code extension, the team playground's launcher
+docs/v3/    design.html and milestones.html;  docs/reports/  run reports and benchmarks
 ```
 
 ## Running
@@ -50,7 +59,7 @@ docs/v3/             design.html and milestones.html
 npm install
 npm run build
 npm test                    # the v1, v2 and v3 tests, the concept map included
-npm run world-engine:test   # the world engine's own tests, the design's generated sections checked
+npm run engine:test         # the engine's own tests, the design's generated sections checked
 cd apps/novel-console && npm start   # the console, from the repository
 ```
 

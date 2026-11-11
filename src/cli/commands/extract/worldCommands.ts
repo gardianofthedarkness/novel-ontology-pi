@@ -1,8 +1,8 @@
 import { mkdir, readFile, writeFile, appendFile } from "node:fs/promises";
 import { join } from "node:path";
 import { createHash, randomUUID } from "node:crypto";
-import { LANDSCAPE_TYPES } from "../../../v2/world/landscape.js";
-import type { LandscapePick } from "../../../digger/stage/landscape.js";
+import { LANDSCAPE_TYPES } from "../../../world/built/landscape.js";
+import type { LandscapePick } from "../../../play/stage/landscape.js";
 
 /**
  * The world's review pool (docs/v3/design.html#world-first-design §11): what the world-first loop flags — a merge it made on world
@@ -14,9 +14,9 @@ import type { LandscapePick } from "../../../digger/stage/landscape.js";
  */
 export interface PoolItem {
   id: string;
-  /** person, sheet: the cast's review (world-engine/review/cast.mjs; novel cast review): who is one person, what they can do. */
+  /** person, sheet: the cast's review (engine/review/cast.mjs; novel cast review): who is one person, what they can do. */
   kind: "identity" | "presence" | "dialogue" | "actor" | "trace" | "landscape" | "speaker" | "talk" | "reach" | "continuity" | "two-places" | "travel" | "blast" | "note" | "person" | "sheet";
-  /** v2 (world-engine/review/review.mjs): the card, the law that held it, its ledger entry, the scenes of a two-places. */
+  /** v2 (engine/review/review.mjs): the card, the law that held it, its ledger entry, the scenes of a two-places. */
   card?: string | null;
   law?: string | null;
   ledger?: string;

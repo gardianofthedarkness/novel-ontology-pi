@@ -6,7 +6,7 @@ import { repo } from './config.mjs';
 
 /**
  * The stage simulation player, served by the host: the engine's own page
- * (world-engine/view/strand-demo.html) with a book's accepted runs inlined, the way
+ * (engine/view/strand-demo.html) with a book's accepted runs inlined, the way
  * the exporter builds a page (inlineStrand), and three.js served beside it
  * from the app's own copy, so nothing loads from a CDN. Read-only: runs are
  * made by `novel sim run`; this only plays what stage/simulation/ keeps.
@@ -47,8 +47,8 @@ export function pagePolicy(html, { framed = false } = {}) {
 export async function simulationPage(workspace, { title = 'Simulation', newest = false, live = null } = {}) {
   const runs = await playableRuns(workspace, { newest });
   if (!runs.length) return null;
-  const { inlineStrand } = await import(pathToFileURL(`${repo}/world-engine/world/export-strand-demo.mjs`).href);
-  const template = await readFile(`${repo}/world-engine/view/strand-demo.html`, 'utf8');
+  const { inlineStrand } = await import(pathToFileURL(`${repo}/engine/world/export-strand-demo.mjs`).href);
+  const template = await readFile(`${repo}/engine/view/strand-demo.html`, 'utf8');
   let html = inlineStrand(template, { strands: runs.map(({ id, label, name, data }) => ({ id, label, name, data })) }, { name: title, vendor: true });
   if (live) {
     const running = (await liveState(workspace)).status === 'running';
@@ -57,16 +57,16 @@ export async function simulationPage(workspace, { title = 'Simulation', newest =
   return { html, policy: pagePolicy(html), runs: runs.map(({ id, run }) => ({ id, run })) };
 }
 
-/** three.js for the player, from the app's own dependency: only the files the page imports (world-engine/live/sim-jev.mjs names them). */
+/** three.js for the player, from the app's own dependency: only the files the page imports (engine/live/sim-jev.mjs names them). */
 export async function simulationVendor(file) {
-  const { VENDOR_FILES } = await import(pathToFileURL(`${repo}/world-engine/live/sim-jev.mjs`).href);
+  const { VENDOR_FILES } = await import(pathToFileURL(`${repo}/engine/live/sim-jev.mjs`).href);
   const path = Object.hasOwn(VENDOR_FILES, file) ? VENDOR_FILES[file] : null;
   return path ? readFile(`${repo}/${path}`) : null;
 }
 
 /**
  * The live page: what a book's running `novel sim pick|run` is doing, and a replay of every question Jev was asked with its
- * pictures and answers (world-engine/live/sim-jev.mjs records them). Static: it reads live.json and the recording beside it.
+ * pictures and answers (engine/live/sim-jev.mjs records them). Static: it reads live.json and the recording beside it.
  */
 export async function simulationLivePage() {
   const html = await readFile(new URL('./sim-live.html', import.meta.url), 'utf8');
@@ -92,8 +92,8 @@ export async function simulationWorldPage() {
 export async function simulationNowPage(workspace) {
   const page = await readFile(resolve(workspace, 'stage', 'simulation', 'live', 'page.json'), 'utf8').then(JSON.parse, () => null);
   if (!page) return null;
-  const { inlineStrand } = await import(pathToFileURL(`${repo}/world-engine/world/export-strand-demo.mjs`).href);
-  const template = await readFile(`${repo}/world-engine/view/strand-demo.html`, 'utf8');
+  const { inlineStrand } = await import(pathToFileURL(`${repo}/engine/world/export-strand-demo.mjs`).href);
+  const template = await readFile(`${repo}/engine/view/strand-demo.html`, 'utf8');
   const html = inlineStrand(template, page, { name: 'World · now', vendor: true });
   return { html, policy: pagePolicy(html, { framed: true }), run: page.live?.run ?? null };
 }
@@ -130,7 +130,7 @@ export async function livePicture(workspace, file) {
 }
 
 /**
- * Terrain spawning's step (world-engine/terrain/terrain-spawn.mjs; docs/v3/design.html#visual-context-engine), from World · Live: `step` lets
+ * Terrain spawning's step (engine/terrain/terrain-spawn.mjs; docs/v3/design.html#visual-context-engine), from World · Live: `step` lets
  * a run waiting after a proposal go on by one, `run` lets it run on, `pause` makes it wait again after each proposal.
  */
 export async function terrainStep(workspace, mode) {
@@ -164,7 +164,7 @@ export async function addDirectorNote(workspace, body) {
   return note;
 }
 /**
- * The story sky (world-engine/digest/sky.mjs; experiments/v2/sky.mjs: sky.json beside the reading the run played): each
+ * The story sky (engine/casts/sky.mjs; engine/casts/run/sky.mjs: sky.json beside the reading the run played): each
  * unit's time of day, hour, weather and lying snow, for the world's look. Null before the step has run.
  */
 export async function directorSky(workspace) {
@@ -174,14 +174,14 @@ export async function directorSky(workspace) {
   const sky = (at?.path ? await read(resolve(at.path, '..', 'sky.json')) : null) ?? await read(resolve(workspace, '..', 'reading', 'sky.json'));
   return skyView(sky);
 }
-/** A sky.json as World · Live reads it (also the replay io's, experiments/v2/replay-io.mjs), or null. */
+/** A sky.json as World · Live reads it (also the replay io's, engine/view/replay-io.mjs), or null. */
 export function skyView(sky) {
   return sky ? { units: Object.fromEntries(Object.entries(sky.units ?? {}).map(([id, unit]) => [id, { daypart: unit.daypart?.value ?? null, hour: unit.hour ?? null, weather: unit.weather?.value ?? null, strength: unit.weather?.strength ?? null, wind: unit.weather?.wind ?? null, sure: unit.weather?.sure ?? 0, lying: !!unit.lying, ...(unit.cloudCut ? { cloudCut: unit.cloudCut } : {}) }])) } : null;
 }
 
 /**
  * The book's album as World · Live shows it (the user, 2026-11-05: "the picture detection and portrait system never wired
- * in in v2"): its pictures on their sentences (src/v2/album.ts) and each character's bound portrait (album.mjs, which
+ * in in v2"): its pictures on their sentences (src/reading/album/inReading.ts) and each character's bound portrait (album.mjs, which
  * serves only the files its records list). Ids only: the images come from api/album-asset.
  */
 export async function directorAlbum(workspace) {

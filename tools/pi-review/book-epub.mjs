@@ -25,8 +25,8 @@ async function open(path) {
   const { mtimeMs } = await stat(path);
   const known = books.get(path);
   if (known?.mtimeMs === mtimeMs) return known;
-  const { unzipAll } = await import(pathToFileURL(resolve(repo, 'dist/src/digger/intake/album/zip.js')).href);
-  const { resolveEpubPath } = await import(pathToFileURL(resolve(repo, 'dist/src/digger/intake/album/epub.js')).href);
+  const { unzipAll } = await import(pathToFileURL(resolve(repo, 'dist/src/reading/album/zip.js')).href);
+  const { resolveEpubPath } = await import(pathToFileURL(resolve(repo, 'dist/src/reading/album/epub.js')).href);
   const files = unzipAll(await readFile(path)), canon = new Map([...files.keys()].map(key => [key.toLowerCase(), key])), canonPath = key => canon.get(key.toLowerCase()) ?? key;
   const opfPath = canonPath(attr(files.get('META-INF/container.xml')?.toString('utf8') ?? '', 'full-path') ?? '');
   const opf = files.get(opfPath)?.toString('utf8') ?? '', opfDir = opfPath.includes('/') ? opfPath.slice(0, opfPath.lastIndexOf('/')) : '';

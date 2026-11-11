@@ -8,7 +8,7 @@ import "./clips-demo.css";
 
 /**
  * Stage clips as a standalone page to share (clips-demo.html): the clip
- * player over clips exported ahead of time (playground/export-clips-demo.mjs),
+ * player over clips exported ahead of time (archive/playground/export-clips-demo.mjs),
  * embedded in the page as JSON. No host, archive, book text or agent behind
  * it: each clip carries only its scene's beats (summaries and names), its
  * place and the prepared moves.

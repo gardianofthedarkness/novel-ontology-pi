@@ -1,4 +1,4 @@
-import { loadUniverseContext, qualifyCausalUnit, universeCandidates, universeEvidence, universePacket } from '../../dist/src/solidifier/causality/universe.js';
+import { loadUniverseContext, qualifyCausalUnit, universeCandidates, universeEvidence, universePacket } from '../../dist/src/universe/causality/universe.js';
 
 export function createUniverseCausalityAccess(config) {
   const pages = new Map(), evidence = new Map(), candidates = new Set();

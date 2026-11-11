@@ -4,7 +4,7 @@
 import { readFile } from 'node:fs/promises';
 import { join, resolve } from 'node:path';
 
-const calendarModule = () => import('../../dist/src/solidifier/calendar/calendar.js');
+const calendarModule = () => import('../../dist/src/universe/calendar/calendar.js');
 
 /** Reviewed year decisions stored with a universe's calendar. */
 export async function storedYearDecisions(libraryDirectory, universeId) {

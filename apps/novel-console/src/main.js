@@ -1,5 +1,5 @@
 // Novel Console (docs/v3/design.html#console; the user, 2026-11-10: "Let's do electron then"): our own Mac app for reading novels.
-// The window is the console; each library folder the user adds gets a novel server (dist/src/v3/server.js, the same JSON-RPC
+// The window is the console; each library folder the user adds gets a novel server (dist/src/server/server.js, the same JSON-RPC
 // the editor extension spoke) run by this app's own Node; the console and the reader are served from app:// so they share an
 // origin and nothing is loaded from outside. Keys go to the Mac's secure store through the reading module, never to a page.
 const { app, BrowserWindow, dialog, ipcMain, net, protocol, shell } = require("electron");
@@ -12,7 +12,7 @@ const { pathToFileURL } = require("node:url");
 
 // The backend: the repository's built code beside the app in development, its copy in the app's resources when packaged.
 const backend = app.isPackaged ? path.join(process.resourcesPath, "backend") : path.resolve(__dirname, "..", "..", "..");
-const serverScript = path.join(backend, "dist", "src", "v3", "server.js");
+const serverScript = path.join(backend, "dist", "src", "server", "server.js");
 const readerTemplate = path.join(backend, "apps", "reader", "reader.html");
 const store = () => path.join(app.getPath("userData"), "libraries.json");
 const log = (...parts) => { try { fs.appendFileSync(path.join(app.getPath("userData"), "console.log"), `${new Date().toISOString()} ${parts.join(" ")}\n`); } catch {} };
@@ -71,7 +71,7 @@ const listing = () => libraries().map((folder) => ({ path: folder, name: path.ba
 // What a page may ask the server: the novel requests, never a key's entry (that goes through setKeys below).
 const ALLOWED = new Set(["novel/scan", "novel/tree", "novel/book", "novel/cast", "novel/document", "novel/record", "novel/refs", "novel/bookProblems", "novel/world", "novel/search", "novel/basicStep", "novel/basic", "novel/series", "novel/arrange",
   "novel/read", "novel/readDocument", "novel/readLine", "novel/readPortrait", "novel/locate", "novel/sentenceAt", "novel/startReading", "novel/reading", "novel/stopReading"]);
-const reading = () => import(pathToFileURL(path.join(backend, "dist", "src", "v3", "reading.js")).href);
+const reading = () => import(pathToFileURL(path.join(backend, "dist", "src", "server", "reading.js")).href);
 
 ipcMain.handle("libraries", () => listing());
 ipcMain.handle("addLibrary", async (event, given) => {

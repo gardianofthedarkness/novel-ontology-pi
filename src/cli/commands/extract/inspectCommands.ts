@@ -8,8 +8,8 @@ import type {
   Relation,
   Scene,
 } from "../../../ground/ontology/types.js";
-import { listChangeSets } from "../../../solidifier/merge/changesetStore.js";
-import { cutBlocks, splitChapters } from "../../../digger/intake/blocks.js";
+import { listChangeSets } from "../../../canon/gate/changesetStore.js";
+import { cutBlocks, splitChapters } from "../../../reading/text/blocks.js";
 
 /**
  * `novel inspect <novel-dir>` — corpus diagnostics over a novel bundle.

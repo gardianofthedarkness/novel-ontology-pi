@@ -49,7 +49,7 @@ export function identitiesOf(answers, labels) {
 export async function settleBuildings(novelDir, { decisions = null } = {}) {
   const script = JSON.parse(await readFile(join(novelDir, 'stage', 'world', 'script.json'), 'utf8'));
   const objects = JSON.parse(await readFile(join(novelDir, 'stage', 'objects.json'), 'utf8').catch(() => 'null'));
-  const { jevFromEnv } = await load('dist/src/ground/connectors/jev.js'), { cachedDecisions } = await load('dist/src/digger/timeplace/cache.js');
+  const { jevFromEnv } = await load('dist/src/ground/connectors/jev.js'), { cachedDecisions } = await load('dist/src/reading/v1/timeplace/cache.js');
   let calls = 0;
   const live = decisions ?? jevFromEnv(process.env), counted = { modelId: live.modelId, decide: (...args) => { calls++; return live.decide(...args); } };
   const jev = cachedDecisions(counted, join(novelDir, 'stage', 'world', 'cache'));

@@ -1,7 +1,7 @@
 import { createHash, randomUUID } from "node:crypto";
 import { mkdir, readFile, readdir, rename, rmdir, unlink, writeFile } from "node:fs/promises";
 import { basename, join } from "node:path";
-import { cutBlocks, DEFAULT_BLOCK_SIZE, type Block } from "../../digger/intake/blocks.js";
+import { cutBlocks, DEFAULT_BLOCK_SIZE, type Block } from "../../reading/text/blocks.js";
 
 export interface WorkspaceSource {
   version: 1;

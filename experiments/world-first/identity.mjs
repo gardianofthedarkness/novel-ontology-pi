@@ -77,7 +77,7 @@ export async function settleIdentity(novelDir, { scriptFile = null, apply = fals
   const birth = (await birthMatches(novelDir)).filter(match => names[match.a] && names[match.b] && match.same >= SAME && match.same - match.distinct >= MARGIN).map(match => ({ a: match.a, b: match.b, direct: true, why: `EM at birth: Jev same ${match.same}, distinct ${match.distinct}` }));
   const { merges, apart } = planMerges([...birth, ...aliases.filter(alias => names[alias.a] && names[alias.b])], names, script, order);
   if (apply) {
-    const { mergeEntities } = await import(pathToFileURL(`${repository}/dist/src/solidifier/maintenance/fixes.js`).href);
+    const { mergeEntities } = await import(pathToFileURL(`${repository}/dist/src/canon/maintenance/fixes.js`).href);
     // Into the kept one, the deepest first, so every drop still exists when it is merged.
     for (const merge of merges) await mergeEntities(novelDir, merge.keep, merge.drop, `emFromWorld: ${names[merge.drop]} is ${names[merge.keep]} (${merge.why}); merged with no conflict`);
   }

@@ -3,7 +3,7 @@
  *
  * The Oct 21, 2026 graph-first deferral still governs every other faculty:
  * nothing in this module is read by retrieval, EM, or the merge gate. The
- * causality faculty (src/solidifier/causality/) is the sole consumer, using
+ * causality faculty (src/universe/causality/) is the sole consumer, using
  * vectors only to nominate candidate pairs for Jev adjudication. Jev — never
  * a vector score — decides whether a CAUSES link exists.
  *

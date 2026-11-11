@@ -107,8 +107,8 @@ export async function universeCommand(args: string[]): Promise<unknown> {
   if (operation === "adopt") {
     const { values, flags } = options(rest, ["--why"]);
     const root = libraryRoot(values[0]);
-    // The canon's undo lives with the world engine (world-engine/review/canon.mjs); dist/src/cli/commands/extract → repository.
-    const adoptModule = pathToFileURL(resolve(new URL(".", import.meta.url).pathname, "..", "..", "..", "..", "..", "world-engine", "library", "adopt.mjs")).href;
+    // The canon's undo lives with the world engine (engine/review/canon.mjs); dist/src/cli/commands/extract → repository.
+    const adoptModule = pathToFileURL(resolve(new URL(".", import.meta.url).pathname, "..", "..", "..", "..", "..", "engine", "library", "adopt.mjs")).href;
     const { adopt } = await import(adoptModule) as { adopt: (root: string, options: { why?: string }) => Promise<unknown> };
     return adopt(root, { why: flags.get("--why")?.[0] ?? "adopted" });
   }

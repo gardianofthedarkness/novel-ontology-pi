@@ -4,21 +4,21 @@ import { BundleStore } from "../../../ground/connectors/bundle.js";
 import type { Entity, Relation, Scene } from "../../../ground/ontology/types.js";
 import { storedSource } from "../../../ground/workspace/source.js";
 import { libraryShow } from "../../../ground/workspace/library.js";
-import { cutBlocks } from "../../../digger/intake/blocks.js";
-import { nominatePlacePairs, type PlaceTreeMemory } from "../../../digger/timeplace/placeTreeSweep.js";
-import { flagForRepair } from "../../../digger/timeplace/placeTreeRepair.js";
-import { readCausalityMemory } from "../../../solidifier/causality/faculty.js";
-import { loadUniverseContext, universeBindings, universeCandidates } from "../../../solidifier/causality/universe.js";
-import { atlasAsked, atlasCandidates, atlasContext } from "../../../solidifier/atlas/universeAtlas.js";
-import { listChangeSets } from "../../../solidifier/merge/changesetStore.js";
+import { cutBlocks } from "../../../reading/text/blocks.js";
+import { nominatePlacePairs, type PlaceTreeMemory } from "../../../reading/v1/timeplace/placeTreeSweep.js";
+import { flagForRepair } from "../../../reading/v1/timeplace/placeTreeRepair.js";
+import { readCausalityMemory } from "../../../universe/causality/faculty.js";
+import { loadUniverseContext, universeBindings, universeCandidates } from "../../../universe/causality/universe.js";
+import { atlasAsked, atlasCandidates, atlasContext } from "../../../universe/atlas/universeAtlas.js";
+import { listChangeSets } from "../../../canon/gate/changesetStore.js";
 import { loadWorkspaceSentences, placeScales, strandInputs } from "./timeplaceCommands.js";
-import { timePlaceAttempted } from "../../../digger/timeplace/afterApply.js";
+import { timePlaceAttempted } from "../../../reading/v1/timeplace/afterApply.js";
 import { landscapePacketsOpen, objectsPacketsOpen, stageInputs } from "./stageCommands.js";
 import { simCurrent, simPicksDone } from "./simCommands.js";
-import { castScope, loadCast } from "../../../solidifier/identity/cast.js";
-import { openIdentityPackets } from "../../../solidifier/identity/afterApply.js";
-import { calendarStale, loadCalendar } from "../../../solidifier/calendar/calendar.js";
-import { calendarPacketId } from "../../../solidifier/calendar/review.js";
+import { castScope, loadCast } from "../../../universe/identity/cast.js";
+import { openIdentityPackets } from "../../../universe/identity/afterApply.js";
+import { calendarStale, loadCalendar } from "../../../universe/calendar/calendar.js";
+import { calendarPacketId } from "../../../universe/calendar/review.js";
 
 /**
  * `novel checklist` — what a completed analysis still lacks, in dependency
@@ -102,7 +102,7 @@ export async function bookChecklist(novelDir: string, options: { input?: string;
     counts: { blocks: blocks.length, applied: blocks.length - missingBlocks.length, awaitingReview: blockReview.length, scenes: scenes.length, entities: entities.length },
     next: blockReview.length ? blockReview.map((changeset) => reviewCommand(changeset.id)) : missingBlocks.length ? [options.input ? `novel ingest ${dir} ${quote(options.input)}` : `novel ingest ${dir} <the assigned input>  (continues at ${missingBlocks[0]})`] : [] });
 
-  // A v2 workspace (docs/v3/design.html#world-engine-v2 §2.0): its canon is the v2 reading (experiments/v2/workspace.mjs), written
+  // A v2 workspace (docs/v3/design.html#world-engine-v2 §2.0): its canon is the v2 reading (engine/reading/workspace.mjs), written
   // whole, not block by block through the gate; its identities are the reading's unified EM.
   if (manifest.v2Reading) Object.assign(items.at(-1)!, { status: "done", next: [], note: `v2 reading of ${manifest.v2Reading.at}: scenes, cards, entities and events written as canon (${manifest.v2Reading.out}).` });
 
@@ -204,10 +204,10 @@ export async function bookChecklist(novelDir: string, options: { input?: string;
 
   // A world-first workspace: story time, scene places, the place tree, strands and in-book causality are the world's
   // (docs/v3/design.html#world-first-design), done once its world script is written; these faculties are never asked. A v2 reading's
-  // workspace has it from the reading (experiments/v2/workspace.mjs); an older one from the v1 world loop.
+  // workspace has it from the reading (engine/reading/workspace.mjs); an older one from the v1 world loop.
   if (manifest.worldFirst) {
     const script = await exists(join(novelDir, "stage", "world", "script.json"));
-    const writer = manifest.v2Reading ? `node experiments/v2/workspace.mjs <source-novel-dir> ${quote(manifest.v2Reading.out)} <new-novel-dir>` : `node experiments/world-first/run.mjs <out-dir> --novel ${dir}`;
+    const writer = manifest.v2Reading ? `node engine/reading/workspace.mjs <source-novel-dir> ${quote(manifest.v2Reading.out)} <new-novel-dir>` : `node experiments/world-first/run.mjs <out-dir> --novel ${dir}`;
     for (const item of items) if (["time-place", "place-tree", "strands", "causality"].includes(item.id)) Object.assign(item, { status: script ? "done" : "todo", next: script ? [] : [writer], note: `World-first: the world ${script ? "decides" : "will decide"} this (stage/world/script.json).` });
   }
   const worldFirst = !!manifest.worldFirst;

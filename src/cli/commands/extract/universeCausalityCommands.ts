@@ -1,6 +1,6 @@
 import { jevFromEnv } from "../../../ground/connectors/jev.js";
 import { libraryCallSink, observeDecisions } from "../../../ground/events/observe.js";
-import { loadUniverseContext, universeBindings, universeCandidates, universeCausalView, universeDecide, universeEvidence, universePacket, universePropose, universeSweep } from "../../../solidifier/causality/universe.js";
+import { loadUniverseContext, universeBindings, universeCandidates, universeCausalView, universeDecide, universeEvidence, universePacket, universePropose, universeSweep } from "../../../universe/causality/universe.js";
 
 export async function universeCausalityCommand(args: string[], env: NodeJS.ProcessEnv = process.env) {
   const [operation, directory, universeId, ...rest] = args;

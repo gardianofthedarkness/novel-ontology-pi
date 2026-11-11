@@ -1,7 +1,7 @@
 import { createHash } from "node:crypto";
 import { parentMap, placePath } from "../../../ground/ontology/placeTree.js";
-import { sweepPlaceTree, type PlaceTreeMemory } from "../../../digger/timeplace/placeTreeSweep.js";
-import { repairPlaceTree } from "../../../digger/timeplace/placeTreeRepair.js";
+import { sweepPlaceTree, type PlaceTreeMemory } from "../../../reading/v1/timeplace/placeTreeSweep.js";
+import { repairPlaceTree } from "../../../reading/v1/timeplace/placeTreeRepair.js";
 import { mkdir, readFile, readdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { BundleStore } from "../../../ground/connectors/bundle.js";
@@ -11,16 +11,16 @@ import { EventLog } from "../../../ground/events/log.js";
 import { observeDecisions, observeWork } from "../../../ground/events/observe.js";
 import type { Entity, Relation, Scene } from "../../../ground/ontology/types.js";
 import { storedSource } from "../../../ground/workspace/source.js";
-import { cutBlocks } from "../../../digger/intake/blocks.js";
-import { sectionBlock, type Sentence } from "../../../digger/intake/sectioning.js";
-import { runTimePlace, timePlaceProposals, type TimePlaceResult, type VocabularyMode } from "../../../digger/timeplace/faculty.js";
-import { saveChangeSet } from "../../../solidifier/merge/changesetStore.js";
-import { cachedDecisions, cachedWork } from "../../../digger/timeplace/cache.js";
-import { timePlaceAttempted, timePlaceForNewScenes, timePlaceReviewSource } from "../../../digger/timeplace/afterApply.js";
-import type { ChangeSet } from "../../../solidifier/merge/changeset.js";
-import { listChangeSets } from "../../../solidifier/merge/changesetStore.js";
-import { askStrandQuestions, planStrandQuestions, scenePassage, storyStrands, strandProjection, STRAND_QUESTION_DEFAULTS } from "../../../digger/timeplace/strandQuestions.js";
-import { castCandidates } from "../../../digger/processing/castCandidates.js";
+import { cutBlocks } from "../../../reading/text/blocks.js";
+import { sectionBlock, type Sentence } from "../../../reading/text/sectioning.js";
+import { runTimePlace, timePlaceProposals, type TimePlaceResult, type VocabularyMode } from "../../../reading/v1/timeplace/faculty.js";
+import { saveChangeSet } from "../../../canon/gate/changesetStore.js";
+import { cachedDecisions, cachedWork } from "../../../reading/v1/timeplace/cache.js";
+import { timePlaceAttempted, timePlaceForNewScenes, timePlaceReviewSource } from "../../../reading/v1/timeplace/afterApply.js";
+import type { ChangeSet } from "../../../canon/gate/changeset.js";
+import { listChangeSets } from "../../../canon/gate/changesetStore.js";
+import { askStrandQuestions, planStrandQuestions, scenePassage, storyStrands, strandProjection, STRAND_QUESTION_DEFAULTS } from "../../../reading/v1/timeplace/strandQuestions.js";
+import { castCandidates } from "../../../reading/v1/processing/castCandidates.js";
 import type { StrandAnswers } from "../../../../apps/playground/src/data/storyStrands.js";
 
 /**

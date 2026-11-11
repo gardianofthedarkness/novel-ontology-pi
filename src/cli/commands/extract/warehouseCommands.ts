@@ -4,7 +4,7 @@
  * with a catalogue of evaluated records; parts are `<source>:<part>`; `use` connects a part to a slot of the world's
  * configuration through the settings schema. JSON out; nothing here asks a model; a download needs the user's OK.
  */
-import { addSource, fetchSource, findParts, interactionOf, listSources, meshOfPart, partOf, refreshSource, setInteraction, SLOTS, usePart, type AddOptions } from "../../../v2/models/warehouse.js";
+import { addSource, fetchSource, findParts, interactionOf, listSources, meshOfPart, partOf, refreshSource, setInteraction, SLOTS, usePart, type AddOptions } from "../../../world/models/warehouse.js";
 
 export async function warehouseList(options: { source?: string; novelDir?: string } = {}) {
   const out = await listSources(options);

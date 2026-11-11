@@ -21,7 +21,7 @@ const formsOf = entity => [...new Set((entity.names ?? []).map(name => name.text
 export async function takeBase(novelDir, outDir) {
   const { BundleStore } = await load('dist/src/ground/connectors/bundle.js');
   const { loadWorkspaceSentences } = await load('dist/src/cli/commands/extract/timeplaceCommands.js');
-  const { listChangeSets } = await load('dist/src/solidifier/merge/changesetStore.js');
+  const { listChangeSets } = await load('dist/src/canon/gate/changesetStore.js');
   const bundle = new BundleStore(join(novelDir, 'ontology'));
   const scenes = fold(await bundle.loadFile('scenes.jsonl')).sort((a, b) => order(a.sentenceIds?.[0]) - order(b.sentenceIds?.[0]));
   const events = fold(await bundle.loadFile('events.jsonl')), entities = fold(await bundle.loadFile('entities.jsonl')), relations = await bundle.loadFile('relations.jsonl');

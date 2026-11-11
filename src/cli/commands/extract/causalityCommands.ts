@@ -15,23 +15,23 @@
 import { loadConfig } from "../../config.js";
 import { loadEmbedder } from "../../../ground/connectors/embeddings.js";
 import { jevFromEnv } from "../../../ground/connectors/jev.js";
-import { saveChangeSet } from "../../../solidifier/merge/changesetStore.js";
-import { causalReachability, nominateCausalCandidates, type CausalCandidate } from "../../../solidifier/causality/candidates.js";
+import { saveChangeSet } from "../../../canon/gate/changesetStore.js";
+import { causalReachability, nominateCausalCandidates, type CausalCandidate } from "../../../universe/causality/candidates.js";
 import {
   clearCausalitySweepPending,
   ensureUnitVectors,
   enrichCausalText,
   runCausalityPass,
-} from "../../../solidifier/causality/faculty.js";
+} from "../../../universe/causality/faculty.js";
 import {
   alreadyLinked,
   compareOrder,
   loadCausalityUniverse,
-} from "../../../solidifier/causality/units.js";
-import type { ChangeProposal } from "../../../solidifier/merge/changeset.js";
+} from "../../../universe/causality/units.js";
+import type { ChangeProposal } from "../../../canon/gate/changeset.js";
 import { readFile, writeFile, rename } from "node:fs/promises";
 import { join } from "node:path";
-import { digest } from "../../../solidifier/merge/semantic.js";
+import { digest } from "../../../canon/gate/semantic.js";
 import { EventLog } from "../../../ground/events/log.js";
 
 function embedderFromEnv(env: NodeJS.ProcessEnv) {

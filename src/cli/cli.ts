@@ -50,18 +50,18 @@ import { albumAssign } from "./commands/extract/portraitCommands.js";
 import { evalExtract, evalRun } from "./commands/extract/evalCommands.js";
 import { evalDialogueCards } from "./commands/extract/dialogueEval.js";
 import { evalStoryOrder } from "./commands/extract/storyOrderEval.js";
-import { sectionBlock } from "../digger/intake/sectioning.js";
-import { cutBlocks } from "../digger/intake/blocks.js";
+import { sectionBlock } from "../reading/text/sectioning.js";
+import { cutBlocks } from "../reading/text/blocks.js";
 import { initWorkspace } from "../ground/workspace/init.js";
 import { buildGraphFromBundle, LadybugStore } from "../ground/connectors/ladybug.js";
 import { exportBundle, importBundle } from "../ground/connectors/bundleTransfer.js";
-import { reviewPage } from "../solidifier/merge/reviewPage.js";
-import { reviseProposals } from "../solidifier/merge/revise.js";
-import { decideFacts, semanticPage } from "../solidifier/merge/semanticCommands.js";
-import { causalityEvidence } from "../solidifier/causality/evidence.js";
+import { reviewPage } from "../canon/gate/reviewPage.js";
+import { reviseProposals } from "../canon/gate/revise.js";
+import { decideFacts, semanticPage } from "../canon/gate/semanticCommands.js";
+import { causalityEvidence } from "../universe/causality/evidence.js";
 import { universeCausalityCommand } from "./commands/extract/universeCausalityCommands.js";
 import { reviewCommand } from "./commands/extract/reviewCommands.js";
-import { approveBook } from "../solidifier/merge/approve.js";
+import { approveBook } from "../canon/gate/approve.js";
 import { atlasCommand } from "./commands/extract/atlasCommands.js";
 import { checklistCommand } from "./commands/extract/checklistCommands.js";
 import { SIM_USAGE, simPick, simRun, simShow, simStrands, simTerrain } from "./commands/extract/simCommands.js";
@@ -82,7 +82,7 @@ import {
   listChangeSets,
   loadChangeSet,
   setChangeSetStatus,
-} from "../solidifier/merge/changesetStore.js";
+} from "../canon/gate/changesetStore.js";
 
 const COMMANDS: Record<string, string> = {
   "novel review show|evidence|decide|apply <root> <packet> --scope book|universe|library [--universe <id>]": "One semantic gate for every faculty: paged assertions/evidence, revision-bound accept|hold|reject, staged decisions, explicit apply. Evidence uses --fact; mutations use --revision; decide uses --decisions '<JSON>'. Unreviewed assertions remain held.",

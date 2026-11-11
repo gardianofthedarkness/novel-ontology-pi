@@ -3,26 +3,26 @@ import { join } from "node:path";
 import { BundleStore } from "../../../ground/connectors/bundle.js";
 import { jevFromEnv, type DecisionModel } from "../../../ground/connectors/jev.js";
 import type { Entity, Relation, Scene } from "../../../ground/ontology/types.js";
-import { cachedDecisions } from "../../../digger/timeplace/cache.js";
-import { storyStrands, strandProjection } from "../../../digger/timeplace/strandQuestions.js";
-import { latestStrandAnswers } from "../../../digger/timeplace/strandView.js";
-import { forkTimeline, type TimelineScene } from "../../../digger/stage/environment.js";
-import { detectObjects, namedThings, objectIdentities, objectProposals, objectSceneInputs, type ObjectScene, type ObjectScenePlace, type ObjectsReport } from "../../../digger/stage/objects.js";
-import { listChangeSets, saveChangeSet } from "../../../solidifier/merge/changesetStore.js";
-import { timePlaceReviewSource } from "../../../digger/timeplace/afterApply.js";
-import { castScope } from "../../../solidifier/identity/cast.js";
-import { loadThings } from "../../../solidifier/identity/things.js";
+import { cachedDecisions } from "../../../reading/v1/timeplace/cache.js";
+import { storyStrands, strandProjection } from "../../../reading/v1/timeplace/strandQuestions.js";
+import { latestStrandAnswers } from "../../../reading/v1/timeplace/strandView.js";
+import { forkTimeline, type TimelineScene } from "../../../play/stage/environment.js";
+import { detectObjects, namedThings, objectIdentities, objectProposals, objectSceneInputs, type ObjectScene, type ObjectScenePlace, type ObjectsReport } from "../../../play/stage/objects.js";
+import { listChangeSets, saveChangeSet } from "../../../canon/gate/changesetStore.js";
+import { timePlaceReviewSource } from "../../../reading/v1/timeplace/afterApply.js";
+import { castScope } from "../../../universe/identity/cast.js";
+import { loadThings } from "../../../universe/identity/things.js";
 import { workModelFromEnv } from "../../../ground/connectors/workModel.js";
 import { loadEmbedder } from "../../../ground/connectors/embeddings.js";
 import { loadConfig } from "../../config.js";
-import { cachedWork } from "../../../digger/timeplace/cache.js";
-import { architectureFingerprint, architecturePictures, pickArchitecture, type ArchitecturePlace, type ArchitectureReport } from "../../../digger/stage/architecture.js";
-import { askMovement, movementFingerprint, pairsCallLimit, sceneCallEstimate, sceneCallLimit, sceneInputs, type MovementReport, type MovementScene } from "../../../digger/stage/movement.js";
-import { prepareStage, prepFingerprint, type StagePlan } from "../../../digger/stage/prep.js";
-import { pickScales, scaleFingerprint, SCALES, type ScalePlace, type ScaleReport } from "../../../digger/stage/scale.js";
-import { LANDSCAPE_UNSURE, landscapeFingerprint, landscapeProposal, OPEN_SCALES, pickLandscapes, type LandscapePick, type LandscapePlace, type LandscapeReport } from "../../../digger/stage/landscape.js";
+import { cachedWork } from "../../../reading/v1/timeplace/cache.js";
+import { architectureFingerprint, architecturePictures, pickArchitecture, type ArchitecturePlace, type ArchitectureReport } from "../../../play/stage/architecture.js";
+import { askMovement, movementFingerprint, pairsCallLimit, sceneCallEstimate, sceneCallLimit, sceneInputs, type MovementReport, type MovementScene } from "../../../play/stage/movement.js";
+import { prepareStage, prepFingerprint, type StagePlan } from "../../../play/stage/prep.js";
+import { pickScales, scaleFingerprint, SCALES, type ScalePlace, type ScaleReport } from "../../../play/stage/scale.js";
+import { LANDSCAPE_UNSURE, landscapeFingerprint, landscapeProposal, OPEN_SCALES, pickLandscapes, type LandscapePick, type LandscapePlace, type LandscapeReport } from "../../../play/stage/landscape.js";
 import { landscapeItem, loadPool, writePool } from "./worldCommands.js";
-import { firstLandscape, type Landscape } from "../../../v2/world/landscape.js";
+import { firstLandscape, type Landscape } from "../../../world/built/landscape.js";
 import { loadWorkspaceSentences, pendingTreeLinks } from "./timeplaceCommands.js";
 
 /**
@@ -70,7 +70,7 @@ async function writeReport(path: string, value: unknown) {
 }
 
 /**
- * The world script of a world-first workspace (stage/world/script.json), or null: from a v2 reading (src/v2/extraction/script.ts,
+ * The world script of a world-first workspace (stage/world/script.json), or null: from a v2 reading (src/reading/script.ts,
  * `from: "v2-reading"`, written with the workspace), or from the v1 world-first loop.
  */
 interface WorldScript { from?: string; places: Record<string, { label: string; scale?: string | null; parent?: string | null; spot?: boolean; near?: string }>; scenes: { id: string; place: string | null; clock: number[] | null; present: string[]; stayed: string[]; fragment?: boolean; context?: string }[] }

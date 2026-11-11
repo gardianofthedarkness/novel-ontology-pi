@@ -1,7 +1,7 @@
 import { copyFile, readFile, stat } from "node:fs/promises";
 import { join } from "node:path";
 import { recallSourceBlock } from "../../../ground/workspace/source.js";
-import { BlockProcessor } from "../../../digger/processing/blockProcessor.js";
+import { BlockProcessor } from "../../../reading/v1/processing/blockProcessor.js";
 import { BundleStore } from "../../../ground/connectors/bundle.js";
 import { jevFromEnv } from "../../../ground/connectors/jev.js";
 import { workModelFromEnv } from "../../../ground/connectors/workModel.js";
@@ -10,12 +10,12 @@ import { EventLog } from "../../../ground/events/log.js";
 import {
   loadCorrections,
   pinsForBlock,
-} from "../../../solidifier/maintenance/corrections.js";
-import { appendAudit } from "../../../solidifier/maintenance/fixes.js";
-import { changesetDir, loadChangeSet } from "../../../solidifier/merge/changesetStore.js";
+} from "../../../canon/maintenance/corrections.js";
+import { appendAudit } from "../../../canon/maintenance/fixes.js";
+import { changesetDir, loadChangeSet } from "../../../canon/gate/changesetStore.js";
 import type { Entity } from "../../../ground/ontology/types.js";
-import { loadExtractionCounts } from "../../../digger/processing/counts.js";
-import { facultyOptionsFromEnv } from "../../../digger/processing/facultyOptions.js";
+import { loadExtractionCounts } from "../../../reading/v1/processing/counts.js";
+import { facultyOptionsFromEnv } from "../../../reading/v1/processing/facultyOptions.js";
 
 /**
  * `novel recall <novel-dir> <blockId>` — the recall protocol

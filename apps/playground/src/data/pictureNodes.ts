@@ -3,7 +3,7 @@
  *
  * Pictures are an INDEPENDENT node type ("picture"), not members of a
  * scene. Each picture's anchor is a sentence identity (see
- * src/digger/intake/album/album.ts); at render time the orbit resolves
+ * src/reading/album/album.ts); at render time the orbit resolves
  * it against the current scenes:
  *
  * - The picture's neighbors are its ANCHOR scene (the scene whose

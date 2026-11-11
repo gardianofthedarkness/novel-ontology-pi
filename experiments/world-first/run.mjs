@@ -74,8 +74,8 @@ const count = (text, form) => text.split(form).length - 1;
 export async function runWorldFirst(outDir, { chapters = null, maxCalls = 400, decisions = null, novelDir = null, batchSize = 8, agentConsole = null } = {}) {
   const scenes = JSON.parse(await readFile(join(outDir, 'base', 'scenes.json'), 'utf8')), roster = JSON.parse(await readFile(join(outDir, 'base', 'roster.json'), 'utf8'));
   const states = JSON.parse(await readFile(join(outDir, 'base', 'states.json'), 'utf8').catch(() => '[]'));
-  const { jevFromEnv } = await load('dist/src/ground/connectors/jev.js'), { cachedDecisions } = await load('dist/src/digger/timeplace/cache.js');
-  const { detectTimeMentions } = await load('dist/src/digger/timeplace/lexicon.js');
+  const { jevFromEnv } = await load('dist/src/ground/connectors/jev.js'), { cachedDecisions } = await load('dist/src/reading/v1/timeplace/cache.js');
+  const { detectTimeMentions } = await load('dist/src/reading/v1/timeplace/lexicon.js');
   // Real calls are counted below the cache, so a rerun counts only what it pays for.
   let calls = 0;
   const live = decisions ?? jevFromEnv(process.env), counted = { modelId: live.modelId, decide: (...args) => { calls++; return live.decide(...args); } };
@@ -125,7 +125,7 @@ export async function runWorldFirst(outDir, { chapters = null, maxCalls = 400, d
     // A chapter's end: people whose traces run too alike are asked about again.
     if (world.scenes.length && world.scenes.at(-1).chapter !== scene.chapter) await tracesAlike();
     const previous = world.scenes.at(-1), text = scene.text.trim(), factLines = (scene.facts ?? []).map(fact => clip(fact.text, FACT_CHARS));
-    // A v2 base layer (experiments/v2/read.mjs) composes more: the scene before's world cards, and who the recommender expects.
+    // A v2 base layer (engine/reading/read.mjs) composes more: the scene before's world cards, and who the recommender expects.
     const beforeLines = Object.entries(scene.v2?.before ?? {}).flatMap(([kind, lines]) => lines.map(line => `${kind}: ${line}`));
     // Without text, nothing changes: the scene before carries on (its people stay, unseen).
     if (text.length < FRAGMENT && !scene.events.length) {

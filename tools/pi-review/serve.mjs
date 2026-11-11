@@ -124,7 +124,7 @@ export async function bookText(metadataDirectory, block) {
   const files = (await readdir(metadataDirectory)).filter(name => /^b\d{4}\.txt$/.test(name)).sort();
   const name = `b${String(block + 1).padStart(4, '0')}.txt`;
   if (!files.includes(name)) return null;
-  const { sectionBlock } = await import('../../dist/src/digger/intake/sectioning.js');
+  const { sectionBlock } = await import('../../dist/src/reading/text/sectioning.js');
   const text = await readFile(resolve(metadataDirectory, name), 'utf8');
   let cursor = 0;
   const sentences = sectionBlock(text, block).sentences.map((sentence) => {
@@ -202,7 +202,7 @@ export async function createViewer({ port = 4324, origin, expiresAt, readLive = 
         return;
       }
       if (scopedPath === '/play/terrain/step') {
-        // Terrain spawning's step (world-engine/terrain/terrain-spawn.mjs), from World · Live's Next step and Run on: for a run waiting
+        // Terrain spawning's step (engine/terrain/terrain-spawn.mjs), from World · Live's Next step and Run on: for a run waiting
         // after a proposal, watched in the engine's own live view.
         const volume = url.searchParams.get('volume') ?? 'active';
         if (!resolveWorkspace || volume !== 'active' && (!/^[1-9]\d*$/.test(volume) || !Number.isSafeInteger(Number(volume)))) { send(404); request.resume(); return; }

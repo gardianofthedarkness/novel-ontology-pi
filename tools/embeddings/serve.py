@@ -1,7 +1,7 @@
 """A local embedding server: the OpenAI-compatible /v1/embeddings over a model on disk, CPU only, offline.
 
 The v1 causality faculty's (BAAI/bge-small-zh-v1.5, cross-scene causal retrieval, 2026-10-26), brought in for the building
-level's inventory search (src/v2/terrain/inventory.ts, docs/v3/design.html#borrow-and-spawn §6). The connector
+level's inventory search (src/world/terrain/inventory.ts, docs/v3/design.html#borrow-and-spawn §6). The connector
 (src/ground/connectors/embeddings.ts) reaches it with:
 
     python tools/embeddings/serve.py --model <a model folder> --port 8194

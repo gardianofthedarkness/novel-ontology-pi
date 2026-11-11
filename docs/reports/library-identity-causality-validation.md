@@ -13,10 +13,10 @@ PRs #46 and #47 are not included or modified by this follow-up.
 | Reviewed series/universe/continuity membership and reading order | `skills/novel-library/`, `src/ground/workspace/library.ts`, `src/cli/commands/extract/libraryCommands.ts` |
 | Stable source ownership and isolated intake/recall | `src/ground/workspace/source.ts`, ingest/recall commands and workspace tests |
 | Semantic labels instead of model-selected storage IDs | `src/ground/language/identityLabels.ts`, name detector, extraction and faculty graph |
-| Source-supported aliases available before downstream references | `src/digger/extraction/extraction.ts`, identity and extraction regressions |
-| Readable Pi review and label-based corrections | `src/solidifier/merge/semanticIdentity.ts`, semantic commands, skill reference |
-| Duplicate proposal-ID repair without payload edits or automatic approval | `src/solidifier/merge/proposalIds.ts`, revision command and tests |
-| Bounded cross-book causality with independent evidence review | `src/solidifier/causality/universe.ts`, CLI command and scoped Pi access |
+| Source-supported aliases available before downstream references | `src/reading/v1/extraction/extraction.ts`, identity and extraction regressions |
+| Readable Pi review and label-based corrections | `src/canon/gate/semanticIdentity.ts`, semantic commands, skill reference |
+| Duplicate proposal-ID repair without payload edits or automatic approval | `src/canon/gate/proposalIds.ts`, revision command and tests |
+| Bounded cross-book causality with independent evidence review | `src/universe/causality/universe.ts`, CLI command and scoped Pi access |
 | Live library hierarchy and causal metadata | `tools/pi-review/library-live.mjs`, `universe-causality-live.mjs`, frontend library model |
 | Directed universe causal arrows | `causalProjection.ts`, `OrbitalExplorer.tsx`, `OrbitalGraph.tsx`, library-orbit regressions |
 | Read-only review intervention audit | `tools/pi-review/review-impact.mjs`, `docs/reports/review-impact.md` |
@@ -27,7 +27,7 @@ Paths in the frontend rows are under `apps/playground/src/`.
 ## Automated validation — 2026-10-25
 
 - `TMPDIR=/private/tmp npm test`: **417 passed, zero failed**.
-- `node --test tools/pi-review/*.test.mjs playground/*.test.mjs`:
+- `node --test tools/pi-review/*.test.mjs archive/playground/*.test.mjs`:
   **116 passed, zero failed**, including real CLI/loopback/protected-stream tests
   backed by synthetic sources and local model stubs.
 - Native macOS temporary-directory rerun of `universe-causality.test.js` and

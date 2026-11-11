@@ -36,7 +36,7 @@ export const FLOW_NODES: FlowNode[] = [
   node("atlas", "Universe atlas", "solidifier", "jev", ["atlas"], 1.25, 9.6),
   node("universe", "Universe causality", "solidifier", "jev", ["universe-causality"], 2.6, 9.6),
   node("stage", "Stage · buildings, movement", "solidifier", "jev", ["stated_", "moves_", "how_", "dir_"], 2.6, 10.6),
-  // The v2 reading flow (src/v2, docs/v3/design.html#world-engine-v2 §2): listing (work model), typing, unified EM and EM² roles (Jev).
+  // The v2 reading flow (src/reading, docs/v3/design.html#world-engine-v2 §2): listing (work model), typing, unified EM and EM² roles (Jev).
   node("listing", "Listing · v2", "digger", "work", ["v2-listing"], 3.6, 1),
   node("typing", "Typing · v2", "digger", "jev", ["type", "proper"], 3.6, 2),
   node("unified", "Unified EM · v2", "digger", "jev", ["em", "own"], 3.6, 3),

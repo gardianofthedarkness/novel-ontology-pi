@@ -6,9 +6,9 @@
 import { readFile } from "node:fs/promises";
 import { join, resolve } from "node:path";
 import { workModelFromEnv } from "../../../ground/connectors/workModel.js";
-import { bindKit, bindPart, logUsage, nominateBuildings, recheckModel, briefOf, catalogOf, checkModel, idOf, kitModules, KIT_CATEGORIES, nominate, nominationsOf, pickParts, propsOf, putModel, readingOf, saveNominations, storeOf, writeModel, type Nomination } from "../../../v2/models/models.js";
+import { bindKit, bindPart, logUsage, nominateBuildings, recheckModel, briefOf, catalogOf, checkModel, idOf, kitModules, KIT_CATEGORIES, nominate, nominationsOf, pickParts, propsOf, putModel, readingOf, saveNominations, storeOf, writeModel, type Nomination } from "../../../world/models/models.js";
 import { loadWorkspaceSentences } from "./timeplaceCommands.js";
-import { PART_REF } from "../../../v2/models/partRefs.js";
+import { PART_REF } from "../../../world/models/partRefs.js";
 
 async function sceneMap(novelDir: string, reading?: string) {
   const data = await readingOf(novelDir, reading), out = new Map<string, string>();
@@ -25,9 +25,9 @@ async function rowOf(novelDir: string, thing: string): Promise<Nomination> {
 
 export async function modelNominate(novelDir: string, options: { reading?: string; top?: number } = {}) {
   const [props, sentences, sceneOf] = await Promise.all([propsOf(novelDir), loadWorkspaceSentences(novelDir), sceneMap(novelDir, options.reading)]);
-  const settings = (await import("../../../v2/settings.js")).setting<{ ownScenes: number; ownMentions: number; top: number }>("models.nominate");
+  const settings = (await import("../../../world/settings.js")).setting<{ ownScenes: number; ownMentions: number; top: number }>("models.nominate");
   const terrain = JSON.parse(await readFile(join(resolve(novelDir), "stage", "terrain.json"), "utf8").catch(() => "null")) as { sites?: Record<string, { label?: string; scale?: string; kind?: string; size?: number[] }> } | null;
-  const floorsOf = (await import("../../../v2/settings.js")).setting<Record<string, number>>("buildings.floorsOf");
+  const floorsOf = (await import("../../../world/settings.js")).setting<Record<string, number>>("buildings.floorsOf");
   const things = nominate(props, sentences as Map<string, { text: string }>, sceneOf, { ...settings, ...(options.top ? { top: options.top } : {}) });
   const buildings = nominateBuildings(terrain?.sites ?? {}, sentences as Map<string, { text: string }>, sceneOf, floorsOf, settings);
   const rows = [...things, ...buildings].sort((a, b) => b.importance - a.importance);

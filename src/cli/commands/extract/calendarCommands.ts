@@ -1,6 +1,6 @@
-import { castScope, rootCastScope, STANDALONE, type CastScope } from "../../../solidifier/identity/cast.js";
-import { buildCalendar, dayOf, describeEntry, loadCalendar, type CalendarFile } from "../../../solidifier/calendar/calendar.js";
-import { calendarPacketId } from "../../../solidifier/calendar/review.js";
+import { castScope, rootCastScope, STANDALONE, type CastScope } from "../../../universe/identity/cast.js";
+import { buildCalendar, dayOf, describeEntry, loadCalendar, type CalendarFile } from "../../../universe/calendar/calendar.js";
+import { calendarPacketId } from "../../../universe/calendar/review.js";
 
 export const CALENDAR_USAGE = "novel calendar show|build <novel-dir> | novel calendar show|build <library-dir> --universe <id>";
 

@@ -1,8 +1,8 @@
 import { readdir, readFile } from "node:fs/promises";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
-import { decodeEntities, htmlToText, resolveEpubPath } from "../../../digger/intake/album/epub.js";
-import { unzipAll } from "../../../digger/intake/album/zip.js";
+import { decodeEntities, htmlToText, resolveEpubPath } from "../../../reading/album/epub.js";
+import { unzipAll } from "../../../reading/album/zip.js";
 import { loadWorkspaceSentences } from "./timeplaceCommands.js";
 
 /**
@@ -15,8 +15,8 @@ import { loadWorkspaceSentences } from "./timeplaceCommands.js";
 const readJson = async <T>(path: string): Promise<T | null> => JSON.parse(await readFile(path, "utf8").catch(() => "null")) as T | null;
 const readJsonl = async (path: string) => (await readFile(path, "utf8").catch(() => "")).split("\n").filter(Boolean).map((line) => JSON.parse(line) as Record<string, unknown>);
 const clip = (text: string, length = 300) => ([...text].length > length ? `${[...text].slice(0, length - 1).join("")}…` : text);
-const repository = async () => { let dir = dirname(fileURLToPath(import.meta.url)); for (let n = 0; n < 6; n++) { if (await readFile(join(dir, "package.json"), "utf8").then(() => true, () => false) && await readdir(join(dir, "world-engine")).then(() => true, () => false)) return dir; dir = dirname(dir); } throw new Error("The repository's world-engine was not found."); };
-const review = async () => import(pathToFileURL(join(await repository(), "world-engine", "review", "review.mjs")).href) as Promise<{
+const repository = async () => { let dir = dirname(fileURLToPath(import.meta.url)); for (let n = 0; n < 6; n++) { if (await readFile(join(dir, "package.json"), "utf8").then(() => true, () => false) && await readdir(join(dir, "engine")).then(() => true, () => false)) return dir; dir = dirname(dir); } throw new Error("The repository's world-engine was not found."); };
+const review = async () => import(pathToFileURL(join(await repository(), "engine", "review", "review.mjs")).href) as Promise<{
   holdForReview(novelDir: string, options: { run?: string | null; budget?: number; name?: (id: string) => string }): Promise<Record<string, unknown>>;
   applyAnswers(novelDir: string): Promise<Record<string, unknown>>;
   latestRun(novelDir: string): Promise<string | null>;
@@ -131,7 +131,7 @@ export async function worldApply(novelDir: string): Promise<Record<string, unkno
   return (await review()).applyAnswers(novelDir);
 }
 
-const canon = async () => import(pathToFileURL(join(await repository(), "world-engine", "review", "canon.mjs")).href) as Promise<{
+const canon = async () => import(pathToFileURL(join(await repository(), "engine", "review", "canon.mjs")).href) as Promise<{
   toCanon(novelDir: string, options: { run: string; reading: Reading }): Promise<Record<string, unknown>>;
   undoCanon(novelDir: string, options: { run: string }): Promise<Record<string, unknown>>;
 }>;

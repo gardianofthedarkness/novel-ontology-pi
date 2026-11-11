@@ -1,9 +1,9 @@
 import { readFile, readdir, stat } from "node:fs/promises";
 import { basename, dirname, join } from "node:path";
 import { closest, distance, graphSchema, PROPERTY_ALIASES, type ErrorReport, type Suggestion } from "../ground/errors.js";
-import { reviewAdapter } from "../solidifier/merge/reviewAdapters.js";
+import { reviewAdapter } from "../canon/gate/reviewAdapters.js";
 import { REVIEW_OPTIONS } from "./commands/extract/reviewCommands.js";
-import type { ChangeSet } from "../solidifier/merge/changeset.js";
+import type { ChangeSet } from "../canon/gate/changeset.js";
 
 /**
  * Evidence-based diagnosis (the rustc idea, for agents): after a command

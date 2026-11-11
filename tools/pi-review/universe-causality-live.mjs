@@ -1,7 +1,7 @@
 import { readFile, readdir } from 'node:fs/promises';
 import { resolve } from 'node:path';
-import { causalSource } from '../../dist/src/solidifier/causality/evidence.js';
-import { universeCausalView } from '../../dist/src/solidifier/causality/universe.js';
+import { causalSource } from '../../dist/src/universe/causality/evidence.js';
+import { universeCausalView } from '../../dist/src/universe/causality/universe.js';
 
 export async function readUniverseCausalityLive(directory, bindings = [], resolveWorkspace) {
   const packets = await readdir(resolve(directory, 'causality/packets')).catch(error => { if (error.code === 'ENOENT') return []; throw error; });

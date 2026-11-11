@@ -12,7 +12,7 @@ const PLACE = /^[\w:-]{1,80}$/, KEY = /^[a-z][\w.]{1,60}$/i, REF = /^[a-z][a-z0-
 
 /** The settings as they resolve for the book (or a place), by group, with each key's meaning, unit, range, kind, layers and when a change takes effect. */
 export async function settingsView(workspace, { place = null } = {}) {
-  const S = await load('dist/src/cli/commands/extract/settingsCommands.js'), V = await load('dist/src/v2/settings.js');
+  const S = await load('dist/src/cli/commands/extract/settingsCommands.js'), V = await load('dist/src/world/settings.js');
   const shown = await S.settingsShow(workspace, { place: place ?? undefined }), schema = V.schema(), groups = schema.groups ?? {};
   const byGroup = {};
   for (const row of shown.settings) {
@@ -42,10 +42,10 @@ export async function warehouseView(workspace, { find = '', kind = null, categor
   const sources = await W.warehouseList({ novelDir: workspace });
   const words = clip(find, 120)?.trim() ?? '';
   const found = words || source || category ? await W.warehouseFind(words || (category ?? source ?? ''), { kind: clip(kind, 60) || undefined, category: clip(category, 40) || undefined, source: clip(source, 40) || undefined, size: Number.isFinite(Number(size)) && Number(size) > 0 ? Number(size) : undefined, top: Math.min(200, Math.max(1, Number(top) || 40)), novelDir: workspace }) : null;
-  const V = await load('dist/src/v2/settings.js'), at = { book: resolve(workspace) };
+  const V = await load('dist/src/world/settings.js'), at = { book: resolve(workspace) };
   const slots = { props: V.setting('fill.props', at), vehicles: V.setting('models.vehicles', at), parts: V.setting('models.parts', at) };
   // The slots a part may go to, from the kinds the code knows and the uses the table has (one list, the panel's too).
-  const PR = await load('dist/src/v2/models/partRefs.js'), MD = await load('dist/src/v2/models/models.js'), uses = V.table('models.uses', at);
+  const PR = await load('dist/src/world/models/partRefs.js'), MD = await load('dist/src/world/models/models.js'), uses = V.table('models.uses', at);
   const slotChoices = [...PR.PROP_KINDS_FOR_PARTS.map(kind => `prop:${kind}`), ...PR.VEHICLE_KINDS.map(kind => `vehicle:${kind}`), ...[...MD.PART_KINDS].map(kind => `kind:${kind}`), ...Object.keys(uses.uses ?? {}).map(use => `use:${use}`), ...Object.keys(uses.roles ?? {}).map(role => `role:${role}`)];
   return { sources: sources.sources, allowedLicences: sources.allowedLicences, found, slots, slotChoices };
 }

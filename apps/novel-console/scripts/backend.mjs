@@ -1,5 +1,5 @@
 // The backend the app carries (apps/novel-console/build/backend, copied into the app's resources): the repository's built
-// code (dist, without its tests), the reading's scripts (experiments/v2/*.mjs), its settings (config/), the reader page, and the production
+// code (dist, without its tests), the reading's scripts (engine/*.mjs), its settings (config/), the reader page, and the production
 // packages the code imports, laid out as in the repository so every relative path still holds. Run after `npm run build`
 // at the repository's root.
 import { execFileSync } from "node:child_process";
@@ -10,18 +10,16 @@ import { fileURLToPath } from "node:url";
 
 const app = resolve(dirname(fileURLToPath(import.meta.url)), ".."), repository = resolve(app, "..", "..");
 const out = join(app, "build", "backend");
-if (!existsSync(join(repository, "dist", "src", "v3", "server.js"))) throw new Error("Build the repository first (npm run build at its root).");
+if (!existsSync(join(repository, "dist", "src", "server", "server.js"))) throw new Error("Build the repository first (npm run build at its root).");
 // An earlier backend goes to the Trash, never deleted here.
 if (existsSync(out)) renameSync(out, join(homedir(), ".Trash", `novel-console-backend-${Date.now()}`));
 mkdirSync(out, { recursive: true });
 
 const copy = (from, to = from) => cpSync(join(repository, from), join(out, to), { recursive: true, dereference: true });
 for (const name of readdirSync(join(repository, "dist")).filter((name) => name !== "test")) copy(`dist/${name}`);
-mkdirSync(join(out, "experiments", "v2"), { recursive: true });
-for (const name of readdirSync(join(repository, "experiments", "v2")).filter((name) => name.endsWith(".mjs") && !name.endsWith(".test.mjs"))) copy(`experiments/v2/${name}`);
+// The engine's scripts (the reading's runner engine/reading/read.mjs and what it loads), without their tests.
+cpSync(join(repository, "engine"), join(out, "engine"), { recursive: true, dereference: true, filter: (from) => !from.endsWith(".test.mjs") });
 copy("config");
-mkdirSync(join(out, "world-engine", "director"), { recursive: true });
-copy("world-engine/director/segments.mjs");
 copy("apps/reader/reader.html");
 copy("skills/novel-folder");
 // Pi, for arranging a folder when Claude Code is signed out (tools/pi-review/folder-arrange.mjs and its packages).

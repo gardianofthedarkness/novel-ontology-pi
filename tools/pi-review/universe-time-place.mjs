@@ -109,7 +109,7 @@ export function mergeUniverse({ atlas, books, continuities }) {
  */
 export async function readUniverseTimePlace(directory, bindings, resolveWorkspace, volume) {
   const library = await import('../../dist/src/ground/workspace/library.js');
-  const { atlasView, atlasContext } = await import('../../dist/src/solidifier/atlas/universeAtlas.js');
+  const { atlasView, atlasContext } = await import('../../dist/src/universe/atlas/universeAtlas.js');
   const view = await library.libraryView(resolve(directory));
   const sourceId = bindings.find(binding => binding.volume === volume)?.sourceId;
   const continuityId = view.organization.assignments.find(entry => entry.sourceId === sourceId && entry.status === 'confirmed')?.continuityId;

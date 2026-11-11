@@ -1,5 +1,5 @@
-import { review } from "../../../solidifier/merge/review.js";
-import type { ReviewTarget } from "../../../solidifier/merge/reviewTypes.js";
+import { review } from "../../../canon/gate/review.js";
+import type { ReviewTarget } from "../../../canon/gate/reviewTypes.js";
 
 /** Options each review operation takes (also used to suggest the right one for a mistyped option). */
 export const REVIEW_OPTIONS: Record<string, string[]> = {

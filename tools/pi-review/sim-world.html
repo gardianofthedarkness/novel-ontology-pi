@@ -187,7 +187,7 @@
   /* Reading along: the sentence being read at the foot of the screen, edged in its kind's colour; the same one lit in the text. */
   .sub { --k: var(--narration); position: fixed; z-index: 6; left: 50%; transform: translateX(-50%); bottom: calc(max(12px, env(safe-area-inset-bottom)) + 52px); width: min(680px, calc(100vw - 24px)); box-sizing: border-box; background: var(--panel); border: 1px solid var(--line); border-left: 4px solid var(--k); border-radius: 10px; padding: 8px 12px; font-size: 16px; line-height: 1.65; color: var(--ink); backdrop-filter: blur(6px); }
   .sub b { color: var(--k); margin-right: 6px; font-weight: 600; }
-  /* The album (src/v2/album.ts): a speaker's portrait before their line; the book's picture at its sentence, read along. */
+  /* The album (src/reading/album/inReading.ts): a speaker's portrait before their line; the book's picture at its sentence, read along. */
   .sub img.face { width: 30px; height: 30px; border-radius: 50%; object-fit: cover; vertical-align: middle; margin-right: 6px; border: 2px solid var(--k); }
   .pic { position: fixed; z-index: 6; right: max(12px, env(safe-area-inset-right)); bottom: calc(max(12px, env(safe-area-inset-bottom)) + 140px); width: min(220px, 34vw); margin: 0; background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 6px; cursor: zoom-in; box-sizing: border-box; }
   .pic img { display: block; width: 100%; height: auto; border-radius: 6px; }
@@ -258,7 +258,7 @@
   let buildings = "";
   $("bopen").addEventListener("click", () => { const on = $("bopen").getAttribute("aria-pressed") !== "true"; fold("bopen", "blist", on); if (on) { fold("live", "asks", false); fold("sopen", "slist", false); fold("copen", "clist", false); } });
   $("sopen").addEventListener("click", () => { const on = $("sopen").getAttribute("aria-pressed") !== "true"; fold("sopen", "slist", on); if (on) { fold("live", "asks", false); fold("bopen", "blist", false); fold("copen", "clist", false); } });
-  // Spawning (world-engine/spawning/spawn.mjs, live.json's world notes): each scene's start positions, how each was decided,
+  // Spawning (engine/spawning/spawn.mjs, live.json's world notes): each scene's start positions, how each was decided,
   // and, where the rules left someone open, what Jev is given to say where: the scene's own text, who, the place's spots.
   let spawnKey = "";
   const BY = { carried: "carried on", stays: "stays where left", holder: "with its holder", spatial: "by the scene's words", group: "with those arriving together", speaking: "within speaking distance", default: "a random floor (open: Jev's question)", ground: "on the ground", part: "inside its part" };
@@ -279,7 +279,7 @@
     }));
   };
   $("copen").addEventListener("click", () => { const on = $("copen").getAttribute("aria-pressed") !== "true"; fold("copen", "clist", on); if (on) { fold("live", "asks", false); fold("bopen", "blist", false); fold("sopen", "slist", false); if (innerWidth < 960 && $("dopen").getAttribute("aria-pressed") === "true") fold("dopen", "dlist", false); } });
-  // Reading (world-engine/director/director.mjs's cards in live.json's world notes; the text from api/book-text, a block at a
+  // Reading (engine/director/director.mjs's cards in live.json's world notes; the text from api/book-text, a block at a
   // time as the reader scrolls): every sentence as written; those of a card played are underlined (green where someone moved)
   // and tapped play it in this world, the camera free; Continue plays on to the next move and stops there.
   const volume = new URLSearchParams(location.search).get("volume") ?? "active";
@@ -294,7 +294,7 @@
     for (const portrait of album?.portraits ?? []) if (!faceOf.has(portrait.entityId)) faceOf.set(portrait.entityId, albumAsset(portrait.id));
   })();
   const portraitsMessage = () => ({ type: "portraits", portraits: Object.fromEntries(faceOf) });
-  // The story sky (play/sky.json, world-engine/digest/sky.mjs): each unit's hour, weather and lying snow, for the world.
+  // The story sky (play/sky.json, engine/casts/sky.mjs): each unit's hour, weather and lying snow, for the world.
   let sky = null;
   const skyLoaded = fetch(`sky.json${location.search}`, { cache: "no-store" }).then((r) => (r.ok ? r.json() : null)).catch(() => null).then((value) => { sky = value; return value; });
   const skyMessage = () => ({ type: "sky", units: sky?.units ?? null });
@@ -973,7 +973,7 @@
     setTimeout(() => { if (next === frame && !ready) drop(frame); }, 30000);
     document.body.append(next);
   };
-  // Terrain spawning (world-engine/terrain/terrain-spawn.mjs) in step mode waits for the user after each proposal: Next step lets it
+  // Terrain spawning (engine/terrain/terrain-spawn.mjs) in step mode waits for the user after each proposal: Next step lets it
   // keep that one and go on to the next; Run on lets it run without waiting (pressed again, it waits after each again).
   const step = async (mode) => {
     const reply = await fetch(`terrain/step${query}`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ mode }) }).then((r) => (r.ok ? r.json() : null)).catch(() => null);
