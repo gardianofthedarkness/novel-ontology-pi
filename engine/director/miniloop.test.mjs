@@ -59,3 +59,18 @@ test("a card's picture goes to Jev with the verdict and its line, and the prompt
   await reviewItems([item], { ...stores, decide, concurrency: 1 });
   assert.ok(sent.every(entry => entry.request === undefined));
 });
+
+test("a unit's law breaks become the review's items, with the same ids as the end of a run's; who says a line is not asked", async () => {
+  const { UNIT_LAWS } = await import('./miniloop.mjs');
+  assert.ok(['L1', 'L2', 'L5', 'L6', 'L9', 'L10', 'L13'].every(law => UNIT_LAWS.has(law)));
+  assert.ok(!KINDS.has('who-speaks'));
+  const ledger = [
+    { id: 'e1', state: 'held', kind: 'held', law: 'L2', subject: 'char_a', value: { what: 'scene_000004 & scene_000009 \u00b7 char_a', why: 'two places at 0910' } },
+    { id: 'e2', state: 'held', kind: 'held', law: 'L5', subject: 'char_b', value: { what: 'scene_000009 \u00b7 char_b', why: '1200 m in 2 min' } },
+  ];
+  const items = heldItems({ ledger }), byKind = Object.fromEntries(items.map(item => [item.kind, item]));
+  assert.deepEqual(Object.keys(byKind).sort(), ['travel', 'two-places']);
+  assert.deepEqual(byKind['two-places'].scenes, ['scene_000004', 'scene_000009']);
+  // The same break found again at the end of the run is the same item (its id), so the review skips it once settled.
+  assert.equal(heldItems({ ledger: [{ ...ledger[0], id: 'other' }] })[0].id, byKind['two-places'].id);
+});

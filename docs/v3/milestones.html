@@ -94,7 +94,7 @@ director's track, the world and ontology track) and v3's phases (the user, 2026-
 <span class="st aside">Set aside</span>
 </div>
 
-<div class="toc"><ul><li><a href="#timeline">1. The whole story</a></li><li><a href="#v3">2. v3</a></li><li><a href="#v3-phases">2.1 The phases</a></li><li><a href="#console-versions">2.2 Novel Console, version by version</a></li><li><a href="#v3-commits">2.3 The commits of v3, from v2</a></li><li><a href="#figures-actor">2.4 Figures and the actor cast: F1–F9</a></li><li><a href="#v2">3. v2</a></li><li><a href="#map-milestones">3.1 The map and the world: M0–M18, W15–W16</a></li><li><a href="#director-milestones">3.2 Track A: the director, to the next whole-volume run</a></li><li><a href="#director-decisions">3.3 Track A: the director&#x27;s decisions, milestone by milestone</a></li><li><a href="#track-b">3.4 Track B: the world and the ontology as one loop</a></li><li><a href="#v1">4. v1</a></li><li><a href="#v1-roadmap">4.1 Roadmap and decision log</a></li></ul></div>
+<div class="toc"><ul><li><a href="#timeline">1. The whole story</a></li><li><a href="#v3">2. v3</a></li><li><a href="#v3-phases">2.1 The phases</a></li><li><a href="#console-versions">2.2 Novel Console, version by version</a></li><li><a href="#v3-commits">2.3 The commits of v3, from v2</a></li><li><a href="#figures-actor">2.4 Figures and the actor cast: F1–F9</a></li><li><a href="#place-tree-milestones">2.5 The place tree by the agent: T1–T4</a></li><li><a href="#v2">3. v2</a></li><li><a href="#map-milestones">3.1 The map and the world: M0–M18, W15–W16</a></li><li><a href="#director-milestones">3.2 Track A: the director, to the next whole-volume run</a></li><li><a href="#director-decisions">3.3 Track A: the director&#x27;s decisions, milestone by milestone</a></li><li><a href="#track-b">3.4 Track B: the world and the ontology as one loop</a></li><li><a href="#v1">4. v1</a></li><li><a href="#v1-roadmap">4.1 Roadmap and decision log</a></li></ul></div>
 <h1 id="timeline">1. The whole story</h1>
 <table>
 <thead>
@@ -361,6 +361,18 @@ of the action animation system. We need actionable figures to be able to check."
 <tr><td>F7</td><td>perception lines in the reading: who perceives what, by sight or hearing, at which bearing (a pre-film cast)</td><td>volume 1: the lines found against a hand-labelled sample</td><td><span class="st plan">Planned</span></td></tr>
 <tr><td>F8</td><td>the check against the text: each perception line checked against the view as played; a failing one a conflict at the card, asked in the miniloop with the first-person still; what it settles an observation for the smoother</td><td>volume 1: checks passed, failed, settled; the end smoothing's revisions against W17's</td><td><span class="st plan">Planned</span></td></tr>
 <tr><td>F9</td><td>the miniloop's review seeing through the eyes of those it asks about, beside the camera's still</td><td>a fourth run against W17's three (the director, the miniloop, the miniloop with the camera's still)</td><td><span class="st plan">Planned</span></td></tr>
+</tbody>
+</table>
+<h2 id="place-tree-milestones">2.5 The place tree by the agent: T1–T4</h2>
+<p>Designed 2026-11-12 (design <a href="design.html#place-tree-agent">§ place tree by the agent</a>; the user: "we need agent to help build
+space trees with evidence instead of only reading", then "Let's do that and test it out").</p>
+<table>
+<thead><tr><th>Milestone</th><th>What</th><th>Proof</th><th>Status</th></tr></thead>
+<tbody>
+<tr><td>T1</td><td>the place commands: look (tree, place, unit, units, moves), decide (setting, mention, drop, hold, set, same), check and apply, each claim checked against the text</td><td>a fabricated or unrelated line refused; apply rewrites the world script from the reading's kept copy</td><td><span class="st done">Built</span> (<code>engine/places/place-tree.mjs</code>; for Pi as <code>novel places</code>, in the guard and the novel-volume skill)</td></tr>
+<tr><td>T2</td><td>an agent builds volume 1's place tree (the original series) with the commands: Claude on a copy (library 17p) and Pi from the same workflow message (<code>tools/pi-review/place-pass.mjs</code>, library 17q), compared</td><td>Academy City the one city set; London, Kyoto, Vatican, Turin, Compiègne mentions or dropped; the dorm and Komoe's room held in Academy City; unproved moves none or each shown</td><td><span class="st now">In progress</span></td></tr>
+<tr><td>T3</td><td>terrain and starts rebuilt on the decided tree</td><td>cities built against W17's six; cross-city journeys against W17's 26</td><td><span class="st plan">Planned</span></td></tr>
+<tr><td>T4</td><td>the step in the volume runner and the console (the chat's agent, as Arrange and the Review)</td><td>a book read in the console gets its place tree from the agent before terrain</td><td><span class="st plan">Planned</span></td></tr>
 </tbody>
 </table>
 <h1 id="v2">3. v2</h1>

@@ -29,7 +29,7 @@ const { withSystem2 } = await import('./system2.mjs');
 const { writeWorldLog } = await import('../log/write-log.mjs');
 const R = await import('../review/review.mjs'), JR = await import('../review/jev-review.mjs'), C6 = await import('../review/canon.mjs'), SM = await import('../smoother/smoother.mjs'), OC = await import('../smoother/occupation.mjs');
 const SKY = await import('../casts/sky.mjs');
-const MLM = await import('./miniloop.mjs'), WLOG = await import('../log/world-log.mjs');
+const MLM = await import('./miniloop.mjs'), WLOG = await import('../log/world-log.mjs'), CR = await import('../laws/check-run.mjs');
 const OM = await import('./on-the-move.mjs'), RD = await import('../world/roads.mjs');
 const RM = await import('../casts/rooms.mjs');
 const TR = await import('../casts/transport.mjs');
@@ -251,6 +251,7 @@ export async function direct(novelDir, { reading, readingPath = null, prefilm = 
   const ML = miniloop ? await MLM.createMiniloop({ novelDir, readingPath: playedFrom, reading,
     decide: jev.modelId === 'stand-in-director' ? JR.standIn(reading.roles ?? {}) : reviewer?.decide ?? ((state, questions, options) => jev.decide(state, questions, options)),
     work: jev.modelId === 'stand-in-director' ? JR.standInWork : reviewer?.work ?? workModel, name: id => names.get(id) ?? id, camera: miniloop === 'camera', log }) : null;
+  const mlBreaks = new Set();
   if (ML) { record.miniloop = ML.record; log(`miniloop: conflicts reviewed at the card${ML.camera ? ' with its camera\'s picture' : ''}, smoothed at the unit's end`); }
   let calls = 0;
   /**
@@ -2255,6 +2256,30 @@ export async function direct(novelDir, { reading, readingPath = null, prefilm = 
             if (sceneRecord.departures.some(entry => entry.ran)) { scene.events.push(event); run.events.push({ at: { ...positions } }); await grow(scene, run); }
           }
         }
+        // The miniloop at the unit's end (miniloop.mjs): the laws the whole run is checked by, on the line as played so far,
+        // for this unit; each break asked at once. Someone answered not there (two places at once, a journey too fast) leaves
+        // the unit's end, so no unit after carries them on from here; the unit is then smoothed.
+        if (ML) {
+          try {
+            const pageNow = { ...withLine(page), director: payload() }, played = CR.playedLine({ record: { scenes: record.scenes }, page: pageNow, reading });
+            const lawsNow = LW.checkAll({ played, strands: segStrands, script: seg.script, speakers: CR.speakersOf(reading), abilities: abilitySheet ?? { version: 1, people: {} } });
+            const here = what => String(what).split(' · ')[0].split(' & ').includes(scene.id);
+            const fresh = lawsNow.filter(law => MLM.UNIT_LAWS.has(law.law)).flatMap(law => law.violations.filter(broken => here(broken.what) && !mlBreaks.has(`${law.law}|${broken.what}`)).map(broken => ({ state: 'held', kind: 'held', law: law.law, subject: broken.who ?? null, value: { what: broken.what, why: broken.why } })));
+            for (const entry of fresh) mlBreaks.add(`${entry.law}|${entry.value.what}`);
+            if (fresh.length) {
+              unitConflicts += fresh.length;
+              const settled = await ML.settle([], { pins, script, ledger: fresh }), dropped = [];
+              for (const { item, verdict } of settled) {
+                const who = item.subjects?.[0];
+                const gone = item.kind === 'two-places' && verdict !== 'both' ? item.scenes?.[verdict === 'not in the first' ? 0 : 1] : item.kind === 'travel' && verdict === 'not in the later scene' ? item.scene : null;
+                if (gone === scene.id && who && positions[who]) { delete positions[who]; dropped.push(who); }
+              }
+              unitSettled += settled.length;
+              sceneRecord.miniloopLaws = { broken: fresh.length, settled: settled.length, ...(dropped.length ? { dropped } : {}) };
+              if (dropped.length) log(`${scene.id}: the miniloop drops ${dropped.map(who => names.get(who) ?? who).join(', ')} from the unit's end (answered not there)`);
+            }
+          } catch (error) { sceneRecord.miniloopLaws = { error: String(error.message ?? error) }; log(`${scene.id}: miniloop law check failed: ${error.message ?? error}`); }
+        }
         // The miniloop's smoothing (miniloop.mjs): a unit where a conflict was has its strand so far smoothed now, with the
         // answers just pinned; whoever the least-action history puts elsewhere at the unit's end (more than 2 m, at most the
         // revision limit) goes on from there into the next unit, instead of on the next pass.
@@ -2330,6 +2355,12 @@ export async function direct(novelDir, { reading, readingPath = null, prefilm = 
       } catch (error) { record.review.canon = { error: String(error.message ?? error) }; }
       log(`canon: ${JSON.stringify(record.review.canon)}`);
       // What the laws held goes to the main agent (W5): one batch per scene by reach, sent to its console when one is given.
+      // What the miniloop settled, into the review's pool as applied (the same items, by id), so it is not asked again.
+      if (ML?.answered.length) {
+        const { writePool } = await load('dist/src/cli/commands/extract/worldCommands.js'), now = new Date().toISOString();
+        await writePool(novelDir, ML.answered.map(({ item, verdict, by, confidence }) => ({ ...item, status: 'applied', at: now, answer: { verdict, by: `miniloop (${by})`, confidence } })));
+        await appendFile(join(novelDir, 'stage', 'world', 'answers.jsonl'), ML.answered.map(({ item, verdict, by, confidence, line }) => JSON.stringify({ batch: null, item: item.id, kind: item.kind, verdict, reason: line ? `the line that shows it: ${line}` : 'the miniloop', by: `miniloop (${by})`, confidence, at: now })).join('\n') + '\n', { mode: 0o600 });
+      }
       const held = await R.holdForReview(novelDir, { run: id, name: who => names.get(who) ?? who, skip: speakers ? [] : ['who-speaks', 'audit', 'speaker'] }).catch(error => ({ error: String(error.message ?? error) }));
       record.review.held = { held: held.held, asked: held.asked, left: held.left, batches: held.batches?.length ?? 0, ...(held.error ? { error: held.error } : {}) };
       // The review by Jev first (docs/v3/design.html#jev-review §16): what its policy lets stand is answered as Pi's answers are;

@@ -12,6 +12,14 @@
 //   the least-action history puts elsewhere at the unit's end goes on from there into the next unit.
 // With `camera` (the third W17 run, the user, 2026-11-12: "Test the picture in the third run"), each card's conflicts are
 // asked with the director's camera on that card as played (its people labelled by name) beside the lines.
+// Wider (2026-11-12, W17: in volume 1 of the original series no card held L6, L9 or L10 at play, so the first miniloop
+// never fired; what reaches the review is the whole-run law check and who says unsure lines):
+// - who says a line is not the miniloop's: it never holds the play up (the user, 2026-11-12: "Speaker assignment should be
+//   none blocking. Only other conflicts should be checked"); unsure speakers go to the review at the end, as before;
+// - when a unit ends, the laws the end of a run checks are checked on the unit as played (continuity, two places,
+//   travel, talk, actors, reach, blasts); each break is asked at once, someone answered not there leaves the unit's end,
+//   and the unit is smoothed. Every item the miniloop settles goes into the review's pool as applied, so the review at
+//   the end does not ask it again.
 // An answer is applied only when it is sure (`ACCEPT`): Jev at least 0.7, or Jev and the work model agreeing. An unsure
 // one leaves the item held, playing its lawful default, for the review at the run's end as before: a wrong judgement
 // carried forward is what this loop is for avoiding.
@@ -20,7 +28,9 @@ import { reviewItems, storesOf } from '../review/jev-review.mjs';
 
 /** The laws the miniloop settles at the card, and the review's kinds they make. */
 export const LAWS = new Set(['L6', 'L9', 'L10']);
-export const KINDS = new Set(['actor', 'speaker', 'talk', 'reach']);
+export const KINDS = new Set(['actor', 'speaker', 'talk', 'reach', 'continuity', 'two-places', 'travel', 'blast']);
+/** The laws the whole-run check finds that the miniloop asks at a unit's end (as review.mjs heldItems reads them). */
+export const UNIT_LAWS = new Set(['L1', 'L2', 'L5', 'L6', 'L9', 'L10', 'L13']);
 /** How sure an answer must be to change the world at once. */
 export const ACCEPT = { jev: process.env.NOVEL_MINILOOP_ACCEPT ? Number(process.env.NOVEL_MINILOOP_ACCEPT) : 0.7 };
 // (NOVEL_MINILOOP_ACCEPT: another threshold, for a rehearsal that must take every answer to try each way it applies.)
@@ -51,12 +61,15 @@ export async function createMiniloop({ novelDir, readingPath, reading, decide, w
   stores.cards = new Map((reading.cards ?? []).map(card => [card.id, card]));
   stores.scenes = new Map((reading.scenes ?? []).map(scene => [scene.id, scene]));
   const record = { asked: 0, applied: 0, left: 0, turnedBack: 0, byKind: {}, answers: [], ...(camera ? { camera: { pictures: 0, failed: 0 } } : {}) };
+  /** The items settled, with their answers: written to the review's pool as applied at the run's end. */
+  const answered = [];
   let n = 0;
   const next = () => `ml_${String(++n).padStart(5, '0')}`;
 
   // `seen`: the card's picture, { images: { camera: <png base64> }, picture: what it shows }, asked with every item of it.
-  async function settle(conflicts, { pins, script, seen = null }) {
-    const ledger = ledgerOf(conflicts.filter(conflict => LAWS.has(conflict.law)), next);
+  // `ledger`: entries made as the review's ledger makes them (a unit's law breaks), asked as they are.
+  async function settle(conflicts, { pins, script, seen = null, ledger: more = [] }) {
+    const ledger = [...ledgerOf(conflicts.filter(conflict => LAWS.has(conflict.law)), next), ...more.map(entry => ({ ...entry, id: entry.id ?? next() }))];
     for (const entry of ledger) stores.ledger.set(entry.id, entry);
     const items = heldItems({ ledger, name }).filter(item => KINDS.has(item.kind)).map(item => (seen?.images ? { ...item, images: seen.images, picture: seen.picture } : item));
     if (!items.length) return [];
@@ -75,12 +88,13 @@ export async function createMiniloop({ novelDir, readingPath, reading, decide, w
       if (failed.size) { record.turnedBack++; record.left++; record.answers.push({ ...kept, turnedBack: failed.get(item.id) }); continue; }
       row.applied++; record.applied++;
       record.answers.push({ ...kept, verdict: ok.verdict, by: ok.by, applied: true });
+      answered.push({ item, verdict: ok.verdict, by: ok.by, confidence: ok.confidence, line: answer.line ?? null });
       out.push({ item, ...ok });
     }
     if (out.length) log(`miniloop: ${out.map(entry => `${entry.item.kind} ${entry.item.names?.join('/') ?? ''} → ${entry.verdict} (${entry.by})`).join('; ')}`);
     return out;
   }
-  return { settle, record, camera };
+  return { settle, record, camera, answered };
 }
 
 /**

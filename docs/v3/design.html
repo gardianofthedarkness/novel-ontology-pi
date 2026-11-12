@@ -1439,6 +1439,33 @@ frame moves along a path.</p>
 2. One entity at two scales: when the battle destroys the planet, do the units on its surface close at once, or only
    when the text shows it from the ground?
 3. Where v3 starts: the unit finder on volumes 1 and 2 first, read against the text before anything is built on it?</p>
+<h3 id="place-tree-agent">The place tree by the agent, with evidence</h3>
+<p><span class="st designed">Designed</span>, being built (the user, 2026-11-12, after W17's world had six cities and 26 journeys
+between them in a book set wholly in Academy City: "we need agent to help build space trees with evidence instead of only
+reading"). What W17 showed: the reading made a city of every place the text names (London from "I am from London", Kyoto
+from inside the word for Tokyo, a "Turin Shroud City" from the relic); an unnamed place with nothing to hold it (Kamijou's
+dorm) went to any of the pools, each as likely (<code>src/reading/pools.ts</code>), and the rules that carry a unit's place on
+spread one such pick over 51 units; the terrain built every city it was given; the look pass styles places but never asks
+whether they belong.</p>
+<ul>
+<li><strong>After the reading and before terrain</strong>, the agent open in the chat (Claude Code or Pi, as Arrange and the Review)
+  goes through the reading's place tree and its units' places, chapter by chapter, with the place commands
+  (<code>novel place tree | place | unit | units | moves</code> to look; <code>setting | mention | drop | hold | set | same</code> to decide;
+  <code>check</code>; <code>apply</code>).</li>
+<li><strong>Setting or mention</strong>: a city, district or building stays in the map only as a <em>setting</em>, a place some unit happens
+  in, with a line that shows it; a place the text only names is a <em>mention</em> (it can be spoken of, it gets no terrain and
+  no unit is set there); a false match is dropped.</li>
+<li><strong>Every unit's place has a reason</strong>: a line of the unit (or just before it) that puts it there, or "the same place as
+  unit N" with why; an unnamed place has a holder with a line. A person changing setting between units needs a line that
+  moves them, or the move is listed as unproved.</li>
+<li><strong>Code checks every claim</strong>, as the review's gate does: the line exists, it is in or just before the unit, and it names
+  the place (or one of its names); a claim that fails is refused with why, and the agent tries again.</li>
+<li><strong>Applied to the world script</strong> (<code>stage/world/script.json</code>, from the reading's own kept as
+  <code>script.reading.json</code>), so strands, starts, terrain, the director and the review all read the decided tree; the
+  decisions and their lines are kept in <code>stage/world/place-tree.json</code>. The terrain then builds only settings.</li>
+<li>This is how v3's render units get an owner (<a href="#render-units">§6.2</a>): the agent proposes the settings, book by book, with
+  the lines that show them.</li>
+</ul>
 <h2 id="strands">6.3 Strands: groups in envelopes</h2>
 <p><span id="strands-m14"></span><span id="forks-m15"></span></p>
 <blockquote>
