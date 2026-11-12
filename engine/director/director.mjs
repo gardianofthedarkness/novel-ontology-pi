@@ -95,7 +95,7 @@ export async function direct(novelDir, { reading, readingPath = null, prefilm = 
   // plays on, each retaken unit with the reviewer's note added to every question the director asks about it.
   let reviewNote = null;
   if (review) { const inner = jev; jev = Object.assign(Object.create(inner), { decide: (state, questions, options) => inner.decide(!reviewNote ? state : typeof state === 'string' ? `${state}\n\nThe reviewer's note on the last take of this unit (this is a retake; follow it where the lines allow): ${reviewNote}` : { ...state, reviewer_note: reviewNote }, questions, options) }); }
-  const RV = review ? { every: Math.max(1, Number(review.every) || RVM.EVERY), reviewer: review.reviewer ?? RVM.reviewerOf(review.agent ?? 'claude-code'), notes: new Map(), retaken: new Set(), reviewedThrough: -1, blocks: [], block: 0 } : null;
+  const RV = review ? { every: Math.max(1, Number(review.every) || RVM.EVERY), reviewer: review.reviewer ?? RVM.reviewerOf(review.agent ?? 'pi'), notes: new Map(), retaken: new Set(), reviewedThrough: -1, blocks: [], block: 0 } : null;
   // A card's line with its kind (spoken, action, environment, thought, fact, narration) and, spoken, who says it: the
   // reader colours sentences by kind, and the page puts a spoken line in a bubble over its speaker.
   // Who says a line is the reading's (EM², a Jev question during extraction): its answer and how sure; below its accept
@@ -2476,7 +2476,7 @@ if (process.argv[1] === fileURLToPath(import.meta.url)) {
   const U = await load('dist/src/ground/workspace/universe.js'), library = novelDir ? U.libraryOf(resolve(novelDir)) : null;
   // A library's book reads its own reading (vol-<n>/reading/data.json) when none is named.
   if (!values.reading && library?.book && existsSync(U.libraryPaths(library.root).book(library.book).reading.data)) values.reading = U.libraryPaths(library.root).book(library.book).reading.data;
-  if (!novelDir || !values.reading || !values.from || !values.to) { console.error('usage: node engine/director/director.mjs <novel-dir> --reading <data.json> --from <scene> --to <scene> [--budget 60] [--stand-in] [--live] [--from-last] [--discard-edits|--keep-edits] [--no-snapshots] [--review-every N --reviewer claude-code|stand-in]'); process.exit(2); }
+  if (!novelDir || !values.reading || !values.from || !values.to) { console.error('usage: node engine/director/director.mjs <novel-dir> --reading <data.json> --from <scene> --to <scene> [--budget 60] [--stand-in] [--live] [--from-last] [--discard-edits|--keep-edits] [--no-snapshots] [--review-every N --reviewer pi|claude-code|stand-in]'); process.exit(2); }
   let before = null;
   if (library?.book && !values['no-snapshots']) {
     const book = library.book;
@@ -2529,7 +2529,7 @@ if (process.argv[1] === fileURLToPath(import.meta.url)) {
     if (prefilm) console.error(`pre-film casts' notes from the reading step: ${Object.keys(prefilm.units ?? {}).length} units${prefilm.standIn ? ' (made by a stand-in)' : ''}`);
     // The request rides along (the miniloop's camera picture); the review at the end sends none.
     const reviewer = reviewJev ? { decide: (state, questions, request) => reviewJev.decide(state, questions, request), work: workModel, readingPath: resolve(values.reading) } : null;
-    const { record } = await direct(resolve(novelDir), { reading, readingPath: values.reading, prefilm, agent, reviewer, digest: !values['no-digest'], speakers: !values['no-speakers'], miniloop: values['miniloop-camera'] ? 'camera' : !!values.miniloop, review: values['review-every'] ? { every: Number(values['review-every']), agent: values.reviewer ?? 'claude-code' } : null, from: values.from, to: values.to, jev, workModel, budget: values.budget ? Number(values.budget) : Infinity, live, pace: values.pace ? Number(values.pace) : values.live ? 6 : 0 });
+    const { record } = await direct(resolve(novelDir), { reading, readingPath: values.reading, prefilm, agent, reviewer, digest: !values['no-digest'], speakers: !values['no-speakers'], miniloop: values['miniloop-camera'] ? 'camera' : !!values.miniloop, review: values['review-every'] ? { every: Number(values['review-every']), agent: values.reviewer ?? 'pi' } : null, from: values.from, to: values.to, jev, workModel, budget: values.budget ? Number(values.budget) : Infinity, live, pace: values.pace ? Number(values.pace) : values.live ? 6 : 0 });
     if (library?.book && !values['no-snapshots']) {
       const run = `d${String(record.startedAt).replace(/\D/g, '').slice(0, 14)}`, mode = values['stand-in'] ? 'a stand-in run' : values['from-last'] ? 'a second pass' : 'a run';
       const after = await U.takeSnapshot(library.root, { book: library.book, kind: 'after', run, parent: before?.id ?? null, why: `${mode} of ${library.book}, ${values.from} to ${values.to}` });

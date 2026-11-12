@@ -371,7 +371,7 @@ try {
   const settingsManager = SettingsManager.inMemory({ compaction: { enabled: true, reserveTokens: 32768, keepRecentTokens: 12000 }, retry: { enabled: true, maxRetries: 1 }, defaultTools: ['bash'] });
   const agentDir = `${jobRoot}/agent`;
   await mkdir(agentDir, { recursive: true, mode: 0o700 });
-  await writeFile(`${agentDir}/models.json`, JSON.stringify({ providers: { 'novel-deepseek': { baseUrl: 'https://api.deepseek.com/v1', api: 'openai-completions', models: [{ id: 'deepseek-flash', name: 'DeepSeek Flash / Pi', reasoning: false, input: ['text'], contextWindow: 128000, maxTokens: 32768 }] } } }), { mode: 0o600 });
+  await writeFile(`${agentDir}/models.json`, JSON.stringify({ providers: { 'novel-deepseek': { baseUrl: 'https://api.deepseek.com/v1', api: 'openai-completions', models: [{ id: 'deepseek-flash', name: 'DeepSeek Flash / Pi', reasoning: false, input: ['text', 'image'], contextWindow: 128000, maxTokens: 32768 }] } } }), { mode: 0o600 });
   runtime = await ModelRuntime.create({ authPath: `${agentDir}/auth.json`, modelsPath: `${agentDir}/models.json`, modelsStorePath: `${agentDir}/catalog.json`, allowModelNetwork: false });
   await runtime.setRuntimeApiKey('novel-deepseek', apiKey);
   const assignedSkills = [skill, portraitSkill, stageSkill, ...(libraryAccess ? [librarySkill] : [])];

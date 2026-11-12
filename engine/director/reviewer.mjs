@@ -7,18 +7,22 @@
 // One round per block: the retaken units are not reviewed again.
 import { spawn } from 'node:child_process';
 import { mkdir, writeFile } from 'node:fs/promises';
-import { join } from 'node:path';
+import { dirname, join, resolve } from 'node:path';
+import { fileURLToPath } from 'node:url';
+
+const repository = resolve(dirname(fileURLToPath(import.meta.url)), '..', '..');
 
 /** How many units a review covers when none is given. */
 export const EVERY = 5;
 
 /** The fixed prompt: the units of the block, each with its picture and what it should show; the fixed reply. */
-export function reviewPrompt(units) {
+export function reviewPrompt(units, { attached = false } = {}) {
+  let n = 0;
   return [
-    'You are the reviewer of a film being directed from a novel, one unit (a short stretch of the story) at a time, in a 3D world. The director has just played the units below. For each, look at its picture (read the file): the director\'s camera at the end of the unit, every person labelled by name where the world has them.',
+    `You are the reviewer of a film being directed from a novel, one unit (a short stretch of the story) at a time, in a 3D world. The director has just played the units below. For each, look at its picture (${attached ? 'the pictures are attached in the order of the units that have one' : 'read the file'}): the director's camera at the end of the unit, every person labelled by name where the world has them.`,
     'Judge each unit only on what the picture and its notes show against what the unit should show: the people the unit has are there and visible, in the right kind of place (a room, a street, a rooftop), standing where the action needs them (close enough to talk, to fight, to hand something over), nobody inside a wall or floating, nobody there who should not be, the camera framing the action rather than empty ground. Retake a unit only when something there is clearly wrong and the director could do better; otherwise keep it.',
     'For a retake, the note is to the director: what is wrong in the picture and what to do instead, in one or two plain sentences (who should stand where, who should go to whom, what the camera should hold). Never ask for anything the unit\'s lines do not say.',
-    ...units.map(unit => [`Unit ${unit.unit}`, `- picture: ${unit.still ?? '(no picture: judge from the notes)'}`, `- place: ${unit.place ?? 'unknown'}`, `- people: ${unit.people.join(', ') || 'none'}`, `- cards played: ${unit.cards}; moves: ${unit.moves}; held by the laws: ${unit.held.join('; ') || 'none'}`, ...(unit.lines?.length ? ['- its first lines:', ...unit.lines.map(line => `  ${line}`)] : [])].join('\n')),
+    ...units.map(unit => [`Unit ${unit.unit}`, `- picture: ${unit.still ? (attached ? `attached picture ${++n}` : unit.still) : '(no picture: judge from the notes)'}`, `- place: ${unit.place ?? 'unknown'}`, `- people: ${unit.people.join(', ') || 'none'}`, `- cards played: ${unit.cards}; moves: ${unit.moves}; held by the laws: ${unit.held.join('; ') || 'none'}`, ...(unit.lines?.length ? ['- its first lines:', ...unit.lines.map(line => `  ${line}`)] : [])].join('\n')),
     'Reply with exactly one JSON block and nothing after it:\n```json\n[{"unit": "<unit id>", "verdict": "keep" | "retake", "note": "<to the director, for a retake; empty for keep>"}]\n```\nOne entry for every unit above, in the same order.',
   ].join('\n\n');
 }
@@ -59,6 +63,33 @@ export function claudeReviewer({ command = process.env.NOVEL_REVIEW_AGENT_COMMAN
   };
 }
 
+/** Pi on the work model (DeepSeek reads pictures): the stills attached to the prompt (tools/pi-review/review-agent.mjs), once more in the same session when out of format. */
+export function piReviewer({ script = process.env.NOVEL_REVIEW_PI_RUNNER || join(repository, 'tools', 'pi-review', 'review-agent.mjs') } = {}) {
+  const call = (text, folder, images, session) => new Promise(done => {
+    const child = spawn(process.execPath, [script, folder, ...(session ? [session] : [])], { cwd: folder, env: { ...process.env, NOVEL_REVIEW_MESSAGE: text, NOVEL_REVIEW_IMAGES: JSON.stringify(images) }, stdio: ['ignore', 'pipe', 'pipe'] });
+    let out = '', err = '';
+    child.stdout.on('data', chunk => { out += chunk; }); child.stderr.on('data', chunk => { err += chunk; });
+    child.on('error', error => done({ error: String(error.message ?? error) }));
+    child.on('close', () => {
+      const lines = out.split('\n').flatMap(line => { try { return [JSON.parse(line)]; } catch { return []; } });
+      const last = lines.findLast(line => 'result' in line || 'error' in line) ?? { error: err.slice(-400) || 'Pi ended without a reply' };
+      done({ reply: last.result ?? '', error: last.error ?? null, session: last.sessionFile ?? lines.find(line => line.session)?.session ?? session, seconds: last.seconds ?? null, images: last.images ?? 0 });
+    });
+  });
+  return {
+    id: 'pi',
+    async review(units, folder) {
+      const images = units.map(unit => unit.still).filter(Boolean);
+      const first = await call(reviewPrompt(units, { attached: true }), folder, images, null);
+      if (first.error) return { error: first.error, rounds: [first] };
+      let verdicts = verdictsOf(first.reply, units);
+      const rounds = [first];
+      if (!verdicts && first.session) { const again = await call('Your reply was not in the fixed format. Reply again with only the JSON block, one entry per unit.', folder, [], first.session); rounds.push(again); verdicts = verdictsOf(again.reply, units); }
+      return verdicts ? { verdicts, rounds } : { error: 'the reviewer\'s reply was not in the fixed format', rounds };
+    },
+  };
+}
+
 /** A stand-in for trying the loop (no model): a unit is retaken when the laws held something in it, with that as the note. */
 export function standInReviewer() {
   return { id: 'stand-in', async review(units) { return { verdicts: units.map(unit => (unit.held.length ? { unit: unit.unit, verdict: 'retake', note: `stand-in: the laws held ${unit.held[0]}; place the people so it holds` } : { unit: unit.unit, verdict: 'keep', note: '' })), rounds: [] }; } };
@@ -80,9 +111,10 @@ export async function reviewBlock({ reviewer, units, folder, block, log = () => 
   return { retakes, file };
 }
 
-/** The reviewer an option names: 'claude-code' (default) or 'stand-in'. */
+/** The reviewer an option names: 'pi' (the work model, which reads pictures), 'claude-code' or 'stand-in'. */
 export function reviewerOf(id = 'claude-code', options = {}) {
   if (id === 'stand-in') return standInReviewer();
+  if (id === 'pi') return piReviewer(options);
   if (id === 'claude-code') return claudeReviewer(options);
-  throw new Error(`no reviewer ${id}: claude-code or stand-in`);
+  throw new Error(`no reviewer ${id}: pi, claude-code or stand-in`);
 }

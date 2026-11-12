@@ -53,7 +53,7 @@ const execute = async (command, ignored, options) => {
 try {
   const agentDir = join(tmpdir(), `novel-console-pi-${process.pid}`);
   await mkdir(agentDir, { recursive: true, mode: 0o700 }); await mkdir(sessionDir, { recursive: true, mode: 0o700 });
-  await writeFile(join(agentDir, 'models.json'), JSON.stringify({ providers: { 'novel-deepseek': { baseUrl: 'https://api.deepseek.com/v1', api: 'openai-completions', models: [{ id: modelId, name: `${modelId} / Pi`, reasoning: false, input: ['text'], contextWindow: 128000, maxTokens: 32768 }] } } }), { mode: 0o600 });
+  await writeFile(join(agentDir, 'models.json'), JSON.stringify({ providers: { 'novel-deepseek': { baseUrl: 'https://api.deepseek.com/v1', api: 'openai-completions', models: [{ id: modelId, name: `${modelId} / Pi`, reasoning: false, input: ['text', 'image'], contextWindow: 128000, maxTokens: 32768 }] } } }), { mode: 0o600 });
   const runtime = await ModelRuntime.create({ authPath: join(agentDir, 'auth.json'), modelsPath: join(agentDir, 'models.json'), modelsStorePath: join(agentDir, 'catalog.json'), allowModelNetwork: false });
   await runtime.setRuntimeApiKey('novel-deepseek', apiKey);
   const settingsManager = SettingsManager.inMemory({ compaction: { enabled: true, reserveTokens: 32768, keepRecentTokens: 12000 }, retry: { enabled: true, maxRetries: 1 }, defaultTools: ['bash'] });

@@ -1815,8 +1815,10 @@ setting each step's length, and the first-person views of the actor cast (<a hre
 <h3 id="reviewer-segment">The reviewer segment: a review every few units, a retake rewound</h3>
 <p>The user, 2026-11-12: "we come up with a magic number for example like 5 segments, that triggers one round of review
 from agent. It will look at each segments screenshot, and decide either to retake or not, if retake leave comments to
-director in what to improve." The retake rewinds in the run (the user's choice over block runs or a second pass), and the
-reviewer is Claude Code, which reads the pictures.</p>
+director in what to improve." The retake rewinds in the run (the user's choice over block runs or a second pass). The
+reviewer is Pi on the work model (the user, after the DeepSeek models were found to read pictures: "Yes let's do pi"), the
+block's stills attached to the prompt (<code>tools/pi-review/review-agent.mjs</code>, JPEGs 960 px wide); Claude Code can be
+chosen instead (<code>--reviewer claude-code</code>).</p>
 <ul>
 <li><b>Every N units</b> (<code>--review-every N</code>, 5 by default in the code), the director stops after the block's last
 unit. Each unit of the block has a <b>still</b>: the director's camera at the unit's end, framed on everyone in it,
@@ -1824,8 +1826,8 @@ labelled by name (<code>shots/&lt;unit&gt;-review.png</code>).</li>
 <li><b>The reviewer</b> (<code>engine/director/reviewer.mjs</code>) gets a fixed prompt: each unit's picture, its place, its
 people, its cards and moves, what the laws held, its first lines; and answers in a fixed JSON format, keep or retake for
 each unit, a note to the director for a retake ("who should stand where, who should go to whom, what the camera should
-hold"). Claude Code runs with only its Read tool on the review's own folder; a reply out of format is asked once more in
-the same session. Every block is kept in <code>stage/director/reviews/&lt;run&gt;/block-NNN.json</code>.</li>
+hold"). Pi gets no tools, only the pictures; Claude Code runs with only its Read tool on the review's own folder; a reply out of
+format is asked once more in the same session. Every block is kept in <code>stage/director/reviews/&lt;run&gt;/block-NNN.json</code>.</li>
 <li><b>A retake rewinds</b>: before each unit of a block the director takes a checkpoint of the world (each lot's standing
 cells, units and rubble, the things, the underground's damage, the strand layers, the moves and hits so far) and of
 itself (where each person stands and last stood, the ends of units and strands, the things carried, the record); a retake
