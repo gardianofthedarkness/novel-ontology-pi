@@ -94,7 +94,7 @@ director's track, the world and ontology track) and v3's phases (the user, 2026-
 <span class="st aside">Set aside</span>
 </div>
 
-<div class="toc"><ul><li><a href="#timeline">1. The whole story</a></li><li><a href="#v3">2. v3</a></li><li><a href="#v3-phases">2.1 The phases</a></li><li><a href="#console-versions">2.2 Novel Console, version by version</a></li><li><a href="#v3-commits">2.3 The commits of v3, from v2</a></li><li><a href="#figures-actor">2.4 Figures and the actor cast: F1–F9</a></li><li><a href="#place-tree-milestones">2.5 The place tree by the agent: T1–T4</a></li><li><a href="#v2">3. v2</a></li><li><a href="#map-milestones">3.1 The map and the world: M0–M18, W15–W16</a></li><li><a href="#director-milestones">3.2 Track A: the director, to the next whole-volume run</a></li><li><a href="#director-decisions">3.3 Track A: the director&#x27;s decisions, milestone by milestone</a></li><li><a href="#track-b">3.4 Track B: the world and the ontology as one loop</a></li><li><a href="#v1">4. v1</a></li><li><a href="#v1-roadmap">4.1 Roadmap and decision log</a></li></ul></div>
+<div class="toc"><ul><li><a href="#timeline">1. The whole story</a></li><li><a href="#v3">2. v3</a></li><li><a href="#v3-phases">2.1 The phases</a></li><li><a href="#console-versions">2.2 Novel Console, version by version</a></li><li><a href="#v3-commits">2.3 The commits of v3, from v2</a></li><li><a href="#figures-actor">2.4 Figures and the actor cast: F1–F9</a></li><li><a href="#place-tree-milestones">2.5 The place tree by the agent: T1–T4</a></li><li><a href="#reviewer-milestones">2.6 The reviewer segment: R1–R3</a></li><li><a href="#v2">3. v2</a></li><li><a href="#map-milestones">3.1 The map and the world: M0–M18, W15–W16</a></li><li><a href="#director-milestones">3.2 Track A: the director, to the next whole-volume run</a></li><li><a href="#director-decisions">3.3 Track A: the director&#x27;s decisions, milestone by milestone</a></li><li><a href="#track-b">3.4 Track B: the world and the ontology as one loop</a></li><li><a href="#v1">4. v1</a></li><li><a href="#v1-roadmap">4.1 Roadmap and decision log</a></li></ul></div>
 <h1 id="timeline">1. The whole story</h1>
 <table>
 <thead>
@@ -375,6 +375,19 @@ space trees with evidence instead of only reading", then "Let's do that and test
 <tr><td>T4</td><td>the step in the volume runner and the console (the chat's agent, as Arrange and the Review)</td><td>a book read in the console gets its place tree from the agent before terrain</td><td><span class="st now">Built in part</span> 2026-11-12 as the agent's workflows (design <a href="design.html#agent-workflows">§ agent workflows</a>): the runner's places and look steps drive the agent with a fixed prompt, format and check (<code>engine/workflows</code>); the place check now covers every level (unproved placements, <code>nowhere</code>, <code>same --through</code>). On library 17 (17r) the runner drove Pi through places in one round (778 s, 208 commands, 9 refused): the gyudon shop dropped, the dorm fight in the dorm, Komoe's room scenes in her room; 1 city, 0 journeys, 61 sites. Then the check went down to the room (the user: "On room level for example"): coarse placements (a unit placed wider than its own lines show) and the same place made twice (merge), or a run kept wide on purpose; the runner's second places round on 17r took 483 s and 150 commands: Pi merged the bridge the reading made four times, Kamijou's room made four times and the two dorms, and placed units at the room, the entrance and the bridge. Units at a room: Pi 146 (127 before), Claude's hand tree 89; at the city only: Pi 23, Claude 58. The console's world books have Run volume (seen, not pressed); the Claude Code driver is written, not run; a v3 reading cannot be run as a volume yet</td></tr>
 </tbody>
 </table>
+<h2 id="reviewer-milestones">2.6 The reviewer segment: R1–R3</h2>
+<p>The user, 2026-11-12: a review every few units ("a magic number for example like 5 segments"), each unit's screenshot,
+keep or retake with comments to the director; the retake rewound in the run; Claude Code reviews (design
+<a href="design.html#reviewer-segment">§ reviewer segment</a>).</p>
+<table>
+<thead><tr><th>Milestone</th><th>What</th><th>Proof</th><th>Status</th></tr></thead>
+<tbody>
+<tr><td>R1</td><td>checkpoint and restore of the world (engine, strand layers) and of the director; a still per unit; the review every N units; a retake rewound with the note in the director's questions</td><td>unpaid rehearsal on 17r units 1&ndash;30 with a stand-in reviewer: 5 blocks, 2 units retaken (10, 16), each rewound and played on; 23 units recorded, none twice; 99 tests</td><td><span class="st done">Built</span> 2026-11-12</td></tr>
+<tr><td>R2</td><td>Claude Code as the reviewer on a paid run of 17r's new terrain (Jev directing)</td><td>its verdicts and notes per block, the retakes' stills beside the first takes</td><td><span class="st plan">Waits</span> for Claude Code's login on this Mac</td></tr>
+<tr><td>R3</td><td>the magic number tuned; the review as a volume step in the console</td><td>retakes per block and what they fixed, against a run without review</td><td><span class="st plan">Planned</span></td></tr>
+</tbody>
+</table>
+
 <h1 id="v2">3. v2</h1>
 <p>v2 (2026-10-30 → 11-10, branch <code>v2</code>, legacy since 2026-11-10) had two stages: <strong>extraction</strong> reads the book into a world
 model; the <strong>world engine</strong> builds that world: terrain first, then where everyone stands, then how they move. Two tracks ran

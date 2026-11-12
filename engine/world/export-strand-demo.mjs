@@ -1742,7 +1742,29 @@ export async function strandDemo(novelDir, options) {
   // line's starts, handed on so the loop plays forward card by card on the same world (no export again, no replay): it adds
   // its cards to the chosen scenes, its moves to `moves` and its positions to `runs`, streams the world in with `reach`, and
   // calls `assemble` for the page as far as it has played.
-  if (options.engine) await options.engine({ roadInputs: { roads: landscapes.flatMap(entry => entry.roads ?? []), highways: Object.values(terrain?.highways ?? {}).filter(highway => highway.lines?.length) }, world, W, graphOf, cost, reach, solve, onFoot, portalsNear, DEEP, deepAt, beamCeiling, sampleWalk, T, kappa, lambda, runs, moves, chosen, assemble, snapshot, names: inputs.names, hits, hitSphere, wake, standThing, liftThing, enter: enterScene, layers });
+  // A retake (docs/v3/design.html#reviewer-segment; the user, 2026-11-12: a reviewer every few units, a retake "with comments
+  // to director"): the world as it stands before a unit, and back to it. What the units after it broke, stood, moved, hit
+  // and caved in is undone; lots streamed in since keep what they have (they were not there to be written before). Every
+  // walk window and field is dropped, since the world they were built on is gone.
+  const checkpoint = () => {
+    const kept = structuredClone({ under: world.underDamage, brokenAt });
+    return { standing: shared.standing.map(cells => cells?.slice?.() ?? cells), units: shared.units.map(cells => cells?.slice?.() ?? cells), rubble: shared.rubble.map(cells => cells?.slice?.() ?? cells),
+      things: new Map(shared.things), under: kept.under, brokenAt: kept.brokenAt, entities: entities.map(entity => entity.standing?.slice?.() ?? null),
+      moves: new Map(moves), hits: new Map(hits), hitThings: new Map(hitThings), struck: new Set(struck), notes: structuredClone(notes), layers: layers?.checkpoint() ?? null };
+  };
+  const restore = point => {
+    for (const key of ['standing', 'units', 'rubble']) point[key].forEach((cells, index) => { shared[key][index] = cells?.slice?.() ?? cells; });
+    shared.things.clear(); for (const [id, footprint] of point.things) shared.things.set(id, footprint);
+    const back = structuredClone({ under: point.under, brokenAt: point.brokenAt });
+    world.underDamage = back.under; brokenAt.clear(); for (const [key, at] of back.brokenAt) brokenAt.set(key, at);
+    entities.forEach((entity, n) => { if (point.entities[n]) entity.standing = point.entities[n].slice(); });
+    for (const [map, from] of [[moves, point.moves], [hits, point.hits], [hitThings, point.hitThings]]) { map.clear(); for (const [k, v] of from) map.set(k, v); }
+    struck.clear(); for (const id of point.struck) struck.add(id);
+    for (const key of Object.keys(notes)) delete notes[key]; Object.assign(notes, structuredClone(point.notes));
+    if (point.layers) layers.restore(point.layers);
+    windows.clear(); fields.clear(); spotCache.clear(); reachable.clear(); changed(null);
+  };
+  if (options.engine) await options.engine({ roadInputs: { roads: landscapes.flatMap(entry => entry.roads ?? []), highways: Object.values(terrain?.highways ?? {}).filter(highway => highway.lines?.length) }, world, W, graphOf, cost, reach, solve, onFoot, portalsNear, DEEP, deepAt, beamCeiling, sampleWalk, T, kappa, lambda, runs, moves, chosen, assemble, snapshot, names: inputs.names, hits, hitSphere, wake, standThing, liftThing, enter: enterScene, layers, checkpoint, restore });
   return data;
 }
 

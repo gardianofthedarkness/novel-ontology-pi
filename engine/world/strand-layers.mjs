@@ -142,8 +142,31 @@ export function strandLayers({ forks, forkOf, rankOf, state, mergeLot = (_index,
     return { strand, layer: id, created, switched: was !== id, merged, lots, things, cells: under.cells, marks: under.marks, unseen: unseenAt.get(sceneId) };
   };
 
+  // A retake (docs/v3/design.html#reviewer-segment): the layers as they stand before a unit, and back to them. The layer playing
+  // first takes what stands in the world now (the engine writes new lists over the ones it was handed), then all is copied.
+  const checkpoint = () => {
+    const playing = active ? layers.get(active) : null;
+    if (playing) for (const index of playing.lots.keys()) playing.lots.set(index, state.lot(index));
+    return { layers: new Map([...layers].map(([id, layer]) => [id, copyLayer(layer)])), base: { lots: new Map([...base.lots].map(([index, lot]) => [index, copyLot(lot)])), things: new Map(base.things), under: base.under ? copyUnder(base.under) : null },
+      alias: new Map(alias), active, rank, stamp, hits: hits.slice(), unseenAt: new Map(unseenAt), playedIn: new Map(playedIn), log: log.length, unions: unions.map(union => union.done) };
+  };
+  /** The layers back as `checkpoint` took them (the engine puts the world back itself, from its own checkpoint). */
+  const restore = point => {
+    layers.clear(); for (const [id, layer] of point.layers) layers.set(id, copyLayer(layer));
+    base.lots = new Map([...point.base.lots].map(([index, lot]) => [index, copyLot(lot)])); base.things = new Map(point.base.things); base.under = point.base.under ? copyUnder(point.base.under) : null;
+    alias.clear(); for (const [from, to] of point.alias) alias.set(from, to);
+    active = point.active; rank = point.rank; stamp = point.stamp;
+    hits.length = 0; hits.push(...point.hits);
+    unseenAt.clear(); for (const [k, v] of point.unseenAt) unseenAt.set(k, v);
+    playedIn.clear(); for (const [k, v] of point.playedIn) playedIn.set(k, v);
+    log.length = point.log; unions.forEach((union, n) => { union.done = point.unions[n]; });
+    // The layer playing owns the world's lots it holds: put its copies in, so a later write is its own again.
+    const playing = active ? layers.get(active) : null;
+    if (playing) for (const [index, lot] of playing.lots) state.setLot(index, lot);
+  };
+
   return {
-    enter,
+    enter, checkpoint, restore,
     /** Before the engine writes a lot: the layer playing gets its own copy of it (the first time), the built one is kept. */
     touch(index) {
       const layer = active ? layers.get(active) : null;

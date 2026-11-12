@@ -19,6 +19,7 @@ import { fileURLToPath, pathToFileURL } from 'node:url';
 import { parseArgs } from 'node:util';
 
 const repository = resolve(dirname(fileURLToPath(import.meta.url)), '..', '..'), load = path => import(pathToFileURL(join(repository, path)).href);
+const RVM = await import('./reviewer.mjs');
 const C = await load('dist/src/context/camera.js'), CB = await load('dist/src/context/cutBag.js'), M = await load('dist/src/context/directorModes.js'), { ask } = await load('dist/src/context/engine.js');
 const S = await load('dist/apps/playground/src/data/skeleton.js'), { loadWorkspaceSentences } = await load('dist/src/cli/commands/extract/timeplaceCommands.js');
 const { strandDemo, inlineStrand } = await import('../world/export-strand-demo.mjs');
@@ -88,7 +89,13 @@ export async function readerView(reading, text) {
   return { version: 2, kinds: Object.fromEntries(Object.entries(reading.kinds ?? {}).map(([id, entry]) => [id, entry.kind])), marks, names };
 }
 
-export async function direct(novelDir, { reading, readingPath = null, prefilm = null, from, to, jev, workModel = null, budget = Infinity, live = null, pace = 0, agent = null, reviewer = null, digest = true, speakers = true, smoothing = null, blasts = [], onTheMove = true, miniloop = false, log = console.error }) {
+export async function direct(novelDir, { reading, readingPath = null, prefilm = null, from, to, jev, workModel = null, budget = Infinity, live = null, pace = 0, agent = null, reviewer = null, digest = true, speakers = true, smoothing = null, blasts = [], onTheMove = true, miniloop = false, review = null, log = console.error }) {
+  // The reviewer segment (reviewer.mjs; docs/v3/design.html#reviewer-segment): every `review.every` units the reviewer looks
+  // at each unit's still and keeps or retakes it; a retake rewinds the world and the director to the first unit retaken and
+  // plays on, each retaken unit with the reviewer's note added to every question the director asks about it.
+  let reviewNote = null;
+  if (review) { const inner = jev; jev = Object.assign(Object.create(inner), { decide: (state, questions, options) => inner.decide(!reviewNote ? state : typeof state === 'string' ? `${state}\n\nThe reviewer's note on the last take of this unit (this is a retake; follow it where the lines allow): ${reviewNote}` : { ...state, reviewer_note: reviewNote }, questions, options) }); }
+  const RV = review ? { every: Math.max(1, Number(review.every) || RVM.EVERY), reviewer: review.reviewer ?? RVM.reviewerOf(review.agent ?? 'claude-code'), notes: new Map(), retaken: new Set(), reviewedThrough: -1, blocks: [], block: 0 } : null;
   // A card's line with its kind (spoken, action, environment, thought, fact, narration) and, spoken, who says it: the
   // reader colours sentences by kind, and the page puts a spoken line in a bubble over its speaker.
   // Who says a line is the reading's (EM², a Jev question during extraction): its answer and how sure; below its accept
@@ -694,8 +701,32 @@ export async function direct(novelDir, { reading, readingPath = null, prefilm = 
         if (stale) await reload();
         return chrome.evaluate(`window.__stage.extend(${JSON.stringify(lastPiece)})`);
       };
-      for (const scene of E.chosen) {
-        const run = E.runs[scene.id], reads = reading.scenes.find(entry => entry.id === scene.id), sceneRecord = { scene: scene.id, cards: [] };
+      // The reviewer segment's checkpoints: the world and the director as they stood before each unit of the block under review.
+      const points = new Map();
+      let blockUnits = [];
+      const takePoint = () => {
+        let thingsCopy; try { thingsCopy = structuredClone(things); } catch { thingsCopy = new Map([...things].map(([id, thing]) => [id, { ...thing, placed: [...(thing.placed ?? [])], events: [...(thing.events ?? [])] }])); }
+        return { engine: E.checkpoint?.() ?? null, where: new Map(where), lastSceneOf: new Map(lastSceneOf), endOf: new Map(endOf), lastIn: new Map([...lastIn].map(([fork, map]) => [fork, new Map(map)])), things: thingsCopy,
+          heldBefore: new Map(heldBefore), before, mlBreaks: new Set(mlBreaks), scenes: record.scenes.length, revisions: record.revisions.length, casts: E.chosen.map(entry => entry.cast?.slice() ?? null) };
+      };
+      const restorePoint = (point, fromScene) => {
+        if (point.engine) E.restore(point.engine);
+        for (const [map, from] of [[where, point.where], [lastSceneOf, point.lastSceneOf], [endOf, point.endOf]]) { map.clear(); for (const [k, v] of from) map.set(k, v); }
+        lastIn.clear(); for (const [fork, map] of point.lastIn) lastIn.set(fork, new Map(map));
+        things.clear(); for (const [id, thing] of point.things) things.set(id, thing);
+        heldBefore = new Map(point.heldBefore); before = point.before;
+        mlBreaks.clear(); for (const id of point.mlBreaks) mlBreaks.add(id);
+        record.scenes.length = point.scenes; record.revisions.length = point.revisions;
+        E.chosen.forEach((entry, n) => { if (point.casts[n]) entry.cast = point.casts[n].slice(); });
+        // The page's line from the retaken unit on is played again: the stage in Chrome is loaded afresh before the next shot.
+        let drop = false; for (const id of [...played.keys()]) { if (id === fromScene) drop = true; if (drop) played.delete(id); }
+        stale = true;
+      };
+      for (let k = 0; k < E.chosen.length; k++) {
+        const scene = E.chosen[k];
+        if (RV && k > RV.reviewedThrough && !points.has(k)) points.set(k, takePoint());
+        reviewNote = RV?.notes.get(scene.id) ?? null;
+        const run = E.runs[scene.id], reads = reading.scenes.find(entry => entry.id === scene.id), sceneRecord = { scene: scene.id, cards: [], ...(reviewNote ? { retake: { note: reviewNote } } : {}) };
         record.scenes.push(sceneRecord);
         asking = sceneRecord;
         if (!run || !reads) continue;
@@ -2310,7 +2341,41 @@ export async function direct(novelDir, { reading, readingPath = null, prefilm = 
         if (fork) { const inStrand = lastIn.get(fork) ?? lastIn.set(fork, new Map()).get(fork); for (const [who, value] of Object.entries(positions)) inStrand.set(who, value); }
         log(`${scene.id}: ${cards.length} cards, ${sceneRecord.cards.reduce((n, card) => n + card.moves.filter(move => move.moved).length, 0)} moves, ${calls} calls so far`);
         await save();
+        // The reviewer segment: this unit's still (the director's camera on everyone in it at its end), and at the block's end
+        // the review; a retake rewinds to the first unit retaken (its checkpoint) and plays on from there with the notes.
+        if (RV && k > RV.reviewedThrough) {
+          const ids = Object.keys(positions).filter(id => !String(id).startsWith('crowd:'));
+          let still = null;
+          if (looks && ids.length) {
+            try {
+              const played = await grow(scene, run), points3 = ids.map(id => at(positions[id][0])), mid = [0, 1, 2].map(n => points3.reduce((sum, q) => sum + q[n], 0) / points3.length);
+              const reach = Math.max(0, ...points3.map(q => Math.hypot(q[0] - mid[0], q[2] - mid[2]))), cam = [...sceneRecord.cards].reverse().find(card => card.camera)?.camera ?? null;
+              const shot = await shoot(`${scene.id.slice(-3)}-review${RV.retaken.has(scene.id) ? '-retake' : ''}`, [1440, 900], { place: scene.placeId, at: Math.max(0, (played?.end ?? 0) - 0.02), only: [scene.placeId], focus: { x: mid[0], z: mid[2], y0: mid[1], w: 6, d: 6, h: 3 }, radius: Math.min(150, Math.max(14, reach * 1.4 + 8)), elevation: Math.max(30, cam?.elevation ?? 35), yaw: cam?.yaw ?? 0 });
+              if (shot.png) still = join(shots, `${scene.id.slice(-3)}-review${RV.retaken.has(scene.id) ? '-retake' : ''}.png`);
+            } catch (error) { log(`${scene.id}: review still failed: ${error.message ?? error}`); }
+          }
+          const held = sceneRecord.cards.flatMap(card => (card.laws ?? []).filter(entry => entry.verdict === 'held').map(entry => `${entry.law} ${names.get(entry.who) ?? entry.who ?? ''}${entry.why ? ` (${String(entry.why).slice(0, 80)})` : ''}`));
+          blockUnits.push({ k, unit: scene.id, still, place: script.places?.[scene.placeId]?.label ?? scene.placeId ?? null, people: ids.map(id => names.get(id) ?? id), cards: sceneRecord.cards.length, moves: sceneRecord.cards.reduce((n, card) => n + card.moves.filter(move => move.moved).length, 0), held: held.slice(0, 6), lines: (reads?.sentences ?? []).slice(0, 4).map(id => (text.get(id)?.text ?? '').slice(0, 80)).filter(Boolean) });
+          if (blockUnits.length >= RV.every || k === E.chosen.length - 1) {
+            const block = ++RV.block, folder = join(out, 'reviews', `d${record.startedAt.replace(/\D/g, '').slice(0, 14)}`);
+            const { retakes, file, error } = await RVM.reviewBlock({ reviewer: RV.reviewer, units: blockUnits.map(({ k: _k, ...unit }) => unit), folder, block, log });
+            RV.blocks.push({ block, units: blockUnits.map(unit => unit.unit), retakes: retakes.map(entry => ({ unit: entry.unit, note: entry.note })), file, ...(error ? { error } : {}) });
+            RV.reviewedThrough = k;
+            const first = retakes.length ? Math.min(...retakes.map(entry => blockUnits.find(unit => unit.unit === entry.unit)?.k ?? Infinity)) : Infinity;
+            blockUnits = [];
+            if (Number.isFinite(first) && points.has(first)) {
+              for (const entry of retakes) { RV.notes.set(entry.unit, entry.note); RV.retaken.add(entry.unit); }
+              restorePoint(points.get(first), E.chosen[first].id);
+              points.clear();
+              log(`review: rewound to ${E.chosen[first].id}; retaking ${retakes.map(entry => entry.unit.slice(-3)).join(', ')} and playing on to ${scene.id}`);
+              k = first - 1;
+              continue;
+            }
+            points.clear();
+          }
+        }
       }
+      if (RV) record.review = { every: RV.every, reviewer: RV.reviewer.id, blocks: RV.blocks, retaken: [...RV.retaken] };
       // The things placed over the line, for the record.
       // The world's layers as the run left them, and what began, united and changed hands on the way (M17c).
       if (E.layers) record.layers = E.layers.report();
@@ -2401,7 +2466,7 @@ export async function direct(novelDir, { reading, readingPath = null, prefilm = 
 }
 
 if (process.argv[1] === fileURLToPath(import.meta.url)) {
-  const { values, positionals: [novelDir] } = parseArgs({ allowPositionals: true, options: { reading: { type: 'string' }, from: { type: 'string' }, to: { type: 'string' }, budget: { type: 'string' }, 'stand-in': { type: 'boolean' }, live: { type: 'boolean' }, pace: { type: 'string' }, agent: { type: 'string' }, 'no-digest': { type: 'boolean' }, 'no-speakers': { type: 'boolean' }, 'live-test': { type: 'boolean' }, 'no-prefilm': { type: 'boolean' }, 'no-faculties': { type: 'boolean' }, 'from-last': { type: 'boolean' }, 'discard-edits': { type: 'boolean' }, 'keep-edits': { type: 'boolean' }, 'no-snapshots': { type: 'boolean' }, 'no-jev-review': { type: 'boolean' }, miniloop: { type: 'boolean' }, 'miniloop-camera': { type: 'boolean' } } });
+  const { values, positionals: [novelDir] } = parseArgs({ allowPositionals: true, options: { reading: { type: 'string' }, from: { type: 'string' }, to: { type: 'string' }, budget: { type: 'string' }, 'stand-in': { type: 'boolean' }, live: { type: 'boolean' }, pace: { type: 'string' }, agent: { type: 'string' }, 'no-digest': { type: 'boolean' }, 'no-speakers': { type: 'boolean' }, 'live-test': { type: 'boolean' }, 'no-prefilm': { type: 'boolean' }, 'no-faculties': { type: 'boolean' }, 'from-last': { type: 'boolean' }, 'discard-edits': { type: 'boolean' }, 'keep-edits': { type: 'boolean' }, 'no-snapshots': { type: 'boolean' }, 'no-jev-review': { type: 'boolean' }, miniloop: { type: 'boolean' }, 'miniloop-camera': { type: 'boolean' }, 'review-every': { type: 'string' }, reviewer: { type: 'string' } } });
   // The universe's snapshots (src/ground/workspace/universe.ts; the user, 2026-11-05: "rerunning a previous volume returns to
   // the snapshot before that volume to recover clean status"). In a library, a book's first run is preceded by its `before`
   // snapshot; a rerun starts from that `before` (W11 had started on W10's smoothing, and played worse for it), unless
@@ -2411,7 +2476,7 @@ if (process.argv[1] === fileURLToPath(import.meta.url)) {
   const U = await load('dist/src/ground/workspace/universe.js'), library = novelDir ? U.libraryOf(resolve(novelDir)) : null;
   // A library's book reads its own reading (vol-<n>/reading/data.json) when none is named.
   if (!values.reading && library?.book && existsSync(U.libraryPaths(library.root).book(library.book).reading.data)) values.reading = U.libraryPaths(library.root).book(library.book).reading.data;
-  if (!novelDir || !values.reading || !values.from || !values.to) { console.error('usage: node engine/director/director.mjs <novel-dir> --reading <data.json> --from <scene> --to <scene> [--budget 60] [--stand-in] [--live] [--from-last] [--discard-edits|--keep-edits] [--no-snapshots]'); process.exit(2); }
+  if (!novelDir || !values.reading || !values.from || !values.to) { console.error('usage: node engine/director/director.mjs <novel-dir> --reading <data.json> --from <scene> --to <scene> [--budget 60] [--stand-in] [--live] [--from-last] [--discard-edits|--keep-edits] [--no-snapshots] [--review-every N --reviewer claude-code|stand-in]'); process.exit(2); }
   let before = null;
   if (library?.book && !values['no-snapshots']) {
     const book = library.book;
@@ -2464,7 +2529,7 @@ if (process.argv[1] === fileURLToPath(import.meta.url)) {
     if (prefilm) console.error(`pre-film casts' notes from the reading step: ${Object.keys(prefilm.units ?? {}).length} units${prefilm.standIn ? ' (made by a stand-in)' : ''}`);
     // The request rides along (the miniloop's camera picture); the review at the end sends none.
     const reviewer = reviewJev ? { decide: (state, questions, request) => reviewJev.decide(state, questions, request), work: workModel, readingPath: resolve(values.reading) } : null;
-    const { record } = await direct(resolve(novelDir), { reading, readingPath: values.reading, prefilm, agent, reviewer, digest: !values['no-digest'], speakers: !values['no-speakers'], miniloop: values['miniloop-camera'] ? 'camera' : !!values.miniloop, from: values.from, to: values.to, jev, workModel, budget: values.budget ? Number(values.budget) : Infinity, live, pace: values.pace ? Number(values.pace) : values.live ? 6 : 0 });
+    const { record } = await direct(resolve(novelDir), { reading, readingPath: values.reading, prefilm, agent, reviewer, digest: !values['no-digest'], speakers: !values['no-speakers'], miniloop: values['miniloop-camera'] ? 'camera' : !!values.miniloop, review: values['review-every'] ? { every: Number(values['review-every']), agent: values.reviewer ?? 'claude-code' } : null, from: values.from, to: values.to, jev, workModel, budget: values.budget ? Number(values.budget) : Infinity, live, pace: values.pace ? Number(values.pace) : values.live ? 6 : 0 });
     if (library?.book && !values['no-snapshots']) {
       const run = `d${String(record.startedAt).replace(/\D/g, '').slice(0, 14)}`, mode = values['stand-in'] ? 'a stand-in run' : values['from-last'] ? 'a second pass' : 'a run';
       const after = await U.takeSnapshot(library.root, { book: library.book, kind: 'after', run, parent: before?.id ?? null, why: `${mode} of ${library.book}, ${values.from} to ${values.to}` });

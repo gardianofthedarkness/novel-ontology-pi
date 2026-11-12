@@ -170,3 +170,21 @@ test('the picture of the whole run has every layer\'s holes at once; the layer p
   all.breaches.set('z', 9);
   assert.equal(under().breaches.has('z'), false, 'the picture is a copy');
 });
+
+test('a retake: the layers back as they stood before a unit, and the units after it played again as the first time', () => {
+  const { layers, smash, standing, rubble } = run();
+  layers.enter('m1'); smash('h1', 0, 0);
+  // Before s1: the engine keeps its lists (here by hand), the layers their own.
+  const kept = { standing: standing.map(cells => cells.slice()), rubble: rubble.map(cells => cells?.slice()) }, point = layers.checkpoint();
+  layers.enter('s1'); smash('h2', 0, 1); layers.enter('m2'); smash('h3', 1, 2);
+  kept.standing.forEach((cells, n) => { standing[n] = cells.slice(); }); rubble.length = 0; kept.rubble.forEach((cells, n) => { rubble[n] = cells?.slice(); });
+  layers.restore(point);
+  assert.deepEqual([layers.active(), standing[0], standing[1]], ['m1', [0, 1, 1, 1], [1, 1, 1, 1]], 'm1 playing, only its own blast standing');
+  const split = layers.enter('s1');
+  assert.deepEqual([split.created, split.unseen], [true, []], 'the split begins again, as it did the first time');
+  smash('h2', 0, 1);
+  const back = layers.enter('m2');
+  assert.deepEqual([back.unseen, standing[0], standing[1]], [['h2'], [0, 1, 1, 1], [1, 1, 1, 1]], 'm2 has not seen the retaken split\'s blast, and h3 of the take thrown away is gone');
+  layers.restore(point);
+  assert.equal(layers.report().hits, 1, 'a checkpoint restores again as often as asked');
+});

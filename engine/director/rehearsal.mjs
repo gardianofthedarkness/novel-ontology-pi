@@ -8,6 +8,7 @@
 //   node engine/director/rehearsal.mjs <copy of novel-dir> --reading <reading>/v2/data.json --from scene_000001 --to scene_000046 [--passes 2] [--out report.json]
 // --still-talk plays as before talk on the move (on-the-move.mjs): a walk and the talk on it as separate cards.
 // --miniloop: conflicts reviewed at the card and smoothed at the unit's end (miniloop.mjs), by rule as the rest.
+// --review-every N [--reviewer stand-in|claude-code]: the reviewer segment (reviewer.mjs), a review every N units, a retake rewound.
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -97,7 +98,7 @@ export function smoothedOf({ run, record, page, spawn, strands, reading }) {
 }
 
 if (process.argv[1] === fileURLToPath(import.meta.url)) {
-  const { values, positionals: [novelDir] } = parseArgs({ allowPositionals: true, options: { 'keep-page': { type: 'boolean' }, 'still-talk': { type: 'boolean' }, reading: { type: 'string' }, from: { type: 'string' }, to: { type: 'string' }, passes: { type: 'string' }, out: { type: 'string' }, logs: { type: 'string' }, miniloop: { type: 'boolean' } } });
+  const { values, positionals: [novelDir] } = parseArgs({ allowPositionals: true, options: { 'keep-page': { type: 'boolean' }, 'still-talk': { type: 'boolean' }, reading: { type: 'string' }, from: { type: 'string' }, to: { type: 'string' }, passes: { type: 'string' }, out: { type: 'string' }, logs: { type: 'string' }, miniloop: { type: 'boolean' }, 'review-every': { type: 'string' }, reviewer: { type: 'string' } } });
   if (!novelDir || !values.reading || !values.from || !values.to) { console.error('usage: node engine/director/rehearsal.mjs <copy of novel-dir> --reading <data.json> --from <scene> --to <scene> [--out report.json]'); process.exit(2); }
   const reading = JSON.parse(await readFile(values.reading, 'utf8')), world = join(resolve(novelDir), 'stage', 'world');
   const strands = JSON.parse(await readFile(join(world, 'strands.json'), 'utf8')), spawn = JSON.parse(await readFile(join(world, 'spawn.json'), 'utf8').catch(() => 'null'));
@@ -108,7 +109,7 @@ if (process.argv[1] === fileURLToPath(import.meta.url)) {
   let smoothing = false, blasts = [];
   for (let pass = 1; pass <= Number(values.passes ?? 1); pass++) {
     const started = Date.now();
-    const { record, data } = await direct(resolve(novelDir), { reading, prefilm, from: values.from, to: values.to, jev: standIn(), workModel: ruledWork(), speakers: false, smoothing, blasts: blasts.map(entry => ({ ...entry })), onTheMove: !values['still-talk'], miniloop: !!values.miniloop, readingPath: values.reading, log: () => {} });
+    const { record, data } = await direct(resolve(novelDir), { reading, prefilm, from: values.from, to: values.to, jev: standIn(), workModel: ruledWork(), speakers: false, smoothing, blasts: blasts.map(entry => ({ ...entry })), onTheMove: !values['still-talk'], miniloop: !!values.miniloop, review: values['review-every'] ? { every: Number(values['review-every']), agent: values.reviewer ?? 'stand-in' } : null, readingPath: values.reading, log: values['review-every'] ? line => { if (/review/.test(line)) console.error(line); } : () => {} });
     const smoothedNow = smoothedOf({ run: `rehearsal-${pass}`, record, page: data, spawn, strands, reading });
     // --keep-page: the page beside the run's record, as a real run keeps it (why-walk.mjs and the replay read it).
     if (values['keep-page']) { const id = `d${record.startedAt.replace(/\D/g, '').slice(0, 14)}`, folder = join(resolve(novelDir), 'stage', 'simulation', 'runs', 'director'); await mkdir(folder, { recursive: true }); await writeFile(join(folder, `${id}.page.json`), JSON.stringify(data)); passes.keptPage = id; }
@@ -122,6 +123,7 @@ if (process.argv[1] === fileURLToPath(import.meta.url)) {
     const passLog = worldLog({ run: `rehearsal-${pass}`, record, page: data, spawn, strands });
     if (values.logs) { await mkdir(resolve(values.logs), { recursive: true }); await writeFile(join(resolve(values.logs), `pass-${pass}.jsonl`), passLog.map(row => JSON.stringify(row)).join("\n")); await writeFile(join(resolve(values.logs), `pass-${pass}.record.json`), JSON.stringify(record)); }
     { const movement = backAndForth({ log: passLog, record }); passes.at(-1).backAndForth = { talk: movement.talk, roundTrips: { count: movement.roundTrips.count, throughTalk: movement.roundTrips.throughTalk, kinds: movement.roundTrips.kinds }, regrouped: record.scenes.reduce((n, scene) => n + (scene.regrouped?.length ?? 0), 0) }; }
+    if (record.review) passes.at(-1).review = { every: record.review.every, reviewer: record.review.reviewer, blocks: record.review.blocks.length, retaken: record.review.retaken.length, units: record.scenes.length, retakesNoted: record.scenes.filter(scene => scene.retake).length };
     if (record.miniloop) { const units = record.scenes.filter(scene => scene.miniloop); passes.at(-1).miniloop = { asked: record.miniloop.asked, applied: record.miniloop.applied, left: record.miniloop.left, turnedBack: record.miniloop.turnedBack, byKind: record.miniloop.byKind, units: units.length, smoothedUnits: units.filter(scene => scene.miniloop.smoothed?.length).length, carried: units.reduce((n, scene) => n + (scene.miniloop.smoothed?.length ?? 0), 0), errors: units.filter(scene => scene.miniloop.error).map(scene => `${scene.scene}: ${scene.miniloop.error}`).slice(0, 5),
       unitLaws: record.scenes.reduce((acc, scene) => ({ broken: acc.broken + (scene.miniloopLaws?.broken ?? 0), settled: acc.settled + (scene.miniloopLaws?.settled ?? 0), dropped: acc.dropped + (scene.miniloopLaws?.dropped?.length ?? 0), errors: acc.errors + (scene.miniloopLaws?.error ? 1 : 0) }), { broken: 0, settled: 0, dropped: 0, errors: 0 }) }; }
     passes.at(-1).held = record.scenes.flatMap(scene => scene.cards.flatMap(card => card.laws ?? [])).filter(entry => entry.verdict === 'held').reduce((acc, entry) => ({ ...acc, [entry.law]: (acc[entry.law] ?? 0) + 1 }), {});
