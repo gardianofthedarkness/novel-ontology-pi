@@ -94,7 +94,7 @@ director's track, the world and ontology track) and v3's phases (the user, 2026-
 <span class="st aside">Set aside</span>
 </div>
 
-<div class="toc"><ul><li><a href="#timeline">1. The whole story</a></li><li><a href="#v3">2. v3</a></li><li><a href="#v3-phases">2.1 The phases</a></li><li><a href="#console-versions">2.2 Novel Console, version by version</a></li><li><a href="#v3-commits">2.3 The commits of v3, from v2</a></li><li><a href="#v2">3. v2</a></li><li><a href="#map-milestones">3.1 The map and the world: M0–M18, W15–W16</a></li><li><a href="#director-milestones">3.2 Track A: the director, to the next whole-volume run</a></li><li><a href="#director-decisions">3.3 Track A: the director&#x27;s decisions, milestone by milestone</a></li><li><a href="#track-b">3.4 Track B: the world and the ontology as one loop</a></li><li><a href="#v1">4. v1</a></li><li><a href="#v1-roadmap">4.1 Roadmap and decision log</a></li></ul></div>
+<div class="toc"><ul><li><a href="#timeline">1. The whole story</a></li><li><a href="#v3">2. v3</a></li><li><a href="#v3-phases">2.1 The phases</a></li><li><a href="#console-versions">2.2 Novel Console, version by version</a></li><li><a href="#v3-commits">2.3 The commits of v3, from v2</a></li><li><a href="#figures-actor">2.4 Figures and the actor cast: F1–F9</a></li><li><a href="#v2">3. v2</a></li><li><a href="#map-milestones">3.1 The map and the world: M0–M18, W15–W16</a></li><li><a href="#director-milestones">3.2 Track A: the director, to the next whole-volume run</a></li><li><a href="#director-decisions">3.3 Track A: the director&#x27;s decisions, milestone by milestone</a></li><li><a href="#track-b">3.4 Track B: the world and the ontology as one loop</a></li><li><a href="#v1">4. v1</a></li><li><a href="#v1-roadmap">4.1 Roadmap and decision log</a></li></ul></div>
 <h1 id="timeline">1. The whole story</h1>
 <table>
 <thead>
@@ -215,13 +215,25 @@ director's track, the world and ontology track) and v3's phases (the user, 2026-
 <td>P5</td>
 <td>the unit finder and small Jev loops with the agent setting each step's length</td>
 <td>volume 2's units against its 25 crossings; errors per step against W15's</td>
-<td><span class="st plan">Planned</span></td>
+<td><span class="st now">In progress</span>: taken before P4 (the user, 2026-11-12: "jump over unity and go to the miniloop design stage"); the miniloop (a card's conflicts reviewed at once, the unit smoothed where they happen; <code>--miniloop-camera</code> with a still of the card) built 2026-11-12, measured in W17 on volume 1 of the original series (design §8.1)</td>
 </tr>
 <tr>
 <td>P6</td>
 <td>volume 2 again, on v3</td>
 <td>the run W16 could not finish</td>
 <td><span class="st plan">Planned</span></td>
+</tr>
+<tr>
+<td>P7</td>
+<td>figures that act: rigged figures driven by the run's records, their state (facing, gaze, pose, hands, action) readable and checked by code (design §8.6; F1–F4 below)</td>
+<td>volume 1's run replayed with figures: talkers face each other, blows land as strikes, riders sit on their carriers; frames a second against the pawns</td>
+<td><span class="st plan">Planned</span>: the figures' source needs the user's OK</td>
+</tr>
+<tr>
+<td>P8</td>
+<td>the actor cast: each person's eyes; first-person stills and the code's view list; watching through any person's eyes; perception lines checked against the views; the miniloop's review seeing through the eyes of those it asks about (design §8.7; F5–F9 below)</td>
+<td>volume 1: perception lines checked, how many hold and how many the miniloop settles; a run with the eyes against W17's three</td>
+<td><span class="st plan">Planned</span>: after P7 (a probe on pawns may come first)</td>
 </tr>
 <tr>
 <td>later</td>
@@ -334,6 +346,23 @@ its units (design §6.2); whether phones read packs from private storage, and wh
 <tr><td>2026-11-10</td><td><a href="https://github.com/gardianofthedarkness/novel-ontology-pi/commit/a2dd71f422adb88bc4f44e39b55c59f43a4af2b8"><code>a2dd71f</code></a></td><td>chore: quote marks as escapes in code (public repo)</td></tr>
 <tr><td>2026-11-10</td><td><a href="https://github.com/gardianofthedarkness/novel-ontology-pi/commit/489bb2d95b4082a28fadfa4405f2d61bee241783"><code>489bb2d</code></a></td><td>docs(v3): arranging universes by an agent counts as done (the user, 2026-11-10: &quot;agent successfully put them in the exact order I needed&quot;)</td></tr>
 </tbody></table></div>
+<h2 id="figures-actor">2.4 Figures and the actor cast: F1–F9</h2>
+<p>Designed 2026-11-12 (design §8.6, §8.7; the user: "This is actually the actor cast. But this might need to built on top
+of the action animation system. We need actionable figures to be able to check."). F1–F4 are P7, F5–F9 are P8.</p>
+<table>
+<thead><tr><th>Milestone</th><th>What</th><th>Proof</th><th>Status</th></tr></thead>
+<tbody>
+<tr><td>F1</td><td>the figure's state in the run's records, by rule from what the run already has: facing (the way they walk; whom they speak to; their opponent), gaze, pose, what each hand holds, the action of each fight exchange</td><td>volume 1's run: talkers facing each other, fighters facing their opponents, riders on their carriers, counted per card</td><td><span class="st plan">Planned</span></td></tr>
+<tr><td>F2</td><td>a rigged figure on the page in place of the pawn: sized by who they are, its gaits and poses from free licensed clips (fetched with the user's OK), driven by F1</td><td>a W17 run replayed with figures; frames a second against the pawns</td><td><span class="st plan">Planned</span></td></tr>
+<tr><td>F3</td><td>actions from the text: strikes, blocks, dodges, falls when hit, throws, gestures; held things in hand; the carried and the riders</td><td>volume 1's fight units with each exchange as a strike and its reaction</td><td><span class="st plan">Planned</span></td></tr>
+<tr><td>F4</td><td>the laws on figures (eyes at the body's height, no limb through a wall, a seated figure on a seat, a held thing in a hand), retaken in the miniloop; the render protocol carries a figure's state</td><td>a run with the figure laws: faults found and settled per unit</td><td><span class="st plan">Planned</span></td></tr>
+<tr><td>F5</td><td>first-person stills: from a figure's eyes, at its eye height and gaze, drawn solid, labelled; and the code's list of what is in view (frustum and line of sight)</td><td>stills from the point of view's eyes on chosen units of volume 1; the list against the still</td><td><span class="st plan">Planned</span> (a probe on pawns with facing by rule may come first)</td></tr>
+<tr><td>F6</td><td>watching through any person's eyes in the player and World · Live, by default the sequence's point of view</td><td>the user watching a unit of volume 1 through its narrator's eyes</td><td><span class="st plan">Planned</span></td></tr>
+<tr><td>F7</td><td>perception lines in the reading: who perceives what, by sight or hearing, at which bearing (a pre-film cast)</td><td>volume 1: the lines found against a hand-labelled sample</td><td><span class="st plan">Planned</span></td></tr>
+<tr><td>F8</td><td>the check against the text: each perception line checked against the view as played; a failing one a conflict at the card, asked in the miniloop with the first-person still; what it settles an observation for the smoother</td><td>volume 1: checks passed, failed, settled; the end smoothing's revisions against W17's</td><td><span class="st plan">Planned</span></td></tr>
+<tr><td>F9</td><td>the miniloop's review seeing through the eyes of those it asks about, beside the camera's still</td><td>a fourth run against W17's three (the director, the miniloop, the miniloop with the camera's still)</td><td><span class="st plan">Planned</span></td></tr>
+</tbody>
+</table>
 <h1 id="v2">3. v2</h1>
 <p>v2 (2026-10-30 → 11-10, branch <code>v2</code>, legacy since 2026-11-10) had two stages: <strong>extraction</strong> reads the book into a world
 model; the <strong>world engine</strong> builds that world: terrain first, then where everyone stands, then how they move. Two tracks ran

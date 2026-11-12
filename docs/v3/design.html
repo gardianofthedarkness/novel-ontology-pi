@@ -180,6 +180,8 @@ which script writes it; the tests fail when one is stale (<code>npm test</code> 
 <li><a href="#movement">8.3 Movement</a></li>
 <li><a href="#laws">8.4 The laws</a></li>
 <li><a href="#smoothing">8.5 Smoothing: back-propagation as Bayesian smoothing</a></li>
+<li><a href="#figures">8.6 Figures that act: the action animation system</a></li>
+<li><a href="#actor-cast">8.7 The actor cast: what each one sees</a></li>
 </ul>
 </li>
 <li><a href="#canon">9. Canon, the ledger and review</a><ul>
@@ -1749,6 +1751,15 @@ walked the protagonist 40 floors up; 28 units of W15 played in the wrong distric
   code and the agent. Jev keeps placing things on a 2D frame (a spot, a formation, a direction, a box, a kind and a
   height) and structural extraction.</li>
 </ul>
+<p><span class="st built">Built in part</span> (2026-11-12, the user: "smoothing and review happen at last. It needs to be right
+at where conflicts happen, so later miniloops won't get affected by a wrong judgement earlier"; <code>engine/director/miniloop.mjs</code>,
+<code>director --miniloop</code>): after each card, what its laws held (L6, L9, L10) is asked at once as the review asks it (Jev on the
+item's lines, the work model beside it), and a sure answer (Jev at 0.7, or Jev and the work model agreeing) is pinned and
+applied before the next card; a unit where a conflict was has its strand so far smoothed at its end, and whoever the
+least-action history moves goes on from there. <code>--miniloop-camera</code> asks each conflict with a still of the card at the
+director camera's angle, framed on the people it is about. Measured on volume 1 of the original series in W17 (the current
+director, the miniloop, and the miniloop with the picture, from one snapshot). Not yet: who-speaks in the loop, the agent
+setting each step's length, and the first-person views of the actor cast (<a href="#actor-cast">§8.7</a>).</p>
 <h2 id="director">8.2 The director and its casts</h2>
 <p><span id="director-camera"></span><span id="next-steps"></span><span id="summarizer-faculties"></span>
 <span id="casts-jev-and-crew"></span><span id="directing-readme"></span><span id="w10-fresh"></span></p>
@@ -1929,6 +1940,67 @@ clouds." — the user, 2026-11-02</p>
   confirmed.</li>
 <li><strong>Back and forth in a second pass</strong> (2026-11-07): a walk that goes out and comes straight back is read again.</li>
 <li>Smoothing is per strand; L18 (destruction) and L19 (places) as smoothed states.</li>
+</ul>
+<h2 id="figures">8.6 Figures that act: the action animation system</h2>
+<p><span class="st designed">Designed</span> (the user, 2026-11-12: "This is actually the actor cast. But this might need to
+built on top of the action animation system. We need actionable figures to be able to check."). The ground the actor
+cast (<a href="#actor-cast">§8.7</a>) stands on.</p>
+<ul>
+<li><strong>What a person is today</strong>: a glowing pawn with a name (<code>engine/view/strand-demo.html</code>), a node on the walk
+  grid and nothing else. It has no body, no facing, no pose; a walk is a path, a blow a line from one pawn to another. Nothing
+  can be asked of a pawn but where it stands.</li>
+<li><strong>A figure</strong> is a person with a body: a humanoid rig sized by who they are (a child, an adult, the settei cast's
+  build and height), and at every moment of the run a <strong>state</strong> the engine can read and check:
+  <ul>
+  <li>where it stands (as now), which way the <strong>body faces</strong>, where the <strong>head and eyes look</strong>;</li>
+  <li>its <strong>pose</strong>: standing, walking, running, sitting, crouching, lying, falling, climbing, carried, riding;</li>
+  <li>its <strong>hands</strong>: what it holds (the things' holders the director already tracks), what it reaches for;</li>
+  <li>its <strong>action</strong>: a strike, a block, a dodge, a throw, pointing, grabbing, an embrace, a fall when hit.</li>
+  </ul></li>
+<li><strong>Driven by what the run already records</strong>, by rule first: a walk's path and pace choose the gait; in talk a
+  figure faces whom it speaks to; in a fight it faces its opponent, and each exchange (close, line or area; hit or stopped)
+  is a strike and its reaction; the transport ties put a rider on its carrier and the carried in arms; an ability in use
+  (a leap, flight) is its own motion. Where the text says where someone looks ("he looked up at the roof"), a cast says
+  so; the rule fills the rest.</li>
+<li><strong>Actionable means it can be asked</strong>: is she facing him, can he reach her hand, is anyone sitting on the bench,
+  and above all <strong>what does this person see</strong> (<a href="#actor-cast">§8.7</a>). Each answer is code on the figure's state,
+  never a model.</li>
+<li><strong>Checked as the rest is</strong>: the laws as assertions on figures (eyes at the body's height, no limb through a wall,
+  a seated figure on a seat, a held thing in a hand), retaken as the miniloop retakes (<a href="#small-loops">§8.1</a>).</li>
+<li><strong>Drawn</strong> on the page with three.js's skinned meshes and animation mixer; the render protocol for the world client
+  (<a href="#render-protocol">§12.1</a>) carries a figure's state (pose, clip and its phase, facing, gaze), not meshes.</li>
+<li><strong>Where the figures and clips come from</strong>: free licensed rigged figures and clip libraries (CC0, as the model packs
+  are, <a href="#models">§7.6</a>), fetched only with the user's OK; clips under licences that forbid sharing them cannot go in this
+  public repository.</li>
+</ul>
+<h2 id="actor-cast">8.7 The actor cast: what each one sees</h2>
+<p><span class="st designed">Designed</span> (the user, 2026-11-12, of a first-person view: "Yes both three make sense. This is
+actually the actor cast."). A runtime cast, one actor for each person on the stage: it acts its character inside what
+the director placed (facing, gaze, pose and gestures, on the figure of <a href="#figures">§8.6</a>), and it is the character's eyes.
+Every view the world had so far was from outside (the director's camera, the player's group orbit, Jev's arrows, plans
+and side views, the miniloop's still); even the storyboard's "eye level" is a camera circling the group.</p>
+<ul>
+<li><strong>The first-person view</strong>: a still from the figure's eyes (its eye height, along its gaze, about a person's field
+  of view), drawn solid (the director's see-through walls off), people and named things labelled; beside it, a list of what
+  is in view, made by code (in the view's frustum, with a line of sight through the walls and floors of the walk grid). Most
+  checks need only the list; the still is for Jev and for the user.</li>
+<li><strong>1. Watching</strong>: a point-of-view camera in the player and World · Live (later the world client): any person's eyes,
+  by default those of the sequence's point of view (the reading cuts sequences where one place, one time and one point of
+  view hold, <a href="#reading-flow">§5.1</a>).</li>
+<li><strong>2. A check against the text</strong>: much of a light novel is told close to one person ("in front of him, a girl hung
+  on the balcony railing"; "behind him, footsteps"). Such lines become <strong>perception lines</strong> (a pre-film cast: who
+  perceives what, by sight or hearing, at which bearing: in front, behind, to a side, above, below, far or near), and each is
+  checked against that person's view as played: in view, in line of sight, on the bearing the line says. A failing check
+  is a conflict at the card, settled in the miniloop (<a href="#small-loops">§8.1</a>): asked of Jev with the first-person still and the
+  line (the world is wrong: turn or move them; the line means something else: heard, remembered, imagined; or the view is
+  another person's). What it settles goes to the smoother as an observation of where they stood and faced
+  (<a href="#smoothing">§8.5</a>: the S_seen term counts what a camera sees, not what the narrator sees).</li>
+<li><strong>3. The review sees through their eyes</strong>: a miniloop question is asked with the first-person views of the people it
+  is about beside the camera's picture: for talk out of earshot, whether the two see each other; for an actor not there,
+  what those present see; for a walk that found no way, the mover's view toward where they were going.</li>
+<li><strong>Order</strong>: the figures first (eyes need a body facing somewhere); a first-person still on today's pawns, facing by
+  rule, can be tried before them as a probe of the check.</li>
+<li><strong>Cost</strong>: a still and a frustum test per check; Jev only where the code's check fails or cannot tell.</li>
 </ul>
 <h1 id="canon">9. Canon, the ledger and review</h1>
 <p><span id="unified-review"></span><span id="semantic-review"></span><span id="merge-gate"></span></p>
