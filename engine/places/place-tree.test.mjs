@@ -1,7 +1,7 @@
 // Tests for the place tree by the agent: every decision needs a line of the book that shows it.
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { decide, namesAlone, placedScenes, movesOf, checkOf, unprovedOf } from './place-tree.mjs';
+import { decide, namesAlone, placedScenes, movesOf, checkOf, unprovedOf, coarseOf, duplicatesOf } from './place-tree.mjs';
 
 const CITY = '\u5b66\u56ed\u90fd\u5e02', KYOTO = '\u4eac\u90fd', TOKYO = '\u4e1c\u4eac\u90fd';
 function stores() {
@@ -91,4 +91,23 @@ test('a unit whose place no sentence shows is unproved until decided; nowhere an
   decide(s, 'nowhere', args(['u5'], { why: 'an afterword' }));
   assert.deepEqual(checkOf(s).unplacedStory, []);
   refused(() => decide(s, 'same', args(['u4', 'u2'], { through: 'u1', why: 'backwards' })));
+});
+
+test('a unit placed wider than its lines show is coarse until set finer or kept wide; the same place made twice is merged', () => {
+  const s = stores();
+  s.original.places['unnamed:dorm2'] = { label: '\u7537\u751f\u5bbf\u820d (scene 4)', parent: 'pool:city', scale: 'building', unnamed: true, scene: 'scene_000004' };
+  s.original.places['unnamed:dorm'].parent = 'pool:city';
+  decide(s, 'setting', args(['city'], { line: 's1', why: 'streets' }));
+  s.original.scenes[1].place = 'city'; s.original.scenes[3].place = 'unnamed:dorm2';
+  assert.deepEqual(coarseOf(s).map(run => [run.from, run.place]), [['u2', 'city']], 'u2 is in the city but its line names the dorm');
+  assert.deepEqual(duplicatesOf(s).map(group => group.places.sort()), [], 'only one dorm holds a unit yet');
+  decide(s, 'set', args(['u2', 'unnamed:dorm'], { line: 's2', why: 'back at the dorm door' }));
+  assert.deepEqual(coarseOf(s), []);
+  assert.deepEqual(duplicatesOf(s).map(group => group.places.sort()), [['unnamed:dorm', 'unnamed:dorm2']]);
+  decide(s, 'merge', args(['unnamed:dorm2', 'unnamed:dorm'], { why: 'one dorm' }));
+  assert.deepEqual(duplicatesOf(s), []);
+  assert.equal(placedScenes(s).find(u => u.id === 'u4').place, 'unnamed:dorm');
+  s.original.scenes[1].place = 'city'; delete s.decisions.units.u2;
+  decide(s, 'wide', args(['u2'], { why: 'he walks across the city past it' }));
+  assert.deepEqual(coarseOf(s), []);
 });

@@ -65,7 +65,7 @@ const FORMS = {
   model: "novel model nominate <book> [--top N] | list <book> [--state todo|made|failed|part] | brief <book> <thing> | write <book> <thing>|--all [--limit N] | check <book> <thing>|--all | show <book> <thing> | use <book> <thing> <source>:<part> [--why <text>] | bind <book> [--limit N] | parts '<kind>'  (novel-models skill)",
   volume: 'novel volume status <book> | run <book> [--step <id> | --until <id>] | log <book> <step> [--lines N] | done <book> places|look --why <text>  (a whole volume, step by step: novel-volume skill)',
   strands: 'novel strands show <book> | inherit <book> [--work] [--dry] | set <book> <strand key> inherited|closed --why <text> [--into <key>]  (what the book carries from the book before: novel-volume skill)',
-  places: "novel places tree|check|moves|apply <book> | place <book> <place id> | unit <book> <unit id> | units <book> [--place <id>] [--by <how>] [--chapter N] [--unplaced] | setting <book> <place id> --line <sentence id> --why <text> | mention|drop <book> <place id> --why <text> [--override] | hold <book> <unnamed place> <parent> --line <sentence id> --why <text> | set <book> <unit id> <place id> --line <sentence id> --why <text> | same <book> <unit id> <earlier unit id> [--through <last unit id>] --why <text> | nowhere <book> <unit id> --why <text> | travel <book> <unit id> <person id> --line <sentence id> --why <text>  (the place tree, novel-volume skill: every claim needs a line of the book; refused claims come back with why)",
+  places: "novel places tree|check|moves|apply <book> | place <book> <place id> | unit <book> <unit id> | units <book> [--place <id>] [--by <how>] [--chapter N] [--unplaced] | setting <book> <place id> --line <sentence id> --why <text> | mention|drop <book> <place id> --why <text> [--override] | hold <book> <unnamed place> <parent> --line <sentence id> --why <text> | set <book> <unit id> <place id> --line <sentence id> --why <text> | same <book> <unit id> <earlier unit id> [--through <last unit id>] --why <text> | nowhere <book> <unit id> --why <text> | wide <book> <unit id> [--through <last unit id>] --why <text> | merge <book> <place id> <into place id> --why <text> | travel <book> <unit id> <person id> --line <sentence id> --why <text>  (the place tree, novel-volume skill: every claim needs a line of the book; refused claims come back with why)",
   look: "novel look context <book> [--place <id>] [--top N]  (the look pass, novel-models skill: each place's environment sentences, the parts the text names, the keys a place may set; then novel settings set|warehouse use ... --place <id> --why <sentence ids>)",
   help: 'novel help', config: 'novel config',
 };
@@ -432,7 +432,9 @@ function permit(command, scope) {
       || ['mention', 'drop'].includes(operation) && ids(1) && decided(4, false, ['--override'])
       || ['hold', 'set', 'travel'].includes(operation) && ids(2) && decided(5, true)
       || operation === 'same' && ids(2) && (() => { const f = flags(5, { '--why': text, '--through': (v) => ID.test(v) }); return !!f && f.has('--why'); })()
-      || operation === 'nowhere' && ids(1) && decided(4, false));
+      || operation === 'nowhere' && ids(1) && decided(4, false)
+      || operation === 'wide' && ids(1) && (() => { const f = flags(4, { '--why': text, '--through': (v) => ID.test(v) }); return !!f && f.has('--why'); })()
+      || operation === 'merge' && ids(2) && decided(5, false));
   }
   if (verb === 'look') valid = operation === 'context' && tokens[2] === novel && (() => { for (let i = 3; i < tokens.length; i += 2) { if (tokens[i] === '--place' && /^[\w:-]{1,80}$/.test(tokens[i + 1] ?? '')) continue; if (tokens[i] === '--top' && /^\d+$/.test(tokens[i + 1] ?? '') && Number(tokens[i + 1]) >= 1 && Number(tokens[i + 1]) <= 40) continue; return false; } return true; })();
   if (verb === 'settings' || verb === 'warehouse' || verb === 'model') {

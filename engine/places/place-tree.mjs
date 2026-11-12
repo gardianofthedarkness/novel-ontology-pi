@@ -8,7 +8,8 @@
 //   look:    tree | place <id> | unit <scene> | units [--place <id>] [--by <how>] [--chapter <n>] | moves
 //   decide:  setting <id> --line <id> --why <t> | mention <id> --why <t> | drop <id> --why <t>
 //            hold <unnamed id> <parent id> --line <id> --why <t> | set <scene> <place id> --line <id> --why <t>
-//            same <scene> <earlier scene> [--through <scene>] --why <t> | nowhere <scene> --why <t> | travel <scene> <person> --line <id> --why <t>
+//            same <scene> <earlier scene> [--through <scene>] --why <t> | nowhere <scene> --why <t> | wide <scene> [--through <scene>] --why <t>
+//            merge <place id> <into place id> --why <t> | travel <scene> <person> --line <id> --why <t>
 //   then:    check | apply
 //   node engine/places/place-tree.mjs <command> <novel-dir> [args]
 import { existsSync, readFileSync } from 'node:fs';
@@ -35,6 +36,7 @@ export async function storesOf(novelDir) {
   const { loadWorkspaceSentences } = await import(pathToFileURL(join(repository, 'dist/src/cli/commands/extract/timeplaceCommands.js')).href);
   const text = await loadWorkspaceSentences(novel), order = [...text.keys()], at = new Map(order.map((id, n) => [id, n]));
   const decisions = await readJson(join(world, 'place-tree.json'), { version: 1, places: {}, units: {}, holds: {}, travels: {}, log: [] });
+  decisions.merges ??= {};
   const entity = new Map((reading.chart?.entities ?? []).map(e => [e.id, e]));
   const sceneLines = new Map((reading.scenes ?? []).map(s => [s.id, s.sentences ?? []]));
   return { novel, world, kept, original, reading, text, order, at, decisions, entity, sceneLines };
@@ -77,15 +79,21 @@ export function placedScenes(stores) {
     else if (decided?.place) { place = decided.place; by = 'agent'; }
     else if (decided?.same) { place = byId.get(decided.same)?.place ?? null; by = 'agent (same as ' + decided.same + ')'; }
     else if (place && chainOf(stores, place).some(gone)) { place = null; by = 'none (its place is not a setting)'; }
-    const row = { ...scene, place, placeBy: by };
+    const row = { ...scene, place: place ? mergedInto(stores, place) : place, placeBy: by };
     byId.set(scene.id, row); out.push(row);
   }
   return out;
 }
 /** A place and the places above it, as decided (an unnamed place's holder, where the agent gave one). */
+/** The place a place was merged into (the same place the reading made twice), followed to the end. */
+export function mergedInto(stores, id) {
+  for (let k = 0; id && stores.decisions.merges?.[id] && k < 14; k++) id = stores.decisions.merges[id].into;
+  return id;
+}
 export function chainOf(stores, id) {
   const out = [];
-  for (let k = 0; id && k < 14; k++) { out.push(id); id = stores.decisions.holds[id]?.parent ?? stores.original.places[id]?.parent ?? null; }
+  id = mergedInto(stores, id);
+  for (let k = 0; id && k < 14; k++) { out.push(id); id = mergedInto(stores, stores.decisions.holds[id]?.parent ?? stores.original.places[id]?.parent ?? null); }
   return out;
 }
 const cityOf = (stores, id) => chainOf(stores, id).find(p => stores.original.places[p]?.scale === 'city') ?? null;
@@ -176,6 +184,22 @@ export function decide(stores, command, args) {
     for (const id of run) d.units[id] = { same: b, why };
     record(stores, { command, scene: a, same: b, ...(k > i ? { through: args.through } : {}), why }); return { same: b, units: run.length, why };
   }
+  // The same place made twice by the reading (two units' unnamed dorms that are one dorm): one is merged into the other.
+  if (command === 'merge') {
+    needPlace(stores, a); needPlace(stores, b); needWhy(why);
+    if (a === b || chainOf(stores, b).includes(a) || chainOf(stores, a).includes(b)) refuse(`${a} and ${b} are one inside the other, not the same place twice.`);
+    if (stores.original.places[a].scale !== stores.original.places[b].scale) refuse(`${a} is a ${stores.original.places[a].scale}, ${b} a ${stores.original.places[b].scale}: only places of one scale are merged.`);
+    d.merges ??= {}; d.merges[a] = { into: b, why }; record(stores, { command, place: a, into: b, why }); return d.merges[a];
+  }
+  // A unit that happens across its place, not in one room or building of it (a chase through the streets): kept wide.
+  if (command === 'wide') {
+    const i = stores.original.scenes.findIndex(s => s.id === a); if (i < 0) refuse(`No unit ${a}.`); needWhy(why);
+    const k = args.through ? stores.original.scenes.findIndex(s => s.id === args.through) : i;
+    if (k < i || k - i > 60) refuse('--through must be this unit or one at most 60 after it.');
+    const run = stores.original.scenes.slice(i, k + 1).map(s => s.id);
+    d.wide ??= {}; for (const id of run) d.wide[id] = { why };
+    record(stores, { command, scene: a, ...(k > i ? { through: args.through } : {}), why }); return { wide: run.length, why };
+  }
   // A unit that happens nowhere: front matter, a chapter's title, a summary or an afterword, whatever people it names.
   if (command === 'nowhere') {
     if (!stores.original.scenes.some(s => s.id === a)) refuse(`No unit ${a}.`); needWhy(why);
@@ -230,6 +254,55 @@ export function unprovedOf(stores) {
   return out.map(({ toIndex, ...run }) => run);
 }
 
+const RANK = { region: 0, city: 1, district: 2, street: 3, building: 3, room: 4 };
+const rankOf = (stores, id) => isPool(id) ? RANK[stores.original.places[stores.original.places[id]?.parent]?.scale] ?? 1 : RANK[stores.original.places[id]?.scale] ?? 3;
+/** The places a line names on its own, each line read once. */
+function namedIn(stores, line) {
+  stores.namedCache ??= new Map();
+  if (stores.namedCache.has(line)) return stores.namedCache.get(line);
+  stores.placeNames ??= Object.keys(stores.original.places).filter(id => !isPool(id)).map(id => [id, namesOf(stores, id)]);
+  const all = stores.allNames ??= Object.keys(stores.original.places).flatMap(other => namesOf(stores, other));
+  const t = stores.text.get(line)?.text ?? '', out = new Set();
+  for (const [id, names] of stores.placeNames) if (!stores.decisions.merges?.[id] && names.some(n => t.includes(n) && namesAlone(t, n, all))) out.add(id);
+  stores.namedCache.set(line, out); return out;
+}
+/**
+ * Units placed wider than their own lines show, as runs: a unit at a city, a district, a street or a building whose lines
+ * name a place inside it of a finer scale (a room of the building, a building of the city). Each run is placed at the
+ * finest place its lines show (set), or kept wide on purpose (wide, a chase through the streets).
+ */
+export function coarseOf(stores) {
+  const placed = placedScenes(stores), gone = id => chainOf(stores, id).some(p => ['mention', 'drop'].includes(stores.decisions.places[p]?.status)), out = [];
+  for (const [k, scene] of placed.entries()) {
+    if (!scene.place || !isStory(scene) || stores.decisions.wide?.[scene.id]) continue;
+    const rank = rankOf(stores, scene.place), finer = new Set();
+    for (const line of stores.sceneLines.get(scene.id) ?? []) for (const id of namedIn(stores, line)) {
+      const real = mergedInto(stores, id);
+      if (real !== scene.place && !gone(real) && rankOf(stores, real) > rank && chainOf(stores, real).includes(scene.place)) finer.add(real);
+    }
+    if (!finer.size) continue;
+    // The likeliest first: places the reading made near this unit (an unnamed place's own unit), then the rest.
+    const near = id => { const at = Number(String(stores.original.places[id]?.scene ?? '').match(/(\d+)$/)?.[1] ?? NaN); return Number.isFinite(at) ? Math.abs(at - (k + 1)) : 1e6; };
+    const labels = [...finer].sort((x, y) => near(x) - near(y)).slice(0, 4).map(id => `${id} ${stores.original.places[id]?.label}`);
+    const last = out.at(-1);
+    if (last && last.place === scene.place && last.toIndex === k - 1) { last.to = scene.id; last.toIndex = k; last.count++; for (const l of labels) if (!last.finer.includes(l) && last.finer.length < 6) last.finer.push(l); }
+    else out.push({ from: scene.id, to: scene.id, place: scene.place, label: stores.original.places[scene.place]?.label ?? scene.place, finer: labels, count: 1, toIndex: k });
+  }
+  return out.map(({ toIndex, ...run }) => run);
+}
+/** The same place made twice: places of one scale and one name (longer than a bare noun) in the same city, each holding units. */
+export function duplicatesOf(stores) {
+  const placed = placedScenes(stores), holding = new Set();
+  for (const scene of placed) for (const id of scene.place ? chainOf(stores, scene.place) : []) holding.add(id);
+  const groups = new Map();
+  for (const id of holding) {
+    const p = stores.original.places[id]; if (!p || isPool(id) || stores.decisions.merges?.[id]) continue;
+    const base = String(p.label).replace(/ \(scene \d+\)$/, ''); if (base.length <= 2) continue;
+    const key = `${base}|${p.scale}|${cityOf(stores, id)}`; groups.set(key, [...(groups.get(key) ?? []), id]);
+  }
+  return [...groups.values()].filter(ids => ids.length > 1).map(ids => ({ places: ids, label: stores.original.places[ids[0]].label.replace(/ \(scene \d+\)$/, '') }));
+}
+
 /** Whether the world script was written from the decisions as they are now (apply ran after the last decision). */
 function appliedAfter(stores) {
   let script; try { script = JSON.parse(readFileSync(join(stores.world, 'script.json'), 'utf8')); } catch { return false; }
@@ -240,7 +313,7 @@ function appliedAfter(stores) {
 export function checkOf(stores) {
   const out = checkParts(stores);
   // What is left for the agent: every count here must be zero, and apply must have run after the last decision.
-  out.left = out.undecided.length + out.unplacedStory.length + out.unproved.length + out.unprovedMoves;
+  out.left = out.undecided.length + out.unplacedStory.length + out.unproved.length + out.coarse.length + out.duplicates.length + out.unprovedMoves;
   out.done = out.left === 0 && out.applied;
   return out;
 }
@@ -254,6 +327,8 @@ function checkParts(stores) {
     unplaced: placed.filter(scene => !scene.place).length,
     unplacedStory: placed.filter(scene => !scene.place && isStory(scene) && !stores.decisions.units[scene.id]?.nowhere).map(scene => scene.id),
     unproved: unprovedOf(stores),
+    coarse: coarseOf(stores),
+    duplicates: duplicatesOf(stores),
     unprovedMoves: movesOf(stores).length,
     applied: appliedAfter(stores),
     decided: { places: Object.keys(stores.decisions.places).length, holds: Object.keys(stores.decisions.holds).length, units: Object.keys(stores.decisions.units).length, travels: Object.keys(stores.decisions.travels).length },
@@ -270,7 +345,9 @@ export async function apply(stores) {
   for (const [id, place] of Object.entries(stores.original.places)) {
     if (chainOf(stores, id).some(p => gone.has(p))) continue;
     if (isPool(id) && !used.has(id)) continue;
-    places[id] = { ...place, ...(d.holds[id] ? { parent: d.holds[id].parent, heldBy: 'agent' } : {}), ...(d.places[id] ? { decided: d.places[id].status } : {}) };
+    if (d.merges?.[id]) continue;
+    const parent = mergedInto(stores, d.holds[id]?.parent ?? place.parent ?? null);
+    places[id] = { ...place, ...(parent !== (place.parent ?? null) ? { parent } : {}), ...(d.holds[id] ? { heldBy: 'agent' } : {}), ...(d.places[id] ? { decided: d.places[id].status } : {}) };
   }
   const scenes = placed.map(scene => ({ ...scene, place: scene.place && places[scene.place] ? scene.place : null, ...(d.units[scene.id] ? { placeEvidence: d.units[scene.id].line ?? null } : {}) }));
   const script = { ...stores.original, places, scenes, placeTree: { by: 'agent', at: new Date().toISOString(), mentions: [...gone], decided: Object.keys(d.places).length + Object.keys(d.units).length + Object.keys(d.holds).length } };
@@ -307,7 +384,7 @@ export function unitsView(stores, { place = null, by = null, chapter = null, unp
 export async function run(argv) {
   const [command, novelDir, ...rest] = argv, positional = [], flags = {};
   for (let k = 0; k < rest.length; k++) { if (rest[k] === '--override' || rest[k] === '--unplaced') { flags[rest[k].slice(2)] = true; continue; } if (rest[k].startsWith('--')) { flags[rest[k].slice(2)] = rest[k + 1]; k++; } else positional.push(rest[k]); }
-  if (!command || !novelDir) throw new Error('Usage: place-tree <tree|place|unit|units|moves|setting|mention|drop|hold|set|same|nowhere|travel|check|apply> <novel-dir> [args]');
+  if (!command || !novelDir) throw new Error('Usage: place-tree <tree|place|unit|units|moves|setting|mention|drop|hold|set|same|nowhere|wide|merge|travel|check|apply> <novel-dir> [args]');
   const stores = await storesOf(novelDir);
   if (command === 'tree') return treeOf(stores).map(row => `${'  '.repeat(row.depth)}${row.id} ${row.label} [${row.scale ?? '?'}${row.unnamed ? ', unnamed' : ''}] ${row.status}; units here ${row.unitsHere}, under ${row.unitsUnder}`).join('\n');
   if (command === 'place') return placeView(stores, positional[0]);

@@ -21,7 +21,7 @@ async function repository(): Promise<string> {
 }
 const placeTree = async () => import(pathToFileURL(join(await repository(), "engine", "places", "place-tree.mjs")).href) as Promise<PlaceTreeModule>;
 
-export const PLACES_COMMANDS = ["tree", "place", "unit", "units", "moves", "setting", "mention", "drop", "hold", "set", "same", "nowhere", "travel", "check", "apply"] as const;
+export const PLACES_COMMANDS = ["tree", "place", "unit", "units", "moves", "setting", "mention", "drop", "hold", "set", "same", "nowhere", "wide", "merge", "travel", "check", "apply"] as const;
 
 /** One place-tree command; a claim the text does not show comes back as { refused: why } (never thrown), so the agent can correct it. */
 export async function placesCommand(command: string, novelDir: string, rest: string[]): Promise<unknown> {

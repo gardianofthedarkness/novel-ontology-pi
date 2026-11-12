@@ -104,6 +104,13 @@ not repeat it.
    Each run needs a sentence that puts it there (`set`), or `same` with the
    unit it goes on from. A place that holds a run it cannot show is often a
    misreading: a word that is not a place, or a room of another building.
+   Coarse placements: `check` lists runs of units placed wider than their own
+   lines show (a unit in a city whose lines name a room, a shop, a street).
+   Place each at the finest place its lines show, down to the room (`set`);
+   a run that really happens across a place (a chase through the streets) is
+   kept with `wide <workspace> <unit id> [--through <last unit id>] --why <text>`.
+   The same place made twice (two units' unnamed dorms that are one dorm):
+   `merge <workspace> <place id> <into place id> --why <text>`.
 5. `novel places moves <workspace>`: people changing city between units. Where a
    sentence shows the journey, `travel <workspace> <unit id> <person id> --line
    <id> --why <text>`; where none does, the unit is placed wrong: fix the place.
