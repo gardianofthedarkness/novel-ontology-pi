@@ -2357,7 +2357,8 @@ export async function direct(novelDir, { reading, readingPath = null, prefilm = 
         await save();
         // The reviewer segment: this unit's still (the director's camera on everyone in it at its end), and at the block's end
         // the review; a retake rewinds to the first unit retaken (its checkpoint) and plays on from there with the notes.
-        if (RV && k > RV.reviewedThrough) {
+        // A retaken unit played again gets its still too (kept with its block; it is not reviewed again).
+        if (RV && (k > RV.reviewedThrough || RV.retaken.has(scene.id))) {
           const ids = Object.keys(positions).filter(id => !String(id).startsWith('crowd:'));
           let still = null;
           if (looks && ids.length) {
@@ -2379,6 +2380,8 @@ export async function direct(novelDir, { reading, readingPath = null, prefilm = 
             } catch (error) { log(`${scene.id}: review still failed: ${error.message ?? error}`); }
           }
           const held = sceneRecord.cards.flatMap(card => (card.laws ?? []).filter(entry => entry.verdict === 'held').map(entry => `${entry.law} ${names.get(entry.who) ?? entry.who ?? ''}${entry.why ? ` (${String(entry.why).slice(0, 80)})` : ''}`));
+          if (k <= RV.reviewedThrough) { const entry = RV.blocks.flatMap(b => b.retakes).find(r => r.unit === scene.id && !r.still); if (entry) Object.assign(entry, { still, held: held.slice(0, 6) }); }
+          else {
           blockUnits.push({ k, unit: scene.id, still, place: script.places?.[scene.placeId]?.label ?? scene.placeId ?? null, people: ids.map(id => names.get(id) ?? id), cards: sceneRecord.cards.length, moves: sceneRecord.cards.reduce((n, card) => n + card.moves.filter(move => move.moved).length, 0), held: held.slice(0, 6), lines: (reads?.sentences ?? []).slice(0, 4).map(id => (text.get(id)?.text ?? '').slice(0, 80)).filter(Boolean) });
           if (blockUnits.length >= RV.every || k === E.chosen.length - 1) {
             const block = ++RV.block, folder = join(out, 'reviews', `d${record.startedAt.replace(/\D/g, '').slice(0, 14)}`);
@@ -2397,9 +2400,14 @@ export async function direct(novelDir, { reading, readingPath = null, prefilm = 
             }
             points.clear();
           }
+          }
         }
       }
-      if (RV) record.review = { every: RV.every, reviewer: RV.reviewer.id, blocks: RV.blocks, retaken: [...RV.retaken] };
+      if (RV) {
+        record.review = { every: RV.every, reviewer: RV.reviewer.id, blocks: RV.blocks, retaken: [...RV.retaken] };
+        // Each block's file gets its retakes as played again: their stills beside the first takes'.
+        for (const block of RV.blocks) if (block.file && block.retakes.length) { const kept = JSON.parse(await readFile(block.file, 'utf8').catch(() => 'null')); if (kept) await writeFile(block.file, JSON.stringify({ ...kept, retaken: block.retakes }, null, 1)); }
+      }
       // The things placed over the line, for the record.
       // The world's layers as the run left them, and what began, united and changed hands on the way (M17c).
       if (E.layers) record.layers = E.layers.report();
