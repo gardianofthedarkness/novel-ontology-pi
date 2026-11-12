@@ -1466,6 +1466,31 @@ whether they belong.</p>
 <li>This is how v3's render units get an owner (<a href="#render-units">§6.2</a>): the agent proposes the settings, book by book, with
   the lines that show them.</li>
 </ul>
+<h3 id="agent-workflows">The agent's workflows: one button for a volume</h3>
+<p>The user, 2026-11-12, after Pi's place pass left the misread buildings it had flagged ("the message only asked about
+cities and districts"): "It seems like we don't have workflows created for agents. These should be hard linked into
+workflows that are self motivated: fixed formats and prompts initiated with one botton to run a volume".</p>
+<p>A step of a volume that needs the agent's judgement is a <b>workflow</b> (<code>engine/workflows/workflows.mjs</code>), not a
+message someone writes. Each workflow fixes five things: the <b>prompt</b>, which names the whole job (for the place tree:
+cities and districts, buildings and rooms, and the place of every unit); the <b>commands</b> it may run (the guard checks
+each one's form; only its verbs, only its book); the <b>skill</b> it reads; the <b>reply format</b> (fixed headings); and the
+<b>check</b>, code that says what is left. The volume runner starts the agent with the prompt and, while the check finds
+something left or the reply is out of format, sends the same follow-up with what is left, in the same session, up to the
+workflow's rounds; the step is done only when the check passes. Nothing in a workflow depends on what a book holds. Each
+run is kept in <code>&lt;book&gt;/workflows/&lt;id&gt;.json</code> (every round: what was sent, the reply, the commands, what was left).</p>
+<table>
+<thead><tr><th>Step</th><th>Workflow</th><th>Done when</th></tr></thead>
+<tbody>
+<tr><td>places (after workspace)</td><td>the place tree with evidence</td><td><code>novel places check</code> "done": no undecided city or district, no unplaced story unit (a title or afterword is <code>nowhere</code>), no unproved placement (a run of units whose place no sentence shows: set with a line, or <code>same ... --through</code>), no change of city without a journey, and applied</td></tr>
+<tr><td>look (before terrain)</td><td>the look pass</td><td>settings written since the step began, each with a why</td></tr>
+</tbody>
+</table>
+<p><b>The agent</b> is the one the user has open in the console's chat: Pi on the work model (one round =
+<code>tools/pi-review/workflow-agent.mjs</code>, a session continued for follow-ups) or Claude Code (<code>claude -p</code>, resumed,
+allowed only the workflow's verbs through the book's own <code>novel</code> command). <b>One button</b>: a world book's
+<b>Run volume</b> in the console (and <code>novel volume run &lt;book&gt;</code>) runs every step not done in the background, the
+agent's steps included; <code>NOVEL_VOLUME_AGENT=hand</code> keeps the old stop at the agent's steps for an agent that drives
+the runner itself.</p>
 <h2 id="strands">6.3 Strands: groups in envelopes</h2>
 <p><span id="strands-m14"></span><span id="forks-m15"></span></p>
 <blockquote>

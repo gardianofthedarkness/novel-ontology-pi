@@ -1,7 +1,7 @@
 // Tests for the place tree by the agent: every decision needs a line of the book that shows it.
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { decide, namesAlone, placedScenes, movesOf, checkOf } from './place-tree.mjs';
+import { decide, namesAlone, placedScenes, movesOf, checkOf, unprovedOf } from './place-tree.mjs';
 
 const CITY = '\u5b66\u56ed\u90fd\u5e02', KYOTO = '\u4eac\u90fd', TOKYO = '\u4e1c\u4eac\u90fd';
 function stores() {
@@ -73,4 +73,22 @@ test('a change of city with no travel line is an unproved move until a line show
   decide(s, 'travel', args(['u5', 'a'], { line: 's6', why: 'by plane' }));
   assert.ok(!movesOf(s).some(m => m.to === 'u5'));
   assert.ok(checkOf(s).unprovedMoves >= 1);
+});
+
+test('a unit whose place no sentence shows is unproved until decided; nowhere and --through settle units at once', () => {
+  const s = stores();
+  decide(s, 'setting', args(['city'], { line: 's1', why: 'streets' }));
+  decide(s, 'mention', args(['kyoto'], { why: 'only remembered' }));
+  decide(s, 'hold', args(['unnamed:dorm', 'pool:city'], { line: 's2', why: 'his dorm' }));
+  s.original.scenes[2].place = 'city';
+  // u3 and u4 far in the book from the lines that name the dorm and the city.
+  s.order.push(...Array.from({ length: 40 }, (_, k) => `f${k}`), 's3', 's4', 's5'); s.at.set('s3', 46); s.at.set('s4', 47); s.at.set('s5', 48);
+  assert.ok(unprovedOf(s).some(run => run.from === 'u4'), 'u4 sits in the dorm with no line and after a unit elsewhere');
+  assert.ok(!unprovedOf(s).some(run => run.from === 'u2'), 'u2 names the dorm');
+  decide(s, 'same', args(['u3', 'u2'], { through: 'u4', why: 'the evening in the dorm' }));
+  assert.deepEqual(unprovedOf(s), []);
+  assert.deepEqual(checkOf(s).unplacedStory, ['u5']);
+  decide(s, 'nowhere', args(['u5'], { why: 'an afterword' }));
+  assert.deepEqual(checkOf(s).unplacedStory, []);
+  refused(() => decide(s, 'same', args(['u4', 'u2'], { through: 'u1', why: 'backwards' })));
 });

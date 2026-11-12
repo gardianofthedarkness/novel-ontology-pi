@@ -57,7 +57,7 @@ const node = (script, ...args) => ({ program: process.execPath, args: [join(repo
 const cli = (...args) => node('dist/src/cli/cli.js', ...args);
 
 /**
- * The steps, in order. Each: `id`; `paid` (Jev or the work model are asked); `who` 'runner' or 'pi' (Pi's judgement);
+ * The steps, in order. Each: `id`; `paid` (Jev or the work model are asked); `who` 'runner' or 'agent' (a workflow the runner drives);
  * `done(at)` whether its result is there; `commands(at)` what it runs (one after another), or `act(at)` done in process.
  */
 export const STEPS = [
@@ -76,6 +76,10 @@ export const STEPS = [
       const settings = join(at.source, 'stage', 'settings.json');
       if (existsSync(settings) && !existsSync(join(at.novel, 'stage', 'settings.json'))) await cp(settings, join(at.novel, 'stage', 'settings.json'));
     } },
+  // The agent's steps are workflows (engine/workflows/workflows.mjs): the runner starts the agent with the workflow's fixed
+  // prompt and keeps at it until the workflow's check passes; NOVEL_VOLUME_AGENT=hand stops here for an agent to do it.
+  { id: 'places', paid: true, who: 'agent', workflow: 'places', why: 'the agent\'s place tree with evidence: every city, building, room and unit\'s place shown by a sentence (workflow places; the work model)',
+    done: at => !!readJson(join(at.novel, 'stage', 'world', 'script.json'))?.placeTree && existsSync(join(at.novel, 'stage', 'world', 'script.reading.json')) && readJson(join(at.bookDir, 'workflows', 'places.json'))?.done === true },
   { id: 'strands', paid: false, why: 'the book\'s strands by interaction (stage/world/strands.json)',
     done: at => existsSync(join(at.novel, 'stage', 'world', 'strands.json')),
     commands: async at => [node('engine/reading/strands.mjs', at.novel, '--reading', at.data)] },
@@ -91,7 +95,7 @@ export const STEPS = [
       out.push(cli('strands', 'inherit', at.novel, '--work'));
       return out;
     } },
-  { id: 'look', paid: true, who: 'pi', why: 'YOUR step: the look pass (novel-models skill): models for the book\'s things, settings for how its places look; then `novel volume done <workspace> look --why <text>`',
+  { id: 'look', paid: true, who: 'agent', workflow: 'look', why: 'the agent\'s look pass (workflow look, novel-models skill): settings for how the book\'s places look, from the text',
     done: () => false },
   { id: 'sky', paid: true, why: 'time of day and weather by unit (12 or so Jev questions)',
     done: at => existsSync(join(at.reading, 'sky.json')), commands: async at => [cli('sky', 'build', at.novel)],
@@ -156,11 +160,18 @@ export async function execute(novelDir, ids, { log = () => {} } = {}) {
   for (const id of ids) {
     const step = STEPS.find(entry => entry.id === id);
     if (!step) throw new Error(`no step ${id}`);
-    if (step.who === 'pi') { log(`${id}: the agent's step; stopping here`); break; }
+    if (step.who === 'agent' && process.env.NOVEL_VOLUME_AGENT === 'hand') { log(`${id}: the agent's step, by hand; stopping here`); break; }
     const state = await stateOf(at);
     state.steps[id] = { status: 'running', pid: process.pid, started: new Date().toISOString(), ...(state.steps[id]?.status === 'failed' || state.steps[id]?.failedBefore ? { failedBefore: true } : {}) };
     await save(at, state);
     try {
+      if (step.workflow) {
+        const { runWorkflow } = await import('../workflows/workflows.mjs');
+        const out = await open(join(at.logs, `${id}.out`), 'w');
+        const result = await runWorkflow(step.workflow, at.novel, { log: line => { void out.write(`${new Date().toISOString()} ${line}\n`); log(line); } });
+        await out.write(`${JSON.stringify({ done: result.done, rounds: result.rounds, left: result.left.length, record: result.record })}\n${result.reply}\n`); await out.close();
+        if (!result.done) throw new Error(`the agent's ${step.workflow} workflow ended with ${result.left.length} left after ${result.rounds} rounds: ${result.left.slice(0, 5).join('; ')} (record ${result.record})`);
+      }
       if (step.act) await step.act(at);
       for (const [n, command] of (step.commands ? await step.commands(at) : []).entries()) {
         const out = await open(join(at.logs, `${id}.out`), n ? 'a' : 'w'), err = await open(join(at.logs, `${id}.err`), n ? 'a' : 'w');
@@ -199,9 +210,11 @@ export async function run(novelDir, { step = null, until = null } = {}) {
     const to = until ? order.indexOf(until) : order.length - 1;
     if (until && to < 0) throw new Error(`no step ${until}`);
     ids = order.slice(from, to + 1);
-    const pi = ids.findIndex(id => STEPS.find(entry => entry.id === id).who === 'pi');
-    if (pi === 0) throw new Error(`the next step, ${ids[0]}, is yours: ${STEPS.find(entry => entry.id === ids[0]).why}`);
-    if (pi > 0) ids = ids.slice(0, pi);
+    if (process.env.NOVEL_VOLUME_AGENT === 'hand') {
+      const own = ids.findIndex(id => STEPS.find(entry => entry.id === id).who === 'agent');
+      if (own === 0) throw new Error(`the next step, ${ids[0]}, is yours: ${STEPS.find(entry => entry.id === ids[0]).why}`);
+      if (own > 0) ids = ids.slice(0, own);
+    }
   }
   await mkdir(at.logs, { recursive: true });
   const runnerLog = await open(join(at.logs, 'runner.log'), 'a');
@@ -219,7 +232,7 @@ export async function logOf(novelDir, step, lines = 40) {
 /** The agent's own step marked done, with why. */
 export async function markDone(novelDir, step, why) {
   const at = placesOf(novelDir), found = STEPS.find(entry => entry.id === step);
-  if (!found || found.who !== 'pi') throw new Error(`only the agent's steps are marked done by hand (${STEPS.filter(entry => entry.who === 'pi').map(entry => entry.id).join(', ')})`);
+  if (!found || found.who !== 'agent') throw new Error(`only the agent's steps are marked done by hand (${STEPS.filter(entry => entry.who === 'agent').map(entry => entry.id).join(', ')})`);
   if (!why?.trim()) throw new Error('say why (--why)');
   const state = await stateOf(at);
   state.steps[step] = { status: 'done', ended: new Date().toISOString(), note: why.trim() };

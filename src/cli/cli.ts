@@ -367,7 +367,7 @@ async function main(): Promise<void> {
 
   if (cmd === "places") {
     const novelDir = positional[2];
-    if (!(PLACES_COMMANDS as readonly string[]).includes(sub ?? "") || !novelDir || novelDir.startsWith("--")) throw new Error("Usage: novel places tree|place|unit|units|moves|check|apply <novel-dir> [...] | setting|mention|drop|hold|set|same|travel <novel-dir> ... --why <text> [--line <sentence id>] [--override]");
+    if (!(PLACES_COMMANDS as readonly string[]).includes(sub ?? "") || !novelDir || novelDir.startsWith("--")) throw new Error("Usage: novel places tree|place|unit|units|moves|check|apply <novel-dir> [...] | setting|mention|drop|hold|set|same|nowhere|travel <novel-dir> ... --why <text> [--line <sentence id>] [--through <unit>] [--override]");
     const result = await placesCommand(sub as string, novelDir, positional.slice(3));
     if (typeof result === "string") console.log(result); else out(result, pretty);
     if (result && typeof result === "object" && "refused" in result) process.exitCode = 3;

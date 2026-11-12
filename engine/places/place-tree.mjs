@@ -8,10 +8,10 @@
 //   look:    tree | place <id> | unit <scene> | units [--place <id>] [--by <how>] [--chapter <n>] | moves
 //   decide:  setting <id> --line <id> --why <t> | mention <id> --why <t> | drop <id> --why <t>
 //            hold <unnamed id> <parent id> --line <id> --why <t> | set <scene> <place id> --line <id> --why <t>
-//            same <scene> <earlier scene> --why <t> | travel <scene> <person> --line <id> --why <t>
+//            same <scene> <earlier scene> [--through <scene>] --why <t> | nowhere <scene> --why <t> | travel <scene> <person> --line <id> --why <t>
 //   then:    check | apply
 //   node engine/places/place-tree.mjs <command> <novel-dir> [args]
-import { existsSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 import { copyFile, readFile, writeFile } from 'node:fs/promises';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
@@ -73,7 +73,8 @@ export function placedScenes(stores) {
   for (const scene of stores.original.scenes) {
     const decided = d.units[scene.id];
     let place = scene.place, by = scene.placeBy;
-    if (decided?.place) { place = decided.place; by = 'agent'; }
+    if (decided?.nowhere) { place = null; by = 'agent (nowhere: ' + decided.why + ')'; }
+    else if (decided?.place) { place = decided.place; by = 'agent'; }
     else if (decided?.same) { place = byId.get(decided.same)?.place ?? null; by = 'agent (same as ' + decided.same + ')'; }
     else if (place && chainOf(stores, place).some(gone)) { place = null; by = 'none (its place is not a setting)'; }
     const row = { ...scene, place, placeBy: by };
@@ -115,7 +116,7 @@ export function namesAlone(text, name, longer = []) {
 /** Whether a line names a place: any of its names, or (an unnamed place) its own words; or a place under it. */
 function names(stores, id, line) {
   const t = stores.text.get(line)?.text ?? '';
-  const all = Object.keys(stores.original.places).flatMap(other => namesOf(stores, other));
+  const all = stores.allNames ??= Object.keys(stores.original.places).flatMap(other => namesOf(stores, other));
   const under = Object.keys(stores.original.places).filter(other => chainOf(stores, other).includes(id));
   return [id, ...under].some(p => namesOf(stores, p).some(n => namesAlone(t, n, all)));
 }
@@ -167,7 +168,18 @@ export function decide(stores, command, args) {
     if (j >= i) refuse(`${b} is not before ${a}.`);
     // Across a chapter's start only from the units just before it (a chapter that opens mid-scene); further back, a line of its own.
     if (stores.original.scenes[i].chapter !== stores.original.scenes[j].chapter && i - j > SAME_ACROSS) refuse(`${b} is in another chapter and more than ${SAME_ACROSS} units before: give ${a} its own line (set).`);
-    d.units[a] = { same: b, why }; record(stores, { command, scene: a, same: b, why }); return d.units[a];
+    // --through <unit>: every unit from a to that one goes on where b was (a run of units in one place).
+    const k = args.through ? stores.original.scenes.findIndex(s => s.id === args.through) : i;
+    if (k < i) refuse(`--through ${args.through} is not ${a} or after it.`);
+    if (k - i > 60) refuse('--through covers at most 60 units at once.');
+    const run = stores.original.scenes.slice(i, k + 1).map(s => s.id);
+    for (const id of run) d.units[id] = { same: b, why };
+    record(stores, { command, scene: a, same: b, ...(k > i ? { through: args.through } : {}), why }); return { same: b, units: run.length, why };
+  }
+  // A unit that happens nowhere: front matter, a chapter's title, a summary or an afterword, whatever people it names.
+  if (command === 'nowhere') {
+    if (!stores.original.scenes.some(s => s.id === a)) refuse(`No unit ${a}.`); needWhy(why);
+    d.units[a] = { nowhere: true, why }; record(stores, { command, scene: a, why }); return d.units[a];
   }
   if (command === 'travel') {
     const [scene, person] = [a, b]; if (!stores.original.scenes.some(s => s.id === scene)) refuse(`No unit ${scene}.`); needWhy(why);
@@ -194,7 +206,45 @@ export function movesOf(stores) {
 }
 
 /** What is left: undecided cities and districts, units with no place, settings with no unit, unproved moves. */
+/** Whether a unit has people in it (front matter, titles and afterwords have none and may stay unplaced). */
+const isStory = scene => (scene.present ?? []).some(who => !String(who).startsWith('crowd:'));
+/**
+ * Units whose place no sentence shows, as runs: a unit's place is shown when the agent decided it, when a line of the unit
+ * (or just before it) names the place or a place in it, or when the unit goes on in the place of the story unit before it
+ * (in its chapter, or just across a chapter's start) whose place is shown.
+ */
+export function unprovedOf(stores) {
+  const placed = placedScenes(stores), shown = new Map(), out = [];
+  let previous = null;
+  for (const [k, scene] of placed.entries()) {
+    if (!scene.place || !isStory(scene)) continue;
+    const lines = stores.sceneLines.get(scene.id) ?? [], first = stores.at.get(lines[0]);
+    const window = first === undefined ? lines : [...stores.order.slice(Math.max(0, first - LOOK_BACK), first), ...lines];
+    const ok = !!stores.decisions.units[scene.id]
+      || window.some(line => names(stores, scene.place, line))
+      || (previous && previous.place === scene.place && shown.get(previous.id) && (previous.chapter === scene.chapter || k - previous.k <= SAME_ACROSS));
+    shown.set(scene.id, ok);
+    if (!ok) { const last = out.at(-1); if (last && last.place === scene.place && last.toIndex === k - 1) { last.to = scene.id; last.toIndex = k; last.count++; } else out.push({ from: scene.id, to: scene.id, place: scene.place, label: stores.original.places[scene.place]?.label ?? scene.place, count: 1, toIndex: k }); }
+    previous = { id: scene.id, place: scene.place, chapter: scene.chapter, k };
+  }
+  return out.map(({ toIndex, ...run }) => run);
+}
+
+/** Whether the world script was written from the decisions as they are now (apply ran after the last decision). */
+function appliedAfter(stores) {
+  let script; try { script = JSON.parse(readFileSync(join(stores.world, 'script.json'), 'utf8')); } catch { return false; }
+  const last = stores.decisions.log.at(-1)?.at;
+  return !!script.placeTree?.at && (!last || script.placeTree.at >= last);
+}
+
 export function checkOf(stores) {
+  const out = checkParts(stores);
+  // What is left for the agent: every count here must be zero, and apply must have run after the last decision.
+  out.left = out.undecided.length + out.unplacedStory.length + out.unproved.length + out.unprovedMoves;
+  out.done = out.left === 0 && out.applied;
+  return out;
+}
+function checkParts(stores) {
   const tree = treeOf(stores), placed = placedScenes(stores);
   const areas = tree.filter(row => ['city', 'district', 'region'].includes(row.scale) && !isPool(row.id));
   return {
@@ -202,7 +252,10 @@ export function checkOf(stores) {
     emptySettings: tree.filter(row => row.status === 'setting' && row.unitsUnder === 0).map(row => ({ id: row.id, label: row.label })),
     placeholders: tree.filter(row => isPool(row.id) && row.unitsUnder > 0).map(row => ({ id: row.id, label: row.label, unitsUnder: row.unitsUnder })),
     unplaced: placed.filter(scene => !scene.place).length,
+    unplacedStory: placed.filter(scene => !scene.place && isStory(scene) && !stores.decisions.units[scene.id]?.nowhere).map(scene => scene.id),
+    unproved: unprovedOf(stores),
     unprovedMoves: movesOf(stores).length,
+    applied: appliedAfter(stores),
     decided: { places: Object.keys(stores.decisions.places).length, holds: Object.keys(stores.decisions.holds).length, units: Object.keys(stores.decisions.units).length, travels: Object.keys(stores.decisions.travels).length },
   };
 }
@@ -254,7 +307,7 @@ export function unitsView(stores, { place = null, by = null, chapter = null, unp
 export async function run(argv) {
   const [command, novelDir, ...rest] = argv, positional = [], flags = {};
   for (let k = 0; k < rest.length; k++) { if (rest[k] === '--override' || rest[k] === '--unplaced') { flags[rest[k].slice(2)] = true; continue; } if (rest[k].startsWith('--')) { flags[rest[k].slice(2)] = rest[k + 1]; k++; } else positional.push(rest[k]); }
-  if (!command || !novelDir) throw new Error('Usage: place-tree <tree|place|unit|units|moves|setting|mention|drop|hold|set|same|travel|check|apply> <novel-dir> [args]');
+  if (!command || !novelDir) throw new Error('Usage: place-tree <tree|place|unit|units|moves|setting|mention|drop|hold|set|same|nowhere|travel|check|apply> <novel-dir> [args]');
   const stores = await storesOf(novelDir);
   if (command === 'tree') return treeOf(stores).map(row => `${'  '.repeat(row.depth)}${row.id} ${row.label} [${row.scale ?? '?'}${row.unnamed ? ', unnamed' : ''}] ${row.status}; units here ${row.unitsHere}, under ${row.unitsUnder}`).join('\n');
   if (command === 'place') return placeView(stores, positional[0]);
@@ -263,7 +316,7 @@ export async function run(argv) {
   if (command === 'moves') return movesOf(stores);
   if (command === 'check') return checkOf(stores);
   if (command === 'apply') { const result = await apply(stores); await save(stores); return result; }
-  const decided = decide(stores, command, { positional, why: flags.why, line: flags.line, override: 'override' in flags });
+  const decided = decide(stores, command, { positional, why: flags.why, line: flags.line, through: flags.through, override: 'override' in flags });
   await save(stores);
   return { ok: true, [command]: positional, ...decided };
 }

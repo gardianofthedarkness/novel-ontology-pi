@@ -12,7 +12,7 @@ import { fileURLToPath } from "node:url";
 const here = dirname(fileURLToPath(import.meta.url)), appDir = resolve(here, "..");
 const argv = process.argv.slice(2), flag = (name) => { const at = argv.indexOf(name); return at >= 0 ? argv.splice(at, 2)[1] : null; };
 const take = (name) => { const at = argv.indexOf(name); if (at < 0) return false; argv.splice(at, 1); return true; };
-const arrange = take("--arrange"), worldStep = take("--world"), copyStep = take("--copy-world"), reviewStep = take("--review"), noAsk = take("--no-ask"), agentArrange = take("--agent-arrange"), asUser = take("--as-user"), realAgent = take("--real-agent") || asUser;
+const arrange = take("--arrange"), volumeStep = take("--volume"), worldStep = take("--world"), copyStep = take("--copy-world"), reviewStep = take("--review"), noAsk = take("--no-ask"), agentArrange = take("--agent-arrange"), asUser = take("--as-user"), realAgent = take("--real-agent") || asUser;
 const packaged = flag("--app"), pick = Number(flag("--book") ?? 1) - 1, agentTab = flag("--agent") ?? "claude-code"; flag("--shots");
 const shotsDir = (() => { const at = process.argv.indexOf("--shots"); return at >= 0 ? resolve(process.argv[at + 1]) : null; })();
 const folders = (argv[0] ?? "").split(",").filter(Boolean).map((folder) => resolve(folder));
@@ -111,6 +111,14 @@ try {
     const data = await run(`(async () => { const base = document.getElementById("worldframe").src.replace(/\\/play\\/world.*$/, ""); const get = async (name) => { const r = await fetch(base + "/play/" + name + "?volume=1"); return r.ok ? Object.keys(await r.json()).slice(0, 8) : r.status; }; const post = await fetch(base + "/play/settings?volume=1", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ key: "fill.streets", value: {}, why: "test" }) }); return { vendor: (await fetch(base + "/play/vendor/three.module.js")).status, live: await get("live.json"), review: await get("review.json"), settings: await get("settings.json"), warehouse: await get("warehouse.json"), settingsChange: post.status }; })()`);
     step("world", { worldRows, page, data, crumb: await run(`document.getElementById("crumb").textContent.replace(/[^\\x20-\\x7e]/g, "?")`) });
     await picture("1e-world");
+  }
+  // A world book's volume (one button): an editable world's book row says where its volume stands; Run volume is there
+  // while a step is not done. Nothing is pressed: a volume spends the keys' tokens.
+  if (volumeStep) {
+    const rows = await until(() => run(`(() => { const rows = [...document.querySelectorAll("#tree .node.world-book")].map((row) => row.textContent.replace(/[^\\x20-\\x7e]/g, "?")); return rows.some((text) => /next |every step done|running |failed/.test(text)) ? rows : null; })()`), "a world book's volume line", 90000);
+    const buttons = await run(`[...document.querySelectorAll("#tree .node.world-book .act")].map((button) => button.textContent + " | " + button.title.replace(/[^\\x20-\\x7e]/g, "?").slice(0, 160))`);
+    step("volume", { rows: rows.slice(0, 6).map((text) => text.slice(0, 120)), buttons });
+    await picture("1g-volume");
   }
   // A read-only world copied to edit: the copy found in the folder's .novel/worlds, opened, and a note on it accepted.
   if (copyStep) {

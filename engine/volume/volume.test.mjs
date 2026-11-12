@@ -10,11 +10,11 @@ import { STEPS, execute, lastRun, markDone, placesOf, previousBook, run, status 
 const library = async () => { const root = await mkdtemp(join(tmpdir(), 'volume-')), novel = join(root, 'vol-2', 'novel'); await mkdir(join(novel, 'source'), { recursive: true }); return { root, novel }; };
 const until = async (check, ms = 10000) => { const end = Date.now() + ms; while (Date.now() < end) { if (await check()) return true; await new Promise(done => setTimeout(done, 50)); } return false; };
 
-test('the steps in order, the look pass the agent\'s, before terrain', () => {
+test('the steps in order, the place tree and the look pass the agent\'s, before terrain', () => {
   const ids = STEPS.map(step => step.id);
-  assert.deepEqual(ids.slice(0, 6), ['prepare', 'read', 'workspace', 'strands', 'carry', 'look']);
+  assert.deepEqual(ids.slice(0, 7), ['prepare', 'read', 'workspace', 'places', 'strands', 'carry', 'look']);
   assert.ok(ids.indexOf('look') < ids.indexOf('terrain') && ids.indexOf('snapshot') < ids.indexOf('direct') && ids.at(-1) === 'kept');
-  assert.deepEqual(STEPS.filter(step => step.who === 'pi').map(step => step.id), ['look']);
+  assert.deepEqual(STEPS.filter(step => step.who === 'agent').map(step => [step.id, step.workflow]), [['places', 'places'], ['look', 'look']]);
   assert.deepEqual([previousBook('vol-2'), previousBook('vol-1'), previousBook('vol-10')], ['vol-1', null, 'vol-9']);
 });
 
@@ -29,10 +29,11 @@ test('a new book: everything waits; prepare runs in the background and sets the 
   assert.equal((await status(novel)).next.id, 'read');
 });
 
-test('the agent\'s step is not started by the runner; it is marked done with a why', async () => {
+test('by hand (NOVEL_VOLUME_AGENT=hand) the agent\'s step is not started by the runner; it is marked done with a why', async () => {
   const { novel } = await library(), at = placesOf(novel);
-  await writeFile(at.state, JSON.stringify({ book: 'vol-2', steps: Object.fromEntries(['prepare', 'read', 'workspace', 'strands', 'carry'].map(id => [id, { status: 'done' }])) }));
-  await assert.rejects(run(novel), /the next step, look, is yours/);
+  await writeFile(at.state, JSON.stringify({ book: 'vol-2', steps: Object.fromEntries(['prepare', 'read', 'workspace', 'places', 'strands', 'carry'].map(id => [id, { status: 'done' }])) }));
+  process.env.NOVEL_VOLUME_AGENT = 'hand';
+  try { await assert.rejects(run(novel), /the next step, look, is yours/); } finally { delete process.env.NOVEL_VOLUME_AGENT; }
   await assert.rejects(markDone(novel, 'terrain', 'no'), /only the agent's steps/);
   await assert.rejects(markDone(novel, 'look', ' '), /say why/);
   assert.equal((await markDone(novel, 'look', 'models and settings set')).status, 'done');

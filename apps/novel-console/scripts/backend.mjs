@@ -30,6 +30,9 @@ for (const rel of Object.values(VENDOR_FILES)) {
 }
 copy("apps/reader/reader.html");
 copy("skills/novel-folder");
+// The agent's workflows for a whole volume (engine/workflows): the skills they read and Pi's round runner with its guard.
+copy("skills/novel-volume"); copy("skills/novel-models");
+for (const name of ["workflow-agent.mjs", "guard.mjs"]) copy(`tools/pi-review/${name}`);
 // Pi, for arranging a folder when Claude Code is signed out (tools/pi-review/folder-arrange.mjs and its packages).
 for (const name of ["folder-arrange.mjs", "folder-scope.mjs", "package.json"]) copy(`tools/pi-review/${name}`);
 // Its packages without node_modules/.bin: those are symbolic links, which the app's signature refuses (Pi runs as a module).

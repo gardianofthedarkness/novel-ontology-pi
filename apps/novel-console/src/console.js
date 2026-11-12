@@ -180,6 +180,27 @@ function openWorld(lib, world, book) {
   render(); if (leftView === "review") renderReview();
 }
 const copyingNow = new Set();
+// A whole volume with one button (docs/v3/design.html#agent-workflows): each world book's steps, the next one, and while
+// one runs the row says which, read again every 15 seconds.
+const volumeState = new Map(), volumeLoading = new Set();
+const volumeRunning = (state) => state?.steps.some((step) => step.status === "running");
+const volumeLine = (state) => !state ? "" : volumeRunning(state) ? ` \u00b7 running ${state.steps.find((step) => step.status === "running").id}` : state.steps.some((step) => step.status === "failed") ? ` \u00b7 ${state.steps.find((step) => step.status === "failed").id} failed` : state.next ? ` \u00b7 next ${state.next.id}` : " \u00b7 every step done";
+const volumeTitle = (state) => !state ? "" : `\n\nSteps: ${state.steps.map((step) => `${step.id}${step.who === "agent" ? " (agent)" : ""} ${step.status}`).join(", ")}${state.steps.find((step) => step.error) ? `\n${state.steps.find((step) => step.error).error}` : ""}`;
+async function loadVolume(wid, volume) {
+  const key = `${wid}|${volume}`; if (volumeLoading.has(key)) return; volumeLoading.add(key);
+  try { volumeState.set(key, await host.volumeStatus(wid, volume)); render(); } catch { volumeState.set(key, null); } finally { volumeLoading.delete(key); }
+}
+setInterval(() => { for (const [key, state] of volumeState) if (volumeRunning(state)) { const [wid, volume] = key.split("|"); volumeState.delete(key); void loadVolume(wid, volume); } }, 15000);
+async function runVolume(world, book) {
+  const agent = chosenHost, name = AGENT_NAMES[agent] ?? "an agent", state = volumeState.get(`${world.wid}|${book.volume}`);
+  // The runner goes on from the first step not done to the end, every step after it again: say which of those are paid.
+  const from = Math.max(0, state?.steps.findIndex((step) => step.id === state?.next?.id) ?? 0), paid = state?.steps.slice(from).filter((step) => step.paid).map((step) => step.id) ?? [];
+  const choice = await chooser(`Run ${book.title ?? `volume ${book.volume}`}?`, `Every step from ${state?.next?.id ?? "the start"} to the end, in the background; the agent's steps (the place tree, the look pass) with ${name}. Paid steps: ${paid.join(", ") || "none"}.`, [["Run it", "run"], ["Not now", "no"]]);
+  if (choice !== "run") return;
+  try { const started = await host.runVolume(world.wid, book.volume, { agent }); say(`${book.title ?? `Volume ${book.volume}`}: started ${(started.started ?? []).join(", ") || started.note || "nothing"}.`); }
+  catch (error) { say(plainError(error), true); }
+  volumeState.delete(`${world.wid}|${book.volume}`); void loadVolume(world.wid, book.volume);
+}
 async function copyWorld(lib, world) {
   copyingNow.add(world.root); render();
   say(`Copying ${world.name} to edit (its latest finished run; the world itself is only read)\u2026`);
@@ -427,8 +448,14 @@ function render() {
         tree.append(node({ depth: 2, chev: open, icon: "\u25cd", name: world.name, nameClass: "book", desc: `${world.books.length} ${world.books.length === 1 ? "book" : "books"}${world.readOnly ? " \u00b7 read only" : ""}`, cls: "world", title: world.root,
           action: !world.readOnly ? null : copying ? actionButton(`<span class="spin"></span>`, "", "Copying\u2026", () => {}) : actionButton("Copy to edit", "", "An editable copy of its latest finished run in this folder's .novel/worlds (the world itself is only read)", () => copyWorld(lib, world)),
           onClick: () => { toggle(`closed:${key}`); render(); } }));
-        if (open) for (const book of world.books) tree.append(node({ depth: 3, icon: "\u25b8", name: book.title ?? `Volume ${book.volume}`, desc: `${book.runs.length} ${book.runs.length === 1 ? "run" : "runs"}${book.accepted ? ` \u00b7 plays ${book.accepted}` : ""}`, cls: `world-book${shownWorld?.key === `${world.wid}|${book.volume}` ? " active" : ""}`,
-          title: `${book.workspace}\nOpen World \u00b7 Live for this book`, onClick: () => openWorld(lib, world, book) }));
+        if (open) for (const book of world.books) {
+          const vkey = `${world.wid}|${book.volume}`, state = volumeState.get(vkey);
+          if (!state) void loadVolume(world.wid, book.volume);
+          tree.append(node({ depth: 3, icon: "\u25b8", name: book.title ?? `Volume ${book.volume}`, desc: `${book.runs.length} ${book.runs.length === 1 ? "run" : "runs"}${book.accepted ? ` \u00b7 plays ${book.accepted}` : ""}${volumeLine(state)}`, cls: `world-book${shownWorld?.key === vkey ? " active" : ""}`,
+            title: `${book.workspace}\nOpen World \u00b7 Live for this book${volumeTitle(state)}`, onClick: () => openWorld(lib, world, book),
+            action: world.readOnly || !state ? null : volumeRunning(state) ? actionButton(`<span class="spin"></span>`, "", `Running: ${state.steps.find((step) => step.status === "running")?.id}`, () => {})
+              : state.next ? actionButton("Run volume", "", `Run every step not done, from ${state.next.id}; the agent's steps with ${AGENT_NAMES[chosenHost] ?? "the agent in the chat"} (spends the keys' tokens)`, () => runVolume(world, book)) : null }));
+        }
       }
     }
     if (!data.universes.length && !data.unsorted.length) tree.append(node({ depth: 1, name: "No EPUB or text files here.", cls: "group" }));

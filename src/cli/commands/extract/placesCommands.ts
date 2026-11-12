@@ -12,7 +12,8 @@ async function repository(): Promise<string> {
   let directory = dirname(fileURLToPath(import.meta.url));
   for (;;) {
     const pkg = await readFile(join(directory, "package.json"), "utf8").then((text) => JSON.parse(text) as { name?: string }, () => null);
-    if (pkg?.name === "novel-ontology-pi") return directory;
+    // The repository, or Novel Console's bundled backend.
+    if (pkg?.name === "novel-ontology-pi" || pkg?.name === "novel-console-backend") return directory;
     const parent = dirname(directory);
     if (parent === directory) throw new Error("The world engine is not installed beside this CLI (engine/places/place-tree.mjs).");
     directory = parent;
@@ -20,7 +21,7 @@ async function repository(): Promise<string> {
 }
 const placeTree = async () => import(pathToFileURL(join(await repository(), "engine", "places", "place-tree.mjs")).href) as Promise<PlaceTreeModule>;
 
-export const PLACES_COMMANDS = ["tree", "place", "unit", "units", "moves", "setting", "mention", "drop", "hold", "set", "same", "travel", "check", "apply"] as const;
+export const PLACES_COMMANDS = ["tree", "place", "unit", "units", "moves", "setting", "mention", "drop", "hold", "set", "same", "nowhere", "travel", "check", "apply"] as const;
 
 /** One place-tree command; a claim the text does not show comes back as { refused: why } (never thrown), so the agent can correct it. */
 export async function placesCommand(command: string, novelDir: string, rest: string[]): Promise<unknown> {

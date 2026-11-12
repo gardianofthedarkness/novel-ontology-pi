@@ -17,7 +17,8 @@ async function repository(): Promise<string> {
   let directory = dirname(fileURLToPath(import.meta.url));
   for (;;) {
     const pkg = await readFile(join(directory, "package.json"), "utf8").then((text) => JSON.parse(text) as { name?: string }, () => null);
-    if (pkg?.name === "novel-ontology-pi") return directory;
+    // The repository, or Novel Console's bundled backend.
+    if (pkg?.name === "novel-ontology-pi" || pkg?.name === "novel-console-backend") return directory;
     const parent = dirname(directory);
     if (parent === directory) throw new Error("The world engine is not installed beside this CLI (engine/volume/volume.mjs).");
     directory = parent;

@@ -123,6 +123,30 @@ ipcMain.handle("worldReviewStep", async (event, wid, volume, step) => {
   if (step !== "held" && step !== "apply") throw new Error("No such review step.");
   return (await worldsModule()).reviewStep(book.workspace, step);
 });
+// A whole volume with one button (docs/v3/design.html#agent-workflows; the user, 2026-11-12: "fixed formats and prompts
+// initiated with one botton to run a volume"): engine/volume/volume.mjs runs every step not done in the background, the
+// agent's steps (the place tree, the look pass) as workflows with the agent open in the chat. Paid steps spend the keys.
+const volumeModule = () => import(pathToFileURL(path.join(backend, "engine", "volume", "volume.mjs")).href);
+ipcMain.handle("volumeStatus", async (event, wid, volume) => {
+  const book = worlds.bookOf(wid, volume), now = await (await volumeModule()).status(book.workspace);
+  return { readOnly: book.readOnly, next: now.next, steps: now.steps.map((step) => ({ id: step.id, who: step.who, paid: step.paid, status: step.status, error: step.error ? String(step.error).slice(0, 300) : undefined })) };
+});
+ipcMain.handle("runVolume", async (event, wid, volume, options = {}) => {
+  const book = worlds.bookOf(wid, volume);
+  if (book.readOnly) throw new Error("This world is read only (a library the console did not make): copy it to edit first.");
+  const agent = options.agent;
+  if (agent !== "claude-code" && agent !== "pi") throw new Error("Pick Claude Code or Pi in the chat: the volume's agent steps run with the agent open there.");
+  const secrets = await import(pathToFileURL(path.join(backend, "dist", "src", "ground", "connectors", "secrets.js")).href);
+  const key = process.env.WORK_LLM_API_KEY?.trim() || secrets.getStoredSecret("work-llm");
+  if (!key) throw new Error("A volume asks the work model: enter its key with the key button first.");
+  return new Promise((resolve, reject) => {
+    const child = spawn(process.execPath, [path.join(backend, "engine", "volume", "volume.mjs"), "run", book.workspace], { cwd: backend, stdio: ["ignore", "pipe", "pipe"], env: { ...process.env, ELECTRON_RUN_AS_NODE: "1", WORK_LLM_API_KEY: key, NOVEL_WORKFLOW_AGENT: agent } });
+    let out = "", err = "";
+    child.stdout.on("data", (chunk) => { out += chunk; }); child.stderr.on("data", (chunk) => { err += chunk; });
+    child.on("error", reject);
+    child.on("close", (code) => { if (code === 0) { try { resolve(JSON.parse(out)); } catch { resolve({ note: out.trim() }); } } else reject(new Error((err || out).trim().split("\n").at(-1)?.slice(0, 400) || `the runner exited ${code}`)); });
+  });
+});
 ipcMain.handle("ask", async (event, folder, method, params) => {
   if (!ALLOWED.has(method)) throw new Error(`The console does not ask ${method}.`);
   const server = serverOf(folder); await server.ready;
