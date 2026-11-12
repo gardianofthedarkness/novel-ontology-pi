@@ -29,6 +29,7 @@ const { withSystem2 } = await import('./system2.mjs');
 const { writeWorldLog } = await import('../log/write-log.mjs');
 const R = await import('../review/review.mjs'), JR = await import('../review/jev-review.mjs'), C6 = await import('../review/canon.mjs'), SM = await import('../smoother/smoother.mjs'), OC = await import('../smoother/occupation.mjs');
 const SKY = await import('../casts/sky.mjs');
+const MLM = await import('./miniloop.mjs'), WLOG = await import('../log/world-log.mjs');
 const OM = await import('./on-the-move.mjs'), RD = await import('../world/roads.mjs');
 const RM = await import('../casts/rooms.mjs');
 const TR = await import('../casts/transport.mjs');
@@ -87,7 +88,7 @@ export async function readerView(reading, text) {
   return { version: 2, kinds: Object.fromEntries(Object.entries(reading.kinds ?? {}).map(([id, entry]) => [id, entry.kind])), marks, names };
 }
 
-export async function direct(novelDir, { reading, readingPath = null, prefilm = null, from, to, jev, workModel = null, budget = Infinity, live = null, pace = 0, agent = null, reviewer = null, digest = true, speakers = true, smoothing = null, blasts = [], onTheMove = true, log = console.error }) {
+export async function direct(novelDir, { reading, readingPath = null, prefilm = null, from, to, jev, workModel = null, budget = Infinity, live = null, pace = 0, agent = null, reviewer = null, digest = true, speakers = true, smoothing = null, blasts = [], onTheMove = true, miniloop = false, log = console.error }) {
   // A card's line with its kind (spoken, action, environment, thought, fact, narration) and, spoken, who says it: the
   // reader colours sentences by kind, and the page puts a spoken line in a bubble over its speaker.
   // Who says a line is the reading's (EM², a Jev question during extraction): its answer and how sure; below its accept
@@ -243,6 +244,14 @@ export async function direct(novelDir, { reading, readingPath = null, prefilm = 
   log = (...args) => { say(...args); appendFile(join(runDir, 'run.log'), `${new Date().toISOString()} ${args.map(arg => (typeof arg === 'string' ? arg : JSON.stringify(arg))).join(' ')}\n`).catch(() => {}); };
   log(`run ${runId}: ${from} – ${to}, model ${jev.modelId}${workModel ? `, system 2 ${workModel.modelId ?? 'on'}` : ', system 2 off'}${agent ? ', review sent to the main agent' : ''}`);
   log(record.storyOrder.complies ? `story order: the narration complies with the strands (${record.storyOrder.units} units)` : `story order: ${record.storyOrder.count} units out of their strands' order, e.g. ${JSON.stringify(record.storyOrder.problems.slice(0, 3))}`);
+  // The miniloop (miniloop.mjs; the user, 2026-11-12: "smoothing and review happen at last. It needs to be right at where
+  // conflicts happen"): what a card's laws hold is asked at once, a sure answer applied before the next card, and a unit
+  // where a conflict was is smoothed at its end. Jev as the review by Jev asks it, the work model beside it; by rule on a
+  // stand-in run.
+  const ML = miniloop ? await MLM.createMiniloop({ novelDir, readingPath: playedFrom, reading,
+    decide: jev.modelId === 'stand-in-director' ? JR.standIn(reading.roles ?? {}) : reviewer?.decide ?? ((state, questions, options) => jev.decide(state, questions, options)),
+    work: jev.modelId === 'stand-in-director' ? JR.standInWork : reviewer?.work ?? workModel, name: id => names.get(id) ?? id, log }) : null;
+  if (ML) { record.miniloop = ML.record; log('miniloop: conflicts reviewed at the card, smoothed at the unit\'s end'); }
   let calls = 0;
   /**
    * What the player shows of the run (strand-demo.html's card list): every card played, in order, with its own lines as
@@ -689,6 +698,8 @@ export async function direct(novelDir, { reading, readingPath = null, prefilm = 
         record.scenes.push(sceneRecord);
         asking = sceneRecord;
         if (!run || !reads) continue;
+        // The miniloop's count for this unit: the conflicts its cards held, and those it settled at once.
+        let unitConflicts = 0, unitSettled = 0;
         // The scene is played in its strand's layer of the world (strand-layers.mjs; docs/v3/design.html#strands §4; milestones M17c):
         // what another strand broke, stood or caved in is not in it until the two unite; a split begins as a copy.
         { const entered = E.enter?.(scene.id);
@@ -2033,6 +2044,56 @@ export async function direct(novelDir, { reading, readingPath = null, prefilm = 
             desk.start(node, 'rush check', card.id);
             desk.check(node, 'rush check', (cardRecord.laws ?? []).filter(entry => entry.verdict === 'held').map(entry => ({ law: entry.law, who: entry.who, why: entry.why })), { card: card.id, canRetake: false, of: 'photography' });
           }
+          // The miniloop (miniloop.mjs): what this card's laws held (L6, L9, L10) asked at once; a sure answer applied before the
+          // next card (they arrive, stay, are placed with the others, talk from elsewhere, or come within earshot), so no
+          // card or unit after this one plays on from the state the conflict left. An unsure answer leaves it held.
+          if (ML) {
+            const fresh = (cardRecord.laws ?? []).filter(entry => entry.verdict === 'held' && MLM.LAWS.has(entry.law) && !entry.miniloop);
+            if (fresh.length) {
+              unitConflicts += fresh.length;
+              for (const entry of fresh) entry.miniloop = 'asked';
+              const conflicts = fresh.map(entry => ({ law: entry.law, who: entry.who, why: entry.why, scene: scene.id, card: card.id, ...(entry.law === 'L6' && cardRecord.talk?.anchor && cardRecord.talk.anchor !== entry.who ? { to: cardRecord.talk.anchor } : {}) }));
+              const settled = await ML.settle(conflicts, { pins, script }).catch(error => { log(`miniloop: ${error.message ?? error}`); return []; });
+              const lawOf = { reach: 'L10', actor: 'L9', speaker: 'L6', talk: 'L6' };
+              // Placed beside the first of `others` who stands in the scene (2 to 4 m, the same floor), when the page draws them.
+              const placeBeside = (who, others) => {
+                const by = others.find(id => id !== who && positions[id]);
+                if (!by || !page?.people?.[who]) return null;
+                const a = at(positions[by][0]), ring = near(a, 2, 4);
+                if (!ring.length) return null;
+                positions[who] = [ring[0].id, 0];
+                // On the page as a move of one spot (they are there from this card on), so the laws read them where the world has them.
+                E.moves.set(`${scene.id}|${card.id}|${who}`, { person: who, how: 'walk', path: [ring[0].id], ensemble: [] });
+                if (!scene.cast.includes(who)) scene.cast.push(who);
+                cardRecord.moves.push({ person: who, why: `there, beside ${names.get(by) ?? by} (the miniloop)`, moved: true, arrived: true, pinned: true, to: said([ring[0].x, ring[0].y, ring[0].z]), at: { x: round(ring[0].x), y: round(ring[0].y), z: round(ring[0].z) } });
+                return by;
+              };
+              // A fault here is logged and the card goes on as the laws left it: the miniloop never stops a run.
+              try { for (const { item, verdict, by } of settled) {
+                const who = item.subjects[0], law = fresh.find(entry => entry.who === who && entry.law === lawOf[item.kind]);
+                if (!law) continue;
+                let done = null;
+                if (item.kind === 'reach') {
+                  const held = [...cardRecord.moves].reverse().find(move => move.person === who && move.moved === false && move.replay?.targets?.length);
+                  if (verdict === 'stays') done = 'ok';
+                  else if (held && positions[who]) { const target = held.replay.targets[0], [x, y, z] = at(target), from = positions[who][0]; positions[who] = [target, positions[who][1]]; if (!E.moves.has(`${scene.id}|${card.id}|${who}`)) E.moves.set(`${scene.id}|${card.id}|${who}`, { person: who, how: 'teleport', path: [from, target], ensemble: [] }); cardRecord.moves.push({ person: who, why: `${verdict === 'arrives' ? 'arrives' : 'gets there another way'} (the miniloop)`, moved: true, arrived: true, pinned: true, to: said([x, y, z]), at: { x: round(x), y: round(y), z: round(z) } }); done = 'pinned'; }
+                } else if (item.kind === 'actor' || item.kind === 'speaker') {
+                  if (verdict === 'present') done = placeBeside(who, card.people.map(person => person.id)) ? 'pinned' : null;
+                  else done = 'ok';
+                } else if (item.kind === 'talk') {
+                  const to = item.subjects[1];
+                  if (verdict === 'remote') done = 'ok';
+                  else if ((verdict === 'live' || verdict === 'group') && to && positions[to] && positions[who]) {
+                    const a = at(positions[to][0]), ring = around(a[0], a[2], 8).nodes.filter(node => Math.abs(node.y - a[1]) < 1 && Math.hypot(node.x - a[0], node.z - a[2]) >= 2 && Math.hypot(node.x - a[0], node.z - a[2]) <= 4).map(node => node.id);
+                    const path = ring.length ? walk(scene, `${scene.id}|${card.id}|${who}|miniloop talk`, positions[who], ring, 'walk') : null;
+                    if (path && path.length > 1) { moveTo(who, path, 'walk', `comes within earshot of ${names.get(to) ?? to} (the miniloop)`); done = 'pinned'; }
+                  }
+                }
+                if (done) { Object.assign(law, { verdict: done, why: `${law.why}; the miniloop: ${verdict} (${by})`, miniloop: 'applied' }); unitSettled++; }
+              } } catch (error) { log(`${scene.id} ${card.id}: miniloop answer not applied: ${error.message ?? error}`); (sceneRecord.miniloopErrors ??= []).push(String(error.message ?? error)); }
+              if (unitSettled && run.events.length) run.events.at(-1).at = { ...positions };
+            }
+          }
           // The producer's camera rides with the card's event: the player and World · Live follow it card by card. It names
           // its group (everyone who has acted, spoken or moved in the beat or cut so far): the player's group orbit centres
           // on them as they stand frame by frame (strand-demo.html orbitTick; the user, 2026-11-08).
@@ -2175,6 +2236,27 @@ export async function direct(novelDir, { reading, readingPath = null, prefilm = 
             if (sceneRecord.departures.some(entry => entry.ran)) { scene.events.push(event); run.events.push({ at: { ...positions } }); await grow(scene, run); }
           }
         }
+        // The miniloop's smoothing (miniloop.mjs): a unit where a conflict was has its strand so far smoothed now, with the
+        // answers just pinned; whoever the least-action history puts elsewhere at the unit's end (more than 2 m, at most the
+        // revision limit) goes on from there into the next unit, instead of on the next pass.
+        if (ML && unitConflicts) {
+          try {
+            const fork = segForkOf.get(scene.id) ?? scene.id, mine = record.scenes.filter(entry => (segForkOf.get(entry.scene) ?? entry.scene) === fork);
+            const pageNow = { ...withLine(page), director: payload() }, partial = { ...record, scenes: mine };
+            const rows = WLOG.worldLog({ run: 'miniloop', record: partial, page: pageNow, spawn: seg.spawn, strands: segStrands });
+            const ends = MLM.endsOf(SM.smoothRun({ page: pageNow, log: rows, record: partial, reading, strands: strandsNow, pins }), scene.id, { most: SM.REVISION_LIMIT });
+            const departed = new Set((sceneRecord.departures ?? []).filter(entry => entry.ran).map(entry => entry.who)), moved = [];
+            for (const [who, { to, shift }] of Object.entries(ends)) {
+              if (!positions[who] || departed.has(who) || String(who).startsWith('crowd:')) continue;
+              E.reach(to.x, to.z, 24);
+              const node = W.nodeNear(world, E.graphOf({ x: to.x, z: to.z }), to.x, to.z, Math.round(to.y / FLOOR));
+              if (node == null || node === positions[who][0]) continue;
+              positions[who] = [node, positions[who][1]]; moved.push({ who, metres: Math.round(shift) });
+            }
+            sceneRecord.miniloop = { conflicts: unitConflicts, settled: unitSettled, smoothed: moved };
+            if (moved.length) log(`${scene.id}: the miniloop's smoothing carries ${moved.map(entry => `${names.get(entry.who) ?? entry.who} ${entry.metres} m`).join(', ')} on from where the least-action history has them`);
+          } catch (error) { sceneRecord.miniloop = { conflicts: unitConflicts, settled: unitSettled, error: String(error.message ?? error) }; log(`${scene.id}: miniloop smoothing failed: ${error.message ?? error}`); }
+        }
         // The scene done: the live page written whole (every card so far), so a view loaded now can replay any of them.
         await stream(`scene ${sceneLabel(scene.id)} played`, null, true);
         before = { scene, reads, positions: { ...positions } };
@@ -2269,7 +2351,7 @@ export async function direct(novelDir, { reading, readingPath = null, prefilm = 
 }
 
 if (process.argv[1] === fileURLToPath(import.meta.url)) {
-  const { values, positionals: [novelDir] } = parseArgs({ allowPositionals: true, options: { reading: { type: 'string' }, from: { type: 'string' }, to: { type: 'string' }, budget: { type: 'string' }, 'stand-in': { type: 'boolean' }, live: { type: 'boolean' }, pace: { type: 'string' }, agent: { type: 'string' }, 'no-digest': { type: 'boolean' }, 'no-speakers': { type: 'boolean' }, 'live-test': { type: 'boolean' }, 'no-prefilm': { type: 'boolean' }, 'no-faculties': { type: 'boolean' }, 'from-last': { type: 'boolean' }, 'discard-edits': { type: 'boolean' }, 'keep-edits': { type: 'boolean' }, 'no-snapshots': { type: 'boolean' }, 'no-jev-review': { type: 'boolean' } } });
+  const { values, positionals: [novelDir] } = parseArgs({ allowPositionals: true, options: { reading: { type: 'string' }, from: { type: 'string' }, to: { type: 'string' }, budget: { type: 'string' }, 'stand-in': { type: 'boolean' }, live: { type: 'boolean' }, pace: { type: 'string' }, agent: { type: 'string' }, 'no-digest': { type: 'boolean' }, 'no-speakers': { type: 'boolean' }, 'live-test': { type: 'boolean' }, 'no-prefilm': { type: 'boolean' }, 'no-faculties': { type: 'boolean' }, 'from-last': { type: 'boolean' }, 'discard-edits': { type: 'boolean' }, 'keep-edits': { type: 'boolean' }, 'no-snapshots': { type: 'boolean' }, 'no-jev-review': { type: 'boolean' }, miniloop: { type: 'boolean' } } });
   // The universe's snapshots (src/ground/workspace/universe.ts; the user, 2026-11-05: "rerunning a previous volume returns to
   // the snapshot before that volume to recover clean status"). In a library, a book's first run is preceded by its `before`
   // snapshot; a rerun starts from that `before` (W11 had started on W10's smoothing, and played worse for it), unless
@@ -2331,7 +2413,7 @@ if (process.argv[1] === fileURLToPath(import.meta.url)) {
     const prefilm = values['no-prefilm'] || values['no-faculties'] ? null : await (await import('../casts/prefilm.mjs')).loadPrefilm(dirname(resolve(values.reading)));
     if (prefilm) console.error(`pre-film casts' notes from the reading step: ${Object.keys(prefilm.units ?? {}).length} units${prefilm.standIn ? ' (made by a stand-in)' : ''}`);
     const reviewer = reviewJev ? { decide: (state, questions) => reviewJev.decide(state, questions), work: workModel, readingPath: resolve(values.reading) } : null;
-    const { record } = await direct(resolve(novelDir), { reading, readingPath: values.reading, prefilm, agent, reviewer, digest: !values['no-digest'], speakers: !values['no-speakers'], from: values.from, to: values.to, jev, workModel, budget: values.budget ? Number(values.budget) : Infinity, live, pace: values.pace ? Number(values.pace) : values.live ? 6 : 0 });
+    const { record } = await direct(resolve(novelDir), { reading, readingPath: values.reading, prefilm, agent, reviewer, digest: !values['no-digest'], speakers: !values['no-speakers'], miniloop: !!values.miniloop, from: values.from, to: values.to, jev, workModel, budget: values.budget ? Number(values.budget) : Infinity, live, pace: values.pace ? Number(values.pace) : values.live ? 6 : 0 });
     if (library?.book && !values['no-snapshots']) {
       const run = `d${String(record.startedAt).replace(/\D/g, '').slice(0, 14)}`, mode = values['stand-in'] ? 'a stand-in run' : values['from-last'] ? 'a second pass' : 'a run';
       const after = await U.takeSnapshot(library.root, { book: library.book, kind: 'after', run, parent: before?.id ?? null, why: `${mode} of ${library.book}, ${values.from} to ${values.to}` });

@@ -7,6 +7,7 @@
 // strand is known, so the least-action history of pass 1 is where pass 2 starts its people).
 //   node engine/director/rehearsal.mjs <copy of novel-dir> --reading <reading>/v2/data.json --from scene_000001 --to scene_000046 [--passes 2] [--out report.json]
 // --still-talk plays as before talk on the move (on-the-move.mjs): a walk and the talk on it as separate cards.
+// --miniloop: conflicts reviewed at the card and smoothed at the unit's end (miniloop.mjs), by rule as the rest.
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -96,7 +97,7 @@ export function smoothedOf({ run, record, page, spawn, strands, reading }) {
 }
 
 if (process.argv[1] === fileURLToPath(import.meta.url)) {
-  const { values, positionals: [novelDir] } = parseArgs({ allowPositionals: true, options: { 'keep-page': { type: 'boolean' }, 'still-talk': { type: 'boolean' }, reading: { type: 'string' }, from: { type: 'string' }, to: { type: 'string' }, passes: { type: 'string' }, out: { type: 'string' }, logs: { type: 'string' } } });
+  const { values, positionals: [novelDir] } = parseArgs({ allowPositionals: true, options: { 'keep-page': { type: 'boolean' }, 'still-talk': { type: 'boolean' }, reading: { type: 'string' }, from: { type: 'string' }, to: { type: 'string' }, passes: { type: 'string' }, out: { type: 'string' }, logs: { type: 'string' }, miniloop: { type: 'boolean' } } });
   if (!novelDir || !values.reading || !values.from || !values.to) { console.error('usage: node engine/director/rehearsal.mjs <copy of novel-dir> --reading <data.json> --from <scene> --to <scene> [--out report.json]'); process.exit(2); }
   const reading = JSON.parse(await readFile(values.reading, 'utf8')), world = join(resolve(novelDir), 'stage', 'world');
   const strands = JSON.parse(await readFile(join(world, 'strands.json'), 'utf8')), spawn = JSON.parse(await readFile(join(world, 'spawn.json'), 'utf8').catch(() => 'null'));
@@ -107,7 +108,7 @@ if (process.argv[1] === fileURLToPath(import.meta.url)) {
   let smoothing = false, blasts = [];
   for (let pass = 1; pass <= Number(values.passes ?? 1); pass++) {
     const started = Date.now();
-    const { record, data } = await direct(resolve(novelDir), { reading, prefilm, from: values.from, to: values.to, jev: standIn(), workModel: ruledWork(), speakers: false, smoothing, blasts: blasts.map(entry => ({ ...entry })), onTheMove: !values['still-talk'], log: () => {} });
+    const { record, data } = await direct(resolve(novelDir), { reading, prefilm, from: values.from, to: values.to, jev: standIn(), workModel: ruledWork(), speakers: false, smoothing, blasts: blasts.map(entry => ({ ...entry })), onTheMove: !values['still-talk'], miniloop: !!values.miniloop, readingPath: values.reading, log: () => {} });
     const smoothedNow = smoothedOf({ run: `rehearsal-${pass}`, record, page: data, spawn, strands, reading });
     // --keep-page: the page beside the run's record, as a real run keeps it (why-walk.mjs and the replay read it).
     if (values['keep-page']) { const id = `d${record.startedAt.replace(/\D/g, '').slice(0, 14)}`, folder = join(resolve(novelDir), 'stage', 'simulation', 'runs', 'director'); await mkdir(folder, { recursive: true }); await writeFile(join(folder, `${id}.page.json`), JSON.stringify(data)); passes.keptPage = id; }
@@ -121,6 +122,8 @@ if (process.argv[1] === fileURLToPath(import.meta.url)) {
     const passLog = worldLog({ run: `rehearsal-${pass}`, record, page: data, spawn, strands });
     if (values.logs) { await mkdir(resolve(values.logs), { recursive: true }); await writeFile(join(resolve(values.logs), `pass-${pass}.jsonl`), passLog.map(row => JSON.stringify(row)).join("\n")); await writeFile(join(resolve(values.logs), `pass-${pass}.record.json`), JSON.stringify(record)); }
     { const movement = backAndForth({ log: passLog, record }); passes.at(-1).backAndForth = { talk: movement.talk, roundTrips: { count: movement.roundTrips.count, throughTalk: movement.roundTrips.throughTalk, kinds: movement.roundTrips.kinds }, regrouped: record.scenes.reduce((n, scene) => n + (scene.regrouped?.length ?? 0), 0) }; }
+    if (record.miniloop) { const units = record.scenes.filter(scene => scene.miniloop); passes.at(-1).miniloop = { asked: record.miniloop.asked, applied: record.miniloop.applied, left: record.miniloop.left, turnedBack: record.miniloop.turnedBack, byKind: record.miniloop.byKind, units: units.length, smoothedUnits: units.filter(scene => scene.miniloop.smoothed?.length).length, carried: units.reduce((n, scene) => n + (scene.miniloop.smoothed?.length ?? 0), 0), errors: units.filter(scene => scene.miniloop.error).map(scene => `${scene.scene}: ${scene.miniloop.error}`).slice(0, 5) }; }
+    passes.at(-1).held = record.scenes.flatMap(scene => scene.cards.flatMap(card => card.laws ?? [])).filter(entry => entry.verdict === 'held').reduce((acc, entry) => ({ ...acc, [entry.law]: (acc[entry.law] ?? 0) + 1 }), {});
     passes.at(-1).broken = Object.fromEntries(lawsNow.map(law => [law.law, law.violations.length]));
     // M17d: the pass re-stranded (the groups read off where its people stood, against the text's strands). Nothing written.
     passes.at(-1).restrand = await restrandRun(novelDir, { run: `rehearsal-${pass}`, script: segScript, smoothed: smoothedNow.smoothed, reading: lawReading, only: record.scenes.map(entry => entry.scene) }).then(again => restrandSummary(again.report), error => ({ error: String(error.message ?? error) }));
