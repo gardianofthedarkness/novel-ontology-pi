@@ -20,6 +20,8 @@ const repository = resolve(dirname(fileURLToPath(import.meta.url)), '..', '..');
 const readJson = (path, fallback = null) => readFile(path, 'utf8').then(JSON.parse, () => fallback);
 /** How far before a unit's first line a line may still show where it is (an environment paragraph before it). */
 export const LOOK_BACK = 12;
+/** How many units back `same` may reach across a chapter's start. */
+export const SAME_ACROSS = 3;
 
 /** The book's stores: the reading's own script (kept), the decisions, the reading, the sentences in order. */
 export async function storesOf(novelDir) {
@@ -163,7 +165,8 @@ export function decide(stores, command, args) {
     const i = stores.original.scenes.findIndex(s => s.id === a), j = stores.original.scenes.findIndex(s => s.id === b);
     if (i < 0 || j < 0) refuse(`No unit ${i < 0 ? a : b}.`); needWhy(why);
     if (j >= i) refuse(`${b} is not before ${a}.`);
-    if (stores.original.scenes[i].chapter !== stores.original.scenes[j].chapter) refuse(`${b} is in another chapter: give ${a} its own line (set).`);
+    // Across a chapter's start only from the units just before it (a chapter that opens mid-scene); further back, a line of its own.
+    if (stores.original.scenes[i].chapter !== stores.original.scenes[j].chapter && i - j > SAME_ACROSS) refuse(`${b} is in another chapter and more than ${SAME_ACROSS} units before: give ${a} its own line (set).`);
     d.units[a] = { same: b, why }; record(stores, { command, scene: a, same: b, why }); return d.units[a];
   }
   if (command === 'travel') {

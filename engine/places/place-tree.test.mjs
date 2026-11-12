@@ -58,6 +58,10 @@ test('units under a mention lose their place until held or set, and the head nou
   refused(() => decide(s, 'set', args(['u4', 'unnamed:dorm'], { line: 's1', why: 'too far before' })));
   decide(s, 'same', args(['u4', 'u2'], { why: 'still in the dorm' }));
   assert.equal(placedScenes(s).find(u => u.id === 'u4').place, 'unnamed:dorm');
+  s.original.scenes[3].chapter = 2;
+  decide(s, 'same', args(['u4', 'u2'], { why: 'a chapter that opens mid-scene' }));
+  s.original.scenes.splice(2, 0, ...['x1', 'x2', 'x3'].map(id => ({ id, chapter: 1, place: 'city', present: [] })));
+  refused(() => decide(s, 'same', args(['u4', 'u2'], { why: 'too far back across a chapter' })));
 });
 
 test('a change of city with no travel line is an unproved move until a line shows the journey', () => {
