@@ -250,8 +250,8 @@ export async function direct(novelDir, { reading, readingPath = null, prefilm = 
   // stand-in run.
   const ML = miniloop ? await MLM.createMiniloop({ novelDir, readingPath: playedFrom, reading,
     decide: jev.modelId === 'stand-in-director' ? JR.standIn(reading.roles ?? {}) : reviewer?.decide ?? ((state, questions, options) => jev.decide(state, questions, options)),
-    work: jev.modelId === 'stand-in-director' ? JR.standInWork : reviewer?.work ?? workModel, name: id => names.get(id) ?? id, log }) : null;
-  if (ML) { record.miniloop = ML.record; log('miniloop: conflicts reviewed at the card, smoothed at the unit\'s end'); }
+    work: jev.modelId === 'stand-in-director' ? JR.standInWork : reviewer?.work ?? workModel, name: id => names.get(id) ?? id, camera: miniloop === 'camera', log }) : null;
+  if (ML) { record.miniloop = ML.record; log(`miniloop: conflicts reviewed at the card${ML.camera ? ' with its camera\'s picture' : ''}, smoothed at the unit's end`); }
   let calls = 0;
   /**
    * What the player shows of the run (strand-demo.html's card list): every card played, in order, with its own lines as
@@ -2053,7 +2053,26 @@ export async function direct(novelDir, { reading, readingPath = null, prefilm = 
               unitConflicts += fresh.length;
               for (const entry of fresh) entry.miniloop = 'asked';
               const conflicts = fresh.map(entry => ({ law: entry.law, who: entry.who, why: entry.why, scene: scene.id, card: card.id, ...(entry.law === 'L6' && cardRecord.talk?.anchor && cardRecord.talk.anchor !== entry.who ? { to: cardRecord.talk.anchor } : {}) }));
-              const settled = await ML.settle(conflicts, { pins, script }).catch(error => { log(`miniloop: ${error.message ?? error}`); return []; });
+              // --miniloop-camera: the director's camera on this card as played (its people labelled), asked with the card's
+              // conflicts. A shot that fails is counted and the conflicts are asked on the lines alone.
+              let seen = null;
+              if (ML.camera && looks) {
+                try {
+                  // The director's camera's angle, framed on what the conflicts are about (W17's first try at the director's own
+                  // frame showed the city with the people as specks): the people in them and those they speak to, the card's
+                  // people standing, and where a held walk was going.
+                  const played = await grow(scene, run), cam = cardRecord.camera ?? null;
+                  const ids = [...new Set([...conflicts.flatMap(entry => [entry.who, entry.to]), ...card.people.map(person => person.id)])].filter(id => id && positions[id]);
+                  const points = [...ids.map(id => at(positions[id][0])), ...cardRecord.moves.filter(move => move.moved === false && move.replay?.targets?.length && conflicts.some(entry => entry.who === move.person)).map(move => at(move.replay.targets[0]))];
+                  if (points.length) {
+                    const mid = [0, 1, 2].map(k => points.reduce((sum, q) => sum + q[k], 0) / points.length), reach = Math.max(...points.map(q => Math.hypot(q[0] - mid[0], q[2] - mid[2])));
+                    const focus = { x: mid[0], z: mid[2], y0: mid[1], w: 6, d: 6, h: 3 }, radius = Math.min(150, Math.max(14, reach * 1.4 + 8));
+                    const shot = await shoot(`${scene.id.slice(-3)}-${card.id.replace(/[^a-z0-9_]/gi, '_')}-miniloop`, [1440, 900], { place: scene.placeId, at: Math.max(0, (played?.end ?? 0) - 0.02), only: [scene.placeId], focus, radius, elevation: Math.max(30, cam?.elevation ?? 35), yaw: cam?.yaw ?? 0 });
+                    if (shot.png) { seen = { images: { camera: shot.png }, picture: `The picture "camera" is the director's camera on this card as played, framed on the people this is about: each person stands where the world has them now, labelled by name (${Object.keys(positions).filter(id => !String(id).startsWith('crowd:')).slice(0, 8).map(id => names.get(id) ?? id).join(', ')}). It shows where they are, not what the text says.` }; ML.record.camera.pictures++; }
+                  }
+                } catch (error) { ML.record.camera.failed++; log(`${scene.id} ${card.id}: miniloop picture failed: ${error.message ?? error}`); }
+              }
+              const settled = await ML.settle(conflicts, { pins, script, seen }).catch(error => { log(`miniloop: ${error.message ?? error}`); return []; });
               const lawOf = { reach: 'L10', actor: 'L9', speaker: 'L6', talk: 'L6' };
               // Placed beside the first of `others` who stands in the scene (2 to 4 m, the same floor), when the page draws them.
               const placeBeside = (who, others) => {
@@ -2351,7 +2370,7 @@ export async function direct(novelDir, { reading, readingPath = null, prefilm = 
 }
 
 if (process.argv[1] === fileURLToPath(import.meta.url)) {
-  const { values, positionals: [novelDir] } = parseArgs({ allowPositionals: true, options: { reading: { type: 'string' }, from: { type: 'string' }, to: { type: 'string' }, budget: { type: 'string' }, 'stand-in': { type: 'boolean' }, live: { type: 'boolean' }, pace: { type: 'string' }, agent: { type: 'string' }, 'no-digest': { type: 'boolean' }, 'no-speakers': { type: 'boolean' }, 'live-test': { type: 'boolean' }, 'no-prefilm': { type: 'boolean' }, 'no-faculties': { type: 'boolean' }, 'from-last': { type: 'boolean' }, 'discard-edits': { type: 'boolean' }, 'keep-edits': { type: 'boolean' }, 'no-snapshots': { type: 'boolean' }, 'no-jev-review': { type: 'boolean' }, miniloop: { type: 'boolean' } } });
+  const { values, positionals: [novelDir] } = parseArgs({ allowPositionals: true, options: { reading: { type: 'string' }, from: { type: 'string' }, to: { type: 'string' }, budget: { type: 'string' }, 'stand-in': { type: 'boolean' }, live: { type: 'boolean' }, pace: { type: 'string' }, agent: { type: 'string' }, 'no-digest': { type: 'boolean' }, 'no-speakers': { type: 'boolean' }, 'live-test': { type: 'boolean' }, 'no-prefilm': { type: 'boolean' }, 'no-faculties': { type: 'boolean' }, 'from-last': { type: 'boolean' }, 'discard-edits': { type: 'boolean' }, 'keep-edits': { type: 'boolean' }, 'no-snapshots': { type: 'boolean' }, 'no-jev-review': { type: 'boolean' }, miniloop: { type: 'boolean' }, 'miniloop-camera': { type: 'boolean' } } });
   // The universe's snapshots (src/ground/workspace/universe.ts; the user, 2026-11-05: "rerunning a previous volume returns to
   // the snapshot before that volume to recover clean status"). In a library, a book's first run is preceded by its `before`
   // snapshot; a rerun starts from that `before` (W11 had started on W10's smoothing, and played worse for it), unless
@@ -2412,8 +2431,9 @@ if (process.argv[1] === fileURLToPath(import.meta.url)) {
     // The pre-film casts' notes the reading step made (engine/casts/run/prefilm.mjs), beside the reading.
     const prefilm = values['no-prefilm'] || values['no-faculties'] ? null : await (await import('../casts/prefilm.mjs')).loadPrefilm(dirname(resolve(values.reading)));
     if (prefilm) console.error(`pre-film casts' notes from the reading step: ${Object.keys(prefilm.units ?? {}).length} units${prefilm.standIn ? ' (made by a stand-in)' : ''}`);
-    const reviewer = reviewJev ? { decide: (state, questions) => reviewJev.decide(state, questions), work: workModel, readingPath: resolve(values.reading) } : null;
-    const { record } = await direct(resolve(novelDir), { reading, readingPath: values.reading, prefilm, agent, reviewer, digest: !values['no-digest'], speakers: !values['no-speakers'], miniloop: !!values.miniloop, from: values.from, to: values.to, jev, workModel, budget: values.budget ? Number(values.budget) : Infinity, live, pace: values.pace ? Number(values.pace) : values.live ? 6 : 0 });
+    // The request rides along (the miniloop's camera picture); the review at the end sends none.
+    const reviewer = reviewJev ? { decide: (state, questions, request) => reviewJev.decide(state, questions, request), work: workModel, readingPath: resolve(values.reading) } : null;
+    const { record } = await direct(resolve(novelDir), { reading, readingPath: values.reading, prefilm, agent, reviewer, digest: !values['no-digest'], speakers: !values['no-speakers'], miniloop: values['miniloop-camera'] ? 'camera' : !!values.miniloop, from: values.from, to: values.to, jev, workModel, budget: values.budget ? Number(values.budget) : Infinity, live, pace: values.pace ? Number(values.pace) : values.live ? 6 : 0 });
     if (library?.book && !values['no-snapshots']) {
       const run = `d${String(record.startedAt).replace(/\D/g, '').slice(0, 14)}`, mode = values['stand-in'] ? 'a stand-in run' : values['from-last'] ? 'a second pass' : 'a run';
       const after = await U.takeSnapshot(library.root, { book: library.book, kind: 'after', run, parent: before?.id ?? null, why: `${mode} of ${library.book}, ${values.from} to ${values.to}` });

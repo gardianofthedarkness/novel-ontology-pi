@@ -10,6 +10,8 @@
 //   person arrives, stays, is placed with the others, talks from elsewhere, or comes within earshot;
 // - the step is a unit where a conflict was: when the unit ends, its strand so far is smoothed (smoother.mjs), and whoever
 //   the least-action history puts elsewhere at the unit's end goes on from there into the next unit.
+// With `camera` (the third W17 run, the user, 2026-11-12: "Test the picture in the third run"), each card's conflicts are
+// asked with the director's camera on that card as played (its people labelled by name) beside the lines.
 // An answer is applied only when it is sure (`ACCEPT`): Jev at least 0.7, or Jev and the work model agreeing. An unsure
 // one leaves the item held, playing its lawful default, for the review at the run's end as before: a wrong judgement
 // carried forward is what this loop is for avoiding.
@@ -43,19 +45,20 @@ export function ledgerOf(conflicts, next) {
  * `{ item, verdict, by, confidence }`, already pinned into `pins` (under the laws, as the review's answers are); `record`
  * counts what it asked and applied. `decide` is Jev (as the review by Jev asks it), `work` the work model (or null).
  */
-export async function createMiniloop({ novelDir, readingPath, reading, decide, work = null, name = id => id, policy = ACCEPT, log = () => {} }) {
+export async function createMiniloop({ novelDir, readingPath, reading, decide, work = null, name = id => id, policy = ACCEPT, camera = false, log = () => {} }) {
   const stores = await storesOf(novelDir, readingPath);
   // The director plays the reading's segments (segments.mjs): their scenes and cards, not the reading file's.
   stores.cards = new Map((reading.cards ?? []).map(card => [card.id, card]));
   stores.scenes = new Map((reading.scenes ?? []).map(scene => [scene.id, scene]));
-  const record = { asked: 0, applied: 0, left: 0, turnedBack: 0, byKind: {}, answers: [] };
+  const record = { asked: 0, applied: 0, left: 0, turnedBack: 0, byKind: {}, answers: [], ...(camera ? { camera: { pictures: 0, failed: 0 } } : {}) };
   let n = 0;
   const next = () => `ml_${String(++n).padStart(5, '0')}`;
 
-  async function settle(conflicts, { pins, script }) {
+  // `seen`: the card's picture, { images: { camera: <png base64> }, picture: what it shows }, asked with every item of it.
+  async function settle(conflicts, { pins, script, seen = null }) {
     const ledger = ledgerOf(conflicts.filter(conflict => LAWS.has(conflict.law)), next);
     for (const entry of ledger) stores.ledger.set(entry.id, entry);
-    const items = heldItems({ ledger, name }).filter(item => KINDS.has(item.kind));
+    const items = heldItems({ ledger, name }).filter(item => KINDS.has(item.kind)).map(item => (seen?.images ? { ...item, images: seen.images, picture: seen.picture } : item));
     if (!items.length) return [];
     const answers = await reviewItems(items, { ...stores, pins, script, decide, work, workAll: !!work, concurrency: 4 });
     const out = [];
@@ -65,7 +68,7 @@ export async function createMiniloop({ novelDir, readingPath, reading, decide, w
       const row = (record.byKind[item.kind] ??= { asked: 0, applied: 0 });
       row.asked++; record.asked++;
       const ok = accepted(answer, item, policy);
-      const kept = { scene: item.scene, card: item.card, kind: item.kind, who: item.subjects, verdict: answer.verdict, jev: answer.jev ? { value: answer.jev.value, confidence: answer.jev.confidence ?? null } : null, work: answer.work ? { value: answer.work.value } : null, line: answer.line ?? null, applied: false };
+      const kept = { scene: item.scene, card: item.card, kind: item.kind, who: item.subjects, verdict: answer.verdict, ...(answer.pictures ? { pictures: answer.pictures } : {}), jev: answer.jev ? { value: answer.jev.value, confidence: answer.jev.confidence ?? null } : null, work: answer.work ? { value: answer.work.value } : null, line: answer.line ?? null, applied: false };
       if (!ok) { record.left++; record.answers.push(kept); continue; }
       // Under the laws, as an answer of the review's becomes a pin (review.mjs pinsFrom: L2 against someone answered present).
       const { failed } = pinsFrom(pins, [{ item, answer: { verdict: ok.verdict, reason: `the miniloop (${ok.by})` } }], { script });
@@ -77,7 +80,7 @@ export async function createMiniloop({ novelDir, readingPath, reading, decide, w
     if (out.length) log(`miniloop: ${out.map(entry => `${entry.item.kind} ${entry.item.names?.join('/') ?? ''} → ${entry.verdict} (${entry.by})`).join('; ')}`);
     return out;
   }
-  return { settle, record };
+  return { settle, record, camera };
 }
 
 /**

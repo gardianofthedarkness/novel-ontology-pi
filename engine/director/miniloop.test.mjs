@@ -39,3 +39,23 @@ test("the smoothing's end of a unit: the last moment there, moved more than 2 m 
   } };
   assert.deepEqual(endsOf(smoothed, 'scene_000003', { most: 50 }), { char_a: { to: { x: 3, y: 0, z: 4 }, shift: 5 } });
 });
+
+test("a card's picture goes to Jev with the verdict and its line, and the prompt says what it is", async () => {
+  const { reviewItems } = await import('../review/jev-review.mjs');
+  const { bookOf, peopleOf } = await import('../review/evidence.mjs');
+  const sentences = [{ id: 'b0001_s0001', text: 'Ann walks to the gate.' }, { id: 'b0001_s0002', text: 'Ben waits by the wall.' }];
+  const card = { id: 'action:b0001_s0001', first: 'b0001_s0001', sentences: ['b0001_s0001'], people: [{ id: 'char_a', how: ['acts'] }] };
+  const [item] = heldItems({ ledger: ledgerOf([{ law: 'L10', who: 'char_a', why: 'no walk there', scene: 'scene_000001', card: card.id }], () => 'ml_1') });
+  const sent = [];
+  const decide = async (state, questions, request) => { sent.push({ state, request }); return questions.map(question => ({ key: question.key, value: question.options[0], confidence: 0.9 })); };
+  const stores = { book: bookOf(sentences), people: peopleOf({ entities: [{ id: 'char_a', names: ['Ann'], proper: ['Ann'] }] }), roles: {}, cards: new Map([[card.id, card]]), scenes: new Map([['scene_000001', { id: 'scene_000001', sentences: sentences.map(s => s.id) }]]), ledger: new Map(), script: { scenes: [] }, pins: {} };
+  const [answer] = await reviewItems([{ ...item, images: { camera: 'iVBORw0KGgo=' }, picture: 'The picture "camera" is the director\'s camera on this card.' }], { ...stores, decide, concurrency: 1 });
+  assert.equal(sent.length, 2);
+  assert.ok(sent.every(entry => entry.request?.images?.camera === 'iVBORw0KGgo='));
+  assert.match(JSON.stringify(sent[0].state), /director's camera on this card/);
+  assert.deepEqual(answer.pictures, ['camera']);
+  // Without a picture, nothing is sent beside the text.
+  sent.length = 0;
+  await reviewItems([item], { ...stores, decide, concurrency: 1 });
+  assert.ok(sent.every(entry => entry.request === undefined));
+});

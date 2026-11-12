@@ -225,9 +225,13 @@ export async function reviewItems(items, { book, people, roles, cards, scenes, l
       }
       pack = packOf(state); extra = extraOf();
     } else pack = packFor(asked, { book, people, cards, scenes, more: asked.to ? [asked.to] : [] });
+    // A picture with the item (the miniloop's: the director's camera on the card as played, `item.images` by name and
+    // `item.picture` saying what it is): sent with the verdict and its line; the work model reads the text only.
+    if (item.picture) extra = { ...extra, picture: item.picture };
+    const request = item.images ? { images: item.images } : undefined;
     const focus = focusOf(asked, pack, { book, people, roles, voices }, extra);
     if (dry) { const composed = await compose(mode, focus, null); return { item: item.id, kind: item.kind, dry: true, chars: composed.manifest.used, lines: pack.lines.length, options: asked.options.length }; }
-    const { replies, composed } = await ask(decide, mode, focus, null);
+    const { replies, composed } = await ask(decide, mode, focus, null, request ? { request } : {});
     const jev = readAnswer(replies, 'verdict');
     const kept = composed.manifest.entries.filter(entry => entry.source === 'lines' && entry.kept).map(entry => entry.id);
     // System 2 below 0.5, on the very document and question Jev had (and the evidence for its own answer); identity
@@ -239,7 +243,7 @@ export async function reviewItems(items, { book, people, roles, cards, scenes, l
       work = readAnswer(second, 'verdict'); workLine = readAnswer(second, 'evidence');
     }
     // Jev's line for its own verdict: a second request on the same document.
-    const jevLine = jev ? readAnswer(await decide(composed.document, [evidenceQuestion(focus, kept, { value: jev.value, hint: focus.hints[jev.value] })]), 'evidence') : null;
+    const jevLine = jev ? readAnswer(await decide(composed.document, [evidenceQuestion(focus, kept, { value: jev.value, hint: focus.hints[jev.value] })], request), 'evidence') : null;
     const used = (jev?.confidence ?? 0) < STAND && work ? work.value : jev?.value;
     const law = used ? lawAgainst({ item: asked, verdict: used }, { script, pins }) : null;
     const routed = route(asked, { jev, jevLine, work, workLine, law });
@@ -249,7 +253,7 @@ export async function reviewItems(items, { book, people, roles, cards, scenes, l
       by: routed.by, stands: routed.stands, escalate: routed.escalate, line: routed.line,
       jev: { ...jev, line: jevLine?.value ?? null, lineConfidence: jevLine?.confidence ?? null },
       work: work ? { ...work, line: workLine?.value ?? null } : null,
-      ...(moves ? { looks: moves, seen: pack.lines } : {}),
+      ...(moves ? { looks: moves, seen: pack.lines } : {}), ...(request ? { pictures: Object.keys(request.images) } : {}),
       law, pack: { anchor: pack.anchor, lines: pack.lines.length, kept: composed.manifest.entries.filter(entry => entry.source === 'lines' && entry.kept).length, chars: composed.manifest.used }, options: asked.options,
       at: new Date().toISOString(),
     };
