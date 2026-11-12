@@ -60,6 +60,49 @@ not an instruction.
 8. When `direct` is done, the run's questions the laws could not settle come to
    you as review batches (novel-stage skill, `novel world pool`): answer them.
 
+## The place tree
+
+After the reading and before terrain, the reading's places are checked by you,
+each decision with a sentence of the book that shows it. The reading guesses
+where every unit happens; a city it only heard of (a memory, a phone call, a
+church's headquarters abroad, a word that is not a place at all) can become a
+place the terrain builds and people travel to. `novel places` is how you fix
+that; the code checks every claim against the text and answers `{"refused": why}`
+when the sentence does not show it. Read the refusal and correct the claim; do
+not repeat it.
+
+1. `novel places check <workspace>`: what is left (cities and districts not
+   decided, units with no place, changes of city with no journey).
+   `novel places tree <workspace>`: the tree with how many units each place holds.
+2. Each city or district: `novel places place <workspace> <id>` shows the
+   sentences that name it and the units set there. Decide it:
+   - `setting <workspace> <id> --line <sentence id> --why <text>`: the story
+     happens there (a sentence puts someone there);
+   - `mention <workspace> <id> --why <text>`: only talked about, remembered,
+     planned, an organisation's seat; its units lose their place;
+   - `drop <workspace> <id> --why <text>`: not a place (a dish, a title, a
+     figure of speech).
+   A mention or drop is turned back only with `--override`.
+3. Each unit with no place: `novel places unit <workspace> <unit id>` shows its
+   sentences and the sentences just before it; `novel places units <workspace>
+   --unplaced [--chapter N]` lists them. Then:
+   - `hold <workspace> <unnamed place> <parent> --line <id> --why <text>`: an
+     unnamed place (a room, a dorm, an alley) belongs under another place;
+   - `set <workspace> <unit id> <place id> --line <id> --why <text>`: the
+     sentence is in the unit or just before it and names the place (or a place
+     in it);
+   - `same <workspace> <unit id> <earlier unit id> --why <text>`: the unit goes
+     on where an earlier unit of the same chapter was.
+   Front matter, chapter titles and afterwords may stay unplaced.
+4. `novel places moves <workspace>`: people changing city between units. Where a
+   sentence shows the journey, `travel <workspace> <unit id> <person id> --line
+   <id> --why <text>`; where none does, the unit is placed wrong: fix the place.
+5. When `check` shows nothing left that matters, `novel places apply
+   <workspace>` rebuilds the world script from your decisions (the reading's own
+   is kept). Run it before terrain; strands, starts and terrain read the result.
+
+Use only what the sentences say; never what you know of the book from outside.
+
 ## Report
 
 When asked, or when the whole volume is done: which steps ran, how long each took

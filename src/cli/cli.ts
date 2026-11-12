@@ -36,6 +36,7 @@ import { folderCommand } from "./commands/v3/folderCommands.js";
 import { settingsDiff, settingsExplain, settingsProfileApply, settingsProfileList, settingsProfileSave, settingsSet, settingsShow, settingsUnset } from "./commands/extract/settingsCommands.js";
 import { warehouseAdd, warehouseFetch, warehouseFind, warehouseInteract, warehouseList, warehouseRefresh, warehouseShow, warehouseUse } from "./commands/extract/warehouseCommands.js";
 import { lookContext } from "./commands/extract/lookCommands.js";
+import { PLACES_COMMANDS, placesCommand } from "./commands/extract/placesCommands.js";
 import { modelBind, modelBrief, modelCheck, modelList, modelNominate, modelParts, modelPut, modelShow, modelUse, modelWrite } from "./commands/extract/modelCommands.js";
 import { readingShow, sourceEpub, worldApply, worldCanon, worldHeld, worldLogShow, worldUndo } from "./commands/extract/worldReviewCommands.js";
 
@@ -54,6 +55,7 @@ const COMMANDS: Record<string, string> = {
   "novel world apply <novel-dir>": "The main agent's answers into the pins the director plays by, under the laws (what they turn back returns to the pool)",
   "novel folder scan|show|universe|put|take|link|unlink|chapters|cast|who|refs|line|problems|serve <folder> …": "v3: the opened folder as a workspace of novels (docs/v3/design.html#workspace): every EPUB and text file under it found (scan); the folder as universes, their books in order and the unsorted files, with each file's first lines for sorting (show [--opening N]); a universe made, renamed or removed (universe <name> [--why t] [--rename n] [--remove]); a file put into a universe at a place in its order, or taken out (put <file> <universe> [--at N] [--title t]; take <file>); an existing reading linked to a book, read-only (link <file> <novel-dir> [--reading data.json]; unlink); a book's chapters and smaller parts (chapters <file> [--depth chapters|parts|cards]); its people, places, things and concepts (cast <file> [--query t]); one entry's record (who <file> <name or id>); every line that refers to it, with how and how sure (refs <file> <name or id> [--how h] [--chapter N] [--scene N] [--guesses] [--via] [--universe] [--limit N], 30 shown unless --limit says more); a line with the lines around it (line <file> <line id>); the reading's doubtful credits (problems <file>); the language server over stdio (serve)",
   "novel volume status|run|log|done <novel-dir> …": "A whole volume step by step (novel-volume skill): each step's status (status); the steps from the first not done up to the agent's look pass, or one step, or up to a step, started in the background (run [--step <id> | --until <id>]); a step's log (log <step> [--lines N]); the agent's look pass marked done (done look --why t)",
+  "novel places tree|place|unit|units|moves|check|apply <novel-dir> | setting|mention|drop|hold|set|same|travel <novel-dir> … --why t [--line id]": "The place tree by the agent, with evidence (docs/v3/design.html#place-tree-agent): after the reading and before terrain, each city or district made a setting (a line that puts something there), a mention or dropped; an unnamed place held under its parent; a unit set at a place (a line in it or just before) or the same as an earlier unit; a change of city shown by a travel line. Every claim is checked against the text; refused claims come back with why. check lists what is left; apply rebuilds the world script from the reading's own (kept as script.reading.json)",
   "novel strands register|inherit|set|keep|show <novel-dir> …": "What a book carries into the next, per strand (docs/v3/design.html#borrow-and-spawn §4.5): the book's strands at its end into the universe's registry (register [--run <id>]); at the next book's reading each open strand of the last book inherited (its damage to buildings that are not nominated stays) or closed (they stand whole) (inherit [--work] [--dry]); the main agent's override (set <strand key> inherited|closed --why t [--into <key>]); a run's damage into the universe building by building (keep --run <id>); the registry and the damage in force (show)",
   "novel cast show|merge|sheet|ask|review <novel-dir> …": "The cast's review: the cast and their ability sheets (show [<char>]); two entries made one person in the reading, its views, the ontology and the universe's sheets (merge <keep> <merged> --reason t [--reading <data.json>]... [--dry]); one person's ability sheet (sheet <char> --sheet '<JSON>' | --none --reason t [--evidence <ids>]); two people raised as one for the agent (ask <a> <b> --why t); the cast's questions in batches in the world's review pool (review [--size N] [--least-cards N] [--send <console-dir>]), answered with novel world answer, done by novel world apply",
   "novel sky build|show <novel-dir> [--dry] [--cache <dir>]": "The story sky: each unit's time of day and weather into sky.json beside the reading the director plays (build: Jev, cents, cached; --dry counts only); show: what it holds",
@@ -360,6 +362,15 @@ async function main(): Promise<void> {
     if (sub === "set") { if (!positional[3] || positional[4] === undefined) throw new Error(usage); out(await settingsSet(novelDir, positional[3], positional[4], common), pretty); return; }
     if (sub === "unset") { if (!positional[3]) throw new Error(usage); out(await settingsUnset(novelDir, positional[3], common), pretty); return; }
     out(await settingsDiff(novelDir, { from: flag(positional, "--from") }), pretty);
+    return;
+  }
+
+  if (cmd === "places") {
+    const novelDir = positional[2];
+    if (!(PLACES_COMMANDS as readonly string[]).includes(sub ?? "") || !novelDir || novelDir.startsWith("--")) throw new Error("Usage: novel places tree|place|unit|units|moves|check|apply <novel-dir> [...] | setting|mention|drop|hold|set|same|travel <novel-dir> ... --why <text> [--line <sentence id>] [--override]");
+    const result = await placesCommand(sub as string, novelDir, positional.slice(3));
+    if (typeof result === "string") console.log(result); else out(result, pretty);
+    if (result && typeof result === "object" && "refused" in result) process.exitCode = 3;
     return;
   }
 

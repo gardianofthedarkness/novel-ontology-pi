@@ -344,6 +344,23 @@ test('settings, warehouse and model commands pass for the assigned book, with a 
   ]) assert.throws(() => authorize(command), command);
 });
 
+test('the place tree: the assigned book only, a why for every decision and a sentence id where the text must show it', () => {
+  for (const command of [
+    `novel places tree '${novel}'`, `novel places check '${novel}'`, `novel places moves '${novel}'`, `novel places apply '${novel}'`,
+    `novel places place '${novel}' loc_000001`, `novel places unit '${novel}' scene_000077`, `novel places units '${novel}' --unplaced --chapter 3`, `novel places units '${novel}' --place pool:loc_000001 --by carried`, `novel places hold '${novel}' unnamed:place_000095_1 pool:\u5b66\u56ed\u90fd\u5e02 --line b0003_s0294 --why 'his dorm'`,
+    `novel places setting '${novel}' loc_000001 --line b0001_s0002 --why 'he walks its streets'`, `novel places mention '${novel}' loc_000009 --why 'only talked about'`,
+    `novel places drop '${novel}' loc_000014 --why 'a food, not a place' --override`, `novel places hold '${novel}' unnamed:place_000095_1 pool:loc_000001 --line b0003_s0294 --why 'his dorm'`,
+    `novel places set '${novel}' scene_000077 unnamed:place_000095_1 --line b0002_s1215 --why 'back at the dorm'`, `novel places same '${novel}' scene_000078 scene_000077 --why 'still there'`,
+    `novel places travel '${novel}' scene_000200 char_000001 --line b0006_s0010 --why 'he flies to London'`,
+  ]) assert.equal(authorize(command).kind, 'cli', command);
+  assert.equal(authorize(`novel places check '${novel}'`).label, 'novel places check');
+  for (const command of [
+    `novel places tree /tmp/other`, `novel places setting '${novel}' loc_000001 --why 'no line'`, `novel places set '${novel}' scene_000077 loc_000001 --line b0002_s1215`,
+    `novel places hold '${novel}' unnamed:place_000095_1 --line b0003_s0294 --why 'no parent'`, `novel places same '${novel}' scene_000078 scene_000077 --why x --line b1 --why y`,
+    `novel places drop '${novel}' loc_000014 --why 'x' --force`, `novel places rewrite '${novel}'`, `novel places units '${novel}' --chapter all`,
+  ]) assert.throws(() => authorize(command), command);
+});
+
 test('a whole volume and what it carries: the assigned book only, the runner\'s steps, a why where the agent decides', () => {
   for (const command of [
     `novel volume status '${novel}'`, `novel volume run '${novel}'`, `novel volume run '${novel}' --step terrain`, `novel volume run '${novel}' --until prefilm`,
