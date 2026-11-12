@@ -181,7 +181,7 @@ which script writes it; the tests fail when one is stale (<code>npm test</code> 
 <li><a href="#laws">8.4 The laws</a></li>
 <li><a href="#smoothing">8.5 Smoothing: back-propagation as Bayesian smoothing</a></li>
 <li><a href="#figures">8.6 Figures that act: the action animation system</a></li>
-<li><a href="#actor-cast">8.7 The actor cast: what each one sees</a></li>
+<li><a href="#actor-cast">8.7 The actor cast: what each one sees</a></li><li><a href="#indoor-mode">8.8 Indoor scene mode: rooms, windows and the camera inside</a></li>
 </ul>
 </li>
 <li><a href="#canon">9. Canon, the ledger and review</a><ul>
@@ -2082,6 +2082,115 @@ and side views, the miniloop's still); even the storyboard's "eye level" is a ca
 </ul>
 <h1 id="canon">9. Canon, the ledger and review</h1>
 <p><span id="unified-review"></span><span id="semantic-review"></span><span id="merge-gate"></span></p>
+<h2 id="indoor-mode">8.8 Indoor scene mode: rooms, windows and the camera inside</h2>
+<p><span class="st now">Built in part</span> (the user, 2026-11-12, after the reviewer's stills looked at a dorm room from
+above its roof: "we should have a indoor scene mode. But we need to pay attention to how we render windows"; of the clip,
+"Good, I think this is good. You can wire it in"). Built: windows in the built world (<code>engine/world/windows.mjs</code>, the
+table <code>models.windows</code>, each lot's <code>windows</code> on the page), drawn as real openings with glass, frames, balconies and
+shop fronts; the architect's rooms marked when their unit names a window or a balcony; the set view in the page's stills
+(<code>capture({ set })</code>: the building's shell and every other floor left out, other buildings' insides left out, the set
+room's walls toward the camera and every other room on its floor cut to a low line, sun patches through its far openings by
+day); the reviewer's stills indoors on it (17r units 23&ndash;42: Pi kept every indoor unit of units 33&ndash;42, where it had retaken
+all of 38&ndash;42 for the camera before). Not yet: the director's own shots for Jev, eye level, light at night, windows as ways.</p>
+
+<h3>What there is today</h3>
+<ul>
+<li><b>Buildings</b> are hologram shells (a baked model or a box, pale blue, translucent) over the lot's plan: corridor
+slabs, stairs, and rooms drawn hollow (a floor, thin translucent walls with a gap at each door, no ceiling). The outer
+walls and the roof appear as panels only once a blast hits the building.</li>
+<li><b>Rooms</b> come from the plan (<code>lot.rooms</code>: floor, cells, doors). The architect (<code>engine/casts/rooms.mjs</code>)
+types a room when a conversation plays in it (Jev picks one of 16 kinds) and furnishes it from the KayKit kit; a room no
+one talks in stays bare.</li>
+<li><b>Windows do not exist</b>, in the data or on the page. Nothing knows which walls face outside, where a balcony is,
+or what a person at a window would see. The sky (time of day, weather, the sun's direction) exists and lights the whole
+city, never a room.</li>
+<li><b>Every camera is outside</b>: the director's shots, the photographer's cuts, the review stills. Indoors they look
+through roofs and floors above, and the people are specks among translucent slabs.</li>
+</ul>
+
+<h3>The mode</h3>
+<p>A unit, a card or a shot is <b>indoors</b> when the people it frames stand in a room of a building (the director's
+<code>roomAt</code>). Indoors, the world is drawn as a set rather than as a city: the room the action is in, solid enough to read,
+its neighbours faint, the building above cut away, and the outside seen only through the room's windows. Three views,
+one data model:</p>
+<ul>
+<li><b>The set</b> (the default for the director's shots indoors and the reviewer's stills): the room cut open like a
+stage set. The ceiling and everything above the room's floors are gone; the one or two walls between the camera and
+the room are cut down to a low line (their base and the door and window outlines kept, so the room's shape still reads);
+the far walls stand, with their windows. The camera sits outside the cut walls at 30 to 45 degrees, framing the room's
+floor, never the roof.</li>
+<li><b>Eye level</b> (the actor cast's view, &sect;8.7, and a close shot): the camera inside the room at 1.6 m, every wall
+standing; the windows are the only way out of the room for the eye.</li>
+<li><b>From outside</b> (the city view of a building with someone inside): the building's shell fades round the occupied
+room, which is drawn as in the set; its windows lit at night.</li>
+</ul>
+
+<h3>Windows</h3>
+<p><b>Where they are</b> is the building's, not the shot's: decided once per lot when the world is built, the same for the
+director's walk, the laws, every camera and every later book (a window broken in book 1 is the same window in book 2).</p>
+<ul>
+<li><b>Only on outer walls</b>: a room's edge on the plan's outer face (or next to an empty cell of an L-shaped plan) can
+have one; an inner room has none. Stairs and corridors on the outer face get their own (a stair window, a corridor's end).</li>
+<li><b>By the building's kind</b>, as a pattern per cell of outer wall, from a new settings table
+(<code>models.windows</code>, &sect;7.6's schema, so a universe or a book can change it): a home or a dorm one window to every two
+cells and a balcony door on some floors; an office a band of glazing; a school wide windows on the classroom side; a
+shop's ground floor a storefront of glass; a hospital regular windows; a warehouse a row of high small ones; a cell
+or a basement none. Seeded by the lot, so it never changes between runs.</li>
+<li><b>By the text</b>, where the lines say so: a unit whose lines name a window, a balcony, a curtain or a view
+(the text's own words, in its language) makes sure the room it plays in has one, on the outer wall nearest the person
+the line is about (Index hanging over Kamijou's balcony rail, unit 25). If the room has no outer wall, the architect
+says so (a conflict for the place tree, not a window in an inner wall).</li>
+<li><b>Each window</b>: its wall, its cells along the wall, sill and head heights (0.9 and 2.1 m for a window, 0 and
+2.2 m for a balcony door or a storefront), whether it opens to a balcony, and its state as the story leaves it (open,
+shut, curtained, broken).</li>
+</ul>
+<p><b>How they are drawn</b>, in the hologram style of the rest of the world:</p>
+<ul>
+<li><b>A real opening</b>: the wall is built in pieces round it (below the sill, above the head, either side), so the
+opening is empty, not a lighter patch. A thin frame line round it and a mullion where the window is wide.</li>
+<li><b>Glass</b> as a very faint pane (a few percent opacity, no depth write) with a highlight line across it, so it reads
+as glass from inside and outside and never hides what is behind it. A broken window: the pane gone, shards as debris
+(the blast system's fragments).</li>
+<li><b>What is seen through it</b> is the real city behind it, already in the world (streamed in round the building when
+a room is shown), under the story's sky; beyond what is loaded, a backdrop card outside the window coloured by the
+sky (time of day, weather), so a window never shows the void.</li>
+<li><b>Light</b>: by day the sun through each window as a patch on the floor, shaped by the window and turned by the
+sun's direction (the story sky already has it), and the room otherwise dimmer than the street; at night the windows
+dark blue with the city's lights outside, the room lit from within; from outside, an occupied room's windows lit.</li>
+<li><b>Curtains</b> when the text has them: a plane across the opening, drawn open or shut as the lines say.</li>
+<li><b>Cost</b>: windows are made only for the building being shown and its neighbours (one or two lots), as instanced
+pieces; the city at a distance keeps its shells.</li>
+</ul>
+
+<h3>The camera and windows</h3>
+<ul>
+<li>A shot indoors is planned on the room's plan, not the city's: the camera's side is chosen so the cut walls are the
+ones without the action's windows, and a window wall, when there is one, stands behind or beside the people, so the
+outside shows in the frame.</li>
+<li>Never into the light: by day the camera does not look straight into a window with the people in front of it
+(they would read as silhouettes); a window to the side is the default.</li>
+<li>Never through a wall: an eye-level camera stays inside the room's walls; the set view's camera is outside only on the
+cut side.</li>
+<li>The review stills (&sect;8.2's reviewer segment) use the set view; the reviewer is told it is a set.</li>
+</ul>
+
+<h3>What windows mean beyond the picture</h3>
+<p>A window is also a way: a person can look out of it (the actor cast's view, &sect;8.7), call through it, climb or be thrown
+out of it, and a beam or a blast can pass through it without breaking the wall. These are later steps; the window's
+data is made so the walk graph and the laws can read it (an opening of known size in a known wall).</p>
+
+<h3>Milestones (proposed)</h3>
+<table>
+<thead><tr><th></th><th>What</th><th>Proof</th></tr></thead>
+<tbody>
+<tr><td>I1</td><td>windows in the built world: outer walls, the pattern by kind (<code>models.windows</code>), the text's windows and balconies</td><td>17r's dorm and Komoe's apartment: windows where their outer walls are, Kamijou's balcony at unit 25</td></tr>
+<tr><td>I2</td><td>the set view: room cut open, far walls with real openings, glass, the city and the sky through them</td><td>stills of units 25, 38 and 140 that a reader recognises as the rooms</td></tr>
+<tr><td>I3</td><td>light: sun patches by day, lit rooms and dark windows at night</td><td>the same rooms at day and night units</td></tr>
+<tr><td>I4</td><td>the director's and the reviewer's cameras indoors on the set view</td><td>the reviewer trial on 17r units 1&ndash;84 again, the indoor retakes compared</td></tr>
+<tr><td>I5</td><td>eye level for the actor cast; windows as ways (look out, through, out of)</td><td>with the figures (&sect;8.6)</td></tr>
+</tbody>
+</table>
+
 <h2 id="ontology-layers">9.1 The layers of the ontology</h2>
 <p><span class="st legacy">Legacy</span> (Track B, 2026-11-02).</p>
 <table>

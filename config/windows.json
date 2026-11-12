@@ -1,0 +1,26 @@
+{
+  "about": "Each building kind's windows (docs/v3/design.html#indoor-mode; engine/world/windows.mjs): on a room's outer wall, a window every `every` cells of 2 m (an offset seeded by the room), between `sill` and `head` metres from its floor; `balcony` the chance an upper-floor room's first window is a balcony door (to `doorHead`); `storefront` makes a ground-floor room's outer wall glass (between storefrontSill and storefrontHead). `every` 0: no windows. By the engine's role of the lot (roles) or a named building's use (uses); `default` under both. Read through the settings schema as the table models.windows: a universe or a book may change it.",
+  "default": { "every": 2, "sill": 0.9, "head": 2.1, "balcony": 0, "doorHead": 2.2, "storefront": false, "storefrontSill": 0.3, "storefrontHead": 2.6 },
+  "roles": {
+    "home": { "every": 2, "balcony": 0.6 },
+    "office": { "every": 1, "sill": 0.8, "head": 2.4 },
+    "skyscraper": { "every": 1, "sill": 0.3, "head": 2.6 },
+    "school": { "every": 1, "sill": 0.9, "head": 2.3 },
+    "hospital": { "every": 2 },
+    "shop": { "every": 2, "storefront": true },
+    "market": { "every": 2, "storefront": true },
+    "mall": { "every": 3, "sill": 1.6, "head": 2.4, "storefront": true },
+    "station": { "every": 3, "sill": 1.8, "head": 2.5 }
+  },
+  "uses": {
+    "house": { "every": 2, "balcony": 0.3 },
+    "apartment": { "every": 2, "balcony": 0.6 },
+    "dormitory": { "every": 2, "balcony": 0.8 },
+    "hotel": { "every": 2, "balcony": 0.4 },
+    "warehouse": { "every": 3, "sill": 2.0, "head": 2.5 },
+    "factory": { "every": 2, "sill": 1.8, "head": 2.6 },
+    "parking": { "every": 0 },
+    "church": { "every": 2, "sill": 1.2, "head": 2.6 },
+    "lab": { "every": 2, "sill": 1.0, "head": 2.2 }
+  }
+}

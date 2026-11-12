@@ -948,6 +948,12 @@ const mats = {
   furnitureEdge: new THREE.LineBasicMaterial({ color: 0xffe2b8, transparent: true, opacity: 0.55 }),
   roomEdge: new THREE.LineBasicMaterial({ color: 0xd8f1ff, transparent: true, opacity: 0.85 }),
   roomCut: new THREE.MeshBasicMaterial({ color: 0xff4d5e, transparent: true, opacity: 0.32, depthWrite: false }),
+  // Windows (docs/v3/design.html#indoor-mode): glass a faint pane that never hides what is behind it, a highlight across it,
+  // its frame in the rooms' edge line; a balcony's slab; the sun's patch through an opening on the floor.
+  glass: new THREE.MeshBasicMaterial({ color: 0xcfeaff, transparent: true, opacity: 0.08, depthWrite: false }),
+  glint: new THREE.LineBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.5 }),
+  balcony: new THREE.MeshLambertMaterial({ color: 0x3d6a8a, transparent: true, opacity: 0.4, depthWrite: false }),
+  sunPatch: new THREE.MeshBasicMaterial({ color: 0xffd28a, transparent: true, opacity: 0.45, depthWrite: false, side: THREE.DoubleSide }),
   // A hit building's units: its walls and roof as panels, and what fell as rubble.
   wall: new THREE.MeshLambertMaterial({ color: 0x5fb4e8, transparent: true, opacity: 0.2, depthWrite: false }),
   roof: new THREE.MeshLambertMaterial({ color: 0x5fb4e8, transparent: true, opacity: 0.3, depthWrite: false }),
@@ -1066,6 +1072,10 @@ function instanced(material, boxes) {
 const plans = new WeakMap();
 /** The rooms the architect typed (data.rooms: page lot, room, kind, furniture), by `lot|room`. */
 const roomTyped = new Map((data.rooms ?? []).map((room) => [`${room.lot}|${room.room}`, room]));
+// The set view (docs/v3/design.html#indoor-mode): a still of one room of the world opened as a stage set. Its building's shell
+// and every floor above the room are left out, the room's walls facing the camera cut down to a low line, the far walls
+// standing with their windows; by day the sun's patches through them on the floor. Set by capture({ set }), undone by the next.
+let setView = null;
 function planOf(lot) {
   if (plans.has(lot)) return plans.get(lot);
   const sx = lot.sx ?? lot.nx, sz = lot.sz ?? lot.nz, frame = Array.isArray(lot.frame) ? { x: lot.frame[0], z: lot.frame[1], angle: lot.frame[2] } : lot.frame;
@@ -1311,7 +1321,7 @@ function release(root) {
 for (const material of Object.values(mats)) if (material?.isMaterial) sharedMaterials.add(material);
 sharedMaterials.add(groundMat); unit.userData.shared = true;
 function drawSkeletons(id, entry, count, settling = null, unseen = null) {
-  const reached = entry.bornAt ? entry.bornAt.filter((at) => at <= time).length : 0, key = `${count}|${settling ? 1 : 0}|${reached}|${entry.farKey ?? ""}|${unseen?.key ?? ""}`;
+  const reached = entry.bornAt ? entry.bornAt.filter((at) => at <= time).length : 0, key = `${count}|${settling ? 1 : 0}|${reached}|${entry.farKey ?? ""}|${unseen?.key ?? ""}|${setView?.key ?? ""}`;
   if (entry.shownHits === key) return;
   entry.shownHits = key;
   entry.leftOut = unseen ? (placeHits[keyOf(id)] ?? []).slice(0, count).filter((hit) => unseen.ids.has(hitEvent.get(hit))).length : 0;
@@ -1329,13 +1339,14 @@ function drawSkeletons(id, entry, count, settling = null, unseen = null) {
     for (const unit of [...part.blasted, ...part.fallen]) gone[part.lot].add(unit.slice(0, 4).join("|"));
     if (hit !== settling) for (const unit of part.fallen) { const box = unitBox(place.lots[part.lot], entry, unit); rubble.push([box[0], unit[4] + 0.3, box[2], Math.min(box[3], CELL * 0.9), 0.6, Math.min(box[5], CELL * 0.9)]); }
   }
-  const corridors = [], stairs = [], red = [], rooms = [], halls = [], talls = [], roomWalls = [], roomEdges = [], redRooms = [], walls = [], roofs = [];
+  const corridors = [], stairs = [], red = [], rooms = [], halls = [], talls = [], roomWalls = [], roomEdges = [], redRooms = [], walls = [], roofs = [], glassPanes = [], glints = [], balconies = [], sunPatches = [];
   // A hit building's walls and roof, unit by unit; its artistic shell gives way to them.
   place.lots.forEach((lot, n) => {
     // A building stands from the start (the user, 2026-11-02: parts of the city vanished until the story first reached them);
     // being reached only switches its inside on (below). Far off in the live story view, it goes.
     const unborn = !!entry.far?.has(n);
-    for (const { part } of entry.lots[n].parts) part.visible = !unborn && (part.isSprite || !structural.has(n));
+    const opened = !!setView && !!place.world && n === setView.lot;
+    for (const { part } of entry.lots[n].parts) part.visible = !unborn && !opened && (part.isSprite || !structural.has(n));
     if (unborn || !structural.has(n) || entry.masked.has(n)) return;
     const { sx, sz } = planOf(lot);
     for (let k = 0; k < lot.floors; k++) for (let j = 0; j < sz; j++) for (let i = 0; i < sx; i++) if ((i === 0 || j === 0 || i === sx - 1 || j === sz - 1) && !gone[n].has(`3|${i}|${j}|${k}`)) walls.push(unitBox(lot, entry, [3, i, j, k]));
@@ -1343,13 +1354,22 @@ function drawSkeletons(id, entry, count, settling = null, unseen = null) {
   });
   place.lots.forEach((lot, n) => {
     // Its inside only near the scene's people and where Jev looks (`deep`); a building far off stands as its shell.
-    if (entry.masked.has(n) || (entry.bornAt && entry.bornAt[n] > time) || entry.far?.has(n) || (entry.deep && !entry.deep.has(n))) return;
+    // A set open (setView): its building's inside is drawn whatever else holds, and only it; the others stand as their shells.
+    const isSet = !!setView && !!place.world && n === setView.lot;
+    if (setView && place.world && !isSet) return;
+    if (!isSet && (entry.masked.has(n) || (entry.bornAt && entry.bornAt[n] > time) || entry.far?.has(n) || (entry.deep && !entry.deep.has(n)))) return;
     // Every tile of its plan in its own frame: the corridors, stairs and rooms fill the building as it stands.
     const plan = planOf(lot), { sx, sz, angle: turn } = plan, local = (u, v) => { const [px, pz] = plan.at(u, v); return [px - entry.cx, pz - entry.cz]; }, lift = (lot.k0 ?? 0) * FLOOR;
+    // This building opened as a set: nothing above the set room's top floor.
+    // Only the set's floors are drawn: the room's (or the person's floor in a corridor), not those above nor below it.
+    const opening = setView && place.world && n === setView.lot ? (lot.rooms[setView.room] ? { room: setView.room, bottom: lot.rooms[setView.room][0], top: lot.rooms[setView.room][5] ?? lot.rooms[setView.room][0] } : { room: -1, bottom: setView.floor ?? 0, top: setView.floor ?? 0 }) : null;
+    // Its windows (windows.mjs, put on the page by the exporter): by floor, cell and side of a room's outline.
+    const openings = new Map((lot.windows ?? []).map(([k, i, j, side, kind, sill, head]) => [`${k}|${i}|${j}|${side}`, { kind, sill: sill ?? 0.9, head: head ?? 2.1 }]));
     for (let cell = 0; cell < lot.cells.length; cell++) {
       const type = lot.cells[cell];
       if (type === "0" || lost[n].has(cell)) continue;
       const i = cell % sx, j = Math.floor(cell / sx) % sz, k = Math.floor(cell / (sx * sz)), [x, z] = local((i + 0.5) * CELL - (sx * CELL) / 2, (j + 0.5) * CELL - (sz * CELL) / 2);
+      if (opening && (k > opening.top || k < opening.bottom)) continue;
       if (cutCells[n].has(cell)) red.push(type === "2" ? [x, lift + k * FLOOR + FLOOR / 2, z, 1.4, FLOOR * 0.96, 1.4, turn] : [x, lift + k * FLOOR + 0.2, z, CELL * 0.9, 0.4, CELL * 0.9, turn]);
       else if (type === "2") stairs.push([x, lift + k * FLOOR + FLOOR / 2, z, 1.4, FLOOR * 0.96, 1.4, turn]);
       else corridors.push([x, lift + k * FLOOR + 0.15, z, CELL * 0.9, 0.3, CELL * 0.9, turn]);
@@ -1357,15 +1377,54 @@ function drawSkeletons(id, entry, count, settling = null, unseen = null) {
     // Each room hollow: its floor, and a thin wall along each cell edge of its outline but where a door is (the circulation
     // cell outside that edge is one of its doors), as high as its floors.
     lot.rooms.forEach(([k, i0, j0, i1, j1, top = k, kind = 0, doors = []], r) => {
+      if (opening && (k > opening.top || k < opening.bottom)) return;
       // In the plan's own frame: u0, v0 its corner, metres from the plan's centre along its sides.
       const cut = cutRooms[n].has(r), u0 = i0 * CELL - (sx * CELL) / 2, v0 = j0 * CELL - (sz * CELL) / 2, w = (i1 - i0 + 1) * CELL, d = (j1 - j0 + 1) * CELL, h = (top - k + 1) * FLOOR - 0.3, y = lift + k * FLOOR;
       const [rx, rz] = local(u0 + w / 2, v0 + d / 2);
       (cut ? redRooms : kind === 2 ? talls : kind === 1 ? halls : rooms).push([rx, y + 0.06, rz, w - 0.2, 0.12, d - 0.2, turn]);
       const door = new Set(doors), at = (i, j) => (k * sz + j) * sx + i, wall = cut ? redRooms : roomWalls;
       // Each wall piece also draws its top edge as a line, so a room reads as a hollow box at any zoom.
-      const piece = (pu, pv, lu, lv) => { const [px, pz] = local(pu, pv); wall.push([px, y + h / 2, pz, lu, h, lv, turn]); const top = y + h, [ax, az] = lu > lv ? local(pu - lu / 2, pv) : local(pu, pv - lv / 2), [bx, bz] = lu > lv ? local(pu + lu / 2, pv) : local(pu, pv + lv / 2); roomEdges.push(ax, top, az, bx, top, bz); };
-      for (let i = i0; i <= i1; i++) { const u = u0 + (i - i0 + 0.5) * CELL; if (!door.has(at(i, j0 - 1))) piece(u, v0 + 0.06, CELL, 0.12); if (!door.has(at(i, j1 + 1))) piece(u, v0 + d - 0.06, CELL, 0.12); }
-      for (let j = j0; j <= j1; j++) { const v = v0 + (j - j0 + 0.5) * CELL; if (!door.has(at(i0 - 1, j))) piece(u0 + 0.06, v, 0.12, CELL); if (!door.has(at(i1 + 1, j))) piece(u0 + w - 0.06, v, 0.12, CELL); }
+      const piece = (pu, pv, lu, lv, from = 0, to = h) => { const [px, pz] = local(pu, pv); wall.push([px, y + (from + to) / 2, pz, lu, to - from, lv, turn]); const top = y + to, [ax, az] = lu > lv ? local(pu - lu / 2, pv) : local(pu, pv - lv / 2), [bx, bz] = lu > lv ? local(pu + lu / 2, pv) : local(pu, pv + lv / 2); roomEdges.push(ax, top, az, bx, top, bz); };
+      // This room as the set: its walls facing the camera cut to a low line (the side whose outside the camera is on).
+      const setRoom = opening && opening.room === r, toward = setRoom ? (() => { const [cx, cz] = local(u0 + w / 2, v0 + d / 2); return [setView.cam[0] - cx, setView.cam[1] - cz]; })() : null;
+      const facesCamera = (side) => { if (!toward) return false; const [du, dv] = [[0, -1], [0, 1], [-1, 0], [1, 0]][side], [ox, oz] = local(u0 + w / 2 + du, v0 + d / 2 + dv), [cx, cz] = local(u0 + w / 2, v0 + d / 2); return (ox - cx) * toward[0] + (oz - cz) * toward[1] > 0; };
+      const typedHere = place.world ? roomTyped.get(`${n}|${r}`) : null;
+      // A room whose lines name a balcony (the architect's `opening`) has one: its first window becomes the balcony door.
+      let balconyWanted = typedHere?.opening === "balcony" && !(lot.windows ?? []).some(([f, i, j, , kd]) => kd === 2 && f === k && i >= i0 && i <= i1 && j >= j0 && j <= j1);
+      // One cell edge of the outline: a wall, a cut wall, or a wall round its window (sill, head, glass, frame), a balcony
+      // door with its balcony outside, or a shop's glass front.
+      const edge = (side, i, j, pu, pv, lu, lv) => {
+        // In a set, the set room's walls facing the camera, and every other room's walls on its floor, are a low line.
+        if ((setRoom && facesCamera(side)) || (opening && !setRoom)) { piece(pu, pv, lu, lv, 0, 0.25); return; }
+        let open = openings.get(`${k}|${i}|${j}|${side}`);
+        if (open && balconyWanted && open.kind === 1) { open = { ...open, kind: 2, sill: 0, head: 2.2 }; balconyWanted = false; }
+        if (!open) { piece(pu, pv, lu, lv); return; }
+        const sill = Math.min(open.sill, h - 0.4), head = Math.min(open.head, h - 0.1), along = lu > lv, [px, pz] = local(pu, pv);
+        if (sill > 0.02) piece(pu, pv, lu, lv, 0, sill);
+        piece(pu, pv, lu, lv, head, h);
+        glassPanes.push([px, y + (sill + head) / 2, pz, along ? lu * 0.94 : 0.02, head - sill, along ? 0.02 : lv * 0.94, turn]);
+        const [ax, az] = along ? local(pu - lu / 2 + 0.06, pv) : local(pu, pv - lv / 2 + 0.06), [bx, bz] = along ? local(pu + lu / 2 - 0.06, pv) : local(pu, pv + lv / 2 - 0.06);
+        roomEdges.push(ax, y + sill, az, bx, y + sill, bz, ax, y + head, az, bx, y + head, bz, ax, y + sill, az, ax, y + head, az, bx, y + sill, bz, bx, y + head, bz);
+        glints.push(ax + (bx - ax) * 0.2, y + sill + 0.25, az + (bz - az) * 0.2, ax + (bx - ax) * 0.55, y + head - 0.2, az + (bz - az) * 0.55);
+        if (open.kind === 2) {
+          // The balcony: a slab 1.2 m out and its rail at 1.1 m.
+          const [du, dv] = [[0, -1], [0, 1], [-1, 0], [1, 0]][side], out = 0.6, [sx_, sz_] = local(pu + du * out, pv + dv * out);
+          balconies.push([sx_, y - 0.05, sz_, along ? lu + 0.6 : 1.2, 0.1, along ? 1.2 : lv + 0.6, turn]);
+          const [ra, rza] = along ? local(pu - lu / 2 - 0.3, pv + dv * 1.2) : local(pu + du * 1.2, pv - lv / 2 - 0.3), [rb, rzb] = along ? local(pu + lu / 2 + 0.3, pv + dv * 1.2) : local(pu + du * 1.2, pv + lv / 2 + 0.3);
+          roomEdges.push(ra, y + 1.1, rza, rb, y + 1.1, rzb, ra, y, rza, ra, y + 1.1, rza, rb, y, rzb, rb, y + 1.1, rzb);
+        }
+        // By day, in the set, the sun through the opening on the floor: its four corners along the light (the sky's sun).
+        if (setRoom && setView.sun) {
+          const [ux, uz] = [ax, az], [vx, vz] = [bx, bz], s = setView.sun, outward = (() => { const [du, dv] = [[0, -1], [0, 1], [-1, 0], [1, 0]][side], [ox, oz] = local(pu + du, pv + dv); return [ox - px, oz - pz]; })();
+          if (s[1] > 0.05 && s[0] * outward[0] + s[2] * outward[1] > 0) {
+            const drop = (x, yy, z) => { const t = yy / s[1]; return [x - s[0] * t, y + 0.03, z - s[2] * t]; };
+            const c = [drop(ux, sill, uz), drop(vx, sill, vz), drop(vx, head, vz), drop(ux, head, uz)];
+            sunPatches.push(...c[0], ...c[1], ...c[2], ...c[0], ...c[2], ...c[3]);
+          }
+        }
+      };
+      for (let i = i0; i <= i1; i++) { const u = u0 + (i - i0 + 0.5) * CELL; if (!door.has(at(i, j0 - 1))) edge(0, i, j0, u, v0 + 0.06, CELL, 0.12); if (!door.has(at(i, j1 + 1))) edge(1, i, j1, u, v0 + d - 0.06, CELL, 0.12); }
+      for (let j = j0; j <= j1; j++) { const v = v0 + (j - j0 + 0.5) * CELL; if (!door.has(at(i0 - 1, j))) edge(2, i0, j, u0 + 0.06, v, 0.12, CELL); if (!door.has(at(i1 + 1, j))) edge(3, i1, j, u0 + w - 0.06, v, 0.12, CELL); }
       // A room the architect typed (a conversation played in it): its furniture, each piece from the room's corner, turned in
       // the plan's frame (a piece's angle 0 faces the plan's +v).
       const typed = place.world ? roomTyped.get(`${n}|${r}`) : null;
@@ -1379,6 +1438,10 @@ function drawSkeletons(id, entry, count, settling = null, unseen = null) {
     });
   });
   if (roomEdges.length) dynamic.add(new THREE.LineSegments(new THREE.BufferGeometry().setAttribute("position", new THREE.Float32BufferAttribute(roomEdges, 3)), mats.roomEdge));
+  if (glints.length) dynamic.add(new THREE.LineSegments(new THREE.BufferGeometry().setAttribute("position", new THREE.Float32BufferAttribute(glints, 3)), mats.glint));
+  if (sunPatches.length) dynamic.add(new THREE.Mesh(new THREE.BufferGeometry().setAttribute("position", new THREE.Float32BufferAttribute(sunPatches, 3)), mats.sunPatch));
+  if (glassPanes.length) dynamic.add(instanced(mats.glass, glassPanes));
+  if (balconies.length) dynamic.add(instanced(mats.balcony, balconies));
   dynamic.add(instanced(mats.corridor, corridors), instanced(mats.stair, stairs), instanced(mats.cut, red), instanced(mats.room, rooms), instanced(mats.hall, halls), instanced(mats.tall, talls), instanced(mats.roomWall, roomWalls), instanced(mats.roomCut, redRooms), instanced(mats.wall, walls), instanced(mats.roof, roofs), instanced(mats.rubble, rubble));
   entry.group.add(dynamic); entry.dynamic = dynamic;
 }
@@ -3151,7 +3214,7 @@ if (capture) {
       return { at: segment.start + 0.05, place: segment.scene.place, people };
     },
     /** One still: `place` at the start of an event, the reader's camera turned by `yaw` about it; `hide` things, `beams` of earlier boxes, `boxes` and a `solved` 3D box drawn for checking. */
-    async capture({ id, scene, event, place, yaw = 0, hide = [], beams = [], boxes = [], solved = null, aim = null, elevation = null, mask = false, ghosts = [], form = null, focus = null, marker = null, radius = null, poles = [], topdown = null, beforeHit = false, spheres = [], pins = [], play = null, at = null, caption = null, frame = null, view = null, slices = [], cuts = [], areas = [], free = [], vague = null, labelScale = 1, dash = 2, arrows = [], wedge = null, people = false, only = null, mover = null, grid = null }) {
+    async capture({ id, scene, event, place, set = null, cutAbove = null, yaw = 0, hide = [], beams = [], boxes = [], solved = null, aim = null, elevation = null, mask = false, ghosts = [], form = null, focus = null, marker = null, radius = null, poles = [], topdown = null, beforeHit = false, spheres = [], pins = [], play = null, at = null, caption = null, frame = null, view = null, slices = [], cuts = [], areas = [], free = [], vague = null, labelScale = 1, dash = 2, arrows = [], wedge = null, people = false, only = null, mover = null, grid = null }) {
       // `play`: that many seconds into the event, its hit's effects on (to look at a destruction as it plays).
       // `at`: any moment of the strand, everything playing (to record a scene).
       // Terrain spawning (docs/v3/design.html#visual-context-engine): a frame of its own size, an explicit camera in world metres,
@@ -3161,6 +3224,9 @@ if (capture) {
       time = at ?? (eventStart.get(`${scene}|${event}`) ?? 0) + (play ?? 0.02); quiet = play === null && at === null; seeing = at !== null; shownPlace = place; glide = null; hiddenThings = new Set(hide); sheetView = null;
       // Just before this event's own hit: the buildings as they stood.
       hitsBefore = beforeHit ? time - 0.02 : null; for (const entry of built.values()) entry.shownHits = -1;
+      // `cutAbove` (metres): everything above that height is cut away, as a dollhouse is opened, so a still looks into the
+      // rooms people stand in (the reviewer's stills indoors; docs/v3/design.html#reviewer-segment). Undone by the next capture without it.
+      renderer.clippingPlanes = cutAbove === null ? [] : [new THREE.Plane(new THREE.Vector3(0, -1, 0), cutAbove)];
       for (const extra of extras.splice(0)) world.remove(extra);
       mapHalf = topdown ? topdown.half : null;
       // `only`: the places a director's shot is about keep their pins and names; the others' are hidden for this still.
@@ -3173,6 +3239,10 @@ if (capture) {
       // A lower look (degrees above level): from the side, a beam's run and a thing's height read directly.
       if (elevation !== null) { const length = offset.length(), level = new THREE.Vector3(offset.x, 0, offset.z).normalize(), up = THREE.MathUtils.degToRad(elevation); offset.copy(level.multiplyScalar(Math.cos(up) * length)).setY(Math.max(2 - pose.target.y, Math.sin(up) * length)); }
       camera.position.copy(pose.target).add(offset); controls.target.copy(pose.target); controls.update();
+      // `set` ({ lot, room }: a world lot and one of its rooms): the room opened as a set for this still, seen from where the
+      // camera now stands; by day with the sun's patches (docs/v3/design.html#indoor-mode).
+      { const toSun = sun.position.clone().normalize(), day = sun.intensity > 0.35 && toSun.y > 0.05;
+        setView = set ? { lot: set.lot, room: set.room, floor: set.floor ?? null, cam: [camera.position.x, camera.position.z], sun: day ? [toSun.x, toSun.y, toSun.z] : null, key: `${set.lot}|${set.room}|${Math.round(camera.position.x)}|${Math.round(camera.position.z)}|${day ? 1 : 0}` } : null; }
       for (const view of beams) { const group = beam(place, view); extras.push(group); world.add(group); }
       // Candidate spots as white ghosts of the thing, each with its letter; a spot as a small marker at its base.
       for (const ghost of ghosts) { const group = spotGhost(place, form, ghost); extras.push(group); world.add(group); }

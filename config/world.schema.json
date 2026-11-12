@@ -1707,6 +1707,18 @@
     "universe",
     "book"
    ]
+  },
+  "models.windows": {
+   "file": "config/windows.json",
+   "meaning": "Each building kind's windows on its rooms' outer walls (engine/world/windows.mjs, docs/v3/design.html#indoor-mode): how often (a window every N cells of 2 m), sill and head heights, the chance of a balcony door on an upper floor, glass fronts on a shop's ground floor; by the lot's role or a named building's use.",
+   "used": [
+    "engine/world/windows.mjs windowsOf",
+    "engine/world/export-strand-demo.mjs (each lot's windows on the page)"
+   ],
+   "layers": [
+    "universe",
+    "book"
+   ]
   }
  },
  "groups": {

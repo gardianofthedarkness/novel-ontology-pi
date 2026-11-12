@@ -20,6 +20,8 @@ import { parseArgs } from 'node:util';
 
 const repository = resolve(dirname(fileURLToPath(import.meta.url)), '..', '..'), load = path => import(pathToFileURL(join(repository, path)).href);
 const RVM = await import('./reviewer.mjs');
+// The words for a room's outside in the book's languages (Chinese, Japanese, English): a balcony, a window (a curtain is one's).
+const OPENING_WORDS = { balcony: /\u9633\u53f0|\u30d9\u30e9\u30f3\u30c0|\u30d0\u30eb\u30b3\u30cb\u30fc|balcony|veranda/i, window: /\u7a97|\u7a93|window|curtain/i };
 const C = await load('dist/src/context/camera.js'), CB = await load('dist/src/context/cutBag.js'), M = await load('dist/src/context/directorModes.js'), { ask } = await load('dist/src/context/engine.js');
 const S = await load('dist/apps/playground/src/data/skeleton.js'), { loadWorkspaceSentences } = await load('dist/src/cli/commands/extract/timeplaceCommands.js');
 const { strandDemo, inlineStrand } = await import('../world/export-strand-demo.mjs');
@@ -470,6 +472,14 @@ export async function direct(novelDir, { reading, readingPath = null, prefilm = 
       };
       // The room of a building a node stands in (its lot on the page, the room's index, its floor and its plan's size in metres),
       // or null: a node on a building's floor inside one of its rooms (a street laid underground's and a deck's buildings too).
+      // The building a node is inside and its floor (a corridor's, a stair's or a room's), or null outside.
+      const insideAt = node => {
+        const p = W.nodePos(world, node), key = W.cellKey(p.i, p.j);
+        const n = (world.lotBelow.get(key) ?? []).find(index => p.k >= (world.lots[index].k0 ?? 0) && p.k < (world.lots[index].k0 ?? 0) + world.lots[index].floors) ?? (p.k >= 0 ? world.lotAt.get(key) : undefined);
+        if (n === undefined) return null;
+        const lot = world.lots[n], k = p.k - (lot.k0 ?? 0);
+        return k >= 0 && k < lot.floors ? { lot: n, floor: k } : null;
+      };
       const roomAt = node => {
         const p = W.nodePos(world, node), key = W.cellKey(p.i, p.j);
         const n = (world.lotBelow.get(key) ?? []).find(index => p.k >= (world.lots[index].k0 ?? 0) && p.k < (world.lots[index].k0 ?? 0) + world.lots[index].floors) ?? (p.k >= 0 ? world.lotAt.get(key) : undefined);
@@ -1748,7 +1758,11 @@ export async function direct(novelDir, { reading, readingPath = null, prefilm = 
               if (reply?.value && RM.ROOM_TYPES[reply.value]) { type = String(reply.value); sure = reply.confidence ?? null; }
             }
             const furniture = RM.furnish(type, room.w, room.d, furnitureSizes, `${key}|${type}`).map(piece => [piece.model, piece.u, piece.v, piece.angle]);
-            E.rooms.set(key, { lot: room.lot, room: room.room, type, sure, scene: scene.id, card: card.id, furniture });
+            // What the unit's lines name of the room's outside (docs/v3/design.html#indoor-mode): a balcony, or a window; the
+            // page then gives the room one on its outer wall (a balcony door from its first window).
+            const said = (reads?.sentences ?? []).map(id => text.get(id)?.text ?? '').join(' ');
+            const opening = OPENING_WORDS.balcony.test(said) ? 'balcony' : OPENING_WORDS.window.test(said) ? 'window' : null;
+            E.rooms.set(key, { lot: room.lot, room: room.room, type, sure, scene: scene.id, card: card.id, furniture, ...(opening ? { opening } : {}) });
             cardRecord.room = { lot: room.lot, room: room.room, type, sure, asked: true, pieces: furniture.length };
           };
           // Where a beam from the attacker (to a point, or straight up) meets the ceiling over them (the exporter's beamCeiling):
@@ -2348,10 +2362,20 @@ export async function direct(novelDir, { reading, readingPath = null, prefilm = 
           let still = null;
           if (looks && ids.length) {
             try {
-              const played = await grow(scene, run), points3 = ids.map(id => at(positions[id][0])), mid = [0, 1, 2].map(n => points3.reduce((sum, q) => sum + q[n], 0) / points3.length);
-              const reach = Math.max(0, ...points3.map(q => Math.hypot(q[0] - mid[0], q[2] - mid[2]))), cam = [...sceneRecord.cards].reverse().find(card => card.camera)?.camera ?? null;
-              const shot = await shoot(`${scene.id.slice(-3)}-review${RV.retaken.has(scene.id) ? '-retake' : ''}`, [1440, 900], { place: scene.placeId, at: Math.max(0, (played?.end ?? 0) - 0.02), only: [scene.placeId], focus: { x: mid[0], z: mid[2], y0: mid[1], w: 6, d: 6, h: 3 }, radius: Math.min(150, Math.max(14, reach * 1.4 + 8)), elevation: Math.max(30, cam?.elevation ?? 35), yaw: cam?.yaw ?? 0 });
+              // Framed on the unit's last action: the people of its last card (else everyone), only those within 40 m of
+              // their middle (a chase's far end left out), seen from high enough that buildings do not hide them (W17-17r's
+              // first block: a frame pulled back to 150 m over towers showed the reviewer an empty city).
+              const lastPeople = [...(cards.at(-1)?.people ?? [])].map(person => person.id).filter(id => positions[id] && !String(id).startsWith('crowd:'));
+              const framed = lastPeople.length ? lastPeople : ids, all = framed.map(id => at(positions[id][0])), centre = [0, 1, 2].map(n => all.reduce((sum, q) => sum + q[n], 0) / all.length);
+              const points3 = all.filter(q => Math.hypot(q[0] - centre[0], q[2] - centre[2]) <= 40), kept3 = points3.length ? points3 : all.slice(0, 1), mid = [0, 1, 2].map(n => kept3.reduce((sum, q) => sum + q[n], 0) / kept3.length);
+              // Indoors (someone framed stands in a room of a building): the room opened as a set (docs/v3/design.html#indoor-mode),
+              // its building and the floors above left out, the walls facing the camera cut low, its windows and furniture seen.
+              // Not in a room but in a building (a corridor, a stair): the building opened at their floor.
+              const indoors = framed.map(id => roomAt(positions[id][0])).find(Boolean) ?? (() => { const b = framed.map(id => insideAt(positions[id][0])).find(Boolean); return b ? { lot: b.lot, room: -1, floor: b.floor, w: 10, d: 10 } : null; })();
+              const played = await grow(scene, run), reach = Math.max(0, ...kept3.map(q => Math.hypot(q[0] - mid[0], q[2] - mid[2]))), cam = [...sceneRecord.cards].reverse().find(card => card.camera)?.camera ?? null;
+              const shot = await shoot(`${scene.id.slice(-3)}-review${RV.retaken.has(scene.id) ? '-retake' : ''}`, [1440, 900], { place: scene.placeId, at: Math.max(0, (played?.end ?? 0) - 0.02), only: [scene.placeId], focus: { x: mid[0], z: mid[2], y0: mid[1], w: 6, d: 6, h: 3 }, radius: indoors ? Math.min(16, Math.max(8, reach * 1.6 + 6)) : Math.min(45, Math.max(12, reach * 1.6 + 8)), elevation: indoors ? 42 : 60, yaw: cam?.yaw ?? 0, ...(indoors ? { set: { lot: indoors.lot, room: indoors.room, floor: indoors.floor } } : {}) });
               if (shot.png) still = join(shots, `${scene.id.slice(-3)}-review${RV.retaken.has(scene.id) ? '-retake' : ''}.png`);
+              log(`${scene.id}: review still ${indoors ? `indoors: lot ${indoors.lot}, ${indoors.room >= 0 ? `room ${indoors.room}` : 'no room'}, floor ${indoors.floor}` : 'outdoors'} (${framed.length} framed)`);
             } catch (error) { log(`${scene.id}: review still failed: ${error.message ?? error}`); }
           }
           const held = sceneRecord.cards.flatMap(card => (card.laws ?? []).filter(entry => entry.verdict === 'held').map(entry => `${entry.law} ${names.get(entry.who) ?? entry.who ?? ''}${entry.why ? ` (${String(entry.why).slice(0, 80)})` : ''}`));

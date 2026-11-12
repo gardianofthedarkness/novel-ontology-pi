@@ -15,6 +15,7 @@ import { mapPicture } from './world-map.mjs';
 import { partsIn, snapMarkers } from './composite.mjs';
 import { setting, table } from '../../dist/src/world/settings.js';
 import { layered, strandLayers } from './strand-layers.mjs';
+import { windowsOf } from './windows.mjs';
 /** The most a walk window reaches from its centre (metres): a window wider than about 2 km has more edges than a Map holds. */
 export const WINDOW_MOST = 1024, windowsCapped = { count: 0 };
 
@@ -22,6 +23,8 @@ const repository = resolve(dirname(fileURLToPath(import.meta.url)), '..', '..');
 const load = path => import(pathToFileURL(`${repository}/${path}`));
 /** A room's kind on the page (its number in a room's row): a room, a hall, a room of several floors. */
 const ROOM_KINDS = ['room', 'hall', 'tall'];
+// Each building kind's windows (config/windows.json, the settings table models.windows).
+const WINDOWS = table('models.windows');
 const PALETTE = ['#7ce6ff', '#ff8fb1', '#ffd36e', '#9dff8a', '#c59bff', '#ff9d5c', '#5cf2c8', '#f2f2f2', '#8fb6ff', '#e0ff6e'];
 // The basic shapes, at unit size (their extents). A sphere is a kind of oval: an oval in a cube-shaped cast.
 const SHAPES = { box: [1, 1, 1], oval: [1, 0.55, 0.7], triangle: [1, 1, 1], diamond: [1, 1, 1], donut: [1, 0.3, 1] };
@@ -1673,7 +1676,9 @@ export async function strandDemo(novelDir, options) {
     const worldLots = world.lots.map((lot, index) => ({ model: shells[index], label: lot.label, detected: named('world', index) ? { name: named('world', index).name, scene: named('world', index).scene, event: named('world', index).event } : null, role: named('world', index) && ROLE_FOR[named('world', index).model] === 'hospital' ? 'hospital' : lot.role,
       i0: lot.i0, j0: lot.j0, nx: lot.nx, nz: lot.nz, floors: lot.floors, height: lot.height, born: lot.born, source: lot.source, manifold: lot.manifold, era: lot.era, place: lot.place,
       // A turned lot's plan (sx × sz cells, `cells` in its order) stands in its own frame [x, z, angle] at the building's true size.
-      sx: lot.skeleton.nx, sz: lot.skeleton.nz, ...(lot.k0 ? { k0: lot.k0 } : {}), frame: lot.frame ? [Math.round(lot.frame.x * 100) / 100, Math.round(lot.frame.z * 100) / 100, Math.round(lot.frame.angle * 10000) / 10000] : null, cells: [...lot.skeleton.cells].join(''), rooms: lot.rooms.map(room => [room.floor, room.i0, room.j0, room.i1, room.j1, room.top ?? room.floor, ROOM_KINDS.indexOf(room.kind ?? 'room'), room.doors]) }));
+      sx: lot.skeleton.nx, sz: lot.skeleton.nz, ...(lot.k0 ? { k0: lot.k0 } : {}), frame: lot.frame ? [Math.round(lot.frame.x * 100) / 100, Math.round(lot.frame.z * 100) / 100, Math.round(lot.frame.angle * 10000) / 10000] : null, cells: [...lot.skeleton.cells].join(''), rooms: lot.rooms.map(room => [room.floor, room.i0, room.j0, room.i1, room.j1, room.top ?? room.floor, ROOM_KINDS.indexOf(room.kind ?? 'room'), room.doors]) }))
+      // Each building's windows on its rooms' outer walls (windows.mjs; docs/v3/design.html#indoor-mode), by its kind, seeded by the lot.
+      .map(entry => ({ ...entry, windows: windowsOf(entry, WINDOWS, `${entry.label ?? ''}|${entry.i0}|${entry.j0}`) }));
     if (partsMissing.length) notes.partsMissing = partsMissing;
     notes.world = { chunks: world.chunks.size, lots: world.lots.length, shells: worldShells.length, nodes: world.cells.length / 3, grid: [NX, NZ, K] };
     return {
