@@ -48,7 +48,8 @@ export async function roomStores(novelDir) {
   if (!script?.places) refuse('No world script: run the place pass first (novel places apply).');
   const plan = await readJson(join(stores.world, 'room-plan.json'), { version: 1, rooms: {}, staging: {}, log: [] });
   const chainOf = id => { const out = []; for (let at = id, guard = 0; at && script.places[at] && guard < 16; at = script.places[at].parent, guard++) out.push(at); return out; };
-  return { ...stores, script, plan, chainOf };
+  const sky = await readJson(join(stores.novel, '..', 'reading', 'sky.json'), null);
+  return { ...stores, script, plan, chainOf, sky };
 }
 
 /** Every room some unit is set in (the unit's place or a room above it), with its building and its units in order. */
@@ -80,6 +81,9 @@ export function buildingUnitsOf(s) {
   return out;
 }
 
+/** A unit's story sky (the reading's sky.json): its time of day and weather, the light a shot is chosen for. */
+const skyOf = (s, unit) => { const told = s.sky?.units?.[unit]; return told ? { daypart: told.daypart?.value ?? null, hour: told.hour ?? null, weather: told.weather?.value ?? null } : null; };
+const lightOf = sky => (sky ? `${sky.daypart ?? '?'}|${sky.weather ?? '?'}` : null);
 const nameOf = (s, id) => { const e = s.entity.get(id); return e?.name ?? e?.names?.[0]?.text ?? e?.names?.[0] ?? id; };
 const presentOf = (s, unit) => s.script.scenes.find(scene => scene.id === unit)?.present ?? [];
 /** A line lies in a unit or within LOOK_BACK lines before its first. */
@@ -149,7 +153,12 @@ export function decide(s, command, { positional: [a, b, c], why, line, through =
     if (!SHOTS[kind]) refuse(`No shot "${kind}"; shots: ${Object.keys(SHOTS).join(', ')}.`);
     needLine(s, line, [unit], unit);
     let span = [unit];
-    if (through) { const i = home.units.indexOf(unit), j = home.units.indexOf(through); if (j < i) refuse(`--through ${through} is not ${unit} or a later unit of ${home.id}.`); if (j - i > 30) refuse('--through covers at most 30 of the room\'s units at once.'); span = home.units.slice(i, j + 1); }
+    if (through) {
+      const i = home.units.indexOf(unit), j = home.units.indexOf(through); if (j < i) refuse(`--through ${through} is not ${unit} or a later unit of ${home.id}.`); if (j - i > 30) refuse('--through covers at most 30 of the room\'s units at once.'); span = home.units.slice(i, j + 1);
+      // A shot is chosen for its light: a run filmed alike shares the story's time of day and weather.
+      const changed = span.find(u => lightOf(skyOf(s, u)) !== lightOf(skyOf(s, unit)));
+      if (changed) refuse(`The light changes at ${changed} (${JSON.stringify(skyOf(s, changed))} after ${JSON.stringify(skyOf(s, unit))}): a shot --through stops before it; decide ${changed} on its own.`);
+    }
     for (const u of span) (d.shots ??= {})[u] = { kind, line, why, ...(u !== unit ? { from: unit } : {}) };
     d.log.push({ command, args: [a, b], through, line, why, at: new Date().toISOString() });
     return { ok: true, shot: [unit, kind], units: span.length };
@@ -182,7 +191,7 @@ export function roomView(s, id) {
 export async function stageView(s, unit) {
   const inBuilding = buildingUnitsOf(s).find(entry => entry.unit === unit), room = roomsOf(s).find(r => r.units.includes(unit) || r.id === inBuilding?.room); if (!room) refuse(`${unit} is not set in a room or its building.`);
   const prefilm = await readJson(join(s.novel, '..', 'reading', 'prefilm.json'), null), notes = prefilm?.units?.[unit]?.scriptSupervisor?.digest?.people ?? [];
-  return { unit, room: `${room.id} ${room.label}`, opens: s.plan.rooms[room.id]?.opens?.value ?? '?', features: FEATURES, shots: SHOTS, shot: s.plan.shots?.[unit] ?? null,
+  return { unit, room: `${room.id} ${room.label}`, sky: skyOf(s, unit), opens: s.plan.rooms[room.id]?.opens?.value ?? '?', features: FEATURES, shots: SHOTS, shot: s.plan.shots?.[unit] ?? null,
     people: presentOf(s, unit).map(id => ({ id, name: nameOf(s, id), notes: notes.find(note => note.who === id) ?? null, decided: s.plan.staging[unit]?.[id] ?? null })),
     lines: (s.sceneLines.get(unit) ?? []).map(line => `${line} ${s.text.get(line)?.text ?? ''}`) };
 }

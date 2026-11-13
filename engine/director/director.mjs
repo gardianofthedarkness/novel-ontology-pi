@@ -1116,6 +1116,9 @@ export async function direct(novelDir, { reading, readingPath = null, prefilm = 
             (sceneRecord.staged ??= []).push({ who, at: feature });
             if (!from) { positions[who] = [stagedAt, 0]; sceneRecord.spawned.push(who); continue; }
             if (from[0] === stagedAt) { positions[who] = from; sceneRecord.carried.push(who); continue; }
+            // From outside the room's building, the text has them in the room from the unit's start: there off-page (the
+            // way between the units is the story's cut), not a walk across the city in the scene.
+            if (insideAt(from[0])?.lot !== boundRoom.lot) { positions[who] = [stagedAt, from[1]]; (sceneRecord.cutIn ??= []).push(who); continue; }
             const a_ = at(from[0]), b_ = at(stagedAt), metres_ = Math.hypot(a_[0] - b_[0], a_[2] - b_[2]);
             positions[who] = from; travels.push({ who, from, dest: stagedAt, ...(frameMetres && metres_ <= frameMetres ? {} : { route: true }) });
             continue;
