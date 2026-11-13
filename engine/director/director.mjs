@@ -757,6 +757,15 @@ export async function direct(novelDir, { reading, readingPath = null, prefilm = 
         floorFacts.set(room.id, facts);
       }
       RBM.storyHints(roomsWanted, id => floorFacts.get(id) ?? [], roomPlan);
+      // The sun a room takes (the agent's, from its lines), for choosing its plan room and its part: how well a plan room's outer
+      // walls face it (east in the morning, west in the afternoon, as the page's sun: strand-demo.html keyedLight).
+      const sunXZOf = told => (told === 'morning' ? [0.915, 0.404] : told === 'afternoon' ? [-0.915, 0.404] : null);
+      const outerOf = (lot, k) => { const sx = lot.skeleton?.nx ?? 0, sz = lot.skeleton?.nz ?? 0, cellAt = (i, j) => lot.skeleton?.cells?.[(k * sz + j) * sx + i]; return (i, j) => i < 0 || j < 0 || i >= sx || j >= sz || (!cellAt(i, j) && !(lot.rooms ?? []).some(other => k >= other.floor && k <= (other.top ?? other.floor) && i >= other.i0 && i <= other.i1 && j >= other.j0 && j <= other.j1)); };
+      const sideScore = (lot, sun) => side => { const angle = lot.frame?.angle ?? 0, c = Math.cos(angle), s_ = Math.sin(angle), [du, dv] = [[0, -1], [0, 1], [-1, 0], [1, 0]][side]; return (du * c - dv * s_) * sun[0] + (du * s_ + dv * c) * sun[1]; };
+      for (const room of roomsWanted) {
+        const sun = sunXZOf(roomPlan.rooms?.[room.id]?.sun?.value); if (!sun) continue;
+        room.sunScore = (lotIndex, entry) => { const lot = world.lots[lotIndex], outer = outerOf(lot, entry.floor), score = sideScore(lot, sun); let best = -1; for (const [side, cellsOf] of [[0, n => [entry.i0 + n, entry.j0 - 1]], [1, n => [entry.i0 + n, entry.j1 + 1]], [2, n => [entry.i0 - 1, entry.j0 + n]], [3, n => [entry.i1 + 1, entry.j0 + n]]]) { const length = side < 2 ? entry.i1 - entry.i0 + 1 : entry.j1 - entry.j0 + 1; if (Array.from({ length }, (_, n) => outer(...cellsOf(n))).some(Boolean)) best = Math.max(best, score(side)); } return best; };
+      }
       const boundRooms = RBM.bindRooms(roomsWanted, lotsOfBuilding, keptRooms);
       // A plan room much bigger than its kind is bound as a room-sized part of it, along its outer wall (room-binding.mjs partOf):
       // outside is beyond the plan, or a cell no room nor corridor fills (as the windows have it, windows.mjs).

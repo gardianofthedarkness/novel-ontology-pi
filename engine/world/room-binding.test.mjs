@@ -56,3 +56,11 @@ test('a plan room much bigger than its kind is bound as a room-sized part along 
   assert.equal(partOf({ i0: 0, j0: 0, i1: 1, j1: 1 }, 'bedroom', outer), null, 'a 2 x 2 room is a bedroom\'s size already');
   assert.equal(partOf(room, 'bedroom', () => false), null, 'no outer wall: no part');
 });
+
+test('a room that takes the sun is bound to a plan room whose outer wall faces it, over an equal one', () => {
+  const lot = { index: 4, place: 'dorm', floors: 3, rooms: [{ floor: 2, i0: 0, j0: 0, i1: 1, j1: 1 }, { floor: 2, i0: 4, j0: 0, i1: 5, j1: 1 }] };
+  const sunScore = (lotIndex, entry) => (entry.i0 === 4 ? 1 : -1);
+  const rooms = [{ id: 'room', label: 'his room', building: 'dorm', within: null, kind: 'bedroom', sunScore }];
+  assert.equal(bindRooms(rooms, () => lot).rooms.room.room, 1, 'the sunny one');
+  assert.equal(bindRooms([{ ...rooms[0], sunScore: (l, e) => -sunScore(l, e) }], () => lot).rooms.room.room, 0, 'and the other way round');
+});
