@@ -16,7 +16,7 @@
 //            the room; --through: the same through the room's later units where they are present, the line in the first)
 //   then:    check
 //   node engine/places/room-plan.mjs <command> <novel-dir> [args]
-import { readFile, writeFile } from 'node:fs/promises';
+import { mkdir, readFile, rename, rmdir, stat, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { storesOf, LOOK_BACK } from './place-tree.mjs';
@@ -151,20 +151,37 @@ export async function stageView(s, unit) {
     lines: (s.sceneLines.get(unit) ?? []).map(line => `${line} ${s.text.get(line)?.text ?? ''}`) };
 }
 
-export async function save(s) { await writeFile(join(s.world, 'room-plan.json'), JSON.stringify(s.plan, null, 1)); }
+/** Written whole or not at all (a file beside it, then renamed over it). */
+export async function save(s) { const file = join(s.world, 'room-plan.json'), next = `${file}.${process.pid}.tmp`; await writeFile(next, JSON.stringify(s.plan, null, 1)); await rename(next, file); }
+
+/** One decision at a time on a book (an agent may run several commands at once): a lock folder beside the plan, taken
+ *  before the plan is read and given back after it is written; a lock older than a minute is a dead one's, and taken. */
+async function locked(novelDir, work) {
+  const lock = join(novelDir, 'stage', 'world', 'room-plan.lock'), until = Date.now() + 30000;
+  for (;;) {
+    try { await mkdir(lock); break; }
+    catch (error) {
+      if (error.code !== 'EEXIST') throw error;
+      const age = await stat(lock).then(info => Date.now() - info.mtimeMs, () => 0);
+      if (age > 60000) { await rmdir(lock).catch(() => {}); continue; }
+      if (Date.now() > until) throw new Error('The room plan is busy (another decision is being written); try again.');
+      await new Promise(done => setTimeout(done, 50 + Math.random() * 100));
+    }
+  }
+  try { return await work(); } finally { await rmdir(lock).catch(() => {}); }
+}
 
 export async function run(argv) {
   const [command, novelDir, ...rest] = argv, positional = [], flags = {};
   for (let k = 0; k < rest.length; k++) { if (rest[k].startsWith('--')) { flags[rest[k].slice(2)] = rest[k + 1]; k++; } else positional.push(rest[k]); }
   if (!command || !novelDir) throw new Error('Usage: room-plan <rooms|room|stage|kind|floor|part|opens|at|check> <novel-dir> [args]');
+  if (!['rooms', 'room', 'stage', 'check'].includes(command)) return locked(novelDir, async () => { const s = await roomStores(novelDir), decided = decide(s, command, { positional, why: flags.why, line: flags.line, through: flags.through ?? null }); await save(s); return decided; });
   const s = await roomStores(novelDir);
   if (command === 'rooms') return roomsView(s);
   if (command === 'room') return roomView(s, positional[0]);
   if (command === 'stage') return stageView(s, positional[0]);
   if (command === 'check') { const c = checkOf(s); return { ...c, items: c.items.slice(0, 60) }; }
-  const decided = decide(s, command, { positional, why: flags.why, line: flags.line, through: flags.through ?? null });
-  await save(s);
-  return decided;
+  return null;
 }
 
 if (process.argv[1] === fileURLToPath(import.meta.url)) {
