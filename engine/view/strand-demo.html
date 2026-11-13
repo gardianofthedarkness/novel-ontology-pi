@@ -3002,6 +3002,21 @@ window.__pawnAt = (id) => { const pawn = pawns.get(id)?.pawn; return pawn?.paren
 // A recorded run unit by unit (engine/director/review-run.mjs): each unit's span on the timeline and who is in it at its end.
 window.__units = () => { const out = new Map(); for (const segment of segments) { const id = segment.scene.id, entry = out.get(id) ?? { id, place: segment.scene.place, start: segment.start, end: segment.end, people: [], events: segment.scene.events?.length ?? 0 }; entry.start = Math.min(entry.start, segment.start); entry.end = Math.max(entry.end, segment.end); entry.people = Object.keys(segment.positions ?? {}).filter((who) => !who.startsWith("crowd:") && !data.people?.[who]?.crowd); out.set(id, entry); } return [...out.values()]; };
 // The world building, floor and room a point stands in (the set view's `set`), or null outside every building.
+// A world room's frame (engine/bench/indoor-set/frames.mjs): its middle on its floor in the world's metres, the way its
+// windows face (a unit vector out through them, else away from the plan's middle), the half depth toward them and the half
+// width across, so a camera can stand where the benchmark's clip stands relative to its room.
+window.__roomFrame = (lotIndex, roomIndex) => {
+  const lot = data.world?.lots?.[lotIndex], room = lot?.rooms?.[roomIndex];
+  if (!lot || !room) return null;
+  const [k, i0, j0, i1, j1] = room, plan = planOf(lot), cu = ((i0 + i1 + 1) / 2) * CELL - (plan.sx * CELL) / 2, cv = ((j0 + j1 + 1) / 2) * CELL - (plan.sz * CELL) / 2, [mx, mz] = plan.at(cu, cv);
+  const sides = [0, 0, 0, 0];
+  for (const [f, i, j, side] of lot.windows ?? []) if (f === k && i >= i0 && i <= i1 && j >= j0 && j <= j1) sides[side]++;
+  const best = sides.some(Boolean) ? sides.indexOf(Math.max(...sides)) : null, [du, dv] = best === null ? [0, 0] : [[0, -1], [0, 1], [-1, 0], [1, 0]][best];
+  let [ox, oz] = best === null ? [mx - plan.at(0, 0)[0], mz - plan.at(0, 0)[1]] : (() => { const [px, pz] = plan.at(cu + du, cv + dv); return [px - mx, pz - mz]; })();
+  const length = Math.hypot(ox, oz) || 1; ox /= length; oz /= length;
+  const w = (i1 - i0 + 1) * CELL, d = (j1 - j0 + 1) * CELL, alongU = best === 2 || best === 3;
+  return { at: [mx, (lot.k0 ?? 0) * FLOOR + k * FLOOR, mz], out: [ox, oz], halfOut: (alongU ? w : d) / 2, halfSide: (alongU ? d : w) / 2 };
+};
 window.__setFacts = () => {
   // The last set as drawn (engine/bench/indoor-set/check.mjs): its room, walls, openings, furniture, what stands above it,
   // and the camera against the room's middle (metres; pitch in degrees down).
