@@ -7,11 +7,11 @@ import { readFile } from 'node:fs/promises';
 import { existsSync, readFileSync } from 'node:fs';
 import { createHash } from 'node:crypto';
 import { join, resolve } from 'node:path';
-import { pathToFileURL } from 'node:url';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 import { parseArgs } from 'node:util';
 import { waitForPass } from './look-pass.mjs';
 
-const repo = resolve(new URL('../..', import.meta.url).pathname);
+const repo = resolve(fileURLToPath(new URL('../..', import.meta.url)));
 
 /** The workflow's message: the same for every book; it names the step and the commands, never what the book holds. */
 export const placePassMessage = (novelDir, volume) => [
@@ -33,7 +33,7 @@ export async function sendPlacePass(library, volume, { novelDir = join(resolve(l
   return { id, ...(await piConsole.submit({ id, text: placePassMessage(novelDir, volume) })) };
 }
 
-if (process.argv[1] && resolve(process.argv[1]) === resolve(new URL(import.meta.url).pathname)) {
+if (process.argv[1] && resolve(process.argv[1]) === resolve(fileURLToPath(import.meta.url))) {
   const { values, positionals: [library, volume] } = parseArgs({ allowPositionals: true, options: { wait: { type: 'string' } } });
   if (!library || !volume) { console.error('usage: node tools/pi-review/place-pass.mjs <library> <volume n> [--wait <seconds>]'); process.exit(2); }
   const since = Date.now(), sent = await sendPlacePass(library, volume);

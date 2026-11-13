@@ -3,6 +3,7 @@
 const { contextBridge, ipcRenderer } = require("electron");
 
 contextBridge.exposeInMainWorld("novelHost", {
+  platform: process.platform,
   libraries: () => ipcRenderer.invoke("libraries"),
   addLibrary: (folder) => ipcRenderer.invoke("addLibrary", folder),
   removeLibrary: (folder) => ipcRenderer.invoke("removeLibrary", folder),

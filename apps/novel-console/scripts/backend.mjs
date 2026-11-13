@@ -5,14 +5,16 @@
 import { execFileSync } from "node:child_process";
 import { cpSync, existsSync, mkdirSync, readdirSync, renameSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
-import { dirname, join, relative, resolve } from "node:path";
+import { basename, dirname, join, relative, resolve } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 
 const app = resolve(dirname(fileURLToPath(import.meta.url)), ".."), repository = resolve(app, "..", "..");
 const out = join(app, "build", "backend");
 if (!existsSync(join(repository, "dist", "src", "server", "server.js"))) throw new Error("Build the repository first (npm run build at its root).");
-// An earlier backend goes to the Trash, never deleted here.
-if (existsSync(out)) renameSync(out, join(homedir(), ".Trash", `novel-console-backend-${Date.now()}`));
+// An earlier backend goes to the Trash (on Windows, build/old beside it: a rename cannot leave the drive), never deleted here.
+const windows = process.platform === "win32", setAside = windows ? join(app, "build", "old") : join(homedir(), ".Trash");
+if (existsSync(out)) { mkdirSync(setAside, { recursive: true }); renameSync(out, join(setAside, `novel-console-backend-${Date.now()}`)); }
+if (!existsSync(join(repository, "tools", "pi-review", "node_modules"))) throw new Error("Install Pi first (npm install in tools/pi-review).");
 mkdirSync(out, { recursive: true });
 
 const copy = (from, to = from) => cpSync(join(repository, from), join(out, to), { recursive: true, dereference: true });
@@ -45,13 +47,23 @@ for (const name of ["folder-arrange.mjs", "folder-scope.mjs", "package.json"]) c
 // Its packages without node_modules/.bin: those are symbolic links, which the app's signature refuses (Pi runs as a module).
 cpSync(join(repository, "tools/pi-review/node_modules"), join(out, "tools/pi-review/node_modules"), { recursive: true, dereference: true, filter: (from) => !/[\\/]node_modules[\\/]\.bin([\\/]|$)/.test(from) });
 writeFileSync(join(out, "package.json"), JSON.stringify({ name: "novel-console-backend", private: true, type: "module" }, null, 2));
+// Windows: the official node.exe this script runs on (the one the native packages were installed for), which the app runs
+// its backend with (src/main.js runtime): LadybugDB's module links node.exe by name and cannot load in the app's own exe.
+if (windows) {
+  if (!/^node(\.exe)?$/i.test(basename(process.execPath))) throw new Error(`Run this with the official Node (node.exe), not ${process.execPath}.`);
+  mkdirSync(join(out, "node"), { recursive: true });
+  cpSync(process.execPath, join(out, "node", "node.exe"));
+  writeFileSync(join(out, "node", "VERSION"), `${process.version}\n`);
+}
 
-// The production packages (npm's own list), Apple Silicon only.
-const listed = execFileSync("npm", ["ls", "--omit=dev", "--all", "--parseable"], { cwd: repository, encoding: "utf8" }).split("\n").slice(1).filter(Boolean);
+// The production packages (npm's own list), the native ones only for this machine (Apple Silicon for the DMG, Windows x64
+// for the installer). npm is a .cmd on Windows, run through its shell (the arguments are plain words).
+const listed = execFileSync(windows ? "npm.cmd" : "npm", ["ls", "--omit=dev", "--all", "--parseable"], { cwd: repository, encoding: "utf8", shell: windows }).split(/\r?\n/).slice(1).filter(Boolean);
+const native = /core-(linux|win32|darwin)-(x64|arm64)/, here = `core-${process.platform}-${process.arch}`;
 let packages = 0;
 for (const path of [...new Set(listed)]) {
   const rel = relative(repository, path);
-  if (!rel.startsWith("node_modules") || /core-(linux|win32|darwin-x64)/.test(rel)) continue;
+  if (!rel.startsWith("node_modules") || (native.test(rel) && !rel.includes(here))) continue;
   copy(rel); packages++;
 }
 console.log(JSON.stringify({ backend: out, packages }));

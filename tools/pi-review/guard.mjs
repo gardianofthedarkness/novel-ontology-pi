@@ -454,7 +454,7 @@ function permit(command, scope) {
   if (verb === 'settings' || verb === 'warehouse' || verb === 'model') {
     const text = (value, most = 400) => typeof value === 'string' && value.trim().length > 0 && !value.startsWith('-') && Buffer.byteLength(value) <= most;
     const KEY = /^[a-z][\w.]{1,60}$/i, REF = /^[a-z][a-z0-9_-]*:[\p{L}\p{N}._-]{1,120}$/u, SLOT = /^(prop|vehicle|kind|use|role):[\p{L}\p{N} .-]{1,60}$/u, PLACE = /^[\w:-]{1,80}$/, NAME = /^[a-z][a-z0-9_-]{0,31}$/, INT = (most) => (value) => /^\d+$/.test(value ?? '') && Number(value) >= 1 && Number(value) <= most;
-    const packsRoot = `${process.env.NOVEL_MODEL_PACKS ?? `${process.env.HOME ?? ''}/claude-world-first/model-packs`}/`;
+    const packsRoot = `${process.env.NOVEL_MODEL_PACKS ?? `${(process.platform === 'win32' ? process.env.USERPROFILE : process.env.HOME) ?? ''}/claude-world-first/model-packs`}/`;
     // The flags after `from`: pairs whose value passes its check, switches that take none; unknown or repeated ones fail.
     const flagsIn = (list, from, pairs, switches = []) => { const out = new Map(); for (let i = from; i < list.length; i++) { const name = list[i]; if (out.has(name)) return null; if (switches.includes(name)) { out.set(name, true); continue; } if (!(name in pairs)) return null; const value = list[i + 1]; if (value === undefined || !pairs[name](value)) return null; out.set(name, value); i++; } return out; };
     const flagsOf = (from, pairs, switches = []) => flagsIn(tokens, from, pairs, switches);

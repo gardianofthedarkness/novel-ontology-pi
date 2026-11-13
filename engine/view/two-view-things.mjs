@@ -32,6 +32,7 @@
  */
 import { spawn } from 'node:child_process';
 import { createHash } from 'node:crypto';
+import { existsSync } from 'node:fs';
 import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { createServer } from 'node:http';
 import { tmpdir } from 'node:os';
@@ -40,7 +41,9 @@ import { fileURLToPath, pathToFileURL } from 'node:url';
 import { parseArgs } from 'node:util';
 
 const repository = resolve(dirname(fileURLToPath(import.meta.url)), '..', '..');
-export const CHROME = process.env.NOVEL_CHROME ?? '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome';
+// Windows: Chrome where its installer puts it (for every user, else this user's own).
+const windowsChrome = () => [process.env.PROGRAMFILES, process.env['PROGRAMFILES(X86)'], process.env.LOCALAPPDATA].filter(Boolean).map(root => join(root, 'Google', 'Chrome', 'Application', 'chrome.exe')).find(file => existsSync(file)) ?? 'chrome.exe';
+export const CHROME = process.env.NOVEL_CHROME ?? (process.platform === 'win32' ? windowsChrome() : '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome');
 
 /** The page and its three.js files on a local port, for the headless browser. */
 export async function serve(page, vendor) {

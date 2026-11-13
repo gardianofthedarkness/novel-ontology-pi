@@ -1,0 +1,2 @@
+# Every text file with LF on every computer (a Windows checkout too): generated docs are compared byte for byte.
+* text=auto eol=lf

@@ -318,7 +318,7 @@ test('Pi may pace a simulation run for the live view, within 0.5–5 s a moment,
 });
 
 test('settings, warehouse and model commands pass for the assigned book, with a why where something is written and the user\'s OK for a download', () => {
-  const packs = `${process.env.NOVEL_MODEL_PACKS ?? `${process.env.HOME}/claude-world-first/model-packs`}`;
+  const packs = `${process.env.NOVEL_MODEL_PACKS ?? `${process.platform === 'win32' ? process.env.USERPROFILE : process.env.HOME}/claude-world-first/model-packs`}`;
   for (const command of [
     `novel settings show '${novel}'`, `novel settings show '${novel}' fill --changed`, `novel settings show '${novel}' --place loc_000001`, 'novel settings explain fill.streets',
     `novel settings set '${novel}' fill.streets '{"arterial":24}' --why 'wider arterials'`, `novel settings set '${novel}' fill.ops '[]' --place loc_000001 --why 'none here' --before`,

@@ -27,7 +27,7 @@ test('the stand-in retakes what the laws held; the block is kept with its prompt
   assert.deepEqual([kept.block, kept.reviewer, kept.verdicts.length], [1, 'stand-in', 2]);
 });
 
-test('Claude Code is asked with its Read tool on the review folder only, and asked once more when out of format', async () => {
+test('Claude Code is asked with its Read tool on the review folder only, and asked once more when out of format', { skip: process.platform === 'win32' && 'its stand-in is a #! script, which Windows cannot run as a command' }, async () => {
   const folder = await mkdtemp(join(tmpdir(), 'review-')), fake = join(folder, 'claude'), calls = join(folder, 'calls.jsonl');
   await writeFile(fake, `#!${process.execPath}\nconst fs = require('fs'); const args = process.argv.slice(2); fs.appendFileSync(${JSON.stringify(calls)}, JSON.stringify(args) + '\\n');\nconst again = args.includes('--resume');\nconsole.log(JSON.stringify({ is_error: false, session_id: 's1', result: again ? '\`\`\`json\\n[{"unit":"scene_000011","verdict":"retake","note":"closer"},{"unit":"scene_000012","verdict":"keep","note":""}]\\n\`\`\`' : 'they look fine' }));\n`);
   await chmod(fake, 0o755);

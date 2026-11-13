@@ -11,6 +11,8 @@
     "backend": "node scripts/backend.mjs",
     "pack": "node scripts/backend.mjs && electron-builder --mac dir --arm64",
     "dmg": "npm run pack && node scripts/dmg.mjs",
+    "pack:win": "node scripts/backend.mjs && electron-builder --win dir --x64",
+    "exe": "npm run pack:win && node scripts/win.mjs",
     "test": "node test/drive.mjs"
   },
   "devDependencies": {
@@ -34,6 +36,19 @@
       ],
       "category": "public.app-category.books",
       "identity": null
+    },
+    "win": {
+      "target": [
+        "dir"
+      ],
+      "signAndEditExecutable": true
+    },
+    "nsis": {
+      "oneClick": false,
+      "perMachine": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "shortcutName": "Novel Console"
     }
   }
 }

@@ -9,7 +9,7 @@
  */
 import { existsSync, mkdtempSync, readdirSync, readFileSync, statSync } from "node:fs";
 import { mkdir, readFile, rename, writeFile } from "node:fs/promises";
-import { tmpdir } from "node:os";
+import { homedir, tmpdir } from "node:os";
 import { basename, dirname, extname, join, relative, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { spawnSync } from "node:child_process";
@@ -19,7 +19,7 @@ import { PART_REF, idOfRef, slugOf, splitRef } from "./partRefs.js";
 import { interactOf } from "./interact.js";
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..", "..", "..", "..");
-export const PACKS_ROOT = process.env.NOVEL_MODEL_PACKS ?? join(process.env.HOME ?? "", "claude-world-first", "model-packs");
+export const PACKS_ROOT = process.env.NOVEL_MODEL_PACKS ?? join(homedir(), "claude-world-first", "model-packs");
 export const REGISTRY_FILE = process.env.NOVEL_WAREHOUSE ?? join(PACKS_ROOT, "warehouse.json");
 /** Licences a source may carry without asking (the user, 2026-11-01 CC0; 2026-11-09 MIT; permissive ones alike; CC-BY with its attribution kept). */
 export const ALLOWED_LICENCES = ["CC0-1.0", "MIT", "Apache-2.0", "BSD-2-Clause", "BSD-3-Clause", "CC-BY-4.0"];

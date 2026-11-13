@@ -155,7 +155,9 @@ async function load(folder) {
 async function refresh(scan = false) {
   // macOS asks a new app (and each new build) whether it may open folders like Documents, and nothing answers until the
   // user does; say so instead of showing an empty library.
-  const waiting = setTimeout(() => { say("Waiting for macOS: if it asks whether Novel Console may open files in your folders, press Allow (the prompt may be behind this window).", true); if (!trees.size) $("tree").innerHTML = `<p class="empty">Waiting for macOS to let Novel Console open your folders. Look for its prompt and press Allow.</p>`; }, 6000);
+  // Elsewhere there is no such prompt: a slow folder is only being read.
+  const mac = host.platform === "darwin";
+  const waiting = setTimeout(() => { say(mac ? "Waiting for macOS: if it asks whether Novel Console may open files in your folders, press Allow (the prompt may be behind this window)." : "Still reading your folders…", true); if (!trees.size) $("tree").innerHTML = mac ? `<p class="empty">Waiting for macOS to let Novel Console open your folders. Look for its prompt and press Allow.</p>` : `<p class="empty">Reading your folders…</p>`; }, 6000);
   libs = await host.libraries();
   // Each folder on its own (a folder macOS still holds at its prompt does not hold the others), drawn as it comes.
   await Promise.all(libs.filter((lib) => lib.exists).map(async (lib) => { if (scan) await ask(lib.path, "novel/scan").catch(() => {}); await load(lib.path); if (!expanded.has(lib.path) && !expanded.has(`closed:${lib.path}`)) expanded.add(lib.path); render();
@@ -299,7 +301,7 @@ async function runAgentTask(spec) {
   const agent = AGENT_NAMES[chosenHost] ? chosenHost : null, entry = hostList.find((item) => item.id === agent);
   if (!agent || !entry?.starts) {
     renderSessions();
-    $("chat-body").insertAdjacentHTML("afterbegin", `<p class="note pick">${agent ? esc(entry?.note ?? `${AGENT_NAMES[agent]} cannot be started on this Mac.`) : "Pick Claude Code or Pi above, then press Ask again: the console can start those two (Codex and Gemini not yet)."}</p>`);
+    $("chat-body").insertAdjacentHTML("afterbegin", `<p class="note pick">${agent ? esc(entry?.note ?? `${AGENT_NAMES[agent]} cannot be started on this computer.`) : "Pick Claude Code or Pi above, then press Ask again: the console can start those two (Codex and Gemini not yet)."}</p>`);
     return;
   }
   const base = { folder: spec.key, path: spec.path, name: spec.name, label: spec.label, request: spec.request, scope: spec.scope, agent };

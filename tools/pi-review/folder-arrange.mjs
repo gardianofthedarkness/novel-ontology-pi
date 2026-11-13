@@ -17,7 +17,8 @@
 import { execFile } from 'node:child_process';
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
-import { join, resolve } from 'node:path';
+import { dirname, join, resolve, sep } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { VERBS, permit, permitReview } from './folder-scope.mjs';
 import { createAgentSession, createBashToolDefinition, DefaultResourceLoader, ModelRuntime, SessionManager, SettingsManager } from '@earendil-works/pi-coding-agent';
 
@@ -25,17 +26,21 @@ const [folder, novel, skill, sessionDir, sessionFile] = process.argv.slice(2).ma
 const apiKey = process.env.WORK_LLM_API_KEY?.trim(), modelId = process.env.WORK_LLM_MODEL?.trim() || 'deepseek-flash';
 const say = (value) => process.stdout.write(`${JSON.stringify(value)}\n`);
 if (!folder || !novel || !skill || !sessionDir) { say({ error: 'usage: folder-arrange.mjs <folder> <novel command> <skill file> <session dir>' }); process.exit(2); }
-if (sessionFile && !sessionFile.startsWith(`${sessionDir}/`)) { say({ error: 'Only the sessions Novel Console started can be continued here.' }); process.exit(2); }
+if (sessionFile && !sessionFile.startsWith(`${sessionDir}${sep}`)) { say({ error: 'Only the sessions Novel Console started can be continued here.' }); process.exit(2); }
 if (!apiKey) { say({ error: 'The work model has no key; enter it with the key button first.' }); process.exit(2); }
 
 const LIMIT = { commands: 120, seconds: 900, output: 40000 };
 const started = Date.now();
-const scope = { folder, novel, skill };
+// On Windows the novel command is written with forward slashes, as a shell word Pi can type without escapes; it runs as
+// the backend's own CLI with this process's Node (a .cmd or shell script cannot be run directly there).
+const windows = process.platform === 'win32', slashed = (path) => (windows && path ? path.replaceAll('\\', '/') : path), shown = slashed(novel);
+const cli = join(dirname(fileURLToPath(import.meta.url)), '..', '..', 'dist', 'src', 'cli', 'cli.js');
+const scope = { folder: slashed(folder), novel: shown, skill: slashed(skill) };
 const reviewing = process.env.NOVEL_TASK === 'review', workspace = reviewing ? resolve(process.env.NOVEL_WORKSPACE ?? '') : null;
 if (reviewing && !process.env.NOVEL_WORKSPACE) { say({ error: 'NOVEL_WORKSPACE names the book whose review Pi answers.' }); process.exit(2); }
-const reviewScope = { workspace, novel };
+const reviewScope = { workspace: slashed(workspace), novel: shown };
 let calls = 0, refused = 0;
-const run = (args) => new Promise((done) => execFile(novel, args, { cwd: folder, maxBuffer: 64 * 1024 * 1024, timeout: 300000, env: { ...process.env, WORK_LLM_API_KEY: '', TYPESAFE_API_KEY: '' } }, (error, stdout, stderr) => done({ exitCode: error ? (typeof error.code === 'number' ? error.code : 1) : 0, output: `${stdout}${stderr}` })));
+const run = (args) => new Promise((done) => execFile(windows ? process.execPath : novel, windows ? [cli, ...args] : args, { cwd: folder, maxBuffer: 64 * 1024 * 1024, timeout: 300000, env: { ...process.env, WORK_LLM_API_KEY: '', TYPESAFE_API_KEY: '' } }, (error, stdout, stderr) => done({ exitCode: error ? (typeof error.code === 'number' ? error.code : 1) : 0, output: `${stdout}${stderr}` })));
 const execute = async (command, ignored, options) => {
   if (++calls > LIMIT.commands || (Date.now() - started) / 1000 > LIMIT.seconds) throw new Error('The command budget or the time is used up; write the report now.');
   let allowed;
@@ -62,8 +67,8 @@ try {
   await loader.reload();
   const bash = createBashToolDefinition(folder, { operations: { exec: execute }, exposeSessionEnvironment: false });
   bash.description = reviewing
-    ? `Run ONE command on this book: ${novel} world pool|batch|answer|log "${workspace}" ..., ${novel} reading "${workspace}" card|scene|line <id>, ${novel} source grep|similar|epub "${workspace}" ..., ${novel} cast show "${workspace}" [<char>]. No pipes, joins, scripts or other files.`
-    : `Run ONE command: ${novel} folder <verb> "${folder}" ... (verbs: ${[...VERBS].join(', ')}), or cat "${skill}". No pipes, joins, scripts or other files.`;
+    ? `Run ONE command on this book: ${shown} world pool|batch|answer|log "${workspace}" ..., ${shown} reading "${workspace}" card|scene|line <id>, ${shown} source grep|similar|epub "${workspace}" ..., ${shown} cast show "${workspace}" [<char>]. No pipes, joins, scripts or other files.`
+    : `Run ONE command: ${shown} folder <verb> "${folder}" ... (verbs: ${[...VERBS].join(', ')}), or cat "${skill}". No pipes, joins, scripts or other files.`;
   const { session } = await createAgentSession({ cwd: folder, agentDir, modelRuntime: runtime, model: runtime.getModel('novel-deepseek', modelId), thinkingLevel: 'off', settingsManager, resourceLoader: loader, tools: ['bash'], customTools: [bash], sessionManager: sessionFile ? SessionManager.open(sessionFile, sessionDir, folder) : SessionManager.create(folder, sessionDir) });
   say({ session: session.sessionFile ?? null });
   // The session's task beside it, so a message sent to it later from the chat runs with the same scope.
