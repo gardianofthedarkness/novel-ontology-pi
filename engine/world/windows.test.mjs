@@ -2,7 +2,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
-import { OPENING, heightsOf, patternOf, windowsOf } from './windows.mjs';
+import { OPENING, heightsOf, patternOf, useOfModel, windowsOf } from './windows.mjs';
 
 const TABLE = JSON.parse(readFileSync(new URL('../../config/windows.json', import.meta.url), 'utf8'));
 // A plan of 6 x 4 cells and 2 floors: a corridor along j = 2 (tiles '1'), rooms north of it (j 0..1) and one south (j 3);
@@ -37,4 +37,10 @@ test('the kind decides: an office a window every cell, a home every other with b
 test('every room with an outer wall has a window at least', () => {
   const sparse = { ...TABLE, roles: { home: { every: 9 } } }, out = windowsOf(plan('home'), sparse, 'x');
   for (const r of [0, 1, 2, 3]) { const [k, i0, j0, i1, j1] = plan('home').rooms[r]; assert.ok(out.some(([f, i, j]) => f === k && i >= i0 && i <= i1 && j >= j0 && j <= j1), `room ${r}`); }
+});
+
+test('a building model says its use: the use in its name, else the first that lists it', () => {
+  const uses = JSON.parse(readFileSync(new URL('../../config/models.json', import.meta.url), 'utf8')).uses;
+  assert.deepEqual(['kk-dormitory', 'suburban-01', 'industrial-h', 'office-c', 'nothing-like-it'].map(model => useOfModel(model, uses)), ['dormitory', 'house', 'warehouse', 'office', null]);
+  assert.equal(patternOf({ role: 'office', use: 'dormitory' }, TABLE).balcony, 0.8, 'the use wins over the role');
 });

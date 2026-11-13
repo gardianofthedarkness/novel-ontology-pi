@@ -11,6 +11,17 @@ export const SIDES = [[0, -1], [0, 1], [-1, 0], [1, 0]];
 
 const seeded = seed => { let h = 2166136261; for (const c of String(seed)) h = Math.imul(h ^ c.charCodeAt(0), 16777619); return () => ((h = Math.imul(h ^ (h >>> 15), 2246822507) ^ Math.imul(h ^ (h >>> 13), 3266489909)) >>> 0) / 4294967296; };
 
+/**
+ * A building model's use (the models table's uses, config/models.json): the use named in the model's own name when one
+ * lists it (kk-dormitory: dormitory), else the first use that lists it. The engine's roles are coarse (shop, office,
+ * station in W17-17r's city, its dorm an office): the model says what the building is.
+ */
+export function useOfModel(model, uses) {
+  if (!model || !uses) return null;
+  const listing = Object.entries(uses).filter(([, entry]) => Object.values(entry ?? {}).some(models => models && typeof models === 'object' && Object.hasOwn(models, model))).map(([use]) => use);
+  return listing.find(use => String(model).includes(use)) ?? listing[0] ?? null;
+}
+
 /** The pattern a lot's windows follow: its named use's, else its role's, else the default. */
 export function patternOf(lot, table) {
   return { ...(table?.default ?? {}), ...((lot.use && table?.uses?.[lot.use]) || table?.roles?.[lot.role] || {}) };
