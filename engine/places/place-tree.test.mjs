@@ -1,7 +1,7 @@
 // Tests for the place tree by the agent: every decision needs a line of the book that shows it.
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { decide, namesAlone, placedScenes, movesOf, checkOf, unprovedOf, coarseOf, duplicatesOf } from './place-tree.mjs';
+import { decide, namesAlone, placedScenes, movesOf, checkOf, unprovedOf, coarseOf, duplicatesOf, roomsWithoutBuildingOf } from './place-tree.mjs';
 
 const CITY = '\u5b66\u56ed\u90fd\u5e02', KYOTO = '\u4eac\u90fd', TOKYO = '\u4e1c\u4eac\u90fd';
 function stores() {
@@ -110,4 +110,15 @@ test('a unit placed wider than its lines show is coarse until set finer or kept 
   s.original.scenes[1].place = 'city'; delete s.decisions.units.u2;
   decide(s, 'wide', args(['u2'], { why: 'he walks across the city past it' }));
   assert.deepEqual(coarseOf(s), []);
+});
+
+test('a room needs a building above it: held under the city it is listed, under its dorm it is not', () => {
+  const s = stores();
+  s.original.places['unnamed:room'] = { label: 'room (scene 4)', parent: 'city', scale: 'room', unnamed: true };
+  s.original.scenes[3].place = 'unnamed:room';
+  decide(s, 'setting', args(['city'], { line: 's1', why: 'streets' }));
+  assert.deepEqual(roomsWithoutBuildingOf(s).map(room => room.place), ['unnamed:room']);
+  s.original.places['unnamed:dorm'].parent = 'pool:city';
+  decide(s, 'hold', args(['unnamed:room', 'unnamed:dorm'], { line: 's2', why: 'his room is in the dorm' }));
+  assert.deepEqual(roomsWithoutBuildingOf(s), []);
 });

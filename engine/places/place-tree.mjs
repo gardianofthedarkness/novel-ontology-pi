@@ -290,6 +290,25 @@ export function coarseOf(stores) {
   }
   return out.map(({ toIndex, ...run }) => run);
 }
+/**
+ * Rooms with no building above them (docs/v3/design.html#indoor-fixes F1): a room-scale place a story unit is set in, held
+ * straight under a street, district or city. Terrain builds sites down to buildings only, so such a room has no building
+ * in the world and its units would start anywhere in the city. Each is held under the building the text gives.
+ */
+export function roomsWithoutBuildingOf(stores) {
+  const placed = placedScenes(stores), out = new Map();
+  for (const scene of placed) {
+    if (!scene.place || !isStory(scene)) continue;
+    const chain = chainOf(stores, scene.place), at = chain.findIndex(id => stores.original.places[id]?.scale === 'room');
+    if (at < 0) continue;
+    const room = chain[at];
+    if (chain.slice(at + 1).some(id => stores.original.places[id]?.scale === 'building')) continue;
+    const entry = out.get(room) ?? { place: room, label: stores.original.places[room]?.label ?? room, units: 0, first: scene.id };
+    entry.units++; out.set(room, entry);
+  }
+  return [...out.values()];
+}
+
 /** The same place made twice: places of one scale and one name (longer than a bare noun) in the same city, each holding units. */
 export function duplicatesOf(stores) {
   const placed = placedScenes(stores), holding = new Set();
@@ -313,7 +332,7 @@ function appliedAfter(stores) {
 export function checkOf(stores) {
   const out = checkParts(stores);
   // What is left for the agent: every count here must be zero, and apply must have run after the last decision.
-  out.left = out.undecided.length + out.unplacedStory.length + out.unproved.length + out.coarse.length + out.duplicates.length + out.unprovedMoves;
+  out.left = out.undecided.length + out.unplacedStory.length + out.unproved.length + out.coarse.length + out.duplicates.length + out.roomsWithoutBuilding.length + out.unprovedMoves;
   out.done = out.left === 0 && out.applied;
   return out;
 }
@@ -328,6 +347,7 @@ function checkParts(stores) {
     unplacedStory: placed.filter(scene => !scene.place && isStory(scene) && !stores.decisions.units[scene.id]?.nowhere).map(scene => scene.id),
     unproved: unprovedOf(stores),
     coarse: coarseOf(stores),
+    roomsWithoutBuilding: roomsWithoutBuildingOf(stores),
     duplicates: duplicatesOf(stores),
     unprovedMoves: movesOf(stores).length,
     applied: appliedAfter(stores),

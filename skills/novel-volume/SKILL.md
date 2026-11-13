@@ -109,6 +109,10 @@ not repeat it.
    Place each at the finest place its lines show, down to the room (`set`);
    a run that really happens across a place (a chase through the streets) is
    kept with `wide <workspace> <unit id> [--through <last unit id>] --why <text>`.
+   A room needs a building above it: `check` lists a room held straight under a
+   street or a city (its units would start anywhere in the city); hold it under
+   the building the text puts it in (`hold <workspace> <room> <building> --line
+   <id> --why <text>`).
    The same place made twice (two units' unnamed dorms that are one dorm):
    `merge <workspace> <place id> <into place id> --why <text>`.
 5. `novel places moves <workspace>`: people changing city between units. Where a

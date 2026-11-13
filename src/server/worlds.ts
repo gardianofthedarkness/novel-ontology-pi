@@ -96,7 +96,7 @@ export async function copyWorld(folder: string, root: string, { snapshot = null 
   if (!id) throw new Error(`${basename(source)} has no finished run to copy (no after, manual or imported snapshot).`);
   const chosen = await universe.readSnapshot(source, id);
   const worlds = join(resolve(folder), ".novel", "worlds"), name = `${basename(source)}-${id.replace(/[^\w-]+/g, "-")}`, target = join(worlds, name);
-  if (existsSync(target)) { await cloneLive(source, target, Object.keys(chosen.books)); return { ...(await worldOf(target)), copiedFrom: { root: source, snapshot: id } }; }
+  if (existsSync(target)) { await cloneLive(source, target, Object.keys(chosen.books)); await copySources(source, target, Object.keys(chosen.books)); return { ...(await worldOf(target)), copiedFrom: { root: source, snapshot: id } }; }
   const { mkdir: makeDir, rm } = await import("node:fs/promises");
   await makeDir(worlds, { recursive: true });
   const bundle = join(worlds, `.copy-${process.pid}-${Date.now()}`);
@@ -107,7 +107,22 @@ export async function copyWorld(folder: string, root: string, { snapshot = null 
     await universe.importBundle(bundle, target, { sources });
   } finally { await rm(bundle, { recursive: true, force: true }); }
   await cloneLive(source, target, Object.keys(chosen.books));
+  await copySources(source, target, Object.keys(chosen.books));
   return { ...(await worldOf(target)), copiedFrom: { root: source, snapshot: id } };
+}
+
+/**
+ * Each book's text as its workspace keeps it (novel/source/: the reading's own file names, the manifest's), which a snapshot
+ * does not carry and the bundle's single source.txt does not name: without it the copy's place, cast and review commands
+ * cannot read a line. Files the copy already has are kept; APFS clones, no space taken.
+ */
+async function copySources(source: string, target: string, books: string[]): Promise<void> {
+  const { constants } = await import("node:fs");
+  const { cp } = await import("node:fs/promises");
+  for (const book of books) {
+    const from = join(source, book, "novel", "source"), to = join(target, book, "novel", "source");
+    if (existsSync(from)) await cp(from, to, { recursive: true, force: false, errorOnExist: false, mode: constants.COPYFILE_FICLONE });
+  }
 }
 
 /**

@@ -32,6 +32,13 @@ copy("apps/reader/reader.html");
 copy("skills/novel-folder");
 // The agent's workflows for a whole volume (engine/workflows): the skills they read and Pi's round runner with its guard.
 copy("skills/novel-volume"); copy("skills/novel-models");
+// The world engine's own data (the director and terrain read them when a volume runs from the app): the building, furniture
+// and vehicle models and the model themes, beside the compiled playground code dist already carries; the stills step's helper.
+for (const name of ["architectureModels.json", "furnitureModels.json", "vehicleModels.json", "modelThemes.json"]) copy(`apps/playground/src/data/${name}`);
+if (existsSync(join(repository, "tools/album-portraits/stills.py"))) copy("tools/album-portraits/stills.py");
+// The world engine's other imports outside engine/: building EM (export-strand-demo) and the Pi console (the review sends batches).
+copy("experiments/world-first/buildings.mjs");
+for (const name of ["pi-console.mjs"]) if (existsSync(join(repository, `tools/pi-review/${name}`))) copy(`tools/pi-review/${name}`);
 for (const name of ["workflow-agent.mjs", "review-agent.mjs", "guard.mjs"]) copy(`tools/pi-review/${name}`);
 // Pi, for arranging a folder when Claude Code is signed out (tools/pi-review/folder-arrange.mjs and its packages).
 for (const name of ["folder-arrange.mjs", "folder-scope.mjs", "package.json"]) copy(`tools/pi-review/${name}`);
