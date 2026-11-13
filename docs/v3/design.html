@@ -180,7 +180,7 @@ which script writes it; the tests fail when one is stale (<code>npm test</code> 
 <li><a href="#movement">8.3 Movement</a></li>
 <li><a href="#laws">8.4 The laws</a></li>
 <li><a href="#smoothing">8.5 Smoothing: back-propagation as Bayesian smoothing</a></li>
-<li><a href="#figures">8.6 Figures that act: the action animation system</a></li>
+<li><a href="#figures">8.6 Figures that act: the action animation system</a> (<a href="#figure-making">figures from pictures</a>, <a href="#model-factory">the model factory</a>, <a href="#text-to-motion">text to motion</a>)</li>
 <li><a href="#actor-cast">8.7 The actor cast: what each one sees</a></li><li><a href="#indoor-mode">8.8 Indoor scene mode: rooms, windows and the camera inside</a></li><li><a href="#indoor-fixes">8.9 Indoor scenes: the fixes, issue by issue</a></li><li><a href="#indoor-benchmark">8.10 The indoor benchmark</a></li><li><a href="#room-plan">8.11 The rooms by the agent</a></li>
 </ul>
 </li>
@@ -2047,9 +2047,160 @@ cast (<a href="#actor-cast">§8.7</a>) stands on.</p>
   a seated figure on a seat, a held thing in a hand), retaken as the miniloop retakes (<a href="#small-loops">§8.1</a>).</li>
 <li><strong>Drawn</strong> on the page with three.js's skinned meshes and animation mixer; the render protocol for the world client
   (<a href="#render-protocol">§12.1</a>) carries a figure's state (pose, clip and its phase, facing, gaze), not meshes.</li>
-<li><strong>Where the figures and clips come from</strong>: free licensed rigged figures and clip libraries (CC0, as the model packs
-  are, <a href="#models">§7.6</a>), fetched only with the user's OK; clips under licences that forbid sharing them cannot go in this
-  public repository.</li>
+<li><strong>Where the figures and clips come from</strong>: <em>superseded 2026-11-14</em>; not kits (the user: "without buying any
+  kits"), but made per character from its pictures (<a href="#figure-making">below</a>) and per action from text
+  (<a href="#text-to-motion">below</a>). Figures and clips of copyrighted characters stay out of this public repository.</li>
+</ul>
+<h3 id="figure-making">Figures from pictures: one head, one skeleton, outfits to swap</h3>
+<p><span class="st designed">Prototyped</span> 2026-11-13/14 outside the repository (the user: "the face silhouette needs to be at
+least anime for this book specifically, and as close as to any novel given"; "colour doesn't matter. We are doing hologram view
+at last ... use triangles for holograming the figure"; "multi mainstream picture setting average + exchangeable cloth over
+different volumes").</p>
+<ul>
+<li><strong>The look is the shape, drawn with its triangles</strong>: the hologram draws the 3D model's own triangles (a dark inner body
+  hides the back ones, the front ones glow). No colours, no textures: the silhouette, hair, folds and a faint face carry the
+  likeness, so the same method serves anime and non-anime books.</li>
+<li><strong>Made from pictures</strong>: an image-edit model (Qwen-Image-Edit) redraws the character alone in a <strong>T-pose</strong> on white
+  from the book's plates and well-known pictures; a back view the same way; an image-to-3D model (Hunyuan3D-2.1) makes the
+  shape. A T-pose, not an A-pose: hanging arms come out fused to the ribs, and a raised arm then tears the body; the T-pose is
+  also the rest pose the VRM humanoid expects.</li>
+<li><strong>The skeleton by code</strong>: a pose detector (RTMPose, any drawing style) finds 17 joints in the drawing, lifted through the
+  mesh to 3D; 21 bones named as the VRM humanoid names them (hips, spine, chest, neck, head; shoulder, upper arm, forearm, hand,
+  thigh, shin, foot, toes on each side), sized by the character's own body. Weights by distance; each arm is the surface joined
+  to the hand past the shoulder, so it follows only the arm.</li>
+<li><strong>Outfits by volume</strong>: one head (above the neck) and one skeleton per character; each outfit a body mesh made the same
+  way, cut at the neck and fitted onto that skeleton. Which outfit a volume needs is read from the book (a cast), and a missing
+  one is drawn on the same face and body.</li>
+<li><strong>Exported</strong> as VRM 1.0, loaded by three-vrm; a figure's state (outfit, clip, phase, facing, gaze) is what the render
+  protocol carries.</li>
+<li><strong>Licences</strong>: Qwen-Image-Edit and RTMPose Apache-2.0; Hunyuan3D-2.1's licence excludes the EU, the UK and South Korea.</li>
+</ul>
+<p id="figure-example-run"><strong>The example run</strong> (2026-11-14, Misaka Mikoto of <em>Toaru Majutsu no Index</em>; the user: "Make this an
+example run"). Kept outside the repository (a copyrighted character); the scripts and their order are the workflow to build.</p>
+<table>
+<thead><tr><th>Step</th><th>In</th><th>Out</th><th>Where, how long</th></tr></thead>
+<tbody>
+<tr><td>1. References</td><td>an official anime picture (the user's), two web pictures (the winter uniform, a second view), the volumes' plates</td><td>three pictures chosen</td><td>by hand this time</td></tr>
+<tr><td>2. T-pose redraw</td><td>the picture, padded square so the hands fit; a fixed prompt (alone, T-pose, arms level, white, keep face, hair and outfit)</td><td>the summer uniform in a T-pose</td><td>Qwen-Image-Edit on a Hugging Face Space, 14–18 s</td></tr>
+<tr><td>3. Outfit</td><td>the T-pose and the winter picture; "dress the girl of image 1 in the outfit of image 2"</td><td>the winter uniform, same face and body</td><td>the same, 17–20 s</td></tr>
+<tr><td>4. Back views</td><td>each T-pose; "the same, from behind"</td><td>two back views</td><td>the same, 17–22 s</td></tr>
+<tr><td>5. Shape</td><td>front and back</td><td>an untextured mesh per outfit, about 290,000 faces</td><td>Hunyuan3D-2.1 on its Space, 30 steps, about 45 s</td></tr>
+<tr><td>6. Joints</td><td>the T-pose</td><td>17 joints, the figure's outline</td><td>RTMPose on the CPU, seconds</td></tr>
+<tr><td>7. Rig</td><td>mesh and joints</td><td>21 VRM humanoid bones, weights</td><td>Blender headless, about 1 min an outfit</td></tr>
+<tr><td>8. Triangles</td><td>the generator's mesh</td><td>about 16,000 triangles; weights copied; each arm by connectivity (about 500 vertices an arm)</td><td>Blender, under 1 min</td></tr>
+<tr><td>9. Outfits on one body</td><td>both rigs</td><td>one VRM: a head and two outfits on one skeleton (the winter skeleton fitted within 1.6 cm)</td><td>Blender, under 1 min</td></tr>
+<tr><td>10. Played</td><td>the VRM</td><td>the triangle hologram, outfits switched, seven motions on the humanoid bones</td><td>three.js and three-vrm in a page</td></tr>
+</tbody>
+</table>
+<p>About ten image edits and four shapes in all, a few minutes of the user's Hugging Face PRO daily GPU quota; nothing paid.
+Two retakes on the way: hands cut off at the frame's edge (fixed by padding the picture square) and a bag strap (named in
+the prompt). The first try with an A-pose was dropped (above). A swimsuit outfit was left out: the character is fourteen.</p>
+<h3 id="model-factory">The model factory: a page per character</h3>
+<p><span class="st designed">Designed</span> 2026-11-14 (the user: "After read, user can select a character and enter a model factory
+page. There he can configure using cloud gpu or his own card").</p>
+<ul>
+<li><strong>Where</strong>: in the console, after a reading, a character in the <strong>Characters</strong> view (the universe's one list,
+  <a href="#universal-em">§5.2</a>) opens its <strong>Model factory</strong> in the middle, as a file opens in an editor; the chat beside it
+  can drive it.</li>
+<li><strong>References</strong>, each a card that can be kept or dropped:
+  <ul>
+  <li><strong>setting pictures</strong> the user drops in (first, and the only source a user may give alone);</li>
+  <li><strong>the book's plates</strong>, taken from the EPUB on this computer; Jev says which character each shows;</li>
+  <li><strong>web pictures</strong> the agent finds for a well-known character, fetched only after the user's yes for that book.</li>
+  </ul></li>
+<li><strong>Outfits</strong>: the ones the reading finds, each with its volume and the line that names it; one can be added, renamed or
+  dropped; each takes its pictures from the references.</li>
+<li><strong>Where it computes</strong>, chosen per step (redraw, shape, rig) and remembered per universe:
+  <ul>
+  <li><strong>Cloud</strong>: Hugging Face, on the user's own account: the free daily GPU allowance and PRO's larger one, or paid Jobs.
+    The token is entered once and kept in the system's store (Keychain on a Mac, Credential Manager on Windows), never in a
+    file. The page shows what one figure takes (about 15 GPU calls, a few minutes of allowance) and what is left today.</li>
+  <li><strong>This computer</strong>: the card is found (its name and memory) and each step marked as fitting or not (the redraw needs
+    about 16 GB of GPU memory compressed, 24 GB full; the shape about 10 GB; rigging none). The models are downloaded only
+    after the user's yes, their size shown first. Apple Silicon is marked "not yet" until the models are proven there.</li>
+  </ul></li>
+<li><strong>Privacy, shown before Start</strong>: exactly what leaves the computer and to whom ("3 setting pictures and 2 book plates
+  to Hugging Face"). The book's own plates go to a cloud only when the user ticks that for this book; on this computer
+  nothing leaves. The README's promise holds: only what the user sends here goes anywhere else.</li>
+<li><strong>The line</strong>, each stage shown as it finishes, each with a retake: the T-pose tries (Jev's pick marked, the user may
+  pick another), the back view, the white model turning, the rig in test poses with the figure laws' marks, the triangle
+  hologram with the outfits and a few motions.</li>
+<li><strong>Kept</strong> in the user's world folder as a figure part of the warehouse (<a href="#models">§7.6</a>): the head, the skeleton,
+  the outfits and the references they came from; never in this public repository. The run then draws that person with it.</li>
+<li><strong>The same steps as the workflow</strong> (<a href="#agent-workflows">§6.2</a>): a <code>figure</code> workflow with a fixed prompt,
+  verbs and a check (each picture one person, whole, hands in frame, a gap under each arm; every vertex weighted; each arm
+  its own region; no stretched triangle in the test poses), so <strong>Run volume</strong> can build the main cast's figures without the
+  page, with the choices the page last saved.</li>
+<li><strong>Windows too</strong>: the console is built for Apple Silicon today (<a href="#console-app">§4.2</a>); Electron builds for
+  Windows, where a user's own NVIDIA card is likeliest.</li>
+</ul>
+<h3 id="text-to-motion">Text to motion: one clip library for every figure</h3>
+<p><span class="st designed">Designed</span> 2026-11-14 (the user: "Let's design a universal text to motion engine"; of the first test:
+"I suspect if we allow individual movement, it will break law of biology (physics) in different scenarios").</p>
+<p><strong>Universal</strong> because a clip is a list of rotations on the VRM humanoid's bones from the T-pose, never on one mesh: any
+figure with those bones plays it. What differs per body (leg length, bulk) is fitted by code at play time.</p>
+<table>
+<thead><tr><th>Who</th><th>Does</th><th>Never</th></tr></thead>
+<tbody>
+<tr><td><strong>The director</strong> and its casts (action director, blocking, prop master)</td><td>owns the timeline: a unit's beats (who
+  does what, to whom or what, how long, what overlaps), where each figure is and in what state (standing, seated, lying), the
+  props and the people a beat touches</td><td>makes a motion</td></tr>
+<tr><td><strong>Jev</strong></td><td>chooses: the clip among the ten nearest in the library, the end state, the target (which chair,
+  which person), the hand; not sure means no clip fits</td><td>writes</td></tr>
+<tr><td><strong>The work model</strong></td><td>writes a missing clip's prompt from the director's brief, in the generator's words ("A person
+  sits down on a chair, then flicks a coin with the right thumb")</td><td>sees the book's text</td></tr>
+<tr><td><strong>The generator</strong> (HY-Motion 1.0; Kimodo where a beat has constraints)</td><td>renders a prompt into a clip, four
+  seeds at a time</td><td>knows the scene: it is told nothing of chairs, stairs or partners</td></tr>
+<tr><td><strong>Code</strong>: retargeting, grounding, the laws</td><td>fits the clip to the body and the set, and checks it; a clip that
+  breaks a law is retaken in the miniloop (<a href="#small-loops">§8.1</a>)</td><td>guesses</td></tr>
+</tbody>
+</table>
+<ul>
+<li><strong>The library</strong>: <code>motions/&lt;id&gt;.vrma</code> (the VRM animation format) and an index: the prompt, tags, duration,
+  whether it loops, the root's travel, the feet's contact frames, the start and end states, the generator and seed, the
+  licence. A beat is looked up first; only a miss is generated, so the library grows into the common vocabulary.</li>
+<li><strong>Retargeting</strong>: the generator's skeleton (SMPL-H, 52 joints with fingers, 30 frames a second, a T-pose) mapped bone by bone
+  onto the VRM humanoid (Pelvis to hips, Spine1–3 to spine, chest, upper chest, L_Collar to the left shoulder, and so on,
+  thumbs and index fingers included); bones a figure lacks fold into the nearest it has.</li>
+<li><strong>Grounding on each body</strong>: the hips' height comes from the feet planted on the floor, frame by frame, not from scaling
+  the root by one ratio; foot IK holds a planted foot still; hand IK takes a reaching hand to the real target in the set.</li>
+<li><strong>States and joins</strong>: every clip starts and ends in a state (standing, seated, lying, on the ground; where, facing which
+  way). Clips join only where one ends as the next starts; elsewhere a transition is generated. The root's travel is the
+  director's: a walk is a cycle along the director's path, its pace matched to the distance.</li>
+<li><strong>The set as constraints</strong>: a chair, steps, a railing, a partner's hand come from the world model; the generator is
+  given them where it can take constraints, and grounding places the body on them where it cannot.</li>
+<li><strong>Two people</strong>: each generated on its own, placed against the other, joined by hand IK at the contact; a two-person
+  generator later.</li>
+<li><strong>When</strong>: generated when a book's run is made, not while reading; reading only plays and blends.</li>
+<li><strong>Privacy</strong>: the book's text goes to Jev and the work model only, as the README promises; the generator receives the
+  work model's neutral prompt.</li>
+<li><strong>Licences to settle before release</strong>: HY-Motion's licence (unchecked); Kimodo's SMPL-X checkpoint (an NVIDIA R&amp;D
+  licence); the SMPL body model's own terms (non-commercial).</li>
+</ul>
+<p><strong>The first test</strong> (2026-11-14, twelve clips from HY-Motion: walk, run, jump, sit, pick up, stairs, turn, punch, fall,
+handshake, lie down, a coin flick; each checked frame by frame on the generator's body and on a prototype figure's
+proportions):</p>
+<ul>
+<li><strong>Sound alone</strong>: a jump's flight falls at 10.2 m/s² (gravity 9.8); bones keep their length; no knee bends backwards;
+  no hand through the torso.</li>
+<li><strong>Broken in a scene</strong>: sitting with no chair leaves the centre of mass 31 cm behind the feet for over two seconds;
+  climbing stairs that are not there rises 1.04 m into the air; lying down floats 2–5 cm and begins already lying; a
+  handshake reaches for no one and steps 34 cm forward.</li>
+<li><strong>Broken at the joins</strong>: a fall begins mid-fall; a punch ends 1.1 m away, turned 43°; a turn ends 3.4 m away facing
+  back.</li>
+<li><strong>Broken on another body</strong>: one scale for the root put planted feet 6–13 cm under the floor on the prototype's
+  proportions (and found its ankle joint placed inside a loose sock, 17.8 cm high).</li>
+<li><strong>Feet slide</strong> even on the generator's body: about 37 cm over a five-second walk, 55 cm in the sit.</li>
+</ul>
+<p><strong>The figure laws</strong> these call for (numbered when built, beside L1–L23, <a href="#laws">§8.4</a>), each code on the
+figure's state per frame:</p>
+<ul>
+<li>a planted foot on the floor or a step: not under it, not over it, not sliding;</li>
+<li>the centre of mass over the feet, a seat, a railing held, or in a flight that falls at gravity;</li>
+<li>a seated figure on a seat, a lying one on the floor or a bed;</li>
+<li>no limb through a wall, a piece of furniture or another person;</li>
+<li>a clip begins in the state the last one ended in, at the place and facing it ended;</li>
+<li>a contact (a handshake, a blow, an embrace) meets the other person's body at the same frame.</li>
 </ul>
 <h2 id="actor-cast">8.7 The actor cast: what each one sees</h2>
 <p><span class="st designed">Designed</span> (the user, 2026-11-12, of a first-person view: "Yes both three make sense. This is
