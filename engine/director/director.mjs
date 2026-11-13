@@ -2440,14 +2440,16 @@ export async function direct(novelDir, { reading, readingPath = null, prefilm = 
         // A unit set in a bound room ends with its people in it (F2, law L23 in the room): whoever stands outside it and did not
         // leave the scene (a departure) is brought back to the nearest free spot in it, at the end of their last move.
         if (roomSet?.size) {
+          // Only this unit's people: those present in it and those it moved (never someone standing elsewhere in the world).
+          const ours = new Set([...present, ...[...E.moves.entries()].filter(([key]) => key.startsWith(`${scene.id}|`)).map(([, move]) => move.person)]);
           const left = new Set((sceneRecord.departures ?? []).filter(entry => entry.ran).map(entry => entry.who)), taken = new Set(Object.values(positions).map(value => value?.[0])), back = [];
           for (const [who, value] of Object.entries(positions)) {
-            if (!value || String(who).startsWith('crowd:') || left.has(who) || roomSet.has(value[0])) continue;
+            if (!value || !ours.has(who) || String(who).startsWith('crowd:') || left.has(who) || roomSet.has(value[0])) continue;
             const from = at(value[0]), spots = [...roomSet].filter(node => !taken.has(node));
             if (!spots.length) continue;
             const node = spots.reduce((best, id) => (Math.hypot(at(id)[0] - from[0], at(id)[2] - from[2]) < Math.hypot(at(best)[0] - from[0], at(best)[2] - from[2]) ? id : best), spots[0]);
             const lastCard = cards.at(-1), key = lastCard ? `${scene.id}|${lastCard.id}|${who}` : null, move = key ? E.moves.get(key) : null;
-            if (move) move.path = [...move.path, node]; else if (key) E.moves.set(key, { person: who, how: 'walk', path: [node], ensemble: [] });
+            if (move) { move.path = [...move.path, node]; delete move.at; } else if (key) E.moves.set(key, { person: who, how: 'walk', path: [node], ensemble: [] });
             back.push({ who, metres: Math.round(Math.hypot(at(node)[0] - from[0], at(node)[2] - from[2])) });
             positions[who] = [node, value[1]]; taken.add(node);
           }
