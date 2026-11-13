@@ -18,7 +18,7 @@ const here = dirname(fileURLToPath(import.meta.url)), repository = resolve(here,
 const ok = (pass, seen) => ({ result: pass ? 'pass' : 'fail', seen });
 
 /** The checks of one unit from its shot's facts at its start and near its end, the agent's staging and the room's kind. */
-export function judgeUnit({ start, end, staged, kind }) {
+export function judgeUnit({ start, end, staged, kind, building = false }) {
   const out = {}, f = start;
   out['shot.drawn'] = ok(!!start && !!end, start ? `${start.kind} (${start.phase})` : 'no shot drawn');
   if (!f) return out;
@@ -26,10 +26,12 @@ export function judgeUnit({ start, end, staged, kind }) {
   out['room.framed'] = ok(framing(f) && (!end || framing(end)), f.phase === 'eye' ? `camera ${f.camera?.inside ? 'inside' : 'outside'} the room` : `the room ${f.frameShare} of the frame${end ? `, then ${end.frameShare}` : ''}`);
   const shown = new Map((f.people ?? []).map(person => [person.id, person]));
   const inRoom = Object.entries(staged ?? {}).filter(([, entry]) => entry.at !== 'elsewhere').map(([who]) => who), away = Object.entries(staged ?? {}).filter(([, entry]) => entry.at === 'elsewhere').map(([who]) => who);
-  const placed = inRoom.filter(who => { const person = shown.get(who); return person && (person.inRoom || person.onBalcony); });
-  out['people.staged'] = ok(placed.length === inRoom.length, `${placed.length} of ${inRoom.length} staged in the room are there${inRoom.filter(who => !placed.includes(who)).length ? ` (not: ${inRoom.filter(who => !placed.includes(who)).join(', ')})` : ''}`);
+  // In a unit set in the room's building, `door` is at the room's door from outside and `corridor` on its floor near it.
+  const where = (who, at) => { const person = shown.get(who); if (!person) return false; if (building && at === 'door') return !person.inRoom && person.level && person.away <= 2.5; if (at === 'corridor') return !person.inRoom && person.level && person.away <= 8; return person.inRoom || person.onBalcony; };
+  const placed = inRoom.filter(who => where(who, staged[who].at) || (end && (() => { const later = (end.people ?? []).find(person => person.id === who); return later && (later.inRoom || later.onBalcony) && !(building && ['door', 'corridor'].includes(staged[who].at)); })()));
+  out['people.staged'] = ok(placed.length === inRoom.length, `${placed.length} of ${inRoom.length} staged are where the agent put them${inRoom.filter(who => !placed.includes(who)).length ? ` (not: ${inRoom.filter(who => !placed.includes(who)).join(', ')})` : ''}`);
   out['people.elsewhere'] = ok(away.every(who => !shown.has(who)), away.length ? `${away.filter(who => !shown.has(who)).length} of ${away.length} put elsewhere stay out` : 'no one put elsewhere');
-  const visible = (f.people ?? []).filter(person => person.inRoom || person.onBalcony);
+  const visible = (f.people ?? []).filter(person => person.inRoom || person.onBalcony || (building && person.level && person.away <= 2.5));
   out['people.in-frame'] = ok(f.phase === 'outside' || visible.every(person => person.inFrame), f.phase === 'outside' ? 'from outside: the room comes later' : `${visible.filter(person => person.inFrame).length} of ${visible.length} in the frame`);
   out['sun.physics'] = ok(f.phase === 'outside' || (f.patches > 0) === (f.light === 'day' && f.sunFacing > 0), `${f.patches} patch(es); ${f.light} light; ${f.sunFacing} window(s) facing the sun`);
   out['walls.read'] = ok((f.walls?.opacity ?? 0) >= 0.7 && !!f.walls?.edges, `walls ${f.walls?.opacity}`);
@@ -68,7 +70,8 @@ export async function checkUnits(novelDir, { run, out, from = null, to = null, l
       const start = await factsAt(0.12), still = join(out, 'stills', `${unit.id.slice(-3)}.png`);
       await writeFile(still, Buffer.from(await chrome.still('png'), 'base64'));
       const end = await factsAt(0.92), binding = bindingOf(unit.id);
-      const checks = judgeUnit({ start, end, staged: plan.staging?.[unit.id] ?? {}, kind: binding?.kind ?? null });
+      const place = script.scenes?.find(scene => scene.id === unit.id)?.place, building = !(place && chainOf(place).some(id => bound[id]));
+      const checks = judgeUnit({ start, end, staged: plan.staging?.[unit.id] ?? {}, kind: binding?.kind ?? null, building });
       const values = Object.values(checks), share = values.filter(check => check.result === 'pass').length / values.length;
       units.push({ unit: unit.id, shot: page.shots[unit.id].kind, share: Math.round(share * 1000) / 1000, still, checks });
       log(`${unit.id} (${page.shots[unit.id].kind}): ${Math.round(share * 100)}%${share < 1 ? ` · ${Object.entries(checks).filter(([, check]) => check.result === 'fail').map(([id]) => id).join(', ')}` : ''}`);

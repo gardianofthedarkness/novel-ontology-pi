@@ -830,6 +830,8 @@ export async function direct(novelDir, { reading, readingPath = null, prefilm = 
               if (local && [[0, -1], [0, 1], [-1, 0], [1, 0]].some(([di, dj]) => doorCells.has(`${local[0] + di}|${local[1] + dj}`))) byDoor.add(node);
               if (local && [[0, -1], [0, 1], [-1, 0], [1, 0]].some(([di, dj]) => outside(local[0] + di, local[1] + dj))) outer.add(node);
             }
+            // A room part with no door of its plan room beside it opens onto the rest of the room: its nodes on its inner side are by its door.
+            if (bound.part && !byDoor.size) for (const node of found) { const q = W.nodePos(world, node), lc = W.localCell(lot, q.i, q.j); if (lc && [[0, -1], [0, 1], [-1, 0], [1, 0]].some(([di, dj]) => { const ni = lc[0] + di, nj = lc[1] + dj; return (ni < bound.part[0] || ni > bound.part[2] || nj < bound.part[1] || nj > bound.part[3]) && ni >= room.i0 && ni <= room.i1 && nj >= room.j0 && nj <= room.j1; })) byDoor.add(node); }
             found.free = free.size ? free : new Set(found); found.outer = outer; found.cellOf = cellOf; found.byDoor = byDoor;
           }
         }
@@ -1368,7 +1370,9 @@ export async function direct(novelDir, { reading, readingPath = null, prefilm = 
           const facts = routed.map(item => item.note.raw).filter(Boolean);
           const faults = [];
           for (const who of [...new Set(facts.map(fact => fact.who))].filter(who => positions[who])) {
-            const here = nodeAt(positions[who][0]), binding = facts.filter(fact => fact.who === who && FA.binding(fact)), failing = binding.filter(fact => FA.holds(fact, here, positionOf) === false);
+            // In a bound room or its building, its floor and being indoors are the binding's (the agent's): notes about them move no one.
+            const settled = fact => (roomAll?.size || stageAll?.size) && ['floor', 'indoors', 'outdoors', 'roof', 'underground'].includes(fact.kind);
+            const here = nodeAt(positions[who][0]), binding = facts.filter(fact => fact.who === who && FA.binding(fact) && !settled(fact)), failing = binding.filter(fact => FA.holds(fact, here, positionOf) === false);
             if (!failing.length) continue;
             const reach = onFoot(here.id, radius), nearby = around(here.x, here.z, radius).nodes.filter(node => inside(node.id) && reach.has(node.id)).map(describe), best = FA.bestFor(binding, here, nearby, positionOf);
             faults.push({ law: 'L14', who, why: failing.map(fact => FA.factWords(fact, id => names.get(id) ?? id)).join('; '), fix: best ? 'layout' : null, spot: best?.id ?? null, lines: failing.map(fact => fact.sentence) });
