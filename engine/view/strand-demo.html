@@ -2956,6 +2956,20 @@ window.__gallery = (entries) => {
 };
 window.__fx = () => ({ segment: blowSegment?.scene?.id ?? null, quiet, kind: blowSegment?.kind, eventBlows: blowSegment?.event?.blows?.length ?? null, inWorld: !!blowFx.parent, parts: blowList.map((fx) => ({ kind: fx.blow.kind, attacker: !!pawns.get(fx.blow.attacker)?.pawn?.parent, target: !!pawns.get(fx.blow.target)?.pawn?.parent, shown: Object.entries(fx).filter(([key, part]) => part?.isMesh && part.visible).map(([key, part]) => `${key}@${part.position.toArray().map(Math.round)}×${part.scale.toArray().map((v) => v.toFixed(2))}`) })) });
 window.__pawnAt = (id) => { const pawn = pawns.get(id)?.pawn; return pawn?.parent ? pawn.position.toArray() : null; };
+// A recorded run unit by unit (engine/director/review-run.mjs): each unit's span on the timeline and who is in it at its end.
+window.__units = () => { const out = new Map(); for (const segment of segments) { const id = segment.scene.id, entry = out.get(id) ?? { id, place: segment.scene.place, start: segment.start, end: segment.end, people: [], events: segment.scene.events?.length ?? 0 }; entry.start = Math.min(entry.start, segment.start); entry.end = Math.max(entry.end, segment.end); entry.people = Object.keys(segment.positions ?? {}).filter((who) => !who.startsWith("crowd:") && !data.people?.[who]?.crowd); out.set(id, entry); } return [...out.values()]; };
+// The world building, floor and room a point stands in (the set view's `set`), or null outside every building.
+window.__roomAt = (px, py, pz) => {
+  const lots = data.world?.lots ?? [];
+  for (let n = 0; n < lots.length; n++) {
+    const lot = lots[n], plan = planOf(lot), c = Math.cos(plan.angle), s = Math.sin(plan.angle), dx = px - plan.x, dz = pz - plan.z;
+    const u = dx * c + dz * s, v = -dx * s + dz * c, i = Math.floor((u + (plan.sx * CELL) / 2) / CELL), j = Math.floor((v + (plan.sz * CELL) / 2) / CELL), k = Math.floor((py + 0.5 - (lot.k0 ?? 0) * FLOOR) / FLOOR);
+    if (i < 0 || j < 0 || i >= plan.sx || j >= plan.sz || k < 0 || k >= lot.floors) continue;
+    const r = (lot.rooms ?? []).findIndex(([f, i0, j0, i1, j1, top = f]) => k >= f && k <= top && i >= i0 && i <= i1 && j >= j0 && j <= j1);
+    return { lot: n, room: r, floor: r >= 0 ? lot.rooms[r][0] : k, w: r >= 0 ? (lot.rooms[r][3] - lot.rooms[r][1] + 1) * CELL : 10, d: r >= 0 ? (lot.rooms[r][4] - lot.rooms[r][2] + 1) * CELL : 10 };
+  }
+  return null;
+};
 window.__vehicleTime = (id) => segments.find((segment) => segment.kind === "event" && id in segment.scene.starts)?.start ?? null;
 window.__replay = () => ({ time, total, playing, stopAt, speed, follow, glide: glide ? { start: glide.start, seconds: glide.seconds } : null, replaying, sky: { on: daylight.on, units: skyUnits ? Object.keys(skyUnits).length : 0, hour: daylight.hour, day: Math.round(daylight.day * 100) / 100, weather: Object.fromEntries(WX.map((key) => [key, Math.round(wx[key] * 100) / 100])) }, camera: camera.position.toArray().map(Math.round), target: controls.target.toArray().map(Math.round) });
 function replayCard({ scene, event, camera: cam = null, once = false, slow = false, speed: pace = null, follow: keep = false }) {
