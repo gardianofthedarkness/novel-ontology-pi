@@ -49,6 +49,25 @@ export const WORKFLOWS = {
       return { done: c.done, left, summary: { left: c.left, applied: c.applied, decided: c.decided } };
     },
   },
+  rooms: {
+    step: 'rooms', title: 'The rooms', skill: SKILL, rounds: 6,
+    verbs: ['rooms', 'source', 'search', 'reading', 'places'],
+    format: ['Rooms', 'Parts and openings', 'Staging', 'Left'],
+    prompt: novel => [
+      `Rooms pass for the book at ${novel}. Its place tree is decided; before filming, decide what the text shows of every room its units are set in, and where each person is in it, so the film stages each room as the text has it.`,
+      `Read the skill first: cat ${SKILL} (section "The rooms"). Use only novel rooms commands (novel source and novel places unit to read the text) on this book. novel rooms rooms lists the rooms; novel rooms room <id> shows one with the first lines of its units; novel rooms stage <unit> shows a unit's people, the script supervisor's notes on where each starts and ends, the room's features and the unit's lines.`,
+      `For each room decide: kind (a kind of the list; not said when the text never shows it), floor (as the text counts floors, 1 the ground floor; ground; or not-said), part (own, or the other room it belongs to when it is a part of one: an entrance, a bathroom or a kitchen of the same home), and opens (balcony, window, or none). Then for each unit set in a room, where each person present is: at a feature of the room (bed, seat, desk, table, counter, door, window, balcony, floor) or elsewhere (present in the unit but not in the room: on the phone, remembered, gone out). A person who stays at one feature through the room's next units: at ... --through <unit>.`,
+      `The job is done when novel rooms check ${novel} shows "done": true. Every decision needs --why and, but for what the text does not say, --line with a sentence of a unit set in that room (or just before it) that shows it; a refused claim comes back with why: correct it, never repeat it. Use only what the text says, never what you know of the book from outside. No paid step.`,
+      `When check is done, reply in exactly this format, one line per decision with its sentence id:\n${formatText(['Rooms', 'Parts and openings', 'Staging', 'Left'])}`,
+    ].join('\n\n'),
+    check: async novel => {
+      const R = await import(pathToFileURL(join(repository, 'engine', 'places', 'room-plan.mjs')).href);
+      const c = R.checkOf(await R.roomStores(novel)), rooms = c.items.filter(item => item.missing !== 'at'), people = c.items.filter(item => item.missing === 'at');
+      const byUnit = new Map(); for (const item of people) (byUnit.get(item.unit) ?? byUnit.set(item.unit, []).get(item.unit)).push(item.person);
+      const left = [...rooms.map(item => `room ${item.room} ${item.label}: no ${item.missing}`), ...[...byUnit].map(([unit, who]) => `${unit}: where is ${who.join(', ')}`)];
+      return { done: c.done, left, summary: { rooms: c.rooms, units: c.units, left: c.left } };
+    },
+  },
   look: {
     step: 'look', title: 'The look pass', skill: MODELS_SKILL, rounds: 3,
     verbs: ['look', 'settings', 'warehouse', 'model', 'source', 'search'],

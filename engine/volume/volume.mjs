@@ -80,6 +80,8 @@ export const STEPS = [
   // prompt and keeps at it until the workflow's check passes; NOVEL_VOLUME_AGENT=hand stops here for an agent to do it.
   { id: 'places', paid: true, who: 'agent', workflow: 'places', why: 'the agent\'s place tree with evidence: every city, building, room and unit\'s place shown by a sentence (workflow places; the work model)',
     done: at => !!readJson(join(at.novel, 'stage', 'world', 'script.json'))?.placeTree && existsSync(join(at.novel, 'stage', 'world', 'script.reading.json')) && readJson(join(at.bookDir, 'workflows', 'places.json'))?.done === true },
+  { id: 'rooms', paid: true, who: 'agent', workflow: 'rooms', why: 'the agent\'s rooms with evidence: each room\'s kind, floor, part and openings, and where each person of each unit is in it (workflow rooms; the work model)',
+    done: at => readJson(join(at.bookDir, 'workflows', 'rooms.json'))?.done === true },
   { id: 'strands', paid: false, why: 'the book\'s strands by interaction (stage/world/strands.json)',
     done: at => existsSync(join(at.novel, 'stage', 'world', 'strands.json')),
     commands: async at => [node('engine/reading/strands.mjs', at.novel, '--reading', at.data)] },

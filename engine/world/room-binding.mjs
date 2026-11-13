@@ -27,34 +27,23 @@ export function roomsOf(script, unitIds = null) {
 
 /** A room kind's size in plan cells of 2 m (F6): the cells it is nearest to; a single room 4 (16 m²), a classroom 20. */
 export const KIND_CELLS = { bedroom: 4, cell: 2, storage: 3, 'kitchen or dining room': 4, 'living room': 6, office: 6, 'meeting room': 6, 'hospital room': 6, 'control room': 6, 'lobby or hall': 3, shop: 9, 'café or restaurant': 12, bar: 9, 'library or study': 9, laboratory: 12, classroom: 20, 'not said': 4 };
-/** A room's kind when the text does not say: by its building's use (the terrain site's kind), else a single room. */
-export function defaultKind(buildingKind, label = '') {
-  if (/\u7384\u5173|entrance|lobby|hall/i.test(label)) return 'lobby or hall';
-  const use = String(buildingKind ?? '').toLowerCase();
-  const by = [[/dorm|apartment|hotel|house|home|residential|flat/, 'bedroom'], [/school|university|college|academy/, 'classroom'], [/hospital|clinic/, 'hospital room'], [/office|bank|government/, 'office'], [/shop|store|convenience|market|mall/, 'shop'], [/cafe|caf\u00e9|restaurant|diner/, 'café or restaurant'], [/bar|pub/, 'bar'], [/lab|research/, 'laboratory'], [/library/, 'library or study'], [/church|station|hall/, 'lobby or hall']];
-  return by.find(([test]) => test.test(use))?.[1] ?? 'bedroom';
-}
-
-/** A room that is another room's way in (a flat's genkan, an entrance, a doorway): bound inside the room it opens (B3). */
-export const ENTRY_WORDS = /\u7384\u5173|\u5165\u53e3|genkan|entrance|entry|doorway|foyer|vestibule/i;
-/** Rooms people live in, whose entry an entrance-like room of the same building is. */
-const LIVED_IN = ['bedroom', 'living room', 'kitchen or dining room', 'hospital room', 'cell'];
 
 /**
- * The binding's hints from the story (B3, docs/v3/design.html#indoor-benchmark): each room's floor where its units state one
- * (`floorsOf(roomId)` gives the stated floor facts, 1 the ground floor; the commonest, then the surest), and an entrance-like
- * room made the entry of a lived-in room of the same building. Mutates and returns `rooms`.
+ * The binding's hints from the story (docs/v3/design.html#room-plan): from the agent's room plan (room-plan.json: each room's
+ * floor as the text counts it, 1 the ground floor, and the room it is part of), else each room's floor where its units state
+ * one (`floorsOf(roomId)` gives the stated floor facts; the commonest, then the surest). A part of another room binds inside
+ * it. Nothing from a room's name. Mutates and returns `rooms`.
  */
-export function storyHints(rooms, floorsOf = () => []) {
+export function storyHints(rooms, floorsOf = () => [], plan = null) {
   for (const room of rooms) {
-    const said = floorsOf(room.id).filter(fact => typeof fact.value === 'number' && fact.value >= 1 && (fact.sure ?? 0) >= 0.7), count = new Map();
-    for (const fact of said) count.set(fact.value, (count.get(fact.value) ?? 0) + 1 + (fact.sure ?? 0) / 10);
-    if (count.size) room.floor = [...count].sort((a, b) => b[1] - a[1])[0][0] - 1;
-  }
-  for (const room of rooms) {
-    if (room.within || !ENTRY_WORDS.test(String(room.label ?? ''))) continue;
-    const home = rooms.find(other => other !== room && other.building === room.building && LIVED_IN.includes(other.kind) && !ENTRY_WORDS.test(String(other.label ?? '')));
-    if (home) { room.within = home.id; room.entry = true; }
+    const decided = plan?.rooms?.[room.id] ?? {};
+    if (decided.floor && typeof decided.floor.value === 'number') room.floor = decided.floor.value - 1;
+    else if (!decided.floor) {
+      const said = floorsOf(room.id).filter(fact => typeof fact.value === 'number' && fact.value >= 1 && (fact.sure ?? 0) >= 0.7), count = new Map();
+      for (const fact of said) count.set(fact.value, (count.get(fact.value) ?? 0) + 1 + (fact.sure ?? 0) / 10);
+      if (count.size) room.floor = [...count].sort((a, b) => b[1] - a[1])[0][0] - 1;
+    }
+    if (decided.part?.of && rooms.some(other => other.id === decided.part.of)) { room.within = decided.part.of; room.entry = true; }
   }
   return rooms;
 }

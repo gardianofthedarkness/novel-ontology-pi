@@ -63,8 +63,9 @@ const FORMS = {
   settings: "novel settings show <book> [<prefix>] [--place <id>] [--changed] | explain <key> | set <book> <key> '<JSON>' [--place <id>] [--layer universe|book] [--table] --why <text> [--before] | unset <book> <key> [...] --why <text> | diff <book> [--from <snapshot>] | profile save|apply|list <book> [<name>] --why <text> [--before]  (novel-models skill)",
   warehouse: "novel warehouse list [--source <name>] [<book>] | find '<words>' [--kind '<kind>'] [--category <c>] [--size <m>] [--source <name>] [--top N] [<book>] | show <source>:<part> [<book>] | use <source>:<part> for <slot> <book> --why <text> [--place <id>] [--before] [--floors a b] | fetch <name> <https-url> --licence <SPDX> --ok '<the user's words>' --why <text> [--path <folder>] [--limit <MB>] | refresh <name> | add <name> <folder under the packs root> --licence <SPDX> --why <text> | interact <source>:<part>|'<kind>' ['<json sheet>'] <book> [--why <text>] [--before]  (novel-models skill; a download only with the user's OK)",
   model: "novel model nominate <book> [--top N] | list <book> [--state todo|made|failed|part] | brief <book> <thing> | write <book> <thing>|--all [--limit N] | check <book> <thing>|--all | show <book> <thing> | use <book> <thing> <source>:<part> [--why <text>] | bind <book> [--limit N] | parts '<kind>'  (novel-models skill)",
-  volume: 'novel volume status <book> | run <book> [--step <id> | --until <id>] | log <book> <step> [--lines N] | done <book> places|look --why <text>  (a whole volume, step by step: novel-volume skill)',
+  volume: 'novel volume status <book> | run <book> [--step <id> | --until <id>] | log <book> <step> [--lines N] | done <book> places|rooms|look --why <text>  (a whole volume, step by step: novel-volume skill)',
   strands: 'novel strands show <book> | inherit <book> [--work] [--dry] | set <book> <strand key> inherited|closed --why <text> [--into <key>]  (what the book carries from the book before: novel-volume skill)',
+  rooms: 'novel rooms rooms|check <book> | room <book> <room id> | stage <book> <unit id> | kind|floor|part|opens <book> <room id> <value> --line <sentence id> --why <text> | at <book> <unit id> <person id> <feature> [--through <unit id>] --line <sentence id> --why <text>  (the rooms by the agent, with evidence; novel-volume skill)',
   places: "novel places tree|check|moves|apply <book> | place <book> <place id> | unit <book> <unit id> | units <book> [--place <id>] [--by <how>] [--chapter N] [--unplaced] | setting <book> <place id> --line <sentence id> --why <text> | mention|drop <book> <place id> --why <text> [--override] | hold <book> <unnamed place> <parent> --line <sentence id> --why <text> | set <book> <unit id> <place id> --line <sentence id> --why <text> | same <book> <unit id> <earlier unit id> [--through <last unit id>] --why <text> | nowhere <book> <unit id> --why <text> | wide <book> <unit id> [--through <last unit id>] --why <text> | merge <book> <place id> <into place id> --why <text> | travel <book> <unit id> <person id> --line <sentence id> --why <text>  (the place tree, novel-volume skill: every claim needs a line of the book; refused claims come back with why)",
   look: "novel look context <book> [--place <id>] [--top N]  (the look pass, novel-models skill: each place's environment sentences, the parts the text names, the keys a place may set; then novel settings set|warehouse use ... --place <id> --why <sentence ids>)",
   help: 'novel help', config: 'novel config',
@@ -407,7 +408,7 @@ function permit(command, scope) {
       operation === 'status' && tokens.length === 3
       || operation === 'run' && (tokens.length === 3 || tokens.length === 5 && ['--step', '--until'].includes(tokens[3]) && STEP.test(tokens[4] ?? ''))
       || operation === 'log' && STEP.test(tokens[3] ?? '') && (tokens.length === 4 || tokens.length === 6 && tokens[4] === '--lines' && /^\d{1,3}$/.test(tokens[5] ?? ''))
-      || operation === 'done' && ['places', 'look'].includes(tokens[3]) && tokens.length === 6 && tokens[4] === '--why' && why(tokens[5]));
+      || operation === 'done' && ['places', 'rooms', 'look'].includes(tokens[3]) && tokens.length === 6 && tokens[4] === '--why' && why(tokens[5]));
   }
   if (verb === 'strands') {
     const KEY = /^vol-[\w-]{1,20}:[\w~-]{1,60}$/, why = value => typeof value === 'string' && value.trim().length > 0 && !value.startsWith('-') && Buffer.byteLength(value) <= 400;
@@ -435,6 +436,18 @@ function permit(command, scope) {
       || operation === 'nowhere' && ids(1) && decided(4, false)
       || operation === 'wide' && ids(1) && (() => { const f = flags(4, { '--why': text, '--through': (v) => ID.test(v) }); return !!f && f.has('--why'); })()
       || operation === 'merge' && ids(2) && decided(5, false));
+  }
+  // The rooms by the agent, with evidence (engine/places/room-plan.mjs): the assigned book's only; every decision with a why
+  // and, but for "not said" ones, a sentence id the code checks lies in a unit set in that room.
+  if (verb === 'rooms') {
+    const ID = /^[\p{L}\p{N}_:.-]{1,80}$/u, LINE = /^[\w.-]{1,40}$/, VALUE = /^[\p{L}\p{N} _:.-]{1,80}$/u, text = (value) => typeof value === 'string' && value.trim().length > 0 && !value.startsWith('-') && Buffer.byteLength(value) <= 400;
+    const flags = (from, pairs) => { const out = new Map(); for (let i = from; i < tokens.length; i += 2) { const name = tokens[i]; if (out.has(name) || !(name in pairs) || !pairs[name](tokens[i + 1])) return null; out.set(name, tokens[i + 1]); } return out; };
+    const decided = (from, extra = {}) => { const f = flags(from, { '--why': text, '--line': (v) => LINE.test(v ?? ''), ...extra }); return !!f && f.has('--why'); };
+    valid = tokens[2] === novel && (
+      ['rooms', 'check'].includes(operation) && tokens.length === 3
+      || ['room', 'stage'].includes(operation) && tokens.length === 4 && ID.test(tokens[3] ?? '')
+      || ['kind', 'floor', 'part', 'opens'].includes(operation) && ID.test(tokens[3] ?? '') && VALUE.test(tokens[4] ?? '') && !tokens[4].startsWith('-') && decided(5)
+      || operation === 'at' && ID.test(tokens[3] ?? '') && ID.test(tokens[4] ?? '') && /^[a-z]{2,20}$/.test(tokens[5] ?? '') && decided(6, { '--through': (v) => ID.test(v ?? '') }));
   }
   if (verb === 'look') valid = operation === 'context' && tokens[2] === novel && (() => { for (let i = 3; i < tokens.length; i += 2) { if (tokens[i] === '--place' && /^[\w:-]{1,80}$/.test(tokens[i + 1] ?? '')) continue; if (tokens[i] === '--top' && /^\d+$/.test(tokens[i + 1] ?? '') && Number(tokens[i + 1]) >= 1 && Number(tokens[i + 1]) <= 40) continue; return false; } return true; })();
   if (verb === 'settings' || verb === 'warehouse' || verb === 'model') {
@@ -484,5 +497,5 @@ function permit(command, scope) {
     }
   }
   if (!valid) throw new Error('Command outside this block/workspace CLI allowlist; no shell, direct file writes, credential access, or auto-approve');
-  return { kind: 'cli', args: tokens, label: `novel ${verb}${['album', 'calendar', 'changeset', 'em', 'fix', 'graph', 'timeline', 'settings', 'warehouse', 'model', 'look', 'places'].includes(verb) ? ` ${operation}` : ''}` };
+  return { kind: 'cli', args: tokens, label: `novel ${verb}${['album', 'calendar', 'changeset', 'em', 'fix', 'graph', 'timeline', 'settings', 'warehouse', 'model', 'look', 'places', 'rooms'].includes(verb) ? ` ${operation}` : ''}` };
 }

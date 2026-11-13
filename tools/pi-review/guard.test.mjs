@@ -361,6 +361,21 @@ test('the place tree: the assigned book only, a why for every decision and a sen
   ]) assert.throws(() => authorize(command), command);
 });
 
+test('the rooms: the assigned book only, a why for every decision, a sentence id but for what is not said', () => {
+  for (const command of [
+    `novel rooms rooms '${novel}'`, `novel rooms check '${novel}'`, `novel rooms room '${novel}' unnamed:place_000025_2`, `novel rooms stage '${novel}' scene_000026`,
+    `novel rooms kind '${novel}' unnamed:place_000025_2 bedroom --line b0002_s0050 --why 'a single dorm room'`, `novel rooms kind '${novel}' unnamed:place_000025_2 'not said' --why 'never described'`,
+    `novel rooms floor '${novel}' unnamed:place_000025_2 7 --line b0002_s0040 --why 'the seventh floor'`, `novel rooms part '${novel}' unnamed:place_000049_1 unnamed:place_000025_2 --line b0002_s0700 --why 'its entrance'`,
+    `novel rooms opens '${novel}' unnamed:place_000025_2 balcony --line b0002_s0050 --why 'he opens the balcony door'`,
+    `novel rooms at '${novel}' scene_000026 slot_000026_4 balcony --line b0002_s0060 --why 'over the rail'`, `novel rooms at '${novel}' scene_000027 char_000001 floor --through scene_000030 --line b0002_s0070 --why 'stays in'`,
+  ]) assert.equal(authorize(command).kind, 'cli', command);
+  assert.equal(authorize(`novel rooms check '${novel}'`).label, 'novel rooms check');
+  for (const command of [
+    `novel rooms rooms /tmp/other`, `novel rooms kind '${novel}' unnamed:place_000025_2 bedroom --line b0002_s0050`, `novel rooms at '${novel}' scene_000026 slot_000026_4 Balcony! --line b1 --why x`,
+    `novel rooms at '${novel}' scene_000026 slot_000026_4 balcony --line b1 --why x --force y`, `novel rooms erase '${novel}'`, `novel rooms kind '${novel}' unnamed:place_000025_2 --why 'no kind'`,
+  ]) assert.throws(() => authorize(command), command);
+});
+
 test('a whole volume and what it carries: the assigned book only, the runner\'s steps, a why where the agent decides', () => {
   for (const command of [
     `novel volume status '${novel}'`, `novel volume run '${novel}'`, `novel volume run '${novel}' --step terrain`, `novel volume run '${novel}' --until prefilm`,
