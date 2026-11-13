@@ -10,7 +10,8 @@ characters' pictures, generated models and VRM files are copyrighted fan materia
 | v0.2 | superseded | T-pose redraw → shape → rig → ~16k-triangle hologram mesh (`holo_detail.py`, arms by connectivity) → outfits as whole bodies on one skeleton (`compose_outfits.py`) |
 | v0.3 | benchmark | v0.2 + face-and-hair-locked redraw + a high-resolution head from a portrait (`head_swap.py`) |
 | v0.4 | experiments | wardrobe from the books (`epub_scan.py`, `garments.py`, `cloth_settle.py`), joint smoothing (`smooth_joints.py`), skirt spring bones (`skirt_rig.py`), separate base body + clothes (`body_fit.py`, `mannequin.py`) |
-| **v0.5** | **stable** | the v0.3 one-shot figure kept whole as the surface, its generated base body underneath as a hidden layer (`layer_pack.py`); in the viewer each point's distance from the base body is its layer thickness: thin points stay on the skeleton, thick points hang on soft springs (stretch limit, 25% edge limit, leg and torso capsules), fast CPU skinning (`viewer/index.html`) |
+| v0.5 | stable (tag `figures-v0.5.0`) | the v0.3 one-shot figure kept whole as the surface, its generated base body underneath as a hidden layer (`layer_pack.py`); in the viewer each point's distance from the base body is its layer thickness: thin points stay on the skeleton, thick points hang on soft springs (stretch limit, 25% edge limit, leg and torso capsules), fast CPU skinning (`viewer/index.html`) |
+| **v0.6** | **stable** (tag `figures-v0.6.0`) | v0.5 + rigid needles: the base body moves by dual-quaternion blending (rotation about each joint, no collapse); thin skin rides its nearest base-body point with its offset turned with it; loose cloth never sinks below 80% of its own depth above the body. Thigh's narrowest point in a deep lunge 71% → 92% of rest; ~21 ms a frame on a laptop. The viewer's "Base layer" switch compares with v0.5 |
 
 ## v0.5 in order
 
@@ -30,6 +31,12 @@ Tokens live in Windows Credential Manager (`vault.py`), never in files.
 
 ## Known issues at v0.5
 
-- The thigh still bends slightly unnaturally in deep hip flexion (linear blend skinning collapse at the hip).
+- The thigh still bends slightly unnaturally in deep hip flexion (linear blend skinning collapse at the hip). Fixed in v0.6.
 - The winter uniform shows 38–45 over-long triangles in walk and run.
 - Spring stiffness and stretch limits are first guesses; phone performance not measured (about 16 ms a frame on a laptop).
+
+## Known issues at v0.6
+
+- The winter uniform's over-long triangles in walk and run remain.
+- About 21 ms a frame on a laptop; phone performance not measured.
+- Spring stiffness, stretch limits and the 80% depth rule are first guesses.
