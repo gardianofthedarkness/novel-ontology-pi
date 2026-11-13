@@ -952,6 +952,10 @@ const mats = {
   // its frame in the rooms' edge line; a balcony's slab; the sun's patch through an opening on the floor.
   glass: new THREE.MeshBasicMaterial({ color: 0xcfeaff, transparent: true, opacity: 0.08, depthWrite: false }),
   glint: new THREE.LineBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.5 }),
+  // The set room's own windows drawn plain (docs/v3/design.html#indoor-fixes F8): its frames and glints at full strength, its glass a little
+  // more there, so a still reads the window wall without the city's windows changing.
+  setFrame: new THREE.LineBasicMaterial({ color: 0xffffff, transparent: true, opacity: 1 }),
+  setGlass: new THREE.MeshBasicMaterial({ color: 0xd8f0ff, transparent: true, opacity: 0.16, depthWrite: false }),
   balcony: new THREE.MeshLambertMaterial({ color: 0x3d6a8a, transparent: true, opacity: 0.4, depthWrite: false }),
   sunPatch: new THREE.MeshBasicMaterial({ color: 0xffd28a, transparent: true, opacity: 0.45, depthWrite: false, side: THREE.DoubleSide }),
   // A hit building's units: its walls and roof as panels, and what fell as rubble.
@@ -1339,7 +1343,7 @@ function drawSkeletons(id, entry, count, settling = null, unseen = null) {
     for (const unit of [...part.blasted, ...part.fallen]) gone[part.lot].add(unit.slice(0, 4).join("|"));
     if (hit !== settling) for (const unit of part.fallen) { const box = unitBox(place.lots[part.lot], entry, unit); rubble.push([box[0], unit[4] + 0.3, box[2], Math.min(box[3], CELL * 0.9), 0.6, Math.min(box[5], CELL * 0.9)]); }
   }
-  const corridors = [], stairs = [], red = [], rooms = [], halls = [], talls = [], roomWalls = [], roomEdges = [], redRooms = [], walls = [], roofs = [], glassPanes = [], glints = [], balconies = [], sunPatches = [];
+  const corridors = [], stairs = [], red = [], rooms = [], halls = [], talls = [], roomWalls = [], roomEdges = [], redRooms = [], walls = [], roofs = [], glassPanes = [], glints = [], balconies = [], sunPatches = [], setFrames = [], setPanes = [];
   // A hit building's walls and roof, unit by unit; its artistic shell gives way to them.
   place.lots.forEach((lot, n) => {
     // A building stands from the start (the user, 2026-11-02: parts of the city vanished until the story first reached them);
@@ -1402,10 +1406,10 @@ function drawSkeletons(id, entry, count, settling = null, unseen = null) {
         const sill = Math.min(open.sill, h - 0.4), head = Math.min(open.head, h - 0.1), along = lu > lv, [px, pz] = local(pu, pv);
         if (sill > 0.02) piece(pu, pv, lu, lv, 0, sill);
         piece(pu, pv, lu, lv, head, h);
-        glassPanes.push([px, y + (sill + head) / 2, pz, along ? lu * 0.94 : 0.02, head - sill, along ? 0.02 : lv * 0.94, turn]);
+        (setRoom ? setPanes : glassPanes).push([px, y + (sill + head) / 2, pz, along ? lu * 0.94 : 0.02, head - sill, along ? 0.02 : lv * 0.94, turn]);
         const [ax, az] = along ? local(pu - lu / 2 + 0.06, pv) : local(pu, pv - lv / 2 + 0.06), [bx, bz] = along ? local(pu + lu / 2 - 0.06, pv) : local(pu, pv + lv / 2 - 0.06);
-        roomEdges.push(ax, y + sill, az, bx, y + sill, bz, ax, y + head, az, bx, y + head, bz, ax, y + sill, az, ax, y + head, az, bx, y + sill, bz, bx, y + head, bz);
-        glints.push(ax + (bx - ax) * 0.2, y + sill + 0.25, az + (bz - az) * 0.2, ax + (bx - ax) * 0.55, y + head - 0.2, az + (bz - az) * 0.55);
+        (setRoom ? setFrames : roomEdges).push(ax, y + sill, az, bx, y + sill, bz, ax, y + head, az, bx, y + head, bz, ax, y + sill, az, ax, y + head, az, bx, y + sill, bz, bx, y + head, bz);
+        (setRoom ? setFrames : glints).push(ax + (bx - ax) * 0.2, y + sill + 0.25, az + (bz - az) * 0.2, ax + (bx - ax) * 0.55, y + head - 0.2, az + (bz - az) * 0.55);
         if (open.kind === 2) {
           // The balcony: a slab 1.2 m out and its rail at 1.1 m.
           const [du, dv] = [[0, -1], [0, 1], [-1, 0], [1, 0]][side], out = 0.6, [sx_, sz_] = local(pu + du * out, pv + dv * out);
@@ -1441,6 +1445,10 @@ function drawSkeletons(id, entry, count, settling = null, unseen = null) {
   if (glints.length) dynamic.add(new THREE.LineSegments(new THREE.BufferGeometry().setAttribute("position", new THREE.Float32BufferAttribute(glints, 3)), mats.glint));
   if (sunPatches.length) dynamic.add(new THREE.Mesh(new THREE.BufferGeometry().setAttribute("position", new THREE.Float32BufferAttribute(sunPatches, 3)), mats.sunPatch));
   if (glassPanes.length) dynamic.add(instanced(mats.glass, glassPanes));
+  if (setPanes.length) dynamic.add(instanced(mats.setGlass, setPanes));
+  if (setFrames.length) dynamic.add(new THREE.LineSegments(new THREE.BufferGeometry().setAttribute("position", new THREE.Float32BufferAttribute(setFrames, 3)), mats.setFrame));
+  // What the last set drew (F9: the sun's patches proven in the stills; read by engine/director/review-run.mjs).
+  if (setView && place.world) window.__setInfo = { key: setView.key, sun: !!setView.sun, patches: sunPatches.length / 18, windows: setPanes.length };
   if (balconies.length) dynamic.add(instanced(mats.balcony, balconies));
   dynamic.add(instanced(mats.corridor, corridors), instanced(mats.stair, stairs), instanced(mats.cut, red), instanced(mats.room, rooms), instanced(mats.hall, halls), instanced(mats.tall, talls), instanced(mats.roomWall, roomWalls), instanced(mats.roomCut, redRooms), instanced(mats.wall, walls), instanced(mats.roof, roofs), instanced(mats.rubble, rubble));
   entry.group.add(dynamic); entry.dynamic = dynamic;
@@ -3244,7 +3252,7 @@ if (capture) {
       for (const extra of extras.splice(0)) world.remove(extra);
       mapHalf = topdown ? topdown.half : null;
       // `only`: the places a director's shot is about keep their pins and names; the others' are hidden for this still.
-      const keep = only ? new Set(only) : null; for (const { id: placeId, parts } of placeMarks) for (const part of parts) part.visible = !keep || keep.has(placeId);
+      const keep = set ? new Set() : only ? new Set(only) : null; for (const { id: placeId, parts } of placeMarks) for (const part of parts) part.visible = !keep || keep.has(placeId);
       const pose = poseFor(place), offset = pose.position.clone().sub(pose.target).applyAxisAngle(new THREE.Vector3(0, 1, 0), yaw);
       // Aimed at an earlier box: look at the middle of its beam's run through the place, far enough back to see all of it.
       if (aim) { const { from, to } = reach(place, aim), length = from.distanceTo(to); pose.target.copy(from).lerp(to, 0.5); offset.setLength(Math.min(400, Math.max(40, length * 1.15 / (2 * Math.tan(THREE.MathUtils.degToRad(camera.fov / 2)))))); }

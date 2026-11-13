@@ -726,7 +726,32 @@ export async function direct(novelDir, { reading, readingPath = null, prefilm = 
         const lot = world.lots[index];
         return { index, place: building, floors: lot.floors, rooms: (lot.rooms ?? []).map(room => ({ floor: room.floor, i0: room.i0, j0: room.j0, i1: room.i1, j1: room.j1, top: room.top ?? room.floor, kind: room.kind ?? 'room' })) };
       };
-      const boundRooms = RBM.bindRooms(RBM.roomsOf(script, E.chosen.map(entry => entry.id)), lotsOfBuilding, keptRooms);
+      // Every room typed once, here (F5): Jev on the room's name, its building's kind and the lines of the units set in it; where
+      // they do not tell, a default by the building's use (a dormitory's room a bedroom). The plan room is then chosen by the
+      // kind's size (F6, room-binding.mjs).
+      const roomsWanted = RBM.roomsOf(script, E.chosen.map(entry => entry.id)), inRoomPlace = (sceneId, room) => RBM.chainOf(script.places ?? {}, script.scenes.find(entry => entry.id === sceneId)?.place).includes(room);
+      const linesOfRoom = room => script.scenes.filter(entry => inRoomPlace(entry.id, room)).slice(0, 4).flatMap(entry => (reading.scenes.find(reads => reads.id === entry.id)?.sentences ?? []).slice(0, 3)).map(id => text.get(id)?.text ?? '').filter(Boolean);
+      for (const room of roomsWanted) {
+        if (keptRooms[room.id]?.kind) { room.kind = keptRooms[room.id].kind; continue; }
+        const site = sitesNow[room.building] ?? {}, buildingKind = site.type ?? site.kind ?? null;
+        let kind = null;
+        if (looks && calls < budget) {
+          const kinds = RM.ROOM_TYPE_NAMES.map(name => `${name}: ${RM.ROOM_TYPES[name]}`).join('\n');
+          const [reply] = await decide(`A room of a novel's story stands in a building. The room: ${room.label}. The building: ${site.label ?? script.places?.[room.building]?.label ?? 'unnamed'} (${buildingKind ?? 'a building'}).\nThe first lines of the scenes set in it:\n${linesOfRoom(room.id).slice(0, 10).join('\n')}\n\nThe kinds of room:\n${kinds}`, [{ key: 'room:kind', primitive: 'choice', instructions: 'What kind of room is it? Answer not said if neither its name, its building nor the lines tell.', options: RM.ROOM_TYPE_NAMES }]).catch(() => []);
+          if (reply?.value && RM.ROOM_TYPES[reply.value] && reply.value !== 'not said') kind = String(reply.value);
+        }
+        room.kind = kind ?? RBM.defaultKind(buildingKind, room.label);
+      }
+      const boundRooms = RBM.bindRooms(roomsWanted, lotsOfBuilding, keptRooms);
+      // Each bound room furnished by its kind (the architect's recipes), drawn on the page and known to the director (a talk in it
+      // asks no more), with what its lines name of its outside (a balcony, a window).
+      for (const [place, binding] of Object.entries(boundRooms.rooms)) {
+        const lot = world.lots[binding.lot], room = lot?.rooms?.[binding.room], key = `${binding.lot}|${binding.room}`;
+        if (!room || E.rooms.has(key)) continue;
+        const type = binding.kind ?? 'not said', said = linesOfRoom(place).join(' '), opening = OPENING_WORDS.balcony.test(said) ? 'balcony' : OPENING_WORDS.window.test(said) ? 'window' : null;
+        const furniture = RM.furnish(type, (room.i1 - room.i0 + 1) * CELL, (room.j1 - room.j0 + 1) * CELL, furnitureSizes, `${key}|${type}`).map(piece => [piece.model, piece.u, piece.v, piece.angle]);
+        E.rooms.set(key, { lot: binding.lot, room: binding.room, type, sure: null, scene: roomsWanted.find(entry => entry.id === place)?.first ?? null, card: null, furniture, bound: place, ...(opening ? { opening } : {}) });
+      }
       await writeFile(roomsFile, JSON.stringify({ version: 1, at: new Date().toISOString(), rooms: { ...keptRooms, ...boundRooms.rooms }, problems: boundRooms.problems }, null, 1));
       record.rooms = { bound: Object.keys(boundRooms.rooms).length, problems: boundRooms.problems };
       log(`rooms: ${Object.keys(boundRooms.rooms).length} bound${boundRooms.problems.length ? `; ${boundRooms.problems.map(entry => `${entry.label}: ${entry.problem}`).join('; ')}` : ''}`);
@@ -744,9 +769,23 @@ export async function direct(novelDir, { reading, readingPath = null, prefilm = 
             const cx = points.reduce((sum, q) => sum + q[0], 0) / points.length, cz = points.reduce((sum, q) => sum + q[1], 0) / points.length, half = Math.max(8, ...points.map(q => Math.max(Math.abs(q[0] - cx), Math.abs(q[1] - cz)))) + 4;
             E.reach(cx, cz, half + 8);
             const graph = E.graphOf({ x: cx, z: cz }, half);
-            for (const [x, z] of points) { const node = W.nodeNear(world, graph, x, z, k); if (node === null || node === undefined) continue; const there = roomAt(node); if (there && there.lot === bound.lot && there.room === bound.room) found.add(node); }
+            // Furniture is solid (F3): a cell whose middle lies under a piece (a rug aside) is no spot to stand on.
+            const pieces = (E.rooms.get(key)?.furniture ?? []).filter(([model]) => !/rug|carpet/.test(model)).map(([model, pu, pv, angle]) => { const [w, , d] = furnitureSizes[model] ?? [1, 1, 1], c = Math.abs(Math.cos(angle)), s_ = Math.abs(Math.sin(angle)); return { pu, pv, hx: (c * w + s_ * d) / 2, hz: (s_ * w + c * d) / 2 }; });
+            const under = (li, lj) => { const cu = (li - room.i0 + 0.5) * CELL, cv = (lj - room.j0 + 0.5) * CELL; return pieces.some(piece => Math.abs(cu - piece.pu) < piece.hx - 0.15 && Math.abs(cv - piece.pv) < piece.hz - 0.15); };
+            const sx = lot.skeleton?.nx ?? 0, sz = lot.skeleton?.nz ?? 0, outside = (li, lj) => li < 0 || lj < 0 || li >= sx || lj >= sz || !(lot.rooms ?? []).some(other => k - (lot.k0 ?? 0) >= other.floor && k - (lot.k0 ?? 0) <= (other.top ?? other.floor) && li >= other.i0 && li <= other.i1 && lj >= other.j0 && lj <= other.j1) && (lot.skeleton?.cells?.[((k - (lot.k0 ?? 0)) * sz + lj) * sx + li] ?? 0) === 0;
+            const free = new Set(), outer = new Set();
+            for (const [x, z] of points) {
+              const node = W.nodeNear(world, graph, x, z, k); if (node === null || node === undefined) continue;
+              const there = roomAt(node); if (!there || there.lot !== bound.lot || there.room !== bound.room) continue;
+              found.add(node);
+              const p = W.nodePos(world, node), local = W.localCell(lot, p.i, p.j);
+              if (local && !under(local[0], local[1])) free.add(node);
+              if (local && [[0, -1], [0, 1], [-1, 0], [1, 0]].some(([di, dj]) => outside(local[0] + di, local[1] + dj))) outer.add(node);
+            }
+            found.free = free.size ? free : new Set(found); found.outer = outer;
           }
         }
+        found.free ??= new Set(found); found.outer ??= new Set();
         roomNodeCache.set(key, found);
         return found;
       };
@@ -939,10 +978,14 @@ export async function direct(novelDir, { reading, readingPath = null, prefilm = 
         // A unit set in a bound room (F1): its anchor inside that room (the node nearest the room's middle when the people
         // carried in stand elsewhere), and only those already in it carried; the others start or walk in beside the anchor,
         // inside the room.
-        const boundRoom = boundOf(scene), roomSet = boundRoom ? roomNodesOf(boundRoom) : null, inBound = node => !roomSet?.size || roomSet.has(node);
+        const boundRoom = boundOf(scene), roomAll = boundRoom ? roomNodesOf(boundRoom) : null, roomSet = roomAll?.free ?? null, inBound = node => !roomSet?.size || roomSet.has(node);
+        // A unit whose lines name the balcony (F4): its anchor at the room's outer wall, by the balcony door, never out in the air.
+        const balconyHere = !!roomAll?.outer?.size && OPENING_WORDS.balcony.test((reads?.sentences ?? []).map(id => text.get(id)?.text ?? '').join(' '));
         if (roomSet?.size) {
-          if (anchor === null || anchor === undefined || !roomSet.has(anchor)) { const ids = [...roomSet], mid = [0, 2].map(n => ids.reduce((sum, id) => sum + at(id)[n], 0) / ids.length); anchor = ids.reduce((best, id) => (Math.hypot(at(id)[0] - mid[0], at(id)[2] - mid[1]) < Math.hypot(at(best)[0] - mid[0], at(best)[2] - mid[1]) ? id : best), ids[0]); }
-          sceneRecord.room = { place: boundRoom.place, lot: boundRoom.lot, room: boundRoom.room, floor: boundRoom.floor, nodes: roomSet.size };
+          const pool = balconyHere ? [...roomAll.outer].filter(node => roomSet.has(node)) : [];
+          if (pool.length) anchor = pool[0];
+          else if (anchor === null || anchor === undefined || !roomSet.has(anchor)) { const ids = [...roomSet], mid = [0, 2].map(n => ids.reduce((sum, id) => sum + at(id)[n], 0) / ids.length); anchor = ids.reduce((best, id) => (Math.hypot(at(id)[0] - mid[0], at(id)[2] - mid[1]) < Math.hypot(at(best)[0] - mid[0], at(best)[2] - mid[1]) ? id : best), ids[0]); }
+          sceneRecord.room = { place: boundRoom.place, lot: boundRoom.lot, room: boundRoom.room, floor: boundRoom.floor, nodes: roomAll.size, free: roomSet.size, ...(balconyHere ? { balcony: true } : {}) };
         } else if (boundRoom) sceneRecord.room = { place: boundRoom.place, lot: boundRoom.lot, room: boundRoom.room, floor: boundRoom.floor, nodes: 0 };
         const beside = (who, spread = [BODY, 2.5 * BODY]) => {
           if (anchor === null || anchor === undefined) return null;
@@ -1167,7 +1210,8 @@ export async function direct(novelDir, { reading, readingPath = null, prefilm = 
         const sentenceAt = new Map(reads.sentences.map((id, n) => [id, n])), lastLine = card => Math.max(...card.sentences.map(id => sentenceAt.get(id) ?? -1));
         const anchorAt = anchor !== null && anchor !== undefined ? at(anchor) : null;
         const moveWords = entry => `${entry.motion}${entry.toward ? ` toward ${names.get(entry.toward) ?? entry.toward}` : ''}${entry.away ? ` away from ${names.get(entry.away) ?? entry.away}` : ''}${entry.with ? ` with ${names.get(entry.with) ?? entry.with}` : ''}${entry.to ? `, to ${entry.to}` : ''} (${entry.how}, ${entry.basis}, ${Math.round(entry.sure * 100)}%)`;
-        const near = (p, lo, hi) => around(p[0], p[2], hi + 2).nodes.filter(node => Math.abs(node.y - p[1]) < 1 && Math.hypot(node.x - p[0], node.z - p[2]) >= lo && Math.hypot(node.x - p[0], node.z - p[2]) <= hi);
+        // In a unit set in a bound room (F2), the spots offered are its free floor: no one is moved out of it by a spot.
+        const near = (p, lo, hi) => { const all = around(p[0], p[2], hi + 2).nodes.filter(node => Math.abs(node.y - p[1]) < 1 && Math.hypot(node.x - p[0], node.z - p[2]) >= lo && Math.hypot(node.x - p[0], node.z - p[2]) <= hi); const inside = roomSet?.size ? all.filter(node => roomSet.has(node.id)) : all; return inside.length || !roomSet?.size ? inside : all; };
         const turn = new Map(), sceneWay = seeded(`${scene.id}|way`)() * 2 * Math.PI;
         const wayOf = (who, shared = true) => { if (!turn.has(who)) turn.set(who, shared ? sceneWay + (seeded(`${scene.id}|${who}|way`)() - 0.5) * 0.5 : seeded(`${scene.id}|${who}|way`)() * 2 * Math.PI); return turn.get(who); };
         // A graded move's spot: a step (to 2.5 m) or nearby (to 10 m) on their level; toward or with someone, to 1.5 m of
@@ -2393,6 +2437,22 @@ export async function direct(novelDir, { reading, readingPath = null, prefilm = 
             if (moved.length) log(`${scene.id}: the miniloop's smoothing carries ${moved.map(entry => `${names.get(entry.who) ?? entry.who} ${entry.metres} m`).join(', ')} on from where the least-action history has them`);
           } catch (error) { sceneRecord.miniloop = { conflicts: unitConflicts, settled: unitSettled, error: String(error.message ?? error) }; log(`${scene.id}: miniloop smoothing failed: ${error.message ?? error}`); }
         }
+        // A unit set in a bound room ends with its people in it (F2, law L23 in the room): whoever stands outside it and did not
+        // leave the scene (a departure) is brought back to the nearest free spot in it, at the end of their last move.
+        if (roomSet?.size) {
+          const left = new Set((sceneRecord.departures ?? []).filter(entry => entry.ran).map(entry => entry.who)), taken = new Set(Object.values(positions).map(value => value?.[0])), back = [];
+          for (const [who, value] of Object.entries(positions)) {
+            if (!value || String(who).startsWith('crowd:') || left.has(who) || roomSet.has(value[0])) continue;
+            const from = at(value[0]), spots = [...roomSet].filter(node => !taken.has(node));
+            if (!spots.length) continue;
+            const node = spots.reduce((best, id) => (Math.hypot(at(id)[0] - from[0], at(id)[2] - from[2]) < Math.hypot(at(best)[0] - from[0], at(best)[2] - from[2]) ? id : best), spots[0]);
+            const lastCard = cards.at(-1), key = lastCard ? `${scene.id}|${lastCard.id}|${who}` : null, move = key ? E.moves.get(key) : null;
+            if (move) move.path = [...move.path, node]; else if (key) E.moves.set(key, { person: who, how: 'walk', path: [node], ensemble: [] });
+            back.push({ who, metres: Math.round(Math.hypot(at(node)[0] - from[0], at(node)[2] - from[2])) });
+            positions[who] = [node, value[1]]; taken.add(node);
+          }
+          if (back.length) { sceneRecord.keptInRoom = back; log(`${scene.id}: L23 in the room: ${back.map(entry => `${names.get(entry.who) ?? entry.who} back ${entry.metres} m`).join(', ')}`); }
+        }
         // The scene done: the live page written whole (every card so far), so a view loaded now can replay any of them.
         await stream(`scene ${sceneLabel(scene.id)} played`, null, true);
         before = { scene, reads, positions: { ...positions } };
@@ -2419,7 +2479,11 @@ export async function direct(novelDir, { reading, readingPath = null, prefilm = 
               // Indoors (someone framed stands in a room of a building): the room opened as a set (docs/v3/design.html#indoor-mode),
               // its building and the floors above left out, the walls facing the camera cut low, its windows and furniture seen.
               // Not in a room but in a building (a corridor, a stair): the building opened at their floor.
-              const indoors = framed.map(id => roomAt(positions[id][0])).find(Boolean) ?? (() => { const b = framed.map(id => insideAt(positions[id][0])).find(Boolean); return b ? { lot: b.lot, room: -1, floor: b.floor, w: 10, d: 10 } : null; })();
+              // Indoors by the story (F7): the unit's bound room when it has one; else, when its place is a room or a building, the
+              // room or floor its people stand in; a street, district or city unit is never opened, whatever lot someone stands in.
+              const storyIndoors = (() => { for (let at_ = scene.placeId, guard = 0; at_ && guard < 16; at_ = script.places?.[at_]?.parent, guard++) if (['room', 'building'].includes(script.places?.[at_]?.scale)) return true; return false; })();
+              const boundHere = boundOf(scene);
+              const indoors = boundHere ? { lot: boundHere.lot, room: boundHere.room, floor: boundHere.floor } : !storyIndoors ? null : framed.map(id => roomAt(positions[id][0])).find(Boolean) ?? (() => { const b = framed.map(id => insideAt(positions[id][0])).find(Boolean); return b ? { lot: b.lot, room: -1, floor: b.floor, w: 10, d: 10 } : null; })();
               const played = await grow(scene, run), reach = Math.max(0, ...kept3.map(q => Math.hypot(q[0] - mid[0], q[2] - mid[2]))), cam = [...sceneRecord.cards].reverse().find(card => card.camera)?.camera ?? null;
               const shot = await shoot(`${scene.id.slice(-3)}-review${RV.retaken.has(scene.id) ? '-retake' : ''}`, [1440, 900], { place: scene.placeId, at: Math.max(0, (played?.end ?? 0) - 0.02), only: [scene.placeId], focus: { x: mid[0], z: mid[2], y0: mid[1], w: 6, d: 6, h: 3 }, radius: indoors ? Math.min(16, Math.max(8, reach * 1.6 + 6)) : Math.min(45, Math.max(12, reach * 1.6 + 8)), elevation: indoors ? 42 : 60, yaw: cam?.yaw ?? 0, ...(indoors ? { set: { lot: indoors.lot, room: indoors.room, floor: indoors.floor } } : {}) });
               if (shot.png) still = join(shots, `${scene.id.slice(-3)}-review${RV.retaken.has(scene.id) ? '-retake' : ''}.png`);

@@ -32,6 +32,12 @@ export async function reviewRun(novelDir, { run, out, every = 5, reviewer = 'pi'
   await writeFile(join(work, 'index.html'), inlineStrand(await readFile(join(repository, 'engine', 'view', 'strand-demo.html'), 'utf8'), page, { vendor: true }));
   const server = await serve(join(work, 'index.html'), join(work, 'vendor')), chrome = await browser({ gpu: true });
   const names = id => page.people?.[id]?.name ?? id, sceneOf = new Map(page.scenes.map(scene => [scene.id, scene]));
+  // Indoors by the story (docs/v3/design.html#indoor-fixes F7): the unit's bound room (stage/world/rooms.json) when its place is in one;
+  // else, when its place is a room or a building, the room its people stand in; never a street, district or city unit.
+  const script = JSON.parse(await readFile(join(novel, 'stage', 'world', 'script.json'), 'utf8').catch(() => 'null')) ?? { places: {} };
+  const bound = JSON.parse(await readFile(join(novel, 'stage', 'world', 'rooms.json'), 'utf8').catch(() => 'null'))?.rooms ?? {};
+  const chainOf = id => { const out = []; for (let at = id, guard = 0; at && guard < 16; at = script.places?.[at]?.parent, guard++) out.push(at); return out; };
+  const storyRoom = unitId => { const place = script.scenes?.find(scene => scene.id === unitId)?.place ?? null, chain = place ? chainOf(place) : []; const room = chain.find(id => bound[id]); return { indoors: chain.some(id => ['room', 'building'].includes(script.places?.[id]?.scale)), room: room ? { ...bound[room], place: room } : null }; };
   const cardsOf = new Map(); for (const card of page.director?.cards ?? []) (cardsOf.get(card.scene) ?? cardsOf.set(card.scene, []).get(card.scene)).push(card);
   const units = [], result = { run, every, reviewer, blocks: [], units: [] };
   try {
@@ -47,17 +53,20 @@ export async function reviewRun(novelDir, { run, out, every = 5, reviewer = 'pi'
       const spots = (await chrome.evaluate(`(${JSON.stringify(unit.people)}).map(id => [id, window.__pawnAt(id)]).filter(([, p]) => p)`)) ?? [];
       const lastPeople = new Set((cards.at(-1)?.moves ?? []).map(move => move.person).filter(Boolean));
       const framedSpots = spots.filter(([id]) => lastPeople.has(id)).length ? spots.filter(([id]) => lastPeople.has(id)) : spots;
-      let still = null, room = null;
+      let still = null, room = null, setInfo = null;
       if (framedSpots.length) {
-        for (const [, p] of framedSpots) { room = await chrome.evaluate(`window.__roomAt(${p[0]}, ${p[1]}, ${p[2]})`); if (room) break; }
+        const story = storyRoom(unit.id);
+        if (story.room) room = { lot: story.room.lot, room: story.room.room, floor: story.room.floor };
+        else if (story.indoors) for (const [, p] of framedSpots) { room = await chrome.evaluate(`window.__roomAt(${p[0]}, ${p[1]}, ${p[2]})`); if (room) break; }
         const frame = framing(framedSpots.map(([, p]) => p), room);
         await chrome.evaluate(`window.__stage.capture(${JSON.stringify({ id: `${unit.id}-review`, scene: unit.id, place: unit.place, at, people: true, frame: [1440, 900], ...frame })})`);
         await new Promise(done => setTimeout(done, 300));
         still = join(stills, `${unit.id.slice(-3)}.png`);
+        if (room) setInfo = await chrome.evaluate('window.__setInfo ?? null');
         await writeFile(still, Buffer.from(await chrome.still('png'), 'base64'));
       }
       const unmoved = cards.flatMap(card => (card.moves ?? []).filter(move => move.moved === false).map(move => `${names(move.person)} found no way${move.why ? ` (${String(move.why).slice(0, 60)})` : ''}`));
-      const entry = { unit: unit.id, still, place: scene?.label ?? unit.place, people: unit.people.map(names), cards: cards.length, moves: cards.reduce((n, card) => n + (card.moves ?? []).filter(move => move.moved).length, 0), held: unmoved.slice(0, 6), lines: cards.flatMap(card => card.lines ?? []).slice(0, 4).map(line => String(line.text ?? '').slice(0, 80)).filter(Boolean), indoors: room ? { lot: room.lot, room: room.room, floor: room.floor } : null, apart: framedSpots.length < spots.length ? spots.length - framedSpots.length : 0 };
+      const entry = { unit: unit.id, still, place: scene?.label ?? unit.place, people: unit.people.map(names), cards: cards.length, moves: cards.reduce((n, card) => n + (card.moves ?? []).filter(move => move.moved).length, 0), held: unmoved.slice(0, 6), lines: cards.flatMap(card => card.lines ?? []).slice(0, 4).map(line => String(line.text ?? '').slice(0, 80)).filter(Boolean), indoors: room ? { lot: room.lot, room: room.room, floor: room.floor, ...(setInfo ? { sun: setInfo.sun, patches: setInfo.patches, windows: setInfo.windows } : {}) } : null, apart: framedSpots.length < spots.length ? spots.length - framedSpots.length : 0 };
       units.push(entry); result.units.push(entry);
       log(`${unit.id}: ${still ? `still ${room ? `indoors (lot ${room.lot}, ${room.room >= 0 ? `room ${room.room}` : 'no room'}, floor ${room.floor})` : 'outdoors'}` : 'no one to frame'}`);
     }

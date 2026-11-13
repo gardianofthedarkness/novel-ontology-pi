@@ -25,6 +25,16 @@ export function roomsOf(script, unitIds = null) {
   return [...out.values()];
 }
 
+/** A room kind's size in plan cells of 2 m (F6): the cells it is nearest to; a single room 4 (16 m²), a classroom 20. */
+export const KIND_CELLS = { bedroom: 4, cell: 2, storage: 3, 'kitchen or dining room': 4, 'living room': 6, office: 6, 'meeting room': 6, 'hospital room': 6, 'control room': 6, 'lobby or hall': 3, shop: 9, 'café or restaurant': 12, bar: 9, 'library or study': 9, laboratory: 12, classroom: 20, 'not said': 4 };
+/** A room's kind when the text does not say: by its building's use (the terrain site's kind), else a single room. */
+export function defaultKind(buildingKind, label = '') {
+  if (/\u7384\u5173|entrance|lobby|hall/i.test(label)) return 'lobby or hall';
+  const use = String(buildingKind ?? '').toLowerCase();
+  const by = [[/dorm|apartment|hotel|house|home|residential|flat/, 'bedroom'], [/school|university|college|academy/, 'classroom'], [/hospital|clinic/, 'hospital room'], [/office|bank|government/, 'office'], [/shop|store|convenience|market|mall/, 'shop'], [/cafe|caf\u00e9|restaurant|diner/, 'café or restaurant'], [/bar|pub/, 'bar'], [/lab|research/, 'laboratory'], [/library/, 'library or study'], [/church|station|hall/, 'lobby or hall']];
+  return by.find(([test]) => test.test(use))?.[1] ?? 'bedroom';
+}
+
 /** A plan room's area in cells (2 m each side). */
 const cells = room => (room.i1 - room.i0 + 1) * (room.j1 - room.j0 + 1);
 
@@ -46,7 +56,7 @@ export function bindRooms(rooms, lotsOf, kept = {}) {
     if (!plan.length) { problems.push({ place: room.id, label: room.label, problem: `its building's lot ${lot.index} has no rooms` }); continue; }
     const before = kept[room.id];
     if (before && before.lotPlace === lot.place && plan.some(entry => entry.index === before.room) && !taken.has(`${lot.index}|${before.room}`)) {
-      out[room.id] = { ...before, lot: lot.index }; taken.set(`${lot.index}|${before.room}`, room.id); continue;
+      out[room.id] = { ...before, lot: lot.index, ...(room.kind && !before.kind ? { kind: room.kind } : {}) }; taken.set(`${lot.index}|${before.room}`, room.id); continue;
     }
     const parent = room.within ? out[room.within] : null;
     let candidates = plan.filter(entry => !taken.has(`${lot.index}|${entry.index}`));
@@ -55,13 +65,16 @@ export function bindRooms(rooms, lotsOf, kept = {}) {
       candidates = candidates.filter(entry => entry.floor === parent.floor).sort((a, b) => Math.hypot(...mid(a).map((v, n) => v - mid(home)[n])) - Math.hypot(...mid(b).map((v, n) => v - mid(home)[n])));
       if (!candidates.length) { out[room.id] = { lot: lot.index, lotPlace: lot.place, room: parent.room, floor: parent.floor, building: room.building, within: room.within }; continue; }
     } else {
-      const upstairs = (lot.floors ?? 1) > 1 ? candidates.filter(entry => entry.floor >= 1) : candidates;
-      const pool = upstairs.length ? upstairs : candidates, rng = seeded(room.id);
-      candidates = pool.map(entry => ({ entry, score: Math.abs(cells(entry) - 4) + rng() * 0.5 })).sort((a, b) => a.score - b.score).map(({ entry }) => entry);
+      // Upstairs in a building of several floors for a room people live in; on the ground floor for a shop, a café, a bar,
+      // a lobby; then the plan room nearest the kind's size (F6).
+      const ground = ['shop', 'café or restaurant', 'bar', 'lobby or hall'].includes(room.kind), want = KIND_CELLS[room.kind] ?? 4;
+      const floorOk = ground ? candidates.filter(entry => entry.floor === 0) : (lot.floors ?? 1) > 1 ? candidates.filter(entry => entry.floor >= 1) : candidates;
+      const pool = floorOk.length ? floorOk : candidates, rng = seeded(room.id);
+      candidates = pool.map(entry => ({ entry, score: Math.abs(cells(entry) - want) / want + rng() * 0.05 })).sort((a, b) => a.score - b.score).map(({ entry }) => entry);
     }
     const chosen = candidates[0];
     if (!chosen) { problems.push({ place: room.id, label: room.label, problem: `every room of lot ${lot.index} is taken` }); continue; }
-    out[room.id] = { lot: lot.index, lotPlace: lot.place, room: chosen.index, floor: chosen.floor, building: room.building, ...(room.within ? { within: room.within } : {}) };
+    out[room.id] = { lot: lot.index, lotPlace: lot.place, room: chosen.index, floor: chosen.floor, building: room.building, ...(room.kind ? { kind: room.kind } : {}), ...(room.within ? { within: room.within } : {}) };
     taken.set(`${lot.index}|${chosen.index}`, room.id);
   }
   return { rooms: out, problems };
