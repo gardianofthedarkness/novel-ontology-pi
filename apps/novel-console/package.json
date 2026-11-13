@@ -44,6 +44,7 @@
       "signAndEditExecutable": true
     },
     "nsis": {
+      "artifactName": "Novel-Console-${version}-x64-setup.${ext}",
       "oneClick": false,
       "perMachine": false,
       "allowToChangeInstallationDirectory": true,

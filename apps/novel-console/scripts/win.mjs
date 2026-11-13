@@ -16,6 +16,6 @@ if (!existsSync(join(backend, "node_modules"))) throw new Error("Assemble the ba
 cpSync(backend, join(unpacked, "resources", "backend"), { recursive: true, force: true });
 const builder = join(app, "node_modules", "electron-builder", "cli.js");
 execFileSync(process.execPath, [builder, "--win", "nsis", "--x64", "--prepackaged", unpacked], { cwd: app, stdio: "inherit" });
-const exe = join(app, "release", `Novel Console Setup ${version}.exe`);
+const exe = join(app, "release", `Novel-Console-${version}-x64-setup.exe`);
 if (!existsSync(exe)) throw new Error(`The installer was not made (${exe}).`);
 console.log(JSON.stringify({ exe }));

@@ -40,8 +40,11 @@ for (const split of document.querySelectorAll(".split")) {
   });
 }
 $("t-daylight").addEventListener("click", () => daylight(document.documentElement.dataset.daylight === "day" ? "night" : "day"));
+// The shortcuts' key: Command on a Mac, Ctrl elsewhere; their labels say which (⌘ or Ctrl+).
+const mod = (event) => (host.platform === "darwin" ? event.metaKey : event.ctrlKey);
+if (host.platform !== "darwin") for (const node of document.querySelectorAll("[title*='⌘'], [placeholder*='⌘']")) for (const name of ["title", "placeholder"]) if (node.getAttribute(name)?.includes("⌘")) node.setAttribute(name, node.getAttribute(name).replaceAll("⌘↵", "Ctrl+Enter").replaceAll("⌘", "Ctrl+"));
 document.addEventListener("keydown", (event) => {
-  if (!event.metaKey || event.altKey || event.shiftKey) return;
+  if (!mod(event) || event.altKey || event.shiftKey) return;
   if (event.key === "b") { event.preventDefault(); if (leftOpen()) setLeft(false); else showLeft(leftView); }
   if (event.key === "i") { event.preventDefault(); setPanel(!panelOpen()); }
 });
@@ -817,7 +820,7 @@ $("compose").addEventListener("submit", async (event) => {
   catch (error) { const pending = $("pending"); if (pending) pending.textContent = `Not sent: ${error.message}`; }
   finally { $("compose-send").disabled = false; }
 });
-$("compose-text").addEventListener("keydown", (event) => { if (event.key === "Enter" && event.metaKey) { event.preventDefault(); $("compose").requestSubmit(); } });
+$("compose-text").addEventListener("keydown", (event) => { if (event.key === "Enter" && mod(event)) { event.preventDefault(); $("compose").requestSubmit(); } });
 
 // ---------- Keys and readings. ----------
 async function keyDots() { const keys = await host.keys().catch(() => ({})); $("dot-jev").classList.toggle("on", Boolean(keys.jev)); $("dot-work").classList.toggle("on", Boolean(keys.work)); return keys; }
