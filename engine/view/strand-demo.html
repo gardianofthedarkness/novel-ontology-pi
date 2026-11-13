@@ -957,6 +957,8 @@ const mats = {
   setFrame: new THREE.LineBasicMaterial({ color: 0xffffff, transparent: true, opacity: 1 }),
   setGlass: new THREE.MeshBasicMaterial({ color: 0xd8f0ff, transparent: true, opacity: 0.16, depthWrite: false }),
   balcony: new THREE.MeshLambertMaterial({ color: 0x3d6a8a, transparent: true, opacity: 0.4, depthWrite: false }),
+  // A set's corridor outside the room's door, as the indoor benchmark draws it: a faint slab (B5).
+  setCorridor: new THREE.MeshLambertMaterial({ color: 0x3d6a8a, transparent: true, opacity: 0.35, depthWrite: false }),
   sunPatch: new THREE.MeshBasicMaterial({ color: 0xffd28a, transparent: true, opacity: 0.45, depthWrite: false, side: THREE.DoubleSide }),
   // A hit building's units: its walls and roof as panels, and what fell as rubble.
   wall: new THREE.MeshLambertMaterial({ color: 0x5fb4e8, transparent: true, opacity: 0.2, depthWrite: false }),
@@ -1076,6 +1078,23 @@ function instanced(material, boxes) {
 const plans = new WeakMap();
 /** The rooms the architect typed (data.rooms: page lot, room, kind, furniture), by `lot|room`. */
 const roomTyped = new Map((data.rooms ?? []).map((room) => [`${room.lot}|${room.room}`, room]));
+// Who stands out on a room's balcony in a unit (B6, the director's `stands`): `${unit}|${person}` to the room.
+const standing = new Map((data.rooms ?? []).flatMap((room) => Object.entries(room.stands ?? {}).flatMap(([unit, who]) => Object.keys(who).map((person) => [`${unit}|${person}`, { lot: room.lot, room: room.room }]))));
+/** The middle of a room's balcony slab, in the world's metres: its balcony door (a balcony opening, else the first window the
+ *  page turns into one, in the order it draws the room's edges), 1.2 m out. */
+function balconySpot(lotIndex, roomIndex) {
+  const lot = data.world?.lots?.[lotIndex], room = lot?.rooms?.[roomIndex];
+  if (!lot || !room) return null;
+  const [k, i0, j0, i1, j1] = room, plan = planOf(lot), mine = (lot.windows ?? []).filter(([f, i, j]) => f === k && i >= i0 && i <= i1 && j >= j0 && j <= j1);
+  const order = [];
+  for (let i = i0; i <= i1; i++) order.push([i, j0, 0], [i, j1, 1]);
+  for (let j = j0; j <= j1; j++) order.push([i0, j, 2], [i1, j, 3]);
+  const at = (kind) => order.map(([i, j, side]) => mine.find(([, wi, wj, ws, wk]) => wi === i && wj === j && ws === side && wk === kind)).find(Boolean);
+  const door = at(2) ?? at(1);
+  if (!door) return null;
+  const [, i, j, side] = door, [du, dv] = [[0, -1], [0, 1], [-1, 0], [1, 0]][side], u = (i + 0.5) * CELL - (plan.sx * CELL) / 2 + du * (CELL / 2 + 0.6), v = (j + 0.5) * CELL - (plan.sz * CELL) / 2 + dv * (CELL / 2 + 0.6), [x, z] = plan.at(u, v);
+  return [x, (lot.k0 ?? 0) * FLOOR + k * FLOOR, z];
+}
 // The set view (docs/v3/design.html#indoor-mode): a still of one room of the world opened as a stage set. Its building's shell
 // and every floor above the room are left out, the room's walls facing the camera cut down to a low line, the far walls
 // standing with their windows; by day the sun's patches through them on the floor. Set by capture({ set }), undone by the next.
@@ -1346,7 +1365,7 @@ function drawSkeletons(id, entry, count, settling = null, unseen = null) {
     for (const unit of [...part.blasted, ...part.fallen]) gone[part.lot].add(unit.slice(0, 4).join("|"));
     if (hit !== settling) for (const unit of part.fallen) { const box = unitBox(place.lots[part.lot], entry, unit); rubble.push([box[0], unit[4] + 0.3, box[2], Math.min(box[3], CELL * 0.9), 0.6, Math.min(box[5], CELL * 0.9)]); }
   }
-  const corridors = [], stairs = [], red = [], rooms = [], halls = [], talls = [], roomWalls = [], roomEdges = [], redRooms = [], walls = [], roofs = [], glassPanes = [], glints = [], balconies = [], sunPatches = [], setFrames = [], setPanes = [];
+  const corridors = [], stairs = [], red = [], rooms = [], halls = [], talls = [], roomWalls = [], roomEdges = [], redRooms = [], walls = [], roofs = [], glassPanes = [], glints = [], balconies = [], sunPatches = [], setFrames = [], setPanes = [], setCorridors = [];
   // A hit building's walls and roof, unit by unit; its artistic shell gives way to them.
   place.lots.forEach((lot, n) => {
     // A building stands from the start (the user, 2026-11-02: parts of the city vanished until the story first reached them);
@@ -1370,6 +1389,7 @@ function drawSkeletons(id, entry, count, settling = null, unseen = null) {
     // This building opened as a set: nothing above the set room's top floor.
     // Only the set's floors are drawn: the room's (or the person's floor in a corridor), not those above nor below it.
     const opening = setView && place.world && n === setView.lot ? (lot.rooms[setView.room] ? { room: setView.room, bottom: lot.rooms[setView.room][0], top: lot.rooms[setView.room][5] ?? lot.rooms[setView.room][0] } : { room: -1, bottom: setView.floor ?? 0, top: setView.floor ?? 0 }) : null;
+    const setRect = opening && lot.rooms[opening.room] ? lot.rooms[opening.room].slice(1, 5) : null;
     // Its windows (windows.mjs, put on the page by the exporter): by floor, cell and side of a room's outline.
     const openings = new Map((lot.windows ?? []).map(([k, i, j, side, kind, sill, head]) => [`${k}|${i}|${j}|${side}`, { kind, sill: sill ?? 0.9, head: head ?? 2.1 }]));
     for (let cell = 0; cell < lot.cells.length; cell++) {
@@ -1377,6 +1397,8 @@ function drawSkeletons(id, entry, count, settling = null, unseen = null) {
       if (type === "0" || lost[n].has(cell)) continue;
       const i = cell % sx, j = Math.floor(cell / sx) % sz, k = Math.floor(cell / (sx * sz)), [x, z] = local((i + 0.5) * CELL - (sx * CELL) / 2, (j + 0.5) * CELL - (sz * CELL) / 2);
       if (opening && (k > opening.top || k < opening.bottom)) continue;
+      // In a set (B5): only the corridor round the room, within two cells of it, as a faint slab; no stair blocks.
+      if (opening && setRect) { if (type === "2") continue; const di = Math.max(setRect[0] - i, 0, i - setRect[2]), dj = Math.max(setRect[1] - j, 0, j - setRect[3]); if (Math.max(di, dj) > 2) continue; setCorridors.push([x, lift + k * FLOOR + 0.05, z, CELL, 0.1, CELL, turn]); continue; }
       if (cutCells[n].has(cell)) red.push(type === "2" ? [x, lift + k * FLOOR + FLOOR / 2, z, 1.4, FLOOR * 0.96, 1.4, turn] : [x, lift + k * FLOOR + 0.2, z, CELL * 0.9, 0.4, CELL * 0.9, turn]);
       else if (type === "2") stairs.push([x, lift + k * FLOOR + FLOOR / 2, z, 1.4, FLOOR * 0.96, 1.4, turn]);
       else corridors.push([x, lift + k * FLOOR + 0.15, z, CELL * 0.9, 0.3, CELL * 0.9, turn]);
@@ -1385,6 +1407,8 @@ function drawSkeletons(id, entry, count, settling = null, unseen = null) {
     // cell outside that edge is one of its doors), as high as its floors.
     lot.rooms.forEach(([k, i0, j0, i1, j1, top = k, kind = 0, doors = []], r) => {
       if (opening && (k > opening.top || k < opening.bottom)) return;
+      // In a set only the set room stands (B5); the floor's other rooms are left out, as the benchmark's clip shows the room alone.
+      if (opening && setRect && r !== opening.room) return;
       // In the plan's own frame: u0, v0 its corner, metres from the plan's centre along its sides.
       const cut = cutRooms[n].has(r), u0 = i0 * CELL - (sx * CELL) / 2, v0 = j0 * CELL - (sz * CELL) / 2, w = (i1 - i0 + 1) * CELL, d = (j1 - j0 + 1) * CELL, h = (top - k + 1) * FLOOR - 0.3, y = lift + k * FLOOR;
       const [rx, rz] = local(u0 + w / 2, v0 + d / 2);
@@ -1458,6 +1482,7 @@ function drawSkeletons(id, entry, count, settling = null, unseen = null) {
   // What the last set drew (F9: the sun's patches proven in the stills; read by engine/director/review-run.mjs).
   if (setView && place.world) window.__setInfo = { key: setView.key, sun: !!setView.sun, patches: sunPatches.length / 18, windows: setPanes.length, stairs: stairs.length, corridors: corridors.length, above: setDrawn ? [corridors, stairs, rooms, halls, talls, roomWalls].reduce((sum, list) => sum + list.filter((entry) => entry[1] > setDrawn.yTop + 0.3).length, 0) : null };
   if (balconies.length) dynamic.add(instanced(mats.balcony, balconies));
+  if (setCorridors.length) dynamic.add(instanced(mats.setCorridor, setCorridors));
   dynamic.add(instanced(mats.corridor, corridors), instanced(mats.stair, stairs), instanced(mats.cut, red), instanced(mats.room, rooms), instanced(mats.hall, halls), instanced(mats.tall, talls), instanced(mats.roomWall, roomWalls), instanced(mats.roomCut, redRooms), instanced(mats.wall, walls), instanced(mats.roof, roofs), instanced(mats.rubble, rubble));
   entry.group.add(dynamic); entry.dynamic = dynamic;
 }
@@ -2661,6 +2686,8 @@ function frame(now) {
     if (!pawn.parent) world.add(pawn);
     if (travel && elapsed < travel.total) { pawn.position.copy(travelAt(travel, elapsed)); if (!body.userData.shared) body.material.opacity = 1; movers.push(pawn.position); continue; }
     pawn.position.set(p.x - entry.cx, p.y, p.z - entry.cz);
+    // Out on the balcony (B6) while not walking: on its slab.
+    { const stand = !move && place?.world ? standing.get(`${segment.scene.id}|${id}`) : null, spot = stand ? balconySpot(stand.lot, stand.room) : null; if (spot) pawn.position.set(spot[0] - entry.cx, spot[1], spot[2] - entry.cz); }
     if (p.ride) ceilings.riders.push({ ...p.ride, x: p.ride.x - entry.cx, z: p.ride.z - entry.cz });
     // Under the street, a pawn shows through the ground above it.
     if (!body.userData.shared) { body.material.depthTest = p.y > -1; body.material.opacity = held ? 0.4 : p.fade ?? 1; }

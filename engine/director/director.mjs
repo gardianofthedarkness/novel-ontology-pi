@@ -48,6 +48,8 @@ const MOVE_SURE = setting('director.moveSure');
 const BODY = setting('body.height');
 /** How far the layout artist and the checks look for a spot that agrees with the notes (metres; was 6 bodies, W10). */
 const FACT_SEARCH = setting('director.factSearch');
+/** Law L23's reach (B4): the farthest someone is brought back into their room at a unit's end, metres (a building's span). */
+const ROOM_REACH = 25;
 // How far round a unit's start a spot under the street is looked for, when the unit is underground (metres).
 const UNDER_SEARCH = setting('director.underSearch');
 // The widest a crowd's field reaches round the anchor (metres): the open ground a camera takes in, never a district or the
@@ -742,6 +744,15 @@ export async function direct(novelDir, { reading, readingPath = null, prefilm = 
         }
         room.kind = kind ?? RBM.defaultKind(buildingKind, room.label);
       }
+      // The story's hints (B3): the floor its units state (a stated floor fact of the script supervisor's notes), and an
+      // entrance (a flat's genkan) the entry of the lived-in room of its building.
+      const floorFacts = new Map();
+      for (const room of roomsWanted) {
+        const facts = [];
+        for (const entry of script.scenes.filter(unit => inRoomPlace(unit.id, room.id))) { const dg = digested.has(entry.id) ? await digested.get(entry.id) : null; facts.push(...(dg?.facts ?? dg?.digest?.facts ?? []).filter(fact => fact.kind === 'floor' && fact.basis === 'stated')); }
+        floorFacts.set(room.id, facts);
+      }
+      RBM.storyHints(roomsWanted, id => floorFacts.get(id) ?? []);
       const boundRooms = RBM.bindRooms(roomsWanted, lotsOfBuilding, keptRooms);
       // Each bound room furnished by its kind (the architect's recipes), drawn on the page and known to the director (a talk in it
       // asks no more), with what its lines name of its outside (a balcony, a window).
@@ -987,6 +998,14 @@ export async function direct(novelDir, { reading, readingPath = null, prefilm = 
           else if (anchor === null || anchor === undefined || !roomSet.has(anchor)) { const ids = [...roomSet], mid = [0, 2].map(n => ids.reduce((sum, id) => sum + at(id)[n], 0) / ids.length); anchor = ids.reduce((best, id) => (Math.hypot(at(id)[0] - mid[0], at(id)[2] - mid[1]) < Math.hypot(at(best)[0] - mid[0], at(best)[2] - mid[1]) ? id : best), ids[0]); }
           sceneRecord.room = { place: boundRoom.place, lot: boundRoom.lot, room: boundRoom.room, floor: boundRoom.floor, nodes: roomAll.size, free: roomSet.size, ...(balconyHere ? { balcony: true } : {}) };
         } else if (boundRoom) sceneRecord.room = { place: boundRoom.place, lot: boundRoom.lot, room: boundRoom.room, floor: boundRoom.floor, nodes: 0 };
+        // Out on the balcony (B6, docs/v3/design.html#indoor-benchmark): in a unit whose lines name the balcony, the one the notes
+        // put surest at its edge or rail (a stated feature) stands on the slab outside the balcony door. The walk graph has no
+        // balcony yet: they keep the doorway's node, and the page draws them on the slab (data.rooms' stands).
+        if (balconyHere && sceneRecord.room) {
+          const edge = (dg?.facts ?? dg?.digest?.facts ?? []).filter(fact => fact.kind === 'feature' && fact.basis === 'stated' && /edge|rail|balcony|parapet/i.test(String(fact.value ?? '')) && (fact.sure ?? 0) >= 0.9).sort((a, b) => (b.sure ?? 0) - (a.sure ?? 0))[0];
+          const roomEntry = E.rooms.get(`${boundRoom.lot}|${boundRoom.room}`);
+          if (edge?.who && roomEntry) { (roomEntry.stands ??= {})[scene.id] = { [edge.who]: 'balcony' }; sceneRecord.room.onBalcony = edge.who; }
+        }
         const beside = (who, spread = [BODY, 2.5 * BODY]) => {
           if (anchor === null || anchor === undefined) return null;
           // On another layer's floor, only where a walk from the anchor goes (a deck's floor between its buildings has pockets).
@@ -1078,6 +1097,7 @@ export async function direct(novelDir, { reading, readingPath = null, prefilm = 
         for (const key of Object.keys(run.starts)) delete run.starts[key];
         Object.assign(run.starts, positions);
         sceneRecord.starts = Object.fromEntries(Object.entries(positions).map(([who, [node]]) => [who, at(node).map(Math.round)]));
+        const startNodes = Object.fromEntries(Object.entries(positions).map(([who, value]) => [who, value?.[0]]));
         // The world's own check round the scene (W0, world.ts worldIssues): every building wholly in its graph entered from the
         // street, every room reached. What fails is recorded with the scene, so a held walk can be told from a broken world.
         if (anchor !== null && anchor !== undefined && W.worldIssues) { const p = at(anchor), issues = W.worldIssues(world, E.graphOf({ x: p[0], z: p[2] })); if (issues.length) sceneRecord.world = issues.slice(0, 20).map(issue => ({ ...issue, name: lotName(issue.lot) })); }
@@ -1211,7 +1231,7 @@ export async function direct(novelDir, { reading, readingPath = null, prefilm = 
         const anchorAt = anchor !== null && anchor !== undefined ? at(anchor) : null;
         const moveWords = entry => `${entry.motion}${entry.toward ? ` toward ${names.get(entry.toward) ?? entry.toward}` : ''}${entry.away ? ` away from ${names.get(entry.away) ?? entry.away}` : ''}${entry.with ? ` with ${names.get(entry.with) ?? entry.with}` : ''}${entry.to ? `, to ${entry.to}` : ''} (${entry.how}, ${entry.basis}, ${Math.round(entry.sure * 100)}%)`;
         // In a unit set in a bound room (F2), the spots offered are its free floor: no one is moved out of it by a spot.
-        const near = (p, lo, hi) => { const all = around(p[0], p[2], hi + 2).nodes.filter(node => Math.abs(node.y - p[1]) < 1 && Math.hypot(node.x - p[0], node.z - p[2]) >= lo && Math.hypot(node.x - p[0], node.z - p[2]) <= hi); const inside = roomSet?.size ? all.filter(node => roomSet.has(node.id)) : all; return inside.length || !roomSet?.size ? inside : all; };
+        const near = (p, lo, hi) => { const all = around(p[0], p[2], hi + 2).nodes.filter(node => Math.abs(node.y - p[1]) < 1 && Math.hypot(node.x - p[0], node.z - p[2]) >= lo && Math.hypot(node.x - p[0], node.z - p[2]) <= hi); const inside = roomSet?.size ? all.filter(node => roomSet.has(node.id)) : all; if (inside.length || !roomSet?.size) return inside; /* B4: in a bound room never a spot outside it: its free floor, nearest first */ return [...roomSet].map(id => { const q = at(id); return { id, x: q[0], y: q[1], z: q[2] }; }).sort((a, b) => Math.hypot(a.x - p[0], a.z - p[2]) - Math.hypot(b.x - p[0], b.z - p[2])).slice(0, 6); };
         const turn = new Map(), sceneWay = seeded(`${scene.id}|way`)() * 2 * Math.PI;
         const wayOf = (who, shared = true) => { if (!turn.has(who)) turn.set(who, shared ? sceneWay + (seeded(`${scene.id}|${who}|way`)() - 0.5) * 0.5 : seeded(`${scene.id}|${who}|way`)() * 2 * Math.PI); return turn.get(who); };
         // A graded move's spot: a step (to 2.5 m) or nearby (to 10 m) on their level; toward or with someone, to 1.5 m of
@@ -1503,8 +1523,10 @@ export async function direct(novelDir, { reading, readingPath = null, prefilm = 
               const wide = failing.some(fact => ['indoors', 'outdoors', 'roof', 'underground', 'floor', 'vehicle'].includes(fact.kind)), nearby = [...around(here.x, here.z, Math.max(5 * BODY, (frameHere ?? frameMetres ?? 24 * BODY) / (wide ? 2 : 4))).nodes];
               for (const fact of failing) { const p = fact.kind === 'near' ? positionOf(fact.value) : null; if (p) nearby.push(...around(p[0], p[2], 3 * BODY).nodes); }
               const words = failing.map(fact => FA.factWords(fact, id => names.get(id) ?? id)).join('; '), far = nearby.reduce((most, node) => Math.max(most, Math.hypot(node.x - here.x, node.z - here.z)), 0), reach = onFoot(here.id, Math.min(far, 160)), walkable = nearby.filter(node => reach.has(node.id));
-              let best = FA.bestFor(binding, here, walkable.filter(node => inside(node.id)).map(describe), positionOf);
-              if (!best && failing.some(fact => fact.basis === 'stated')) { best = FA.bestFor(binding, here, walkable.map(describe), positionOf); if (best) (cardRecord.laws ??= []).push({ law: 'L14', who, verdict: 'amend', why: `outside the set: ${words}` }); }
+              // In a bound room (B4): its own spots first; a stated fact it cannot hold looks no farther than the building's reach.
+              const anchorP = roomAll?.size && anchor != null ? at(anchor) : null, inReach = node => !anchorP || Math.hypot(node.x - anchorP[0], node.y - anchorP[1], node.z - anchorP[2]) <= ROOM_REACH;
+              let best = FA.bestFor(binding, here, walkable.filter(node => (roomAll?.size ? roomAll.has(node.id) : inside(node.id))).map(describe), positionOf);
+              if (!best && failing.some(fact => fact.basis === 'stated')) { best = FA.bestFor(binding, here, walkable.filter(inReach).map(describe), positionOf); if (best) (cardRecord.laws ??= []).push({ law: 'L14', who, verdict: 'amend', why: `outside the set: ${words}` }); }
               // Said to be underground, with no way down near: the nearest way down a walk reaches (§8.5, until the place's note).
               if (!best && failing.some(fact => fact.kind === 'underground' && fact.basis === 'stated')) { best = FA.bestFor(binding, here, downFrom(here.id).slice(0, 400).map(describe), positionOf); if (best) (cardRecord.laws ??= []).push({ law: 'L14', who, verdict: 'amend', why: `went down: ${words}` }); }
               if (!best) { (cardRecord.laws ??= []).push({ law: 'L14', who, verdict: failing.some(fact => fact.basis === 'stated') ? 'held' : 'weighed', why: `no spot near agrees: ${words}` }); continue; }
@@ -2443,16 +2465,23 @@ export async function direct(novelDir, { reading, readingPath = null, prefilm = 
           // Only this unit's people: those present in it and those it moved (never someone standing elsewhere in the world).
           const ours = new Set([...present, ...[...E.moves.entries()].filter(([key]) => key.startsWith(`${scene.id}|`)).map(([, move]) => move.person)]);
           const left = new Set((sceneRecord.departures ?? []).filter(entry => entry.ran).map(entry => entry.who)), taken = new Set(Object.values(positions).map(value => value?.[0])), back = [];
+          // B4 (docs/v3/design.html#indoor-benchmark): only someone who was in the room during the unit (at its start or on a walk
+          // through it) comes back, and never from farther than the building's reach; anyone else is held, not pulled across the city.
+          const wasIn = who => roomAll.has(startNodes[who]) || [...E.moves.entries()].some(([key, move]) => key.startsWith(`${scene.id}|`) && move.person === who && (move.path ?? []).some(node => roomAll.has(node)));
+          const held = [];
           for (const [who, value] of Object.entries(positions)) {
             if (!value || !ours.has(who) || String(who).startsWith('crowd:') || left.has(who) || roomSet.has(value[0])) continue;
             const from = at(value[0]), spots = [...roomSet].filter(node => !taken.has(node));
             if (!spots.length) continue;
             const node = spots.reduce((best, id) => (Math.hypot(at(id)[0] - from[0], at(id)[2] - from[2]) < Math.hypot(at(best)[0] - from[0], at(best)[2] - from[2]) ? id : best), spots[0]);
+            const reach = Math.hypot(at(node)[0] - from[0], at(node)[1] - from[1], at(node)[2] - from[2]);
+            if (!wasIn(who) || reach > ROOM_REACH) { held.push({ who, metres: Math.round(reach), why: !wasIn(who) ? 'never in the room this unit' : `${Math.round(reach)} m from the room` }); continue; }
             const lastCard = cards.at(-1), key = lastCard ? `${scene.id}|${lastCard.id}|${who}` : null, move = key ? E.moves.get(key) : null;
             if (move) { move.path = [...move.path, node]; delete move.at; } else if (key) E.moves.set(key, { person: who, how: 'walk', path: [node], ensemble: [] });
             back.push({ who, metres: Math.round(Math.hypot(at(node)[0] - from[0], at(node)[2] - from[2])) });
             positions[who] = [node, value[1]]; taken.add(node);
           }
+          if (held.length) { sceneRecord.roomHeld = held; (sceneRecord.laws ??= []).push(...held.map(entry => ({ law: 'L23', who: entry.who, verdict: 'held', why: entry.why }))); log(`${scene.id}: L23 held: ${held.map(entry => `${names.get(entry.who) ?? entry.who} (${entry.why})`).join(', ')}`); }
           if (back.length) { sceneRecord.keptInRoom = back; log(`${scene.id}: L23 in the room: ${back.map(entry => `${names.get(entry.who) ?? entry.who} back ${entry.metres} m`).join(', ')}`); }
         }
         // The scene done: the live page written whole (every card so far), so a view loaded now can replay any of them.
