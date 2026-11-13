@@ -2643,8 +2643,14 @@ function shotPoint(r, [x, y, z]) {
   return [r.centre[0] + r.out[0] * wall + r.across[0] * side, r.y + y, r.centre[1] + r.out[1] * wall + r.across[1] * side];
 }
 /** The shot's camera at a share f of its unit, in the clip's frame: [from, to], and whether the room shows as the set. */
-function shotCamera(kind, f) {
-  if (kind === "eye") { const k = shotEase(shotClamp(f)); return { from: [shotLerp(1.85, 2.15, k), 1.6, shotLerp(2.7, 2.5, k)], to: [6, shotLerp(1.45, 1.35, k), shotLerp(-0.7, -1.1, k)], set: false, phase: "eye" }; }
+function shotCamera(kind, f, variant = 0) {
+  if (kind === "eye") {
+    // The clip's place by the door, facing the window wall (0), its mirror (1), and from the window side facing back (2, 3):
+    // the one that holds the unit's people is chosen once per unit (renderShot).
+    const k = shotEase(shotClamp(f)), m = variant % 2 ? -1 : 1;
+    if (variant < 2) return { from: [shotLerp(1.85, 2.15, k), 1.6, m * shotLerp(2.7, 2.5, k)], to: [6, shotLerp(1.45, 1.35, k), m * shotLerp(-0.7, -1.1, k)], set: false, phase: "eye" };
+    return { from: [shotLerp(5.6, 5.3, k), 1.6, m * shotLerp(2.7, 2.5, k)], to: [1.5, shotLerp(1.45, 1.35, k), m * shotLerp(-0.7, -1.1, k)], set: false, phase: "eye" };
+  }
   if (kind === "outside") {
     const t = f * 11;
     if (t < 7.2) { const k = shotEase(shotClamp(t / 7.2)); return { from: [shotLerp(36, 18, k), shotLerp(-6, 2.5, k), shotLerp(14, 6, k)], to: [shotLerp(6, 4, k), shotLerp(0, 0.8, k), shotLerp(0, 0.2, k)], set: false, phase: "outside", fade: shotEase(shotClamp((t - 4.4) / 2.5)) }; }
@@ -2768,9 +2774,34 @@ function renderShot(segment, entry) {
   const palette = shotPalette(unitId), key = `${view.lot}|${view.room}|${(view.part ?? []).join(',')}|${palette.name}`;
   if (!shotStage || shotStage.key !== key) shotStage = buildShotStage(view, entry, palette);
   if (!shotStage) return false;
-  const span = unitSpan(unitId), f = span ? (time - span.start) / Math.max(1e-6, span.end - span.start) : 0.5, cam = shotCamera(view.kind ?? "set", f), { r, parts, lotGroup } = shotStage;
+  const span = unitSpan(unitId), f = span ? (time - span.start) / Math.max(1e-6, span.end - span.start) : 0.5, { r, parts, lotGroup } = shotStage;
   const toScene = ([u, yy, v]) => lotGroup.localToWorld(new THREE.Vector3(u, yy, v));
-  const from = toScene(shotPoint(r, cam.from)), to = toScene(shotPoint(r, cam.to));
+  // At eye level, the run's own room decides where the camera stands: one of eight spots along its walls (its corners and the
+  // middles of its walls, half a metre in), each looking across the room at 1.4 m, the one that frames the most of the unit's
+  // people a metre or more away (a little preferred when it looks at the window wall, as the clip does); chosen once per unit.
+  let variant = 0, eyeSpot = null;
+  if ((view.kind ?? "set") === "eye") {
+    shotStage.eyeChoice ??= new Map();
+    const inset = 0.5, mu = (r.u0 + r.u1) / 2, mv = (r.v0 + r.v1) / 2, spots = [[r.u0 + inset, r.v0 + inset], [r.u1 - inset, r.v0 + inset], [r.u0 + inset, r.v1 - inset], [r.u1 - inset, r.v1 - inset], [mu, r.v0 + inset], [mu, r.v1 - inset], [r.u0 + inset, mv], [r.u1 - inset, mv]];
+    const aimOf = ([u, v]) => [2 * mu - u, 2 * mv - v], winSide = SHOT_SIDES[r.outSide];
+    if (!shotStage.eyeChoice.has(unitId)) {
+      const here = [...pawns].filter(([id, e]) => (segment.scene.starts ?? {})[id] !== undefined && e.pawn.parent).map(([, e]) => e.pawn.position.clone().add(new THREE.Vector3(0, 1, 0)));
+      let best = 0, most = -Infinity;
+      spots.forEach((spot, v) => {
+        const a = toScene([spot[0], r.y + 1.6, spot[1]]), aim = aimOf(spot), b = toScene([aim[0], r.y + 1.4, aim[1]]);
+        camera.position.copy(a); camera.lookAt(b); camera.updateMatrixWorld();
+        const framed = here.filter((p) => { const q = p.clone().project(camera); return q.z < 1 && Math.abs(q.x) <= 0.9 && Math.abs(q.y) <= 0.9 && p.distanceTo(a) >= 1.0; }).length;
+        const toWindow = (aim[0] - spot[0]) * winSide[0] + (aim[1] - spot[1]) * winSide[1] > 0.5 ? 0.5 : 0;
+        if (framed + toWindow > most) { most = framed + toWindow; best = v; }
+      });
+      shotStage.eyeChoice.set(unitId, best);
+    }
+    variant = shotStage.eyeChoice.get(unitId);
+    const spot = spots[variant], aim = aimOf(spot), k = shotEase(shotClamp(f)), step = 0.3 * k, d = Math.hypot(aim[0] - spot[0], aim[1] - spot[1]) || 1;
+    eyeSpot = { from: [spot[0] + (aim[0] - spot[0]) / d * step, r.y + 1.6, spot[1] + (aim[1] - spot[1]) / d * step], to: [aim[0], r.y + shotLerp(1.45, 1.35, k), aim[1]], moved: 0.3 };
+  }
+  const cam = shotCamera(view.kind ?? "set", f, variant);
+  const from = toScene(eyeSpot ? eyeSpot.from : shotPoint(r, cam.from)), to = toScene(eyeSpot ? eyeSpot.to : shotPoint(r, cam.to));
   camera.position.copy(from); controls.target.copy(to); camera.lookAt(to); camera.updateMatrixWorld();
   // The set: the walls facing the camera cut low, the floors above and the window rows gone, the shell faint.
   const camLocal = lotGroup.worldToLocal(from.clone()), toCam = [camLocal.x - r.centre[0], camLocal.z - r.centre[1]];
@@ -2815,16 +2846,16 @@ function renderShot(segment, entry) {
   const frameShare = corners.length ? Math.round(((Math.max(...xs) - Math.min(...xs)) * (Math.max(...ys) - Math.min(...ys))) / 4 * 100) / 100 : 0;
   for (const person of people) { const figure = parts.people.get(person.id), p = figure.position.clone().add(new THREE.Vector3(0, 1, 0)).project(camera); person.inFrame = p.z < 1 && Math.abs(p.x) <= 1 && Math.abs(p.y) <= 1; }
   const flat = Math.hypot(from.x - to.x, from.z - to.z), pitch = Math.round(THREE.MathUtils.radToDeg(Math.atan2(from.y - to.y, flat)));
-  const start = shotCamera(view.kind ?? "set", 0), end = shotCamera(view.kind ?? "set", 1), dir = (c) => { const a = shotPoint(r, c.from), b = shotPoint(r, c.to); return Math.atan2(a[2] - b[2], a[0] - b[0]); };
+  const start = shotCamera(view.kind ?? "set", 0, variant), end = shotCamera(view.kind ?? "set", 1, variant), dir = (c) => { const a = shotPoint(r, c.from), b = shotPoint(r, c.to); return Math.atan2(a[2] - b[2], a[0] - b[0]); };
   shotFacts = { unit: unitId, kind: view.kind ?? "set", phase: cam.phase, lot: view.lot, room: view.room, light: palette.name, walls: { opacity: SHOT.wall.opacity, edges: true, cut: cutSides, standing: [0, 1, 2, 3].filter((side) => !cutSides.includes(side)) },
     ceiling: parts.above.visible, frameShare, sunFacing: parts.sunFacing ?? 0, windows: parts.windows, balcony: parts.balcony, patches: parts.patches.visible ? parts.patches.children.length : 0, rain: SHOT.rain.opacity > 0, litPanes: parts.facade.visible && palette.lit > 0 ? parts.litPanes.length : 0, facadePanes: parts.facade.visible ? parts.facade.children.length : 0,
     shellOpacity: parts.shell.visible ? Math.round(parts.shell.material.opacity * 100) / 100 : 0, furniture: parts.furniture, people, present: [...present], shown: [...pawns].filter(([id, e]) => present.has(id)).map(([id, e]) => ({ id, parent: !!e.pawn.parent, inBox: box.containsPoint(e.pawn.position), at: e.pawn.position.toArray().map((v) => Math.round(v)) })), overlays: 0, figure: { radius: 0.22, ring: false },
     camera: { pitch, distance: Math.round(from.distanceTo(new THREE.Vector3(...lotGroup.localToWorld(new THREE.Vector3(r.centre[0], r.y + 0.5, r.centre[1])).toArray())) * 10) / 10, height: Math.round((camLocal.y - r.y) * 10) / 10, inside: camLocal.x >= r.u0 && camLocal.x <= r.u1 && camLocal.z >= r.v0 && camLocal.z <= r.v1 && camLocal.y > r.y && camLocal.y < r.y + SHOT_H },
-    moves: { degrees: Math.round(Math.abs(THREE.MathUtils.radToDeg(dir(end) - dir(start)))), metres: Math.round(new THREE.Vector3(...shotPoint(r, start.from)).distanceTo(new THREE.Vector3(...shotPoint(r, end.from))) * 10) / 10 } };
+    moves: eyeSpot ? { degrees: 0, metres: eyeSpot.moved } : { degrees: Math.round(Math.abs(THREE.MathUtils.radToDeg(dir(end) - dir(start)))), metres: Math.round(new THREE.Vector3(...shotPoint(r, start.from)).distanceTo(new THREE.Vector3(...shotPoint(r, end.from))) * 10) / 10 } };
   return true;
 }
 /** A unit's span on the timeline. */
-function unitSpan(unitId) { let start = Infinity, end = -Infinity; for (const segment of segments) if (segment.scene.id === unitId) { start = Math.min(start, segment.start); end = Math.max(end, segment.end); } return start < end ? { start, end } : null; }
+function unitSpan(unitId) { let start = Infinity, end = -Infinity; for (const segment of segments) if (segment.scene.id === unitId && segment.kind !== "macro") { start = Math.min(start, segment.start); end = Math.max(end, segment.end); } return start < end ? { start, end } : null; }
 
 function frame(now) {
   const dt = Math.min(0.1, (now - last) / 1000); last = now;
@@ -3270,7 +3301,7 @@ window.__gallery = (entries) => {
 window.__fx = () => ({ segment: blowSegment?.scene?.id ?? null, quiet, kind: blowSegment?.kind, eventBlows: blowSegment?.event?.blows?.length ?? null, inWorld: !!blowFx.parent, parts: blowList.map((fx) => ({ kind: fx.blow.kind, attacker: !!pawns.get(fx.blow.attacker)?.pawn?.parent, target: !!pawns.get(fx.blow.target)?.pawn?.parent, shown: Object.entries(fx).filter(([key, part]) => part?.isMesh && part.visible).map(([key, part]) => `${key}@${part.position.toArray().map(Math.round)}×${part.scale.toArray().map((v) => v.toFixed(2))}`) })) });
 window.__pawnAt = (id) => { const pawn = pawns.get(id)?.pawn; return pawn?.parent ? pawn.position.toArray() : null; };
 // A recorded run unit by unit (engine/director/review-run.mjs): each unit's span on the timeline and who is in it at its end.
-window.__units = () => { const out = new Map(); for (const segment of segments) { const id = segment.scene.id, entry = out.get(id) ?? { id, place: segment.scene.place, start: segment.start, end: segment.end, people: [], events: segment.scene.events?.length ?? 0 }; entry.start = Math.min(entry.start, segment.start); entry.end = Math.max(entry.end, segment.end); entry.people = Object.keys(segment.positions ?? {}).filter((who) => !who.startsWith("crowd:") && !data.people?.[who]?.crowd); out.set(id, entry); } return [...out.values()]; };
+window.__units = () => { const out = new Map(); for (const segment of segments) { if (segment.kind === "macro") continue; const id = segment.scene.id, entry = out.get(id) ?? { id, place: segment.scene.place, start: segment.start, end: segment.end, people: [], events: segment.scene.events?.length ?? 0 }; entry.start = Math.min(entry.start, segment.start); entry.end = Math.max(entry.end, segment.end); entry.people = Object.keys(segment.positions ?? {}).filter((who) => !who.startsWith("crowd:") && !data.people?.[who]?.crowd); out.set(id, entry); } return [...out.values()]; };
 // The world building, floor and room a point stands in (the set view's `set`), or null outside every building.
 // A world room's frame (engine/bench/indoor-set/frames.mjs): its middle on its floor in the world's metres, the way its
 // windows face (a unit vector out through them, else away from the plan's middle), the half depth toward them and the half

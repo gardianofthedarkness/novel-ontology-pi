@@ -760,12 +760,16 @@ export async function direct(novelDir, { reading, readingPath = null, prefilm = 
       const boundRooms = RBM.bindRooms(roomsWanted, lotsOfBuilding, keptRooms);
       // A plan room much bigger than its kind is bound as a room-sized part of it, along its outer wall (room-binding.mjs partOf):
       // outside is beyond the plan, or a cell no room nor corridor fills (as the windows have it, windows.mjs).
-      for (const binding of Object.values(boundRooms.rooms)) {
+      for (const [place, binding] of Object.entries(boundRooms.rooms)) {
         delete binding.part;
         const lot = world.lots[binding.lot], room = lot?.rooms?.[binding.room]; if (!lot || !room || binding.entry) continue;
         const sx = lot.skeleton?.nx ?? 0, sz = lot.skeleton?.nz ?? 0, k = binding.floor, cellAt = (i, j) => lot.skeleton?.cells?.[(k * sz + j) * sx + i];
         const outer = (i, j) => i < 0 || j < 0 || i >= sx || j >= sz || (!cellAt(i, j) && !(lot.rooms ?? []).some(other => k >= other.floor && k <= (other.top ?? other.floor) && i >= other.i0 && i <= other.i1 && j >= other.j0 && j <= other.j1));
-        const part = RBM.partOf(room, binding.kind, outer); if (part) binding.part = part;
+        // The sun the room takes (the agent's, from its lines): the outer wall facing it is preferred, the sun as the page has
+        // it at 9:00 and 15:00 (strand-demo.html keyedLight: east and up in the morning, west in the afternoon).
+        const sunTold = roomPlan.rooms?.[place]?.sun?.value, sunXZ = sunTold === 'morning' ? [0.915, 0.404] : sunTold === 'afternoon' ? [-0.915, 0.404] : null, angle = lot.frame?.angle ?? 0, c = Math.cos(angle), s_ = Math.sin(angle);
+        const prefer = side => { if (!sunXZ) return 0; const [du, dv] = [[0, -1], [0, 1], [-1, 0], [1, 0]][side]; return (du * c - dv * s_) * sunXZ[0] + (du * s_ + dv * c) * sunXZ[1]; };
+        const part = RBM.partOf(room, binding.kind, outer, prefer); if (part) binding.part = part;
       }
       for (const binding of Object.values(boundRooms.rooms)) if (binding.entry && binding.within) { const home = boundRooms.rooms[binding.within]; if (home?.part) binding.part = home.part; }
       // Each bound room furnished by its kind (the architect's recipes), drawn on the page and known to the director (a talk in it
@@ -1037,14 +1041,28 @@ export async function direct(novelDir, { reading, readingPath = null, prefilm = 
         // The agent's staging (room-plan.json): where each person of this unit is in its room. A feature is a spot: the free
         // cell nearest a piece of that kind (the kit's model names), one just inside the door, one by the outer wall; `floor`
         // the scene's own spot (beside); `elsewhere` not in the room at all.
-        const staging = boundRoom ? roomPlan.staging?.[scene.id] ?? {} : {}, stagedTaken = new Set();
+        // A unit set in a room's building (its corridor, its door) is staged relative to that room: `door` just outside its door,
+        // `corridor` on its floor near it, a room feature inside it.
+        const stageRoom = boundRoom ?? roomOfBuilding({ place: scene.placeId }), stageAll = boundRoom ? roomAll : stageRoom ? roomNodesOf(stageRoom) : null, stageFree = boundRoom ? roomSet : stageAll?.free ?? null;
+        const staging = stageRoom ? roomPlan.staging?.[scene.id] ?? {} : {}, stagedTaken = new Set();
         const PIECES = { bed: /bed/, seat: /chair|sofa|couch|bench|stool|armchair/, desk: /desk/, table: /table/, counter: /counter|kitchen|sink|stove/ };
+        const outsideNear = (fromNodes, lo, hi) => {
+          const lot = stageRoom?.lot, y = fromNodes.length ? at(fromNodes[0])[1] : null, out = new Map();
+          for (const id of fromNodes) { const p = at(id); for (const node of around(p[0], p[2], hi + 1).nodes) { const d = Math.hypot(node.x - p[0], node.z - p[2]); if (d >= lo && d <= hi && !stageAll.has(node.id) && Math.abs(node.y - y) < 1 && insideAt(node.id)?.lot === lot && (!out.has(node.id) || out.get(node.id) > d)) out.set(node.id, d); } }
+          return [...out].sort((a, b) => a[1] - b[1]).map(([id]) => id);
+        };
         const featureNode = (who, feature) => {
-          if (!roomAll?.size || !feature || feature === 'floor') return null;
+          if (!stageAll?.size || !feature || (feature === 'floor' && boundRoom)) return null;
+          const roomAll = stageAll, roomSet = stageFree;
+          if (!boundRoom) {
+            // From the building: at the room's door outside it, or in the corridor on its floor; a room feature inside it.
+            if (feature === 'door' || feature === 'corridor') { const near = feature === 'door' ? outsideNear([...roomAll.byDoor], 0.5, 2.5) : outsideNear([...roomAll.byDoor], 2, 8), open = near.filter(id => !stagedTaken.has(id)), node = (open.length ? open : near)[0] ?? null; if (node !== null) stagedTaken.add(node); return node; }
+            if (feature === 'floor') { const pool = [...roomSet].filter(id => !stagedTaken.has(id)); const node = pool.length ? pool[Math.floor(seeded(`${scene.id}|${who}|floor`)() * pool.length)] : null; if (node !== null) stagedTaken.add(node); return node; }
+          }
           const pick = pool => { const open = pool.filter(node => !stagedTaken.has(node)), from = open.length ? open : pool; return from.length ? from[Math.floor(seeded(`${scene.id}|${who}|${feature}`)() * from.length)] : null; };
           let node = null;
           if (PIECES[feature]) {
-            const pieces = (E.rooms.get(`${boundRoom.lot}|${boundRoom.room}`)?.furniture ?? []).filter(([model]) => PIECES[feature].test(model));
+            const pieces = (E.rooms.get(`${stageRoom.lot}|${stageRoom.room}`)?.furniture ?? []).filter(([model]) => PIECES[feature].test(model));
             if (pieces.length) { const [, pu, pv] = pieces[Math.floor(seeded(`${scene.id}|${who}|piece`)() * pieces.length)], cell = id => roomAll.cellOf.get(id) ?? [Infinity, Infinity]; node = [...roomSet].filter(id => !stagedTaken.has(id)).sort((a, b) => Math.hypot(cell(a)[0] - pu, cell(a)[1] - pv) - Math.hypot(cell(b)[0] - pu, cell(b)[1] - pv))[0] ?? null; }
           } else if (feature === 'door') node = pick([...roomAll.byDoor].filter(id => roomSet.has(id)));
           else if (feature === 'window' || feature === 'balcony') node = pick([...roomAll.outer].filter(id => roomSet.has(id)));
@@ -1118,7 +1136,7 @@ export async function direct(novelDir, { reading, readingPath = null, prefilm = 
             if (from[0] === stagedAt) { positions[who] = from; sceneRecord.carried.push(who); continue; }
             // From outside the room's building, the text has them in the room from the unit's start: there off-page (the
             // way between the units is the story's cut), not a walk across the city in the scene.
-            if (insideAt(from[0])?.lot !== boundRoom.lot) { positions[who] = [stagedAt, from[1]]; (sceneRecord.cutIn ??= []).push(who); continue; }
+            if (insideAt(from[0])?.lot !== stageRoom.lot) { positions[who] = [stagedAt, from[1]]; (sceneRecord.cutIn ??= []).push(who); continue; }
             const a_ = at(from[0]), b_ = at(stagedAt), metres_ = Math.hypot(a_[0] - b_[0], a_[2] - b_[2]);
             positions[who] = from; travels.push({ who, from, dest: stagedAt, ...(frameMetres && metres_ <= frameMetres ? {} : { route: true }) });
             continue;
@@ -1354,7 +1372,11 @@ export async function direct(novelDir, { reading, readingPath = null, prefilm = 
           const positionOf = who => (positions[who] ? at(positions[who][0]) : null), facts = CB.route('layout', routeAt(lines, null, cutId), cutBag.notes).filter(item => item.note.kind === 'fact').map(item => item.note.raw).filter(Boolean);
           let moved = false;
           for (const who of Object.keys(positions).filter(id => (desk.nodes.get(cutId)?.cast ?? []).includes(id))) {
-            const own = facts.filter(fact => fact.who === who && FA.binding(fact));
+            // In a bound room (or the building a staged unit is filmed on) its floor and being indoors are settled by the binding
+            // (the agent's, with its line): notes about them move no one; the agent's staging places people in it.
+            const settled = fact => (roomAll?.size || stageAll?.size) && ['floor', 'indoors', 'outdoors', 'roof', 'underground'].includes(fact.kind);
+            const own = facts.filter(fact => fact.who === who && FA.binding(fact) && !settled(fact));
+            if (roomAll?.size || stageAll?.size) continue;
             if (startsInside && !own.some(fact => SITE_KINDS.has(fact.kind))) own.push({ who, kind: 'indoors', value: null, basis: 'implied', sure: 0.7, sentence: null, by: 'the place' });
             const here = nodeAt(positions[who][0]);
             if (!own.some(fact => FA.holds(fact, here, positionOf) === false)) continue;
@@ -1574,7 +1596,7 @@ export async function direct(novelDir, { reading, readingPath = null, prefilm = 
             for (const who of [...new Set(due.map(fact => fact.who))].filter(who => positions[who])) {
               const own = due.filter(fact => fact.who === who), here = nodeAt(positions[who][0]);
               (cardRecord.facts ??= []).push(...own.map(fact => ({ ...fact, holds: FA.holds(fact, here, positionOf) })));
-              const binding = own.filter(FA.binding), failing = binding.filter(fact => FA.holds(fact, here, positionOf) === false);
+              const binding = own.filter(fact => FA.binding(fact) && !((roomAll?.size || stageAll?.size) && ['floor', 'indoors', 'outdoors', 'roof', 'underground'].includes(fact.kind))), failing = binding.filter(fact => FA.holds(fact, here, positionOf) === false);
               if (!failing.length) continue;
               // Facts resolve in the set (M4): the spot is looked for inside the scene's building or area first, further
               // only for a stated fact.

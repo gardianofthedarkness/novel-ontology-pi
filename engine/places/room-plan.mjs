@@ -12,6 +12,7 @@
 //            floor <room> <n|ground|not-said> --line <id> --why <t>   (n as the text counts it: 1 the ground floor)
 //            part <room> <other room|own> --line <id> --why <t>
 //            opens <room> <balcony|window|none> --line <id> --why <t>
+//            sun <room> <morning|afternoon|none> --line <id> --why <t>   (the sun its windows take, as its lines show; none needs only --why)
 //            at <unit> <person> <feature> [--through <unit>] --line <id> --why <t>   (features: FEATURES below; elsewhere: not in
 //            the room; --through: the same through the room's later units where they are present, the line in the first)
 //            shot <unit> <set|eye|outside> [--through <unit>] --line <id> --why <t>   (how the unit is filmed: SHOTS below)
@@ -28,8 +29,11 @@ export const FEATURES = {
   bed: 'on or by a bed', seat: 'on a chair, sofa or bench', desk: 'at a desk or worktable', table: 'at a table',
   counter: 'at a counter or kitchen worktop', door: 'at the room\'s door, just inside', window: 'at a window',
   balcony: 'out on the balcony', floor: 'somewhere on the room\'s floor (no piece said)', elsewhere: 'not in the room in this unit (on the phone, remembered, gone out)',
+  corridor: 'for a unit set in the room\'s building: on the room\'s floor outside it, in its corridor',
 };
+/** For a unit set in a room's building (filmed on that room), `door` is at the room's door from outside. */
 const OPENINGS = ['balcony', 'window', 'none'];
+const SUNS = ['morning', 'afternoon', 'none'];
 /** How a unit set in a room is filmed (the shot stage, docs/v3/design.html#shot-stage): the room cut open from above, at eye
  *  level inside it, or from the street outside up to its window and into it. */
 export const SHOTS = {
@@ -129,9 +133,15 @@ export function decide(s, command, { positional: [a, b, c], why, line, through =
     if (!OPENINGS.includes(b)) refuse(`A room opens onto ${OPENINGS.join(', ')}.`);
     if (b !== 'none') needLine(s, line, room.units, `a unit set in ${a}`);
     entry().opens = { value: b, line: line ?? null, why };
+  } else if (command === 'sun') {
+    needRoom();
+    if (!SUNS.includes(b)) refuse(`A room's sun is ${SUNS.join(', ')}.`);
+    if (b !== 'none') needLine(s, line, room.units, `a unit set in ${a}`);
+    entry().sun = { value: b, line: line ?? null, why };
   } else if (command === 'at') {
-    const unit = a, person = b, feature = c, home = rooms.find(r => r.units.includes(unit));
-    if (!home) refuse(`${unit} is not set in a room (see: rooms).`);
+    const unit = a, person = b, feature = c, inBuilding = buildingUnitsOf(s), home = rooms.find(r => r.units.includes(unit)) ?? (() => { const found = inBuilding.find(entry => entry.unit === unit); return found ? { id: found.room, units: inBuilding.filter(entry => entry.room === found.room).map(entry => entry.unit), building: true } : null; })();
+    if (!home) refuse(`${unit} is not set in a room or in the building of one (see: rooms).`);
+    if (feature === 'corridor' && !home.building) refuse('corridor is for a unit set in a room\'s building; in the room, say where in it.');
     if (!presentOf(s, unit).includes(person)) refuse(`${person} is not present in ${unit}; present: ${presentOf(s, unit).join(', ') || 'no one'}.`);
     if (!FEATURES[feature]) refuse(`No feature "${feature}"; features: ${Object.keys(FEATURES).join(', ')}.`);
     if (feature === 'balcony' && d.rooms[home.id]?.opens?.value !== 'balcony') refuse(`${home.id} has no balcony decided: opens ${home.id} balcony first, with its line.`);
@@ -172,16 +182,16 @@ export function checkOf(s) {
   const rooms = roomsOf(s), d = s.plan, left = [];
   for (const room of rooms) {
     const mine = d.rooms[room.id] ?? {};
-    for (const key of ['kind', 'floor', 'part', 'opens']) if (!mine[key]) left.push({ room: room.id, label: room.label, missing: key });
+    for (const key of ['kind', 'floor', 'part', 'opens', 'sun']) if (!mine[key]) left.push({ room: room.id, label: room.label, missing: key });
     for (const unit of room.units) { for (const person of presentOf(s, unit)) if (!d.staging[unit]?.[person]) left.push({ unit, room: room.id, person, missing: 'at' }); if (!d.shots?.[unit]) left.push({ unit, room: room.id, missing: 'shot' }); }
   }
-  for (const entry of buildingUnitsOf(s)) if (!d.shots?.[entry.unit]) left.push({ unit: entry.unit, room: entry.room, missing: 'shot', building: entry.building });
+  for (const entry of buildingUnitsOf(s)) { if (!d.shots?.[entry.unit]) left.push({ unit: entry.unit, room: entry.room, missing: 'shot', building: entry.building }); for (const person of presentOf(s, entry.unit)) if (!d.staging[entry.unit]?.[person]) left.push({ unit: entry.unit, room: entry.room, person, missing: 'at', building: entry.building }); }
   return { done: left.length === 0, rooms: rooms.length, units: rooms.reduce((n, r) => n + r.units.length, 0), left: left.length, items: left };
 }
 
 export function roomsView(s) {
   const inBuilding = buildingUnitsOf(s);
-  return roomsOf(s).map(room => { const mine = s.plan.rooms[room.id] ?? {}; return `${room.id} ${room.label} in ${room.building ?? 'no building'}: ${room.units.length} units (${room.units[0]} … ${room.units.at(-1)}); kind ${mine.kind?.value ?? '?'}, floor ${mine.floor ? mine.floor.value ?? 'not said' : '?'}, part ${mine.part ? mine.part.of ?? 'own' : '?'}, opens ${mine.opens?.value ?? '?'}${inBuilding.some(entry => entry.room === room.id) ? `; its building's other units (filmed on it): ${inBuilding.filter(entry => entry.room === room.id).map(entry => entry.unit).join(' ')}` : ''}`; }).join('\n');
+  return roomsOf(s).map(room => { const mine = s.plan.rooms[room.id] ?? {}; return `${room.id} ${room.label} in ${room.building ?? 'no building'}: ${room.units.length} units (${room.units[0]} … ${room.units.at(-1)}); kind ${mine.kind?.value ?? '?'}, floor ${mine.floor ? mine.floor.value ?? 'not said' : '?'}, part ${mine.part ? mine.part.of ?? 'own' : '?'}, opens ${mine.opens?.value ?? '?'}, sun ${mine.sun?.value ?? '?'}${inBuilding.some(entry => entry.room === room.id) ? `; its building's other units (filmed on it): ${inBuilding.filter(entry => entry.room === room.id).map(entry => entry.unit).join(' ')}` : ''}`; }).join('\n');
 }
 export function roomView(s, id) {
   const room = roomsOf(s).find(entry => entry.id === id); if (!room) refuse(`${id} is not a room any unit is set in.`);

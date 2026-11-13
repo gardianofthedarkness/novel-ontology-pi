@@ -146,12 +146,19 @@ you put them; nothing is guessed from a room's name.
    - `part <workspace> <room> <other room|own>`: a room that belongs to another
      (a home's entrance, bathroom or kitchen) is part of it; else `own`.
    - `opens <workspace> <room> <balcony|window|none>`.
+   - `sun <workspace> <room> <morning|afternoon|none>`: the sun its windows
+     take as its lines show it (morning sun on the floor, washing drying in
+     it); `none`, with `--why` only, when they do not say.
 3. For each unit set in a room, each person present:
    `at <workspace> <unit> <person> <feature> --line <id> --why <text>`, the
    feature one of bed, seat, desk, table, counter, door, window, balcony, floor,
    or `elsewhere` (in the unit but not in the room: on the phone, remembered,
    gone out). Someone who stays at one feature through the room's next units:
    `--through <last unit>`. A balcony needs the room's `opens ... balcony` first.
+   A unit set in a room's building but in no room (its corridor, its door;
+   `rooms` lists them under their room) is filmed on that room: stage its
+   people relative to it (`door`: at the room's door from outside;
+   `corridor`: on its floor nearby; a room feature: inside it; `elsewhere`).
 4. For each unit set in a room, how it is filmed:
    `shot <workspace> <unit> <set|eye|outside> --line <id> --why <text>`
    (`--through <last unit>` for a run filmed alike; it stops where the story's

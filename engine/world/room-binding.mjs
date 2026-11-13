@@ -51,14 +51,15 @@ export function storyHints(rooms, floorsOf = () => [], plan = null) {
 /**
  * A room-sized part of a plan room much bigger than its kind (more than one and a half times its cells): the cells along its
  * longest outer wall (its windows' side), as deep as two cells and as long as the kind needs, the way a studio's sleeping part
- * is walled off. `outer(i, j)` says whether a plan cell lies outside the building (no room nor corridor there). Null when the
+ * is walled off; among its outer walls the one `prefer(side)` scores highest (the sun the room takes, as its lines show).
+ * `outer(i, j)` says whether a plan cell lies outside the building (no room nor corridor there). Null when the
  * room is not that big or has no outer wall.
  */
-export function partOf(room, kind, outer) {
+export function partOf(room, kind, outer, prefer = () => 0) {
   const want = KIND_CELLS[kind] ?? 4, w = room.i1 - room.i0 + 1, d = room.j1 - room.j0 + 1;
   if (w * d <= want * 1.5) return null;
   const sides = [[0, w, (n) => outer(room.i0 + n, room.j0 - 1)], [1, w, (n) => outer(room.i0 + n, room.j1 + 1)], [2, d, (n) => outer(room.i0 - 1, room.j0 + n)], [3, d, (n) => outer(room.i1 + 1, room.j0 + n)]]
-    .map(([side, length, out]) => [side, Array.from({ length }, (_, n) => out(n)).filter(Boolean).length]).sort((a, b) => b[1] - a[1]);
+    .map(([side, length, out]) => [side, Array.from({ length }, (_, n) => out(n)).filter(Boolean).length]).sort((a, b) => (b[1] > 0) - (a[1] > 0) || prefer(b[0]) - prefer(a[0]) || b[1] - a[1]);
   if (!sides[0][1]) return null;
   const side = sides[0][0], deep = Math.min(2, side < 2 ? d : w), long = Math.min(side < 2 ? w : d, Math.max(2, Math.ceil(Math.max(want, 6) / deep)));
   const start = side < 2 ? room.i0 + Math.floor((w - long) / 2) : room.j0 + Math.floor((d - long) / 2);
