@@ -71,7 +71,7 @@
   <header>
     <div class="kicker">Novel figure pipeline · current final · Misaka Mikoto</div>
     <h1>Misaka as a triangle hologram, with a skirt that moves</h1>
-    <p>The figure from trial 2, before the separate clothing system: one skeleton with the summer and winter uniforms as whole bodies to swap, now wearing the detailed head made from a high-resolution portrait. <strong>One-shot + soft layers</strong> (the default) keeps the one-shot figure whole and puts its generated base body underneath as a hidden layer: each point's distance from that body is its layer thickness, so skin and tight cloth stay on the skeleton while thick cloth (the skirt, hems) hangs on soft springs from where the skeleton puts it, swings and settles, stretches at most 25% between neighbours, and is pushed out of capsules around the legs and torso; <strong>Layers</strong> in Look colours the triangles from tight (cyan) to loose (pink). <strong>Base body + clothes</strong> puts a separately generated base body under the clothes, fitted bone by bone to the benchmark's proportions; the clothes are the benchmark's own, and the skirt hangs from the hips on ten spring-bone chains pushed aside by colliders on the legs, so the legs bend freely and a swinging skirt shows real thighs. <strong>Skirt springs only</strong> is the same skirt on the fused figure; <strong>Benchmark</strong> is the saved version without either. Every motion plays on the standard VRM humanoid bones, so it works on any figure made this way. The clothing system below is parked as work in progress.</p>
+    <p>The figure from trial 2, before the separate clothing system: one skeleton with the summer and winter uniforms as whole bodies to swap, now wearing the detailed head made from a high-resolution portrait. <strong>One-shot + soft layers</strong> (the default) keeps the one-shot figure whole and puts its generated base body underneath as a hidden layer: each point's distance from that body is its layer thickness, so skin and tight cloth stay on the skeleton while thick cloth (the skirt, hems) hangs on soft springs from where the skeleton puts it, swings and settles, stretches at most 25% between neighbours, and is pushed out of capsules around the legs and torso; <strong>Layers</strong> in Look colours the triangles from tight (cyan) to loose (pink). <strong>Rigid needles</strong> (v0.6, the default) moves the base body by dual-quaternion blending (rotation about each joint, so a bent hip keeps its volume), rides the skin on it, and never lets the floating layer sink below 80% of its own depth; <strong>Plain skinning</strong> is v0.5. <strong>Base body + clothes</strong> puts a separately generated base body under the clothes, fitted bone by bone to the benchmark's proportions; the clothes are the benchmark's own, and the skirt hangs from the hips on ten spring-bone chains pushed aside by colliders on the legs, so the legs bend freely and a swinging skirt shows real thighs. <strong>Skirt springs only</strong> is the same skirt on the fused figure; <strong>Benchmark</strong> is the saved version without either. Every motion plays on the standard VRM humanoid bones, so it works on any figure made this way. The clothing system below is parked as work in progress.</p>
   </header>
 
   <div class="bay">
@@ -99,6 +99,11 @@
           <button data-v="body" aria-pressed="false">Base body + clothes</button>
           <button data-v="skirt" aria-pressed="false">Skirt springs only</button>
           <button data-v="final" aria-pressed="false">Benchmark</button>
+        </div></div>
+      <div class="group"><span>Base layer</span>
+        <div class="seg" data-group="needles">
+          <button data-v="on" aria-pressed="true">Rigid needles (v0.6)</button>
+          <button data-v="off" aria-pressed="false">Plain skinning (v0.5)</button>
         </div></div>
       <div class="group"><span>Look</span>
         <div class="seg" data-group="look">
@@ -334,23 +339,41 @@ function buildSoft() {
   const lp = layer.geometry.attributes.position, cell = 0.03, grid = new Map();
   const ck = (x, y, z) => `${Math.floor(x / cell)},${Math.floor(y / cell)},${Math.floor(z / cell)}`;
   for (let i = 0; i < lp.count; i++) { const k = ck(lp.getX(i), lp.getY(i), lp.getZ(i)); (grid.get(k) || grid.set(k, []).get(k)).push(i); }
+  let bestId = -1;
   const nearest = (x, y, z) => {
-    let best = 1e9;
+    let best = 1e9; bestId = -1;
     for (let r = 1; r <= 4 && best > (r - 1) * cell; r++)
       for (let a = -r; a <= r; a++) for (let b = -r; b <= r; b++) for (let c = -r; c <= r; c++) {
         const ids = grid.get(`${Math.floor(x / cell) + a},${Math.floor(y / cell) + b},${Math.floor(z / cell) + c}`); if (!ids) continue;
-        for (const i of ids) { const d = Math.hypot(lp.getX(i) - x, lp.getY(i) - y, lp.getZ(i) - z); if (d < best) best = d; }
+        for (const i of ids) { const d = Math.hypot(lp.getX(i) - x, lp.getY(i) - y, lp.getZ(i) - z); if (d < best) { best = d; bestId = i; } }
       }
     return best;
   };
+  // the base body as rigid needles: its points welded (one per place), each with its normal averaged over its faces and
+  // its own bone weights; they move by dual-quaternion blending (rotation about the joints, no collapse)
+  const lg = layer.geometry, ln = lg.attributes.normal, lsi = lg.attributes.skinIndex, lsw = lg.attributes.skinWeight;
+  const lu = new Int32Array(lp.count), lrep = [], lseen = new Map();
+  for (let i = 0; i < lp.count; i++) { const k = `${lp.getX(i).toFixed(5)},${lp.getY(i).toFixed(5)},${lp.getZ(i).toFixed(5)}`; let u = lseen.get(k); if (u === undefined) { u = lrep.length; lseen.set(k, u); lrep.push(i); } lu[i] = u; }
+  const LU = lrep.length, inner = { mesh: layer, U: LU, bp: new Float32Array(LU * 3), bn: new Float32Array(LU * 3), si: new Uint16Array(LU * 4), sw: new Float32Array(LU * 4),
+    IT: new Float32Array(LU * 3), IQ: new Float32Array(LU * 4) };
+  for (let i = 0; i < lp.count; i++) { const u = lu[i]; inner.bn[u * 3] += ln.getX(i); inner.bn[u * 3 + 1] += ln.getY(i); inner.bn[u * 3 + 2] += ln.getZ(i); }
+  for (let u = 0; u < LU; u++) { const r = lrep[u]; inner.bp.set([lp.getX(r), lp.getY(r), lp.getZ(r)], u * 3);
+    const L = Math.hypot(inner.bn[u * 3], inner.bn[u * 3 + 1], inner.bn[u * 3 + 2]) || 1; inner.bn[u * 3] /= L; inner.bn[u * 3 + 1] /= L; inner.bn[u * 3 + 2] /= L;
+    for (let k = 0; k < 4; k++) { inner.si[u * 4 + k] = lsi.getComponent(r, k); inner.sw[u * 4 + k] = lsw.getComponent(r, k); } }
+  soft.inner = inner;
   for (const p of parts) {
     if (p.soft || p.key === 'head' || !p.mesh.isSkinnedMesh) continue;
     const m = p.mesh, g = m.geometry, pos = g.attributes.position, n = pos.count;
     // weld the split points (flat shading duplicates them) so each place is one particle
     const uid = new Int32Array(n), rep = [], seen = new Map();
     for (let i = 0; i < n; i++) { const k = `${pos.getX(i).toFixed(5)},${pos.getY(i).toFixed(5)},${pos.getZ(i).toFixed(5)}`; let u = seen.get(k); if (u === undefined) { u = rep.length; seen.set(k, u); rep.push(i); } uid[i] = u; }
-    const U = rep.length, thick = new Float32Array(U);
-    for (let u = 0; u < U; u++) thick[u] = nearest(pos.getX(rep[u]), pos.getY(rep[u]), pos.getZ(rep[u]));
+    const U = rep.length, thick = new Float32Array(U), pair = new Int32Array(U), off = new Float32Array(U * 3), d0 = new Float32Array(U);
+    for (let u = 0; u < U; u++) {
+      const px = pos.getX(rep[u]), py = pos.getY(rep[u]), pz = pos.getZ(rep[u]);
+      thick[u] = nearest(px, py, pz); const j = lu[bestId]; pair[u] = j;
+      off[u * 3] = px - inner.bp[j * 3]; off[u * 3 + 1] = py - inner.bp[j * 3 + 1]; off[u * 3 + 2] = pz - inner.bp[j * 3 + 2];
+      d0[u] = off[u * 3] * inner.bn[j * 3] + off[u * 3 + 1] * inner.bn[j * 3 + 1] + off[u * 3 + 2] * inner.bn[j * 3 + 2];   // the layer's own depth along the body's normal
+    }
     // smooth the thickness over the surface twice (neighbours from the triangles)
     const nb = Array.from({ length: U }, () => []); const idx = g.index;
     for (let t = 0; t < idx.count; t += 3) { const a = uid[idx.getX(t)], b = uid[idx.getX(t + 1)], c = uid[idx.getX(t + 2)]; nb[a].push(b, c); nb[b].push(a, c); nb[c].push(a, b); }
@@ -371,7 +394,7 @@ function buildSoft() {
       es.add(u * U + w); ea.push(u); eb.push(w);
       er.push(Math.hypot(pos.getX(rep[u]) - pos.getX(rep[w]), pos.getY(rep[u]) - pos.getY(rep[w]), pos.getZ(rep[u]) - pos.getZ(rep[w])));
     }
-    soft.items.push({ key: p.key, mesh: m, group, fill, wire, uid, rep, U, sft, ea: Int32Array.from(ea), eb: Int32Array.from(eb), er: Float32Array.from(er),
+    soft.items.push({ key: p.key, mesh: m, group, fill, wire, uid, rep, U, sft, pair, off, d0, ea: Int32Array.from(ea), eb: Int32Array.from(eb), er: Float32Array.from(er),
       x: new Float32Array(U * 3), v: new Float32Array(U * 3), T: new Float32Array(U * 3), fresh: true,
       looseShare: sft.reduce((a, b) => a + (b > 0.2 ? 1 : 0), 0) / U });
   }
@@ -384,9 +407,53 @@ function capsules() {
   caps.push([W('hips'), W('chest'), 0.095]);
   return caps;
 }
+// ── the needles: the base body moved by dual quaternions. Each bone's motion as a unit dual quaternion (rotation R and
+// D = t*R/2); a point blends its bones' (hemisphere-aligned), normalises, and turns about the blended joint instead of
+// averaging positions, so a bent hip or knee keeps its volume
+const _q = new THREE.Quaternion(), _m4 = new THREE.Matrix4(), _pre = new THREE.Matrix4();
+function boneDQs(m, cache) {
+  const sk = m.skeleton, nb = sk.bones.length;
+  const R = cache.R || (cache.R = new Float32Array(nb * 4)), Dq = cache.D || (cache.D = new Float32Array(nb * 4));
+  _pre.multiplyMatrices(m.matrixWorld, m.bindMatrixInverse);
+  for (let k = 0; k < nb; k++) {
+    _m4.multiplyMatrices(sk.bones[k].matrixWorld, sk.boneInverses[k]).premultiply(_pre).multiply(m.bindMatrix);
+    _q.setFromRotationMatrix(_m4); const e = _m4.elements, tx = e[12], ty = e[13], tz = e[14];
+    R[k * 4] = _q.x; R[k * 4 + 1] = _q.y; R[k * 4 + 2] = _q.z; R[k * 4 + 3] = _q.w;
+    Dq[k * 4 + 3] = -0.5 * (tx * _q.x + ty * _q.y + tz * _q.z);
+    Dq[k * 4] = 0.5 * (tx * _q.w + ty * _q.z - tz * _q.y);
+    Dq[k * 4 + 1] = 0.5 * (-tx * _q.z + ty * _q.w + tz * _q.x);
+    Dq[k * 4 + 2] = 0.5 * (tx * _q.y - ty * _q.x + tz * _q.w);
+  }
+  return cache;
+}
+function rotV(qx, qy, qz, qw, vx, vy, vz, out, o) {        // v' = v + w*t + q x t, t = 2 q x v
+  const tx = 2 * (qy * vz - qz * vy), ty = 2 * (qz * vx - qx * vz), tz = 2 * (qx * vy - qy * vx);
+  out[o] = vx + qw * tx + (qy * tz - qz * ty); out[o + 1] = vy + qw * ty + (qz * tx - qx * tz); out[o + 2] = vz + qw * tz + (qx * ty - qy * tx);
+}
+const _r3 = new Float32Array(3);
+function stepNeedles() {
+  const I = soft.inner; if (!I) return;
+  const { R, D } = boneDQs(I.mesh, I);
+  for (let u = 0; u < I.U; u++) {
+    let bx = 0, by = 0, bz = 0, bw = 0, ex = 0, ey = 0, ez = 0, ew = 0, fx = 0, fy = 0, fz = 0, fw = 0, first = true;
+    for (let k = 0; k < 4; k++) {
+      const w = I.sw[u * 4 + k]; if (w === 0) continue; const b = I.si[u * 4 + k] * 4;
+      let s = w; if (first) { fx = R[b]; fy = R[b + 1]; fz = R[b + 2]; fw = R[b + 3]; first = false; }
+      else if (fx * R[b] + fy * R[b + 1] + fz * R[b + 2] + fw * R[b + 3] < 0) s = -w;
+      bx += s * R[b]; by += s * R[b + 1]; bz += s * R[b + 2]; bw += s * R[b + 3]; ex += s * D[b]; ey += s * D[b + 1]; ez += s * D[b + 2]; ew += s * D[b + 3];
+    }
+    const L = Math.hypot(bx, by, bz, bw) || 1; bx /= L; by /= L; bz /= L; bw /= L; ex /= L; ey /= L; ez /= L; ew /= L;
+    const tx = 2 * (-ew * bx + ex * bw - ey * bz + ez * by), ty = 2 * (-ew * by + ex * bz + ey * bw - ez * bx), tz = 2 * (-ew * bz - ex * by + ey * bx + ez * bw);
+    rotV(bx, by, bz, bw, I.bp[u * 3], I.bp[u * 3 + 1], I.bp[u * 3 + 2], I.IT, u * 3);
+    I.IT[u * 3] += tx; I.IT[u * 3 + 1] += ty; I.IT[u * 3 + 2] += tz;
+    I.IQ[u * 4] = bx; I.IQ[u * 4 + 1] = by; I.IQ[u * 4 + 2] = bz; I.IQ[u * 4 + 3] = bw;
+  }
+}
+soft.needles = true;
 function stepSoft(dt) {
   if (!vrm || !soft.items.length) return;
   const caps = capsules(), h = Math.max(1e-4, dt) / 2;
+  const NI = soft.needles && soft.inner; if (NI) stepNeedles();
   for (const s of soft.items) {
     if (!s.group.visible) continue;
     const m = s.mesh, { x, v, T, sft, rep, U } = s;
@@ -405,6 +472,17 @@ function stepSoft(dt) {
       for (let k = 0; k < 4; k++) { const w = SW[u * 4 + k]; if (w === 0) continue; const e = SI[u * 4 + k] * 16;
         ox += w * (BM[e] * px + BM[e + 4] * py + BM[e + 8] * pz + BM[e + 12]); oy += w * (BM[e + 1] * px + BM[e + 5] * py + BM[e + 9] * pz + BM[e + 13]); oz += w * (BM[e + 2] * px + BM[e + 6] * py + BM[e + 10] * pz + BM[e + 14]); }
       T[u * 3] = ox; T[u * 3 + 1] = oy; T[u * 3 + 2] = oz;
+    }
+    // skin rides the needles: a thin point's target is its base-body point plus its own offset turned with that point;
+    // a loose point keeps its own bones' target (a skirt follows the hips, not the thigh it hangs over)
+    if (NI) {
+      const I = soft.inner, { pair, off } = s;
+      for (let u = 0; u < U; u++) {
+        const q = sft[u]; if (q >= 0.999) continue; const j = pair[u], o = u * 3;
+        rotV(I.IQ[j * 4], I.IQ[j * 4 + 1], I.IQ[j * 4 + 2], I.IQ[j * 4 + 3], off[o], off[o + 1], off[o + 2], _r3, 0);
+        const nx = I.IT[j * 3] + _r3[0], ny = I.IT[j * 3 + 1] + _r3[1], nz = I.IT[j * 3 + 2] + _r3[2];
+        T[o] = nx + (T[o] - nx) * q; T[o + 1] = ny + (T[o + 1] - ny) * q; T[o + 2] = nz + (T[o + 2] - nz) * q;
+      }
     }
     if (s.fresh || dt <= 0) { x.set(T); v.fill(0); s.fresh = false; }
     else for (let sub = 0; sub < 2; sub++) for (let u = 0; u < U; u++) {
@@ -431,6 +509,16 @@ function stepSoft(dt) {
         if (L <= M) continue;
         const f = (L - M) / L, fa = f * wa / ws, fb = f * wb / ws;
         x[a] += dx * fa; x[a + 1] += dy * fa; x[a + 2] += dz * fa; x[b] -= dx * fb; x[b + 1] -= dy * fb; x[b + 2] -= dz * fb;
+      }
+    }
+    // the floating layer is never intruded: a loose point keeps at least 80% of its own depth above its base-body point
+    if (NI && !(s.fresh || dt <= 0)) {
+      const I = soft.inner, { pair, d0 } = s;
+      for (let u = 0; u < U; u++) {
+        if (sft[u] < 0.04 || d0[u] < 0.003) continue; const j = pair[u], o = u * 3;
+        rotV(I.IQ[j * 4], I.IQ[j * 4 + 1], I.IQ[j * 4 + 2], I.IQ[j * 4 + 3], I.bn[j * 3], I.bn[j * 3 + 1], I.bn[j * 3 + 2], _r3, 0);
+        const d = (x[o] - I.IT[j * 3]) * _r3[0] + (x[o + 1] - I.IT[j * 3 + 1]) * _r3[1] + (x[o + 2] - I.IT[j * 3 + 2]) * _r3[2], need = 0.8 * d0[u];
+        if (d < need) { x[o] += _r3[0] * (need - d); x[o + 1] += _r3[1] * (need - d); x[o + 2] += _r3[2] * (need - d); }
       }
     }
     const P = s.fill.geometry.attributes.position, uid = s.uid;
@@ -541,6 +629,7 @@ document.querySelectorAll('.seg').forEach(seg => seg.addEventListener('click', e
   seg.querySelectorAll('button').forEach(x => x.setAttribute('aria-pressed', String(x === b)));
   state[seg.dataset.group] = b.dataset.v;
   if (seg.dataset.group === 'look') applyLook();
+  if (seg.dataset.group === 'needles') soft.needles = b.dataset.v === 'on';
   if (seg.dataset.group === 'rig') load().catch(err => { status.textContent = 'Could not load the figure: ' + err.message; });
   if (seg.dataset.group === 'outfit') applyOutfit();
   if (seg.dataset.group === 'motion') t = 0;
