@@ -181,7 +181,7 @@ which script writes it; the tests fail when one is stale (<code>npm test</code> 
 <li><a href="#laws">8.4 The laws</a></li>
 <li><a href="#smoothing">8.5 Smoothing: back-propagation as Bayesian smoothing</a></li>
 <li><a href="#figures">8.6 Figures that act: the action animation system</a></li>
-<li><a href="#actor-cast">8.7 The actor cast: what each one sees</a></li><li><a href="#indoor-mode">8.8 Indoor scene mode: rooms, windows and the camera inside</a></li><li><a href="#indoor-fixes">8.9 Indoor scenes: the fixes, issue by issue</a></li><li><a href="#indoor-benchmark">8.10 The indoor benchmark</a></li>
+<li><a href="#actor-cast">8.7 The actor cast: what each one sees</a></li><li><a href="#indoor-mode">8.8 Indoor scene mode: rooms, windows and the camera inside</a></li><li><a href="#indoor-fixes">8.9 Indoor scenes: the fixes, issue by issue</a></li><li><a href="#indoor-benchmark">8.10 The indoor benchmark</a></li><li><a href="#room-plan">8.11 The rooms by the agent</a></li>
 </ul>
 </li>
 <li><a href="#canon">9. Canon, the ledger and review</a><ul>
@@ -2350,6 +2350,29 @@ run d20261113042457 passes 14 of 16. What is left (milestones B3&ndash;B8): the 
 text says the seventh; the flat's entrance bound to the building's lobby), law L23 bounded (people pulled back across 565&ndash;670 m and a teacher
 on the phone pulled in), the corridor and stair blocks round the set, the girl on the balcony slab, and the eye-level and outside shots,
 which the page does not draw yet.</p>
+
+<h2 id="room-plan">8.11 The rooms by the agent: kind, floor, part, openings and staging</h2>
+<p>The user, 2026-11-13, of the first fixes for the benchmark (B3&ndash;B6): &ldquo;Make sure your idea is generalized, not customized. I feel
+like agent needs to engage more.&rdquo; Those fixes read a room from its name and its lines' words (an entrance by the word for one, a
+balcony by the word for one, a room's kind from its building's use): rules that hold for one book in one language. So what a room is
+and where people are in it is now the agent's to decide, with evidence, as the place tree is (&sect;<a href="#place-tree-agent">place tree</a>).</p>
+<ul>
+<li><b>The pass.</b> After the place tree, before filming, the volume's <code>rooms</code> step (an agent's workflow, &sect;<a href="#agent-workflows">agent workflows</a>):
+for every room a unit is set in, the agent decides its <i>kind</i> (the architect's kinds), its <i>floor</i> as the text counts floors, its
+<i>part</i> (its own room, or part of another of the same building: a home's entrance, bathroom, kitchen) and what it <i>opens</i> onto
+(balcony, window, none); and for every unit set in a room, where each person present is: at a feature of the room (bed, seat, desk, table,
+counter, door, window, balcony, the floor) or <i>elsewhere</i> (in the unit, not in the room: on the phone, remembered, gone out).
+<code>--through</code> keeps one person at one feature over the room's next units.</li>
+<li><b>Evidence.</b> Every decision carries <code>--why</code> and, but for what the text does not say, <code>--line</code>: a sentence the code checks
+is the book's and lies in (or just before) a unit set in that room; a part is in the same building; a balcony needs the room to open onto
+one first. A refused claim says why. The code holds no word of any book or language. Kept in <code>stage/world/room-plan.json</code>;
+<code>novel rooms check</code> says what is left; the step is done when nothing is.</li>
+<li><b>The director reads only the plan.</b> A room binds on its floor (the plan's, else a floor the script supervisor's notes state), a
+part binds inside its room, the kind types and furnishes it, the openings give it its balcony or window; a person staged at a feature
+starts at it (the free cell by a piece of that kind, a cell just inside the door, a cell by the outer wall; walking in from outside the
+room), one staged on the balcony is drawn on its slab, one elsewhere is left out of the room and never pulled into it. Law L23 brings back
+only those who were in the room, from no farther than the building's span.</li>
+</ul>
 
 <h2 id="ontology-layers">9.1 The layers of the ontology</h2>
 <p><span class="st legacy">Legacy</span> (Track B, 2026-11-02).</p>
