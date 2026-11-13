@@ -790,7 +790,7 @@ export async function direct(novelDir, { reading, readingPath = null, prefilm = 
       const boundOf = scene => { for (let at_ = scene.placeId, guard = 0; at_ && guard < 16; at_ = script.places?.[at_]?.parent, guard++) if (boundRooms.rooms[at_]) return { place: at_, ...boundRooms.rooms[at_] }; return null; };
       // A unit set in a bound room is filmed on it; one set in the building of a bound room (its corridor, its door) on that room.
       const roomOfBuilding = unit => { for (let at_ = unit?.place, guard = 0; at_ && guard < 16; at_ = script.places?.[at_]?.parent, guard++) { const found = Object.entries(boundRooms.rooms).find(([, binding]) => binding.building === at_ && !binding.entry); if (found) return { place: found[0], ...found[1] }; } return null; };
-      for (const entry of E.chosen) { const unit = script.scenes.find(scene => scene.id === entry.id), bound = unit ? boundOf({ placeId: unit.place }) ?? roomOfBuilding(unit) : null; if (bound) shotsPage[entry.id] = { kind: roomPlan.shots?.[entry.id]?.kind ?? 'set', lot: bound.lot, room: bound.room, ...(bound.part ? { part: bound.part } : {}) }; }
+      for (const entry of E.chosen) { const unit = script.scenes.find(scene => scene.id === entry.id), bound = unit ? boundOf({ placeId: unit.place }) ?? roomOfBuilding(unit) : null; if (bound) { const away = Object.entries(roomPlan.staging?.[entry.id] ?? {}).filter(([, staged]) => staged.at === 'elsewhere').map(([who]) => who); shotsPage[entry.id] = { kind: roomPlan.shots?.[entry.id]?.kind ?? 'set', lot: bound.lot, room: bound.room, ...(bound.part ? { part: bound.part } : {}), ...(away.length ? { away } : {}) }; } }
       const roomNodesOf = bound => {
         const key = `${bound.lot}|${bound.room}${bound.part ? `|${bound.part.join(',')}` : ''}`;
         if (roomNodeCache.has(key)) return roomNodeCache.get(key);
@@ -1127,7 +1127,9 @@ export async function direct(novelDir, { reading, readingPath = null, prefilm = 
           // Staged by the agent: elsewhere stays where they were (out of the room); at a feature starts there, walking in from
           // outside the room, stepping to it within the room.
           const feature = staging[who]?.at ?? null;
-          if (feature === 'elsewhere') { if (from) positions[who] = from; (sceneRecord.elsewhere ??= []).push(who); continue; }
+          // Elsewhere: not in the room this unit (on the phone, remembered, gone out): left where they were when that is outside
+          // the room's building, else not on the stage at all this unit.
+          if (feature === 'elsewhere') { if (from && insideAt(from[0])?.lot !== stageRoom?.lot) positions[who] = from; (sceneRecord.elsewhere ??= []).push(who); continue; }
           // At a feature: its spot; anywhere in the room (floor, or a feature it has no piece for): the scene's own spot in it.
           const stagedAt = feature ? (featureNode(who, feature) ?? (roomSet?.size ? beside(who) ?? null : null)) : null;
           if (stagedAt !== null) {

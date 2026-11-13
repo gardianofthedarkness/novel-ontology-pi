@@ -2818,7 +2818,8 @@ function renderShot(segment, entry) {
   parts.patches.visible = palette.name === "day";
   parts.rain.position.y = -((performance.now() / 1000) * 14 % 1.2);
   // The people where the run has them, slim, named, in the building or near the room.
-  const box = new THREE.Box3().setFromObject(parts.shell).expandByScalar(4), people = [], present = new Set(Object.keys(segment.scene.starts ?? {}));
+  // The unit's people, but those the agent put elsewhere this unit (view.away: on the phone, remembered, gone out).
+  const away = new Set(view.away ?? []), box = new THREE.Box3().setFromObject(parts.shell).expandByScalar(4), people = [], present = new Set(Object.keys(segment.scene.starts ?? {}).filter((id) => !away.has(id)));
   for (const [id, pawnEntry] of pawns) {
     const person = data.people?.[id]; if (!person || person.crowd || person.prop) continue;
     let figure = parts.people.get(id);
