@@ -181,7 +181,7 @@ which script writes it; the tests fail when one is stale (<code>npm test</code> 
 <li><a href="#laws">8.4 The laws</a></li>
 <li><a href="#smoothing">8.5 Smoothing: back-propagation as Bayesian smoothing</a></li>
 <li><a href="#figures">8.6 Figures that act: the action animation system</a></li>
-<li><a href="#actor-cast">8.7 The actor cast: what each one sees</a></li><li><a href="#indoor-mode">8.8 Indoor scene mode: rooms, windows and the camera inside</a></li><li><a href="#indoor-fixes">8.9 Indoor scenes: the fixes, issue by issue</a></li>
+<li><a href="#actor-cast">8.7 The actor cast: what each one sees</a></li><li><a href="#indoor-mode">8.8 Indoor scene mode: rooms, windows and the camera inside</a></li><li><a href="#indoor-fixes">8.9 Indoor scenes: the fixes, issue by issue</a></li><li><a href="#indoor-benchmark">8.10 The indoor benchmark</a></li>
 </ul>
 </li>
 <li><a href="#canon">9. Canon, the ledger and review</a><ul>
@@ -2322,6 +2322,34 @@ stood in), F2 (the scene is in it), F7, F10 and F8 (the stills say so), F9 (the 
 <code>review-run.mjs</code> on a fresh 17r run, units 1&ndash;84, against this run's issues; the non-indoor issues the review found
 (the girl and Index as two people, partners far apart, people missing from their unit) are the reading's and the
 director's, outside this plan.</p>
+
+<h2 id="indoor-benchmark">8.10 The indoor benchmark: the clip as the standard</h2>
+<p>The user, 2026-11-12, of the indoor clip (&sect;8.8): &ldquo;I really really liked the indoor scene demo you made and we should make it a
+bench mark. Our automated run for the first indoor scenes should exactly match it as standard.&rdquo; So the clip is no longer an
+illustration: it is what a run's first indoor units are measured against, check by check, with the clip's own numbers.</p>
+<ul>
+<li><b>The clip, unchanged.</b> <code>engine/bench/indoor-set/clip.html</code> is the page the user saw (three.js from the repository's
+node_modules). <code>reference.mjs</code> takes its frames at fixed moments into <code>reference/</code> (1440 &times; 810, without the captions):
+the set (unit 25, 9:00, clear), eye level (unit 38, 9:00, rain), from outside (unit 79, 18:00, dusk). The three moments are the story sky's
+own for those units.</li>
+<li><b>The standard.</b> <code>standard.json</code>: per shot its unit, sky, camera and checks; each check says what the clip shows and how
+a run is measured. The set shot: the bound room on an upper floor, a bedroom of a single room's size, nothing above it, the near walls cut
+to 0.25 m and the far walls standing with their real openings, a window with faint glass, a balcony door and its slab, the story's sun on
+the floor, the bedroom's furniture, everyone of the unit in the room or on its balcony, the camera on the room's middle 32&deg; down and 11 m
+off, the corridor round it faint, the city under the story's sky, and the units' own staging (the girl over the balcony rail, units 25&ndash;26).</li>
+<li><b>The check.</b> <code>check.mjs &lt;novel-dir&gt; --run &lt;id&gt; --out &lt;folder&gt;</code> plays the run's page, takes each benchmark
+unit's still as the engine takes it, reads what the set drew from the page (<code>window.__setFacts</code>: the room, each side's walls cut or
+standing, openings, balconies, furniture, anything above, the camera against the room's middle) and gives each check pass, fail or not built,
+with <code>compare.html</code>: the benchmark's frame beside the run's.</li>
+<li><b>The engine follows the standard.</b> A still that opens a set takes the clip's camera (the room's middle at 0.5 m, 32&deg; down, 11 m,
+more for a room wider than 6 m, from the side away from its windows turned 38&deg;), and every review still plays the story's sky
+(<code>storySky</code>), so the sun patches are the story's.</li>
+</ul>
+<p>First measures (2026-11-13): the F1 run d20261113012920 passes 11 of 15 set checks (no furniture, no one in the room); the F2&ndash;F10
+run d20261113042457 passes 14 of 16. What is left (milestones B3&ndash;B8): the floor the text states (the room bound on the first floor, the
+text says the seventh; the flat's entrance bound to the building's lobby), law L23 bounded (people pulled back across 565&ndash;670 m and a teacher
+on the phone pulled in), the corridor and stair blocks round the set, the girl on the balcony slab, and the eye-level and outside shots,
+which the page does not draw yet.</p>
 
 <h2 id="ontology-layers">9.1 The layers of the ontology</h2>
 <p><span class="st legacy">Legacy</span> (Track B, 2026-11-02).</p>
