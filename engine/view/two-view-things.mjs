@@ -64,8 +64,9 @@ export async function browser({ gpu = false } = {}) {
   // SwiftShader (the CPU) by default, the same picture every run; `gpu` (or STILLS_GL=metal) draws on a Mac's GPU through
   // Metal, as alike run to run and some fifty times faster for a whole city of shells (terrain spawning, §2.0.18).
   const metal = (gpu && process.platform === 'darwin' && process.env.STILLS_GL !== 'swiftshader') || process.env.STILLS_GL === 'metal';
-  // Elsewhere (a Linux machine with a GPU): STILLS_GL=vulkan or egl draws on it; else SwiftShader on the CPU.
-  const gl = metal ? ['--use-angle=metal', '--enable-gpu', '--ignore-gpu-blocklist'] : process.env.STILLS_GL === 'vulkan' ? ['--use-angle=vulkan', '--enable-features=Vulkan', '--enable-gpu', '--ignore-gpu-blocklist'] : process.env.STILLS_GL === 'egl' ? ['--use-gl=egl', '--enable-gpu', '--ignore-gpu-blocklist'] : ['--use-angle=swiftshader', '--enable-unsafe-swiftshader'];
+  // Elsewhere (a Linux machine with a GPU): STILLS_GL=vulkan or egl draws on it; on Windows STILLS_GL=d3d11 (Direct3D, Chrome's
+  // own way there); else SwiftShader on the CPU.
+  const gl = metal ? ['--use-angle=metal', '--enable-gpu', '--ignore-gpu-blocklist'] : process.env.STILLS_GL === 'd3d11' ? ['--use-angle=d3d11', '--enable-gpu', '--ignore-gpu-blocklist'] : process.env.STILLS_GL === 'vulkan' ? ['--use-angle=vulkan', '--enable-features=Vulkan', '--enable-gpu', '--ignore-gpu-blocklist'] : process.env.STILLS_GL === 'egl' ? ['--use-gl=egl', '--enable-gpu', '--ignore-gpu-blocklist'] : ['--use-angle=swiftshader', '--enable-unsafe-swiftshader'];
   const chrome = spawn(CHROME, ['--headless=new', '--remote-debugging-port=0', `--user-data-dir=${profile}`, '--window-size=800,600', '--hide-scrollbars', ...gl, '--no-first-run', '--no-default-browser-check', 'about:blank', ...(process.env.NOVEL_CHROME_LOG ? ['--enable-logging=stderr', '--v=0'] : [])], { stdio: process.env.NOVEL_CHROME_LOG ? ['ignore', 'ignore', 'pipe'] : 'ignore' });
   // NOVEL_CHROME_LOG=<file>: Chrome's own log kept there (a renderer or GPU process that dies says why).
   if (process.env.NOVEL_CHROME_LOG) { const { createWriteStream } = await import('node:fs'); chrome.stderr.pipe(createWriteStream(process.env.NOVEL_CHROME_LOG, { flags: 'a' })); }

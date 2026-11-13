@@ -76,6 +76,12 @@ export const STEPS = [
       const settings = join(at.source, 'stage', 'settings.json');
       if (existsSync(settings) && !existsSync(join(at.novel, 'stage', 'settings.json'))) await cp(settings, join(at.novel, 'stage', 'settings.json'));
     } },
+  // The sky before the agent's steps: the rooms pass chooses each unit's shot by its time of day and weather (rain an eye
+  // level shot, a new time of day an outside one), which only the reading's sky.json gives; the sky reads the reading alone.
+  { id: 'sky', paid: true, why: 'time of day and weather by unit (12 or so Jev questions)',
+    done: at => existsSync(join(at.reading, 'sky.json')), commands: async at => [cli('sky', 'build', at.novel)],
+    // novel sky build writes beside the reading the workspace's manifest names (the reading's run); the director plays the book's.
+    after: async at => { const made = join(at.readingRun, 'v2', 'sky.json'); if (existsSync(made)) await cp(made, join(at.reading, 'sky.json')); } },
   // The agent's steps are workflows (engine/workflows/workflows.mjs): the runner starts the agent with the workflow's fixed
   // prompt and keeps at it until the workflow's check passes; NOVEL_VOLUME_AGENT=hand stops here for an agent to do it.
   { id: 'places', paid: true, who: 'agent', workflow: 'places', why: 'the agent\'s place tree with evidence: every city, building, room and unit\'s place shown by a sentence (workflow places; the work model)',
@@ -99,10 +105,6 @@ export const STEPS = [
     } },
   { id: 'look', paid: true, who: 'agent', workflow: 'look', why: 'the agent\'s look pass (workflow look, novel-models skill): settings for how the book\'s places look, from the text',
     done: () => false },
-  { id: 'sky', paid: true, why: 'time of day and weather by unit (12 or so Jev questions)',
-    done: at => existsSync(join(at.reading, 'sky.json')), commands: async at => [cli('sky', 'build', at.novel)],
-    // novel sky build writes beside the reading the workspace's manifest names (the reading's run); the director plays the book's.
-    after: async at => { const made = join(at.readingRun, 'v2', 'sky.json'); if (existsSync(made)) await cp(made, join(at.reading, 'sky.json')); } },
   // The pre-film notes, then settei, then transport (2026-11-12, library 17): settei asks about the things the notes name,
   // and transport reads the prop sheet settei writes; a fresh universe has none before.
   { id: 'prefilm', paid: true, why: 'the pre-film casts\' notes (the work model; ~$0.8 a volume)',
