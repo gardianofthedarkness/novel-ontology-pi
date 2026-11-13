@@ -94,7 +94,7 @@ director's track, the world and ontology track) and v3's phases (the user, 2026-
 <span class="st aside">Set aside</span>
 </div>
 
-<div class="toc"><ul><li><a href="#timeline">1. The whole story</a></li><li><a href="#v3">2. v3</a></li><li><a href="#v3-phases">2.1 The phases</a></li><li><a href="#console-versions">2.2 Novel Console, version by version</a></li><li><a href="#v3-commits">2.3 The commits of v3, from v2</a></li><li><a href="#figures-actor">2.4 Figures and the actor cast: F1–F9</a></li><li><a href="#place-tree-milestones">2.5 The place tree by the agent: T1–T4</a></li><li><a href="#reviewer-milestones">2.6 The reviewer segment: R1–R3</a></li><li><a href="#v2">3. v2</a></li><li><a href="#map-milestones">3.1 The map and the world: M0–M18, W15–W16</a></li><li><a href="#director-milestones">3.2 Track A: the director, to the next whole-volume run</a></li><li><a href="#director-decisions">3.3 Track A: the director&#x27;s decisions, milestone by milestone</a></li><li><a href="#track-b">3.4 Track B: the world and the ontology as one loop</a></li><li><a href="#v1">4. v1</a></li><li><a href="#v1-roadmap">4.1 Roadmap and decision log</a></li></ul></div>
+<div class="toc"><ul><li><a href="#timeline">1. The whole story</a></li><li><a href="#v3">2. v3</a></li><li><a href="#v3-phases">2.1 The phases</a></li><li><a href="#console-versions">2.2 Novel Console, version by version</a></li><li><a href="#v3-commits">2.3 The commits of v3, from v2</a></li><li><a href="#figures-actor">2.4 Figures and the actor cast: F1–F9</a></li><li><a href="#place-tree-milestones">2.5 The place tree by the agent: T1–T4</a></li><li><a href="#reviewer-milestones">2.6 The reviewer segment: R1–R3</a></li><li><a href="#indoor-milestones">2.7 Indoor scenes: F1–F10</a></li><li><a href="#v2">3. v2</a></li><li><a href="#map-milestones">3.1 The map and the world: M0–M18, W15–W16</a></li><li><a href="#director-milestones">3.2 Track A: the director, to the next whole-volume run</a></li><li><a href="#director-decisions">3.3 Track A: the director&#x27;s decisions, milestone by milestone</a></li><li><a href="#track-b">3.4 Track B: the world and the ontology as one loop</a></li><li><a href="#v1">4. v1</a></li><li><a href="#v1-roadmap">4.1 Roadmap and decision log</a></li></ul></div>
 <h1 id="timeline">1. The whole story</h1>
 <table>
 <thead>
@@ -387,6 +387,26 @@ keep or retake with comments to the director; the retake rewound in the run; Cla
 <tr><td>R3</td><td>the magic number tuned; the review as a volume step in the console</td><td>retakes per block and what they fixed, against a run without review</td><td><span class="st plan">Planned</span></td></tr>
 </tbody>
 </table>
+<h2 id="indoor-milestones">2.7 Indoor scenes: F1–F10</h2>
+<p>The plan of design <a href="design.html#indoor-fixes">&sect;8.9</a> (2026-11-12), from the agent's review of the whole 17r trial run
+(run d20261112225518; Pi: 74 units, 18 retakes asked, 12 indoors; 52 indoor stills). Each is proven by
+<code>engine/director/review-run.mjs</code> on a fresh 17r run, units 1&ndash;84.</p>
+<table>
+<thead><tr><th>Milestone</th><th>What</th><th>Proof</th><th>Status</th></tr></thead>
+<tbody>
+<tr><td>F1</td><td>one room, one place: a room needs a building in the place tree; the rooms step binds each room place to one lot, room and floor (stage/world/rooms.json); starts and the director read it</td><td>units 25&ndash;48 all in one dorm room</td><td><span class="st plan">Planned</span></td></tr>
+<tr><td>F6</td><td>the right building and size: binding by the building's use and the room kind's size, plan rooms split to size</td><td>the dorm room a single room in a dormitory</td><td><span class="st plan">Planned</span></td></tr>
+<tr><td>F5</td><td>every bound room typed and furnished, at the binding; a default kind by the building's use</td><td>no bare story room</td><td><span class="st plan">Planned</span></td></tr>
+<tr><td>F3</td><td>furniture solid in the walk graph; spots on free floor, sitting and lying spots on pieces</td><td>no one inside furniture</td><td><span class="st plan">Planned</span></td></tr>
+<tr><td>F4</td><td>balconies built into the world; never a spot over nothing (NO_FLOOR)</td><td>the balcony scene of units 25&ndash;28 on the slab</td><td><span class="st plan">Planned</span></td></tr>
+<tr><td>F2</td><td>scenes inside their room: starts and spots in it; law L23 in the room</td><td>no indoor unit ends in a corridor unless its lines say so</td><td><span class="st plan">Planned</span></td></tr>
+<tr><td>F7</td><td>indoors by the unit's place, not a footprint</td><td>no street or alley unit opened as a set</td><td><span class="st plan">Planned</span></td></tr>
+<tr><td>F10</td><td>clean set stills: the room's and the people's names only; places hidden until born</td><td>indoor stills without pins</td><td><span class="st plan">Planned</span></td></tr>
+<tr><td>F8</td><td>windows by use in a run; far-wall windows plain in a set</td><td>the dorm's window wall and balcony door in its still</td><td><span class="st plan">Planned</span></td></tr>
+<tr><td>F9</td><td>sun patches proven on a test room; the sky from the unit's story time</td><td>patches in the test stills and unit 25</td><td><span class="st plan">Planned</span></td></tr>
+</tbody>
+</table>
+
 
 <h1 id="v2">3. v2</h1>
 <p>v2 (2026-10-30 → 11-10, branch <code>v2</code>, legacy since 2026-11-10) had two stages: <strong>extraction</strong> reads the book into a world

@@ -181,7 +181,7 @@ which script writes it; the tests fail when one is stale (<code>npm test</code> 
 <li><a href="#laws">8.4 The laws</a></li>
 <li><a href="#smoothing">8.5 Smoothing: back-propagation as Bayesian smoothing</a></li>
 <li><a href="#figures">8.6 Figures that act: the action animation system</a></li>
-<li><a href="#actor-cast">8.7 The actor cast: what each one sees</a></li><li><a href="#indoor-mode">8.8 Indoor scene mode: rooms, windows and the camera inside</a></li>
+<li><a href="#actor-cast">8.7 The actor cast: what each one sees</a></li><li><a href="#indoor-mode">8.8 Indoor scene mode: rooms, windows and the camera inside</a></li><li><a href="#indoor-fixes">8.9 Indoor scenes: the fixes, issue by issue</a></li>
 </ul>
 </li>
 <li><a href="#canon">9. Canon, the ledger and review</a><ul>
@@ -2190,6 +2190,138 @@ data is made so the walk graph and the laws can read it (an opening of known siz
 <tr><td>I5</td><td>eye level for the actor cast; windows as ways (look out, through, out of)</td><td>with the figures (&sect;8.6)</td></tr>
 </tbody>
 </table>
+
+<h2 id="indoor-fixes">8.9 Indoor scenes: the fixes, issue by issue</h2>
+<p><span class="st designed">Proposed</span> (the user, 2026-11-12, after the agent's review of the whole 17r trial run:
+"Can you propose me a design plan to fix all the indoor issues one by one"). The review (<code>engine/director/review-run.mjs</code>,
+Pi on a still of every unit, the indoor set view of &sect;8.8) and a pass over its 52 indoor stills found ten indoor issues.
+Each below: what the stills show, why (traced in the run's own files), the fix, and how to know it is fixed. One rule runs
+through them: <b>a room in the story is one room in the world</b>, chosen once, before the director, and everything indoors
+(where people start, where they move, what is drawn, what the camera opens) reads that one binding.</p>
+
+<h3>F1. One room, one place in the world (issue 1: Kamijou's room in six buildings)</h3>
+<p><b>Seen</b>: the place "Kamijou's single dorm room" played in six buildings across units 25&ndash;48 (a tower's 6th floor, office
+blocks on the 5th, 4th and ground floors, a dormitory's 4th), his dorm a seventh from unit 77. <b>Why</b>: in the place tree
+the room is held straight under the city, with no building between (Pi's hold, allowed by the check); terrain makes sites
+down to buildings only, so the room has none, and each unit's start target became the whole city (an area box 1.3 km
+across): people started wherever the box put them. Komoe's room, held inside her apartment, did not move.</p>
+<ul>
+<li><b>The place tree</b> (&sect; place tree by the agent): a room-scale place must have a building above it. <code>novel places check</code>
+lists a room without one as left (<i>a room with no building</i>); the agent holds it under the building the text gives
+(the boys' dorm), or under an unnamed building made for it, never under a street, district or city.</li>
+<li><b>The binding</b>, made once after terrain (a new step, <i>rooms</i>, before starts): every room-scale place of the book gets
+one lot (its building's site) and one room of that lot's plan, chosen by the room's kind and size (F6) on the floor the
+text implies (a ground-floor shop, an upper-floor flat), and kept in <code>stage/world/rooms.json</code> {place: {lot, room, floor}}.
+Later books keep it (the universe's registry carries named rooms like buildings).</li>
+<li><b>Starts and the director</b> read it: a unit set in a room starts its people inside that room (spawn's target is the
+room's box, never an area of the city), and the director's moves within the unit stay in it unless a line takes them out.</li>
+</ul>
+<p><b>Fixed when</b>: on 17r units 25&ndash;48 every still of the dorm room shows the same lot, room and floor.</p>
+
+<h3>F2. The scene inside the room, not in the corridor (issue 2)</h3>
+<p><b>Seen</b>: units 35&ndash;43, 56&ndash;59, 62, 71&ndash;74, 77 and 80 staged in a corridor or stairwell next to the room the text is in.
+<b>Why</b>: with no bound room the start was any walkable node of the city box, often a corridor; the director's spots are
+asked on pictures with no notion of which room is the scene's.</p>
+<ul>
+<li>With F1, the unit's room is known: starts are spots inside it, and the director's spot questions offer only spots in it
+(a person leaving it is a move a line must say).</li>
+<li>A <b>staging law</b> (L23, <i>in the room</i>): at a unit's end, someone present in a unit set in a room stands in that room
+(or on its balcony); else held, the miniloop and the reviewer see it as a fault with its own note.</li>
+</ul>
+<p><b>Fixed when</b>: no indoor unit of 17r 1&ndash;84 ends with its people in a corridor unless its lines put them there.</p>
+
+<h3>F3. Furniture is solid (issue 4: Kamijou inside the dresser)</h3>
+<p><b>Seen</b>: units 40&ndash;42, Kamijou standing in the dresser. <b>Why</b>: the architect's furniture is drawn on the page only;
+the walk graph never had it, so spots and walks pass through it.</p>
+<ul>
+<li>A furnished room's pieces stand in the walk graph as things do (the engine's <code>standThing</code>, footprints by the kit's
+sizes): not walkable, except what is sat or lain on (a bed, a chair, a sofa: their own spot, with a pose).</li>
+<li>Spots offered in a room are its free floor (cells not under furniture), each tagged with what is beside it (by the bed,
+at the desk), so Jev can choose "sit on the bed" and get the bed's spot.</li>
+</ul>
+<p><b>Fixed when</b>: no still shows a person inside furniture; a line that sits someone down puts them on the piece.</p>
+
+<h3>F4. A balcony to stand on (issue 3: people in the air)</h3>
+<p><b>Seen</b>: unit 28, Kamijou and the girl standing beyond the outer wall with nothing under them. <b>Why</b>: the balcony the
+lines name was marked on another building's room (F1), and a balcony exists only on the page (&sect;8.8 windows), not in the
+walk graph, so a spot "out on the balcony" lands on air.</p>
+<ul>
+<li>The bound room's balcony (by the building's pattern or the text) is built into the world: a slab of cells outside the
+balcony door, walkable, with its rail as a wall; the page draws it from the same data.</li>
+<li>A spot is never offered over nothing (no floor, no slab): the walk graph has no node there, and a move ending in air is
+held as L10 with its own code (<code>NO_FLOOR</code>).</li>
+</ul>
+<p><b>Fixed when</b>: unit 25&ndash;28's balcony scene shows Index on the balcony slab at the rail, Kamijou at the balcony door.</p>
+
+<h3>F5. Every story room typed and furnished (issue 5: bare rooms)</h3>
+<p><b>Seen</b>: 9 rooms typed in units 1&ndash;84, 5 of them "not said" and bare, his room among them. <b>Why</b>: the architect asks only
+when a conversation plays in a room, from the conversation's lines alone, and the building's engine role (an office for the
+dorm) misled it.</p>
+<ul>
+<li>The architect types every bound room once, at the binding (F1), not at a conversation: from the room's place name
+(<i>single room of a student dorm</i>), its building's use (by model, &sect;8.8), and the lines of every unit set in it.</li>
+<li>"Not said" is no longer an answer that leaves a room bare: the building's use gives a default kind (a dormitory's room
+a bedroom, a school's a classroom, a shop's a shop).</li>
+</ul>
+<p><b>Fixed when</b>: every room a unit of 17r 1&ndash;84 is set in has a kind and furniture; his room a bedroom.</p>
+
+<h3>F6. Rooms of the right size and in the right building (issue 6)</h3>
+<p><b>Seen</b>: his single dorm room a floor of an office block 10 m and more across; the dorm's entrance furnished as an office.
+<b>Why</b>: the room took whatever plan room its people stood in (F1), in a lot of any use; plan rooms come in the plan
+generator's sizes.</p>
+<ul>
+<li>The binding picks the building by use (the room's building place, a dormitory, binds to a dormitory lot: kk-dormitory,
+kk-block) and the room by size: each kind has a size range (a single room 8&ndash;14 m², a classroom 50&ndash;80 m², an entrance
+4&ndash;10 m²); a plan room too large is split along its cells into the kind's size and a remainder (the plan's rooms are
+cells, so a split is a new wall line with a door).</li>
+<li>A room that is part of another (the dorm room's entrance, the flat's kitchen) binds inside its parent room's cells.</li>
+</ul>
+<p><b>Fixed when</b>: the dorm room reads as a single room (one bed, a desk, a window wall), in a dormitory.</p>
+
+<h3>F7. Indoors by the story, not by a footprint (issue 7: a chase taken for indoors)</h3>
+<p><b>Seen</b>: units 7, 69, 70 (a chase, an alley) opened as sets on a ground floor. <b>Why</b>: the still asked the geometry
+(<code>roomAt</code>) where its people stand, and a ground-floor plan cell under an open lot counted as a room.</p>
+<ul>
+<li>A unit is indoors when its place is a room or building scale (or its people's bound room, F1), not when someone's node
+falls inside a lot. The set view opens the unit's bound room; an outdoor unit is never opened.</li>
+</ul>
+<p><b>Fixed when</b>: no street or alley unit is opened as a set.</p>
+
+<h3>F8. Windows from the building's use, and checked (issue 8)</h3>
+<p><b>Seen</b>: the dorm with office band windows and no balconies; windows faint on far walls. <b>Why</b>: the run was recorded
+before windows followed the model's use (fixed in 426cc4e, not yet in a run); the frames are drawn in the rooms' pale line.</p>
+<ul>
+<li>With F1&ndash;F6 the dorm room binds into a dormitory: its windows and balcony come from the dormitory pattern.</li>
+<li>Far-wall windows in a set drawn brighter (frame line and the glint at full strength in the set room only), so a window
+reads in a still without changing the city view.</li>
+</ul>
+<p><b>Fixed when</b>: the dorm room's still shows its window wall and balcony door plainly.</p>
+
+<h3>F9. The sun through the window, proven (issue 9)</h3>
+<p><b>Seen</b>: no sun patch in any still. <b>Why</b>: unproven rather than known broken: most indoor units were rainy or in
+corridors, and the clear-morning unit 25 opened the wrong building.</p>
+<ul>
+<li>A test page (a room with an east window at 9:00 and a west one at 17:00) whose stills must show the patch on the floor;
+the sky's sun read from the unit's story time, not the page's last state.</li>
+</ul>
+<p><b>Fixed when</b>: the test stills show the patches, and unit 25's still (clear, 9:00) shows one if its window faces the sun.</p>
+
+<h3>F10. Clean set stills (issue 10: pins and future places)</h3>
+<p><b>Seen</b>: unit 82's still covered with place pins and names, places of units 131 and 217 among them. <b>Why</b>: a still
+keeps every place's pin and name; <code>only</code> hides other places' pins but the world place shows all its unnamed ones, born
+or not.</p>
+<ul>
+<li>In a set still: only the set room's name and its people's; no other pin. Every still keeps a place's pin hidden until
+the unit it is born in (the page's <code>bornAt</code>, as the live view does).</li>
+</ul>
+<p><b>Fixed when</b>: indoor stills carry only the room's name and the people's.</p>
+
+<h3>The order</h3>
+<p>F1 first: F2, F3, F4, F6 and F7 all stand on the binding. Then F5 and F6 (the room is right), F3 and F4 (the room can be
+stood in), F2 (the scene is in it), F7, F10 and F8 (the stills say so), F9 (the light). Each is proven by
+<code>review-run.mjs</code> on a fresh 17r run, units 1&ndash;84, against this run's issues; the non-indoor issues the review found
+(the girl and Index as two people, partners far apart, people missing from their unit) are the reading's and the
+director's, outside this plan.</p>
 
 <h2 id="ontology-layers">9.1 The layers of the ontology</h2>
 <p><span class="st legacy">Legacy</span> (Track B, 2026-11-02).</p>
