@@ -71,9 +71,9 @@ export function bindRooms(rooms, lotsOf, kept = {}) {
     const parent = room.within ? out[room.within] : null;
     // An entry (B3): the room it opens, the same plan room.
     if (room.entry && parent && parent.lot === lot.index) { out[room.id] = { lot: lot.index, lotPlace: lot.place, room: parent.room, floor: parent.floor, building: room.building, within: room.within, entry: true, ...(room.kind ? { kind: room.kind } : {}) }; continue; }
-    // The floor the story states (B3), clamped to the building's top; a kept binding elsewhere is bound again.
+    // The floor the story states (B3), clamped to the building's top; a kept binding elsewhere, or one cell wide, is bound again.
     const wantFloor = typeof room.floor === 'number' ? Math.max(0, Math.min(room.floor, Math.max(0, ...plan.map(entry => entry.floor)))) : null;
-    if (before && before.lotPlace === lot.place && plan.some(entry => entry.index === before.room) && !taken.has(`${lot.index}|${before.room}`) && !before.entry && (wantFloor === null || before.floor === wantFloor)) {
+    if (before && before.lotPlace === lot.place && plan.some(entry => entry.index === before.room) && !taken.has(`${lot.index}|${before.room}`) && !before.entry && (wantFloor === null || before.floor === wantFloor) && (() => { const kept = plan.find(entry => entry.index === before.room); return Math.min(kept.i1 - kept.i0 + 1, kept.j1 - kept.j0 + 1) >= 2; })()) {
       out[room.id] = { ...before, lot: lot.index, ...(room.kind && !before.kind ? { kind: room.kind } : {}) }; taken.set(`${lot.index}|${before.room}`, room.id); continue;
     }
     let candidates = plan.filter(entry => !taken.has(`${lot.index}|${entry.index}`));
@@ -87,7 +87,9 @@ export function bindRooms(rooms, lotsOf, kept = {}) {
       const ground = ['shop', 'café or restaurant', 'bar', 'lobby or hall'].includes(room.kind), want = KIND_CELLS[room.kind] ?? 4;
       const floorOk = wantFloor !== null ? candidates.filter(entry => entry.floor === wantFloor) : ground ? candidates.filter(entry => entry.floor === 0) : (lot.floors ?? 1) > 1 ? candidates.filter(entry => entry.floor >= 1) : candidates;
       const pool = floorOk.length ? floorOk : candidates, rng = seeded(room.id);
-      candidates = pool.map(entry => ({ entry, score: Math.abs(cells(entry) - want) / want + rng() * 0.05 })).sort((a, b) => a.score - b.score).map(({ entry }) => entry);
+      // A room as narrow as one cell (2 m) holds no room's furniture: the last choice, whatever its area.
+      const narrow = entry => Math.min(entry.i1 - entry.i0 + 1, entry.j1 - entry.j0 + 1) < 2;
+      candidates = pool.map(entry => ({ entry, score: Math.abs(cells(entry) - want) / want + (narrow(entry) ? 10 : 0) + rng() * 0.05 })).sort((a, b) => a.score - b.score).map(({ entry }) => entry);
     }
     const chosen = candidates[0];
     if (!chosen) { problems.push({ place: room.id, label: room.label, problem: `every room of lot ${lot.index} is taken` }); continue; }

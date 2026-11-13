@@ -2686,8 +2686,8 @@ function frame(now) {
     if (!pawn.parent) world.add(pawn);
     if (travel && elapsed < travel.total) { pawn.position.copy(travelAt(travel, elapsed)); if (!body.userData.shared) body.material.opacity = 1; movers.push(pawn.position); continue; }
     pawn.position.set(p.x - entry.cx, p.y, p.z - entry.cz);
-    // Out on the balcony (B6) while not walking: on its slab.
-    { const stand = !move && place?.world ? standing.get(`${segment.scene.id}|${id}`) : null, spot = stand ? balconySpot(stand.lot, stand.room) : null; if (spot) pawn.position.set(spot[0] - entry.cx, spot[1], spot[2] - entry.cz); }
+    // Out on the balcony (B6) while not mid-walk: on its slab.
+    { const stand = (!move || elapsed >= (move.time?.steps?.at(-1) ?? 0)) && place?.world ? standing.get(`${segment.scene.id}|${id}`) : null, spot = stand ? balconySpot(stand.lot, stand.room) : null; if (spot) pawn.position.set(spot[0] - entry.cx, spot[1], spot[2] - entry.cz); }
     if (p.ride) ceilings.riders.push({ ...p.ride, x: p.ride.x - entry.cx, z: p.ride.z - entry.cz });
     // Under the street, a pawn shows through the ground above it.
     if (!body.userData.shared) { body.material.depthTest = p.y > -1; body.material.opacity = held ? 0.4 : p.fade ?? 1; }
