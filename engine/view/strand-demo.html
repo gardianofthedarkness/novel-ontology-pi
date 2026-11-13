@@ -1079,7 +1079,7 @@ const roomTyped = new Map((data.rooms ?? []).map((room) => [`${room.lot}|${room.
 // The set view (docs/v3/design.html#indoor-mode): a still of one room of the world opened as a stage set. Its building's shell
 // and every floor above the room are left out, the room's walls facing the camera cut down to a low line, the far walls
 // standing with their windows; by day the sun's patches through them on the floor. Set by capture({ set }), undone by the next.
-let setView = null;
+let setView = null, setDrawn = null;
 function planOf(lot) {
   if (plans.has(lot)) return plans.get(lot);
   const sx = lot.sx ?? lot.nx, sz = lot.sz ?? lot.nz, frame = Array.isArray(lot.frame) ? { x: lot.frame[0], z: lot.frame[1], angle: lot.frame[2] } : lot.frame;
@@ -1333,6 +1333,9 @@ function drawSkeletons(id, entry, count, settling = null, unseen = null) {
   // every rebuild kept the last one's geometry, some 20 geometries a jump about the story).
   if (entry.dynamic) { entry.group.remove(entry.dynamic); release(entry.dynamic); }
   const place = data.places[id], dynamic = new THREE.Group(), lost = place.lots.map(() => new Set()), cutCells = place.lots.map(() => new Set()), cutRooms = place.lots.map(() => new Set());
+  // What the set room drew (the indoor benchmark, engine/bench/indoor-set: its walls cut or standing by side, openings,
+  // balconies, furniture), read by window.__setFacts.
+  if (setView && place.world) setDrawn = null;
   // A hit may reach several buildings (an impact sphere): each lot it reaches loses its own cells.
   const gone = place.lots.map(() => new Set()), structural = new Set(), rubble = [];
   for (const hit of (placeHits[keyOf(id)] ?? []).slice(0, count)) if (!unseen?.ids.has(hitEvent.get(hit))) for (const part of buildingParts(place, hit)) {
@@ -1391,6 +1394,7 @@ function drawSkeletons(id, entry, count, settling = null, unseen = null) {
       const piece = (pu, pv, lu, lv, from = 0, to = h) => { const [px, pz] = local(pu, pv); wall.push([px, y + (from + to) / 2, pz, lu, to - from, lv, turn]); const top = y + to, [ax, az] = lu > lv ? local(pu - lu / 2, pv) : local(pu, pv - lv / 2), [bx, bz] = lu > lv ? local(pu + lu / 2, pv) : local(pu, pv + lv / 2); roomEdges.push(ax, top, az, bx, top, bz); };
       // This room as the set: its walls facing the camera cut to a low line (the side whose outside the camera is on).
       const setRoom = opening && opening.room === r, toward = setRoom ? (() => { const [cx, cz] = local(u0 + w / 2, v0 + d / 2); return [setView.cam[0] - cx, setView.cam[1] - cz]; })() : null;
+      if (setRoom) setDrawn = { lot: n, room: r, floor: k, yFloor: y, yTop: y + h, w, d, h, centre: [rx, y, rz], at: plan.at(u0 + w / 2, v0 + d / 2), sides: [0, 1, 2, 3].map(() => ({ cut: 0, stand: 0, openings: [] })), balconies: 0, furniture: [] };
       const facesCamera = (side) => { if (!toward) return false; const [du, dv] = [[0, -1], [0, 1], [-1, 0], [1, 0]][side], [ox, oz] = local(u0 + w / 2 + du, v0 + d / 2 + dv), [cx, cz] = local(u0 + w / 2, v0 + d / 2); return (ox - cx) * toward[0] + (oz - cz) * toward[1] > 0; };
       const typedHere = place.world ? roomTyped.get(`${n}|${r}`) : null;
       // A room whose lines name a balcony (the architect's `opening`) has one: its first window becomes the balcony door.
@@ -1399,10 +1403,12 @@ function drawSkeletons(id, entry, count, settling = null, unseen = null) {
       // door with its balcony outside, or a shop's glass front.
       const edge = (side, i, j, pu, pv, lu, lv) => {
         // In a set, the set room's walls facing the camera, and every other room's walls on its floor, are a low line.
-        if ((setRoom && facesCamera(side)) || (opening && !setRoom)) { piece(pu, pv, lu, lv, 0, 0.25); return; }
+        if ((setRoom && facesCamera(side)) || (opening && !setRoom)) { piece(pu, pv, lu, lv, 0, 0.25); if (setRoom) setDrawn.sides[side].cut++; return; }
         let open = openings.get(`${k}|${i}|${j}|${side}`);
         if (open && balconyWanted && open.kind === 1) { open = { ...open, kind: 2, sill: 0, head: 2.2 }; balconyWanted = false; }
+        if (setRoom) setDrawn.sides[side].stand++;
         if (!open) { piece(pu, pv, lu, lv); return; }
+        if (setRoom) setDrawn.sides[side].openings.push(open.kind);
         const sill = Math.min(open.sill, h - 0.4), head = Math.min(open.head, h - 0.1), along = lu > lv, [px, pz] = local(pu, pv);
         if (sill > 0.02) piece(pu, pv, lu, lv, 0, sill);
         piece(pu, pv, lu, lv, head, h);
@@ -1411,6 +1417,7 @@ function drawSkeletons(id, entry, count, settling = null, unseen = null) {
         (setRoom ? setFrames : roomEdges).push(ax, y + sill, az, bx, y + sill, bz, ax, y + head, az, bx, y + head, bz, ax, y + sill, az, ax, y + head, az, bx, y + sill, bz, bx, y + head, bz);
         (setRoom ? setFrames : glints).push(ax + (bx - ax) * 0.2, y + sill + 0.25, az + (bz - az) * 0.2, ax + (bx - ax) * 0.55, y + head - 0.2, az + (bz - az) * 0.55);
         if (open.kind === 2) {
+          if (setRoom) setDrawn.balconies++;
           // The balcony: a slab 1.2 m out and its rail at 1.1 m.
           const [du, dv] = [[0, -1], [0, 1], [-1, 0], [1, 0]][side], out = 0.6, [sx_, sz_] = local(pu + du * out, pv + dv * out);
           balconies.push([sx_, y - 0.05, sz_, along ? lu + 0.6 : 1.2, 0.1, along ? 1.2 : lv + 0.6, turn]);
@@ -1438,6 +1445,7 @@ function drawSkeletons(id, entry, count, settling = null, unseen = null) {
         const [px, pz] = local(u0 + pu, v0 + pv), item = new THREE.Group();
         item.add(new THREE.Mesh(shell.fill, mats.furniture), new THREE.LineSegments(shell.edges, mats.furnitureEdge));
         item.position.set(px, y + 0.12, pz); item.rotation.y = pa - turn; dynamic.add(item);
+        if (setRoom) setDrawn.furniture.push([model, Math.round(pu * 100) / 100, Math.round(pv * 100) / 100]);
       }
     });
   });
@@ -1448,7 +1456,7 @@ function drawSkeletons(id, entry, count, settling = null, unseen = null) {
   if (setPanes.length) dynamic.add(instanced(mats.setGlass, setPanes));
   if (setFrames.length) dynamic.add(new THREE.LineSegments(new THREE.BufferGeometry().setAttribute("position", new THREE.Float32BufferAttribute(setFrames, 3)), mats.setFrame));
   // What the last set drew (F9: the sun's patches proven in the stills; read by engine/director/review-run.mjs).
-  if (setView && place.world) window.__setInfo = { key: setView.key, sun: !!setView.sun, patches: sunPatches.length / 18, windows: setPanes.length };
+  if (setView && place.world) window.__setInfo = { key: setView.key, sun: !!setView.sun, patches: sunPatches.length / 18, windows: setPanes.length, stairs: stairs.length, corridors: corridors.length, above: setDrawn ? [corridors, stairs, rooms, halls, talls, roomWalls].reduce((sum, list) => sum + list.filter((entry) => entry[1] > setDrawn.yTop + 0.3).length, 0) : null };
   if (balconies.length) dynamic.add(instanced(mats.balcony, balconies));
   dynamic.add(instanced(mats.corridor, corridors), instanced(mats.stair, stairs), instanced(mats.cut, red), instanced(mats.room, rooms), instanced(mats.hall, halls), instanced(mats.tall, talls), instanced(mats.roomWall, roomWalls), instanced(mats.roomCut, redRooms), instanced(mats.wall, walls), instanced(mats.roof, roofs), instanced(mats.rubble, rubble));
   entry.group.add(dynamic); entry.dynamic = dynamic;
@@ -2967,6 +2975,13 @@ window.__pawnAt = (id) => { const pawn = pawns.get(id)?.pawn; return pawn?.paren
 // A recorded run unit by unit (engine/director/review-run.mjs): each unit's span on the timeline and who is in it at its end.
 window.__units = () => { const out = new Map(); for (const segment of segments) { const id = segment.scene.id, entry = out.get(id) ?? { id, place: segment.scene.place, start: segment.start, end: segment.end, people: [], events: segment.scene.events?.length ?? 0 }; entry.start = Math.min(entry.start, segment.start); entry.end = Math.max(entry.end, segment.end); entry.people = Object.keys(segment.positions ?? {}).filter((who) => !who.startsWith("crowd:") && !data.people?.[who]?.crowd); out.set(id, entry); } return [...out.values()]; };
 // The world building, floor and room a point stands in (the set view's `set`), or null outside every building.
+window.__setFacts = () => {
+  // The last set as drawn (engine/bench/indoor-set/check.mjs): its room, walls, openings, furniture, what stands above it,
+  // and the camera against the room's middle (metres; pitch in degrees down).
+  if (!setDrawn) return null;
+  const [cx, cy, cz] = setDrawn.centre, cam = camera.position, target = controls.target, flat = Math.hypot(cam.x - cx, cam.z - cz), rise = cam.y - (cy + 0.5);
+  return { ...setDrawn, info: window.__setInfo ?? null, camera: { distance: Math.round(Math.hypot(flat, rise) * 10) / 10, pitch: Math.round(THREE.MathUtils.radToDeg(Math.atan2(rise, flat))), height: Math.round((cam.y - cy) * 10) / 10, targetOff: Math.round(Math.hypot(target.x - cx, target.z - cz) * 10) / 10 } };
+};
 window.__roomAt = (px, py, pz) => {
   const lots = data.world?.lots ?? [];
   for (let n = 0; n < lots.length; n++) {
@@ -3236,12 +3251,15 @@ if (capture) {
       return { at: segment.start + 0.05, place: segment.scene.place, people };
     },
     /** One still: `place` at the start of an event, the reader's camera turned by `yaw` about it; `hide` things, `beams` of earlier boxes, `boxes` and a `solved` 3D box drawn for checking. */
-    async capture({ id, scene, event, place, set = null, cutAbove = null, yaw = 0, hide = [], beams = [], boxes = [], solved = null, aim = null, elevation = null, mask = false, ghosts = [], form = null, focus = null, marker = null, radius = null, poles = [], topdown = null, beforeHit = false, spheres = [], pins = [], play = null, at = null, caption = null, frame = null, view = null, slices = [], cuts = [], areas = [], free = [], vague = null, labelScale = 1, dash = 2, arrows = [], wedge = null, people = false, only = null, mover = null, grid = null }) {
+    async capture({ id, scene, event, place, set = null, cutAbove = null, yaw = 0, hide = [], beams = [], boxes = [], solved = null, aim = null, elevation = null, mask = false, ghosts = [], form = null, focus = null, marker = null, radius = null, poles = [], topdown = null, beforeHit = false, spheres = [], pins = [], play = null, at = null, caption = null, frame = null, view = null, slices = [], cuts = [], areas = [], free = [], vague = null, labelScale = 1, dash = 2, arrows = [], wedge = null, people = false, only = null, mover = null, grid = null, storySky = false }) {
       // `play`: that many seconds into the event, its hit's effects on (to look at a destruction as it plays).
       // `at`: any moment of the strand, everything playing (to record a scene).
       // Terrain spawning (docs/v3/design.html#visual-context-engine): a frame of its own size, an explicit camera in world metres,
       // ghost slices, cuts, named areas, and the far city faded by fog; all undone by the next capture without them.
       host.style.width = frame ? `${frame[0]}px` : ""; host.style.height = frame ? `${frame[1]}px` : ""; resize();
+      // `storySky`: the story's sky of the unit at `at` from now on (time of day, weather), as the reader sees it; stills are
+      // otherwise unlit by it. The indoor set's sun and its patches follow it (the indoor benchmark, engine/bench/indoor-set).
+      if (storySky && !daylight.on) { daylight.on = true; daylight.force = null; daylight.snap = 3; }
       world.fog = vague ? new THREE.Fog(0x060c12, vague.near, vague.far) : defaultFog;
       time = at ?? (eventStart.get(`${scene}|${event}`) ?? 0) + (play ?? 0.02); quiet = play === null && at === null; seeing = at !== null; shownPlace = place; glide = null; hiddenThings = new Set(hide); sheetView = null;
       // Just before this event's own hit: the buildings as they stood.
@@ -3261,6 +3279,24 @@ if (capture) {
       // A lower look (degrees above level): from the side, a beam's run and a thing's height read directly.
       if (elevation !== null) { const length = offset.length(), level = new THREE.Vector3(offset.x, 0, offset.z).normalize(), up = THREE.MathUtils.degToRad(elevation); offset.copy(level.multiplyScalar(Math.cos(up) * length)).setY(Math.max(2 - pose.target.y, Math.sin(up) * length)); }
       camera.position.copy(pose.target).add(offset); controls.target.copy(pose.target); controls.update();
+      // A set's camera is the indoor benchmark's (engine/bench/indoor-set/standard.json; the user, 2026-11-12: the clip "as
+      // standard"): on the room's middle at 0.5 m, 32 degrees down, 11 m off (more for a room wider than 6 m), from the side
+      // away from its windows turned 38 degrees, so the window wall stands at the back and the near walls are cut.
+      if (set && set.camera !== "free") {
+        const lot = data.world?.lots?.[set.lot], plan = lot ? planOf(lot) : null, room = lot?.rooms?.[set.room], entry = built.get(place);
+        if (plan && room && entry) {
+          const [k, i0, j0, i1, j1] = room, cu = ((i0 + i1 + 1) / 2) * CELL - (plan.sx * CELL) / 2, cv = ((j0 + j1 + 1) / 2) * CELL - (plan.sz * CELL) / 2, [mx, mz] = plan.at(cu, cv);
+          const outward = [0, 0];
+          for (const [f, i, j, side] of lot.windows ?? []) if (f === k && i >= i0 && i <= i1 && j >= j0 && j <= j1) { const [du, dv] = [[0, -1], [0, 1], [-1, 0], [1, 0]][side], [ox, oz] = plan.at(cu + du, cv + dv); outward[0] += ox - mx; outward[1] += oz - mz; }
+          if (!Math.hypot(...outward)) { const [ox, oz] = plan.at(0, 0); outward[0] = mx - ox; outward[1] = mz - oz; }
+          const length = Math.hypot(...outward) || 1, turn38 = THREE.MathUtils.degToRad(38), back = [-outward[0] / length, -outward[1] / length];
+          const dir = [back[0] * Math.cos(turn38) - back[1] * Math.sin(turn38), back[0] * Math.sin(turn38) + back[1] * Math.cos(turn38)];
+          const y = (lot.k0 ?? 0) * FLOOR + k * FLOOR + 0.5, far = 11 * Math.max(1, (Math.max(i1 - i0 + 1, j1 - j0 + 1) * CELL) / 6), pitch = THREE.MathUtils.degToRad(32);
+          controls.target.set(mx - entry.cx, y, mz - entry.cz);
+          camera.position.set(mx - entry.cx + dir[0] * far * Math.cos(pitch), y + far * Math.sin(pitch), mz - entry.cz + dir[1] * far * Math.cos(pitch));
+          controls.update();
+        }
+      }
       // `set` ({ lot, room }: a world lot and one of its rooms): the room opened as a set for this still, seen from where the
       // camera now stands; by day with the sun's patches (docs/v3/design.html#indoor-mode).
       { const toSun = sun.position.clone().normalize(), day = sun.intensity > 0.35 && toSun.y > 0.05;

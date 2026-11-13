@@ -1,0 +1,252 @@
+{
+  "about": "The indoor set's benchmark (the user, 2026-11-12: the indoor clip is the standard the automated run's first indoor scenes must match). clip.html is the clip unchanged; reference/ its frames at the moments below (reference.mjs); check.mjs measures a run's page against each check. Numbers are the clip's own: metres, degrees, the page's opacities.",
+  "book": "vol-1 of the 17r reading (the Documents world v2-host-state-17r-vol-1-0018-after-d20261112225518)",
+  "room": {
+    "place": "the bound room of unit 25 (stage/world/rooms.json)",
+    "kind": "bedroom",
+    "building": "a dormitory of several storeys",
+    "floor": "an upper floor (1 or higher)",
+    "size": [
+      4.5,
+      6
+    ],
+    "height": 2.7
+  },
+  "shots": [
+    {
+      "id": "set",
+      "clip": 0,
+      "title": "The set",
+      "unit": "scene_000025",
+      "sky": {
+        "time": "9:00",
+        "weather": "clear"
+      },
+      "moments": [
+        {
+          "id": "set-a",
+          "t": 2
+        },
+        {
+          "id": "set-b",
+          "t": 8
+        }
+      ],
+      "camera": {
+        "from": "the side of the walls cut low (outside the room, over the cut walls)",
+        "pitch": 32,
+        "distance": 11,
+        "looksAt": "the room's middle at 0.5 m",
+        "swing": [
+          28,
+          48
+        ]
+      },
+      "checks": [
+        {
+          "id": "set.room-bound",
+          "what": "The unit is set in its bound room: that lot, that room, that floor",
+          "measure": "rooms.json binding for the unit's place; the capture's set equals it"
+        },
+        {
+          "id": "set.upper-floor",
+          "what": "The room is on an upper floor of a building of several storeys",
+          "measure": "set floor >= 1 and the lot's floors >= 3"
+        },
+        {
+          "id": "set.kind",
+          "what": "The room is typed a bedroom and furnished as one",
+          "measure": "rooms.json kind bedroom; E.rooms furniture from the bedroom recipe"
+        },
+        {
+          "id": "set.size",
+          "what": "About 4.5 x 6 m (a single room)",
+          "measure": "the plan room's cells x 2 m: area 16-36 m^2"
+        },
+        {
+          "id": "set.nothing-above",
+          "what": "Ceiling and every floor above removed",
+          "measure": "nothing of the lot drawn above the set floor's top"
+        },
+        {
+          "id": "set.near-cut",
+          "what": "The walls facing the camera cut to a 0.25 m outline; their doors kept as outlines",
+          "measure": "set-room wall pieces on the camera's sides no higher than 0.3 m; door gaps kept"
+        },
+        {
+          "id": "set.far-stand",
+          "what": "The far walls stand full height (2.7 m) with their real openings",
+          "measure": "set-room wall pieces on the other sides reach the room's height; openings from the lot's windows"
+        },
+        {
+          "id": "set.window",
+          "what": "At least one window on the outer wall: sill 0.9, head 2.1, faint glass (opacity 0.08-0.16) with a highlight",
+          "measure": "__setInfo.windows >= 1; setGlass opacity; setFrames drawn"
+        },
+        {
+          "id": "set.balcony",
+          "what": "A balcony door (0 to 2.2 m) on the outer wall with its slab 1.3 m out and a rail at 1.1 m",
+          "measure": "an opening of kind balcony in the set room; a balcony slab drawn outside it"
+        },
+        {
+          "id": "set.sun",
+          "what": "Morning sun through the openings: a warm patch on the floor (clear sky, sun up)",
+          "measure": "__setInfo.sun and __setInfo.patches >= 1"
+        },
+        {
+          "id": "set.furniture",
+          "what": "The bedroom's furniture in place: a bed at the back wall, a bedside cabinet, a shelf on a side wall, a rug and a low table in the middle, a floor lamp in a corner",
+          "measure": "furniture items of the room: bed against a far wall; at least 4 of the 6 kinds; none blocking the door"
+        },
+        {
+          "id": "set.people-in",
+          "what": "Every person of the unit inside the room or on its balcony, named",
+          "measure": "each person's spot in the room's cells or the balcony's; a name tag each"
+        },
+        {
+          "id": "set.camera",
+          "what": "The camera from the cut side, about 32 degrees down, about 11 m from the room's middle, the room in the middle of the frame",
+          "measure": "capture pitch 26-40, distance 8-14 m, target within 1 m of the room's middle"
+        },
+        {
+          "id": "set.surround",
+          "what": "Round the room only a faint slab of the corridor outside its door: no stair blocks, nothing standing over the floor",
+          "measure": "no stair drawn on the set floor (__setInfo.stairs = 0)"
+        },
+        {
+          "id": "set.outside",
+          "what": "The city beyond the far wall under the story's sky; the building's shell faint (0.05)",
+          "measure": "sky by the story's time; the lot's shell opacity <= 0.1 in the set"
+        },
+        {
+          "id": "set.story",
+          "what": "The first units' own staging (25-26): the girl over the balcony rail, Kamijou walks from the bed to the balcony door",
+          "measure": "in unit 25 or 26 someone's spot on the balcony; a walk in the room ending at the balcony door"
+        }
+      ],
+      "storyUnits": [
+        "scene_000025",
+        "scene_000026"
+      ]
+    },
+    {
+      "id": "eye",
+      "clip": 1,
+      "title": "Eye level",
+      "unit": "scene_000038",
+      "sky": {
+        "time": "9:00",
+        "weather": "rain"
+      },
+      "moments": [
+        {
+          "id": "eye-a",
+          "t": 1
+        },
+        {
+          "id": "eye-b",
+          "t": 7
+        }
+      ],
+      "camera": {
+        "from": "inside the room by its door",
+        "height": 1.6,
+        "looksAt": "the window wall",
+        "fov": 42
+      },
+      "checks": [
+        {
+          "id": "eye.inside",
+          "what": "The camera inside the room at 1.6 m, every wall standing, the ceiling on",
+          "measure": "camera in the room's cells at floor + 1.6 m; no wall cut"
+        },
+        {
+          "id": "eye.window-view",
+          "what": "The window is the eye's only way out: the street seen through it, the glass never hiding it",
+          "measure": "the window wall in the frame; glass opacity <= 0.16"
+        },
+        {
+          "id": "eye.rain",
+          "what": "Rain: no sun patch, the room dimmer than outside, rain beyond the glass",
+          "measure": "__setInfo.patches = 0 under rain; the sky's rain drawn"
+        },
+        {
+          "id": "eye.people",
+          "what": "Index and Kamijou in the room at their spots, names small",
+          "measure": "both in the room's cells"
+        }
+      ]
+    },
+    {
+      "id": "outside",
+      "clip": 2,
+      "title": "From outside",
+      "unit": "scene_000079",
+      "sky": {
+        "time": "18:00",
+        "weather": "dusk"
+      },
+      "moments": [
+        {
+          "id": "outside-a",
+          "t": 3
+        },
+        {
+          "id": "outside-b",
+          "t": 6.5
+        },
+        {
+          "id": "outside-c",
+          "t": 10
+        }
+      ],
+      "camera": {
+        "from": "the street across, rising to the room's floor, then over into the set",
+        "path": [
+          [
+            36,
+            -6,
+            14
+          ],
+          [
+            18,
+            2.5,
+            6
+          ],
+          [
+            -4.5,
+            8.5,
+            9
+          ]
+        ]
+      },
+      "checks": [
+        {
+          "id": "outside.facade",
+          "what": "The dorm's windows by its kind: one every two cells on the street face, balcony doors",
+          "measure": "the lot's windows from config/windows.json's dormitory pattern"
+        },
+        {
+          "id": "outside.lit",
+          "what": "At dusk the occupied room lit from within, some others lit, the city's windows lit",
+          "measure": "the set room's window lit; the sky's dusk"
+        },
+        {
+          "id": "outside.fade",
+          "what": "The shell fades round the room as the camera nears",
+          "measure": "the lot's shell opacity falls to 0 over the move"
+        },
+        {
+          "id": "outside.into-set",
+          "what": "The move ends in the set on the room",
+          "measure": "the last frame is the set view of the bound room"
+        },
+        {
+          "id": "outside.story",
+          "what": "Index fallen at the room's door in the corridor; Kamijou coming down the corridor",
+          "measure": "Index's spot on the corridor cell at the room's door; Kamijou's move along the corridor to it"
+        }
+      ]
+    }
+  ]
+}

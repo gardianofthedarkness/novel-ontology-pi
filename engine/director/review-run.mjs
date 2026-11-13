@@ -49,7 +49,7 @@ export async function reviewRun(novelDir, { run, out, every = 5, reviewer = 'pi'
     for (const unit of all.slice(Math.max(0, first), last + 1)) {
       const scene = sceneOf.get(unit.id), at = Math.max(unit.start, unit.end - 0.05), cards = cardsOf.get(unit.id) ?? [];
       // The people at the unit's end: placed first by a plain capture, then read where the page has them.
-      await chrome.evaluate(`window.__stage.capture(${JSON.stringify({ id: 'place', scene: unit.id, place: unit.place, at, people: true, frame: [1440, 900] })})`);
+      await chrome.evaluate(`window.__stage.capture(${JSON.stringify({ id: 'place', scene: unit.id, place: unit.place, at, people: true, frame: [1440, 900], storySky: true })})`);
       const spots = (await chrome.evaluate(`(${JSON.stringify(unit.people)}).map(id => [id, window.__pawnAt(id)]).filter(([, p]) => p)`)) ?? [];
       const lastPeople = new Set((cards.at(-1)?.moves ?? []).map(move => move.person).filter(Boolean));
       const framedSpots = spots.filter(([id]) => lastPeople.has(id)).length ? spots.filter(([id]) => lastPeople.has(id)) : spots;
@@ -59,7 +59,7 @@ export async function reviewRun(novelDir, { run, out, every = 5, reviewer = 'pi'
         if (story.room) room = { lot: story.room.lot, room: story.room.room, floor: story.room.floor };
         else if (story.indoors) for (const [, p] of framedSpots) { room = await chrome.evaluate(`window.__roomAt(${p[0]}, ${p[1]}, ${p[2]})`); if (room) break; }
         const frame = framing(framedSpots.map(([, p]) => p), room);
-        await chrome.evaluate(`window.__stage.capture(${JSON.stringify({ id: `${unit.id}-review`, scene: unit.id, place: unit.place, at, people: true, frame: [1440, 900], ...frame })})`);
+        await chrome.evaluate(`window.__stage.capture(${JSON.stringify({ id: `${unit.id}-review`, scene: unit.id, place: unit.place, at, people: true, frame: [1440, 900], storySky: true, ...frame })})`);
         await new Promise(done => setTimeout(done, 300));
         still = join(stills, `${unit.id.slice(-3)}.png`);
         if (room) setInfo = await chrome.evaluate('window.__setInfo ?? null');

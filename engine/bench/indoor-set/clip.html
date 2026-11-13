@@ -1,0 +1,266 @@
+<meta charset="utf-8">
+<title>Indoor Scene Mode</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter+Tight:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap">
+<style>
+/* Layout: one stage (the clip) with its shot strip and transport above the captions that name each part of the design. */
+:root {
+  --bg: #eef2f6; --panel: #ffffff; --ink: #142030; --muted: #5a6878; --line: #d5dde6; --accent: #2a64d6; --warm: #b8742c;
+  --f-body: "Inter Tight", "Helvetica Neue", Arial, sans-serif; --f-mono: "JetBrains Mono", ui-monospace, Menlo, monospace;
+}
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) { --bg: #0d131a; --panel: #151e28; --ink: #e4ebf2; --muted: #93a2b2; --line: #273444; --accent: #7aa4ff; --warm: #e2a35a; color-scheme: dark; } }
+:root[data-theme="dark"] { --bg: #0d131a; --panel: #151e28; --ink: #e4ebf2; --muted: #93a2b2; --line: #273444; --accent: #7aa4ff; --warm: #e2a35a; color-scheme: dark; }
+* { box-sizing: border-box; }
+body { background: var(--bg); color: var(--ink); font-family: var(--f-body); font-size: 14px; line-height: 1.45; }
+.wrap { max-width: 1100px; margin: 0 auto; padding-block: 22px 40px; padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); display: grid; gap: 14px; }
+h1 { font-size: 22px; margin: 0; font-weight: 700; letter-spacing: -0.01em; text-wrap: balance; }
+.lede { margin: 4px 0 0; color: var(--muted); max-width: 72ch; }
+.stage { position: relative; width: 100%; aspect-ratio: 16 / 9; max-width: 100%; border-radius: 8px; overflow: hidden; background: #060c12; }
+.stage canvas { width: 100%; height: 100%; display: block; }
+.tag { position: absolute; left: 12px; top: 10px; font-family: var(--f-mono); font-size: 12px; color: #cfe6ff; background: #060c12cc; padding: 3px 8px; border-radius: 4px; pointer-events: none; }
+.callouts { position: absolute; right: 12px; bottom: 12px; display: grid; gap: 4px; justify-items: end; pointer-events: none; max-width: 60%; }
+.callouts span { font-size: 12px; color: #e9f4ff; background: #0a1622d9; border-left: 2px solid #ffc27a; padding: 3px 8px; border-radius: 3px; opacity: 0; transition: opacity .4s; }
+.callouts span.on { opacity: 1; }
+.bar { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.bar button { font: inherit; font-size: 13px; color: var(--ink); background: var(--panel); border: 1px solid var(--line); border-radius: 6px; padding: 6px 12px; cursor: pointer; }
+.bar button[aria-pressed="true"] { border-color: var(--accent); color: var(--accent); font-weight: 600; }
+.bar button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.progress { flex: 1 1 160px; height: 4px; background: var(--line); border-radius: 2px; overflow: hidden; min-width: 120px; }
+.progress i { display: block; height: 100%; width: 0; background: var(--accent); }
+.notes { display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 10px; }
+.note { background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 12px 14px; display: grid; gap: 6px; min-width: 0; }
+.note h2 { font-size: 14px; margin: 0; font-weight: 600; }
+.note .when { font-family: var(--f-mono); font-size: 11px; color: var(--muted); }
+.note ul { margin: 0; padding-left: 18px; display: grid; gap: 3px; }
+.note.active { border-color: var(--accent); }
+.foot { color: var(--muted); font-size: 12px; max-width: 80ch; }
+@media (prefers-reduced-motion: reduce) { .callouts span { transition: none; } }
+</style>
+
+<div class="wrap">
+  <header>
+    <h1>Indoor scene mode, as designed</h1>
+    <p class="lede">Kamijou's room in the eight-storey boys' dorm, at three moments of volume 1 from the story sky. Each shot is one view of the design (&sect;8.8): the set, eye level, and from outside. A mock-up: furniture as boxes in the bedroom recipe's places, people as markers.</p>
+  </header>
+
+  <div class="stage" id="stage"><div class="tag" id="tag"></div><div class="callouts" id="callouts"></div></div>
+
+  <div class="bar" role="group" aria-label="Clip controls">
+    <button id="play" type="button" aria-pressed="true">Pause</button>
+    <button data-shot="0" type="button">1 · The set</button>
+    <button data-shot="1" type="button">2 · Eye level</button>
+    <button data-shot="2" type="button">3 · From outside</button>
+    <div class="progress" aria-hidden="true"><i id="prog"></i></div>
+  </div>
+
+  <section class="notes" id="notes"></section>
+  <p class="foot">What the real page will differ in: the furniture is the KayKit models the architect places; the room's size, doors and windows come from the dorm's built plan and the windows pattern by building kind; the city outside is the built city under the story's sky.</p>
+</div>
+
+<script type="module">
+import * as THREE from './three.module.js';
+
+const SHOTS = [
+  { title: 'The set', when: 'unit 25 · 9:00 · clear', len: 11, sky: 'day',
+    notes: ['Ceiling and the floors above removed', 'Near walls cut to an outline (doors kept)', 'Far walls stand: real openings, faint glass', 'Morning sun from the east: a patch on the floor', 'Balcony door open: Index over the rail'],
+    cue: [0.5, 2, 3.5, 5, 6.5] },
+  { title: 'Eye level', when: 'unit 38 · 9:00 · rain', len: 10, sky: 'rain',
+    notes: ['Camera inside at 1.6 m, every wall standing', 'The window is the only way out for the eye', 'Rain: no sun patch, the room dimmer than outside', 'Glass reads by its highlight, never hides the street'],
+    cue: [0.5, 2.5, 4.5, 6.5] },
+  { title: 'From outside', when: 'unit 79 · 18:00 · dusk', len: 11, sky: 'dusk',
+    notes: ['Dorm windows by kind: one every two cells, balconies', 'The occupied room lit from within', 'The shell fades round the room', 'Into the set: Index fallen at the door'],
+    cue: [0.5, 2.5, 4.5, 7] },
+];
+
+// ── Stage ──────────────────────────────────────────────────────────────────────────────────────────────────────────
+const host = document.getElementById('stage');
+const renderer = new THREE.WebGLRenderer({ antialias: true }); renderer.setPixelRatio(Math.min(2, devicePixelRatio || 1)); renderer.localClippingEnabled = true;
+host.prepend(renderer.domElement);
+const scene = new THREE.Scene(), camera = new THREE.PerspectiveCamera(42, 16 / 9, 0.1, 600);
+const hemi = new THREE.HemisphereLight(0xcfe6ff, 0x1a2a38, 0.9); scene.add(hemi);
+const sun = new THREE.DirectionalLight(0xfff1d6, 1.2); scene.add(sun);
+const lamp = new THREE.PointLight(0xffc98a, 0, 9, 1.6); lamp.position.set(5.2, 2.2, -2.4); scene.add(lamp);
+function resize() { const w = host.clientWidth, h = host.clientHeight; renderer.setSize(w, h, false); camera.aspect = w / h; camera.updateProjectionMatrix(); }
+addEventListener('resize', resize);
+
+// Materials: the hologram's blues for the building, the room's walls denser, the furniture warm (as the page draws them).
+const M = {
+  shell: new THREE.MeshLambertMaterial({ color: 0x5fb4e8, transparent: true, opacity: 0.12, depthWrite: false }),
+  shellEdge: new THREE.LineBasicMaterial({ color: 0x8fd6ff, transparent: true, opacity: 0.35 }),
+  slab: new THREE.MeshLambertMaterial({ color: 0x3d6a8a, transparent: true, opacity: 0.35, depthWrite: false }),
+  floor: new THREE.MeshLambertMaterial({ color: 0x47708f }),
+  wall: new THREE.MeshLambertMaterial({ color: 0xa9d4ef, transparent: true, opacity: 0.82 }),
+  cut: new THREE.MeshLambertMaterial({ color: 0xa9d4ef, transparent: true, opacity: 0.9 }),
+  edge: new THREE.LineBasicMaterial({ color: 0xe0f3ff, transparent: true, opacity: 0.9 }),
+  ghost: new THREE.LineBasicMaterial({ color: 0xe0f3ff, transparent: true, opacity: 0.35 }),
+  frame: new THREE.LineBasicMaterial({ color: 0xffffff }),
+  glass: new THREE.MeshBasicMaterial({ color: 0xcfeaff, transparent: true, opacity: 0.08, depthWrite: false, side: THREE.DoubleSide }),
+  glint: new THREE.LineBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.55 }),
+  furniture: new THREE.MeshLambertMaterial({ color: 0xd9b48a, emissive: 0x2a1a0c }),
+  furnitureEdge: new THREE.LineBasicMaterial({ color: 0xffe2b8, transparent: true, opacity: 0.6 }),
+  patch: new THREE.MeshBasicMaterial({ color: 0xffd28a, transparent: true, opacity: 0.6, depthWrite: false, side: THREE.DoubleSide }),
+  rail: new THREE.LineBasicMaterial({ color: 0xbfe4ff }),
+  city: new THREE.MeshLambertMaterial({ color: 0x5fb4e8, transparent: true, opacity: 0.16, depthWrite: false }),
+  ground: new THREE.MeshLambertMaterial({ color: 0x1b2b39 }),
+  litWindow: new THREE.MeshBasicMaterial({ color: 0xffcf8a, transparent: true, opacity: 0, side: THREE.DoubleSide }),
+  darkWindow: new THREE.MeshBasicMaterial({ color: 0x9fd2f0, transparent: true, opacity: 0.22, side: THREE.DoubleSide }),
+  rain: new THREE.LineBasicMaterial({ color: 0xbcd8ee, transparent: true, opacity: 0 }),
+};
+const box = (w, h, d, mat, x, y, z, edges = M.edge) => {
+  const g = new THREE.BoxGeometry(w, h, d), mesh = new THREE.Mesh(g, mat); mesh.position.set(x, y, z);
+  if (edges) mesh.add(new THREE.LineSegments(new THREE.EdgesGeometry(g), edges));
+  return mesh;
+};
+const lines = (points, mat) => { const g = new THREE.BufferGeometry(); g.setAttribute('position', new THREE.Float32BufferAttribute(points.flat(), 3)); return new THREE.LineSegments(g, mat); };
+
+// The dorm: 8 floors of 3 m, 18 m along the street (x from -12 to 6), 10 m deep; Kamijou's room on the fourth floor
+// (its floor at y = 0, the street at y = -9), against the east wall that faces the street, with a balcony.
+const FLOOR = 3, ROOM = { x0: 1.5, x1: 6, z0: -3, z1: 3 }, H = 2.7;
+const room = new THREE.Group(), cutWalls = new THREE.Group(), fullNear = new THREE.Group(), building = new THREE.Group(), outside = new THREE.Group();
+scene.add(room, building, outside);
+
+// A wall along x (at z) or along z (at x), built in pieces round its openings: [from, to, sill, head] along the wall.
+function wall({ along, at, from, to, openings = [], height = H, mat = M.wall, thick = 0.14 }) {
+  const g = new THREE.Group(), piece = (a, b, y0, y1) => { if (b - a < 0.01 || y1 - y0 < 0.01) return; const mid = (a + b) / 2, ym = (y0 + y1) / 2; g.add(along === 'x' ? box(b - a, y1 - y0, thick, mat, mid, ym, at, null) : box(thick, y1 - y0, b - a, mat, at, ym, mid, null)); };
+  const holes = [...openings].sort((p, q) => p[0] - q[0]);
+  let cursor = from;
+  for (const [a, b, sill, head] of holes) { piece(cursor, a, 0, height); piece(a, b, 0, sill); piece(a, b, head, height); cursor = b; }
+  piece(cursor, to, 0, height);
+  // The outline: the wall's top and ends, and each opening's frame.
+  const P = (u, y) => (along === 'x' ? [u, y, at] : [at, y, u]), seg = [];
+  seg.push(P(from, height), P(to, height), P(from, 0), P(from, height), P(to, 0), P(to, height));
+  for (const [a, b, sill, head] of holes) seg.push(P(a, sill), P(b, sill), P(a, head), P(b, head), P(a, sill), P(a, head), P(b, sill), P(b, head));
+  g.add(lines(seg, M.frame));
+  return g;
+}
+// Openings in the east wall (along z at x = 6): a window and the balcony door.
+const WINDOW = [-2.4, -0.6, 0.9, 2.1], DOOR_OUT = [0.6, 1.5, 0, 2.2], DOOR_IN = [2.1, 3.0];
+room.add(box(ROOM.x1 - ROOM.x0, 0.12, ROOM.z1 - ROOM.z0, M.floor, (ROOM.x0 + ROOM.x1) / 2, -0.06, 0));
+// Far walls (the set's): east with the window and balcony door, north whole.
+room.add(wall({ along: 'z', at: ROOM.x1, from: ROOM.z0, to: ROOM.z1, openings: [WINDOW, DOOR_OUT] }));
+room.add(wall({ along: 'x', at: ROOM.z0, from: ROOM.x0, to: ROOM.x1 }));
+// Near walls: west (to the corridor, its door) and south (the next room). In the set cut to an outline; full at eye level.
+const westOpen = [[1.2, 2.1, 0, 2.1]];
+cutWalls.add(wall({ along: 'z', at: ROOM.x0, from: ROOM.z0, to: ROOM.z1, openings: westOpen, height: 0.25, mat: M.cut }), wall({ along: 'x', at: ROOM.z1, from: ROOM.x0, to: ROOM.x1, height: 0.25, mat: M.cut }));
+cutWalls.add(lines([[ROOM.x0, 0.25, 1.2], [ROOM.x0, 2.1, 1.2], [ROOM.x0, 0.25, 2.1], [ROOM.x0, 2.1, 2.1], [ROOM.x0, 2.1, 1.2], [ROOM.x0, 2.1, 2.1]], M.ghost));
+fullNear.add(wall({ along: 'z', at: ROOM.x0, from: ROOM.z0, to: ROOM.z1, openings: westOpen }), wall({ along: 'x', at: ROOM.z1, from: ROOM.x0, to: ROOM.x1 }));
+room.add(cutWalls, fullNear);
+// Glass: a faint pane in the window with a highlight across it; the balcony door stands open.
+{ const [a, b, sill, head] = WINDOW, pane = new THREE.Mesh(new THREE.PlaneGeometry(b - a, head - sill), M.glass); pane.rotation.y = Math.PI / 2; pane.position.set(ROOM.x1, (sill + head) / 2, (a + b) / 2); room.add(pane);
+  room.add(lines([[ROOM.x1 - 0.01, sill + 0.25, a + 0.2], [ROOM.x1 - 0.01, head - 0.2, a + 0.75], [ROOM.x1 - 0.01, sill + 0.15, a + 0.55], [ROOM.x1 - 0.01, sill + 0.55, a + 0.75], [ROOM.x1, sill, (a + b) / 2], [ROOM.x1, head, (a + b) / 2]], M.glint));
+  const [c, d] = DOOR_OUT, leaf = new THREE.Mesh(new THREE.PlaneGeometry(d - c, 2.15), M.glass); leaf.position.set(ROOM.x1 + 0.45, 1.08, c - 0.02); room.add(leaf); room.add(lines([[ROOM.x1, 0, c], [ROOM.x1 + 0.9, 0, c - 0.02], [ROOM.x1, 2.15, c], [ROOM.x1 + 0.9, 2.15, c - 0.02], [ROOM.x1 + 0.9, 0, c - 0.02], [ROOM.x1 + 0.9, 2.15, c - 0.02]], M.glint)); }
+// The balcony outside the door: its slab and rail (1.1 m).
+room.add(box(1.3, 0.12, 3.2, M.slab, ROOM.x1 + 0.65, -0.06, 0.6, M.ghost));
+room.add(lines([[ROOM.x1 + 1.3, 1.1, -1], [ROOM.x1 + 1.3, 1.1, 2.2], [ROOM.x1, 1.1, -1], [ROOM.x1 + 1.3, 1.1, -1], [ROOM.x1, 1.1, 2.2], [ROOM.x1 + 1.3, 1.1, 2.2], ...Array.from({ length: 9 }, (_, n) => [[ROOM.x1 + 1.3, 0, -1 + n * 0.4], [ROOM.x1 + 1.3, 1.1, -1 + n * 0.4]]).flat()], M.rail));
+// Furniture, the bedroom recipe's places: the bed at the back (north) wall, a small cabinet and a shelf on the walls, a rug, a lamp in the corner.
+room.add(box(2.0, 0.45, 0.95, M.furniture, 3.0, 0.225, -2.45, M.furnitureEdge), box(0.5, 0.15, 0.85, M.furniture, 2.25, 0.52, -2.45, M.furnitureEdge));
+room.add(box(0.6, 0.6, 0.45, M.furniture, 4.8, 0.3, -2.7, M.furnitureEdge), box(0.3, 1.6, 1.0, M.furniture, 1.72, 0.8, 0.2, M.furnitureEdge));
+{ const rug = new THREE.Mesh(new THREE.CircleGeometry(1.0, 40), M.furniture.clone()); rug.material.opacity = 0.55; rug.material.transparent = true; rug.scale.set(1.3, 0.85, 1); rug.rotation.x = -Math.PI / 2; rug.position.set(3.6, 0.02, 0.4); room.add(rug); }
+room.add(box(0.08, 1.7, 0.08, M.furniture, 5.65, 0.85, -2.7, M.furnitureEdge), box(0.4, 0.25, 0.4, M.furniture, 5.65, 1.75, -2.7, M.furnitureEdge));
+room.add(box(1.0, 0.35, 0.6, M.furniture, 3.6, 0.175, 0.4, M.furnitureEdge));
+
+// The sun's patch: the window's corners projected along the light onto the floor (9:00, sun about east-south-east, 40 degrees up).
+const SUN = (() => { const az = THREE.MathUtils.degToRad(100), el = THREE.MathUtils.degToRad(40); return new THREE.Vector3(Math.sin(az) * Math.cos(el), Math.sin(el), -Math.cos(az) * Math.cos(el)); })();
+sun.position.copy(SUN).multiplyScalar(60);
+const patchOf = ([a, b, sill, head]) => { const corners = [[a, sill], [b, sill], [b, head], [a, head]].map(([z, y]) => { const t = y / SUN.y; return new THREE.Vector3(ROOM.x1 - SUN.x * t, 0.015, z - SUN.z * t); }); const g = new THREE.BufferGeometry().setFromPoints([corners[0], corners[1], corners[2], corners[0], corners[2], corners[3]]); return new THREE.Mesh(g, M.patch); };
+const patches = new THREE.Group(); patches.add(patchOf(WINDOW), patchOf([DOOR_OUT[0], DOOR_OUT[1], 0.02, DOOR_OUT[3]])); room.add(patches);
+
+// The dorm's other floors and rooms, as the hologram draws a building: slabs and a faint shell; its windows by kind (a dorm:
+// one every two cells of 2 m, a balcony door beside each), on the street face.
+const floorsBelow = new THREE.Group(), floorsAbove = new THREE.Group();
+for (let k = -3; k <= 4; k++) { if (k === 0) continue; const slab = box(18, 0.1, 10, M.slab, -3, k * FLOOR, 0, M.ghost); (k < 0 ? floorsBelow : floorsAbove).add(slab); }
+const shellGeo = new THREE.BoxGeometry(18.2, 8 * FLOOR, 10.2), shell = new THREE.Mesh(shellGeo, M.shell.clone()); shell.position.set(-3, -9 + 4 * FLOOR, 0); shell.add(new THREE.LineSegments(new THREE.EdgesGeometry(shellGeo), M.shellEdge)); building.add(shell, floorsBelow, floorsAbove);
+const facadeWindows = new THREE.Group(), litPanes = [];
+for (let k = -3; k <= 4; k++) for (let cell = 0; cell < 9; cell += 2) {
+  const z = -4 + cell, y = k * FLOOR, mine = k === 0 && cell === 2;
+  const pane = new THREE.Mesh(new THREE.PlaneGeometry(1.8, 1.2), mine ? M.litWindow : M.darkWindow); pane.rotation.y = Math.PI / 2; pane.position.set(6.12, y + 1.5, z - 0.5); facadeWindows.add(pane);
+  if (mine) litPanes.push(pane); else if ((k * 7 + cell) % 5 === 0) { const lit = new THREE.Mesh(new THREE.PlaneGeometry(1.8, 1.2), M.litWindow.clone()); lit.rotation.y = Math.PI / 2; lit.position.copy(pane.position).x += 0.01; facadeWindows.add(lit); litPanes.push(lit); }
+}
+building.add(facadeWindows);
+// The corridor outside the room's door (where Index falls at dusk).
+room.add(box(2, 0.1, 10, M.slab, 0.5, -0.05, 0, M.ghost));
+
+// The city across the street (the built city, here boxes), the street 9 m down, and the sky behind.
+outside.add(box(200, 0.2, 200, M.ground, 20, -9.1, 0, null));
+outside.add(lines([[8, -8.95, -60], [8, -8.95, 60], [20, -8.95, -60], [20, -8.95, 60], [14, -8.95, -60], [14, -8.95, 60]], M.ghost));
+const towers = [[30, -10, 10, 14, 30], [30, 8, 9, 12, 45], [44, -2, 12, 12, 60], [28, 24, 10, 10, 24], [52, 18, 14, 10, 38], [27, -28, 9, 12, 33], [60, -20, 16, 14, 52]];
+for (const [x, z, w, d, h] of towers) outside.add(box(w, h, d, M.city, x, -9 + h / 2, z, M.shellEdge));
+const cityLights = []; for (const [x, z, w, d, h] of towers) for (let n = 0; n < 26; n++) { const dot = new THREE.Mesh(new THREE.PlaneGeometry(0.9, 0.6), M.litWindow.clone()); dot.rotation.y = -Math.PI / 2; dot.position.set(x - w / 2 - 0.05, -9 + 2 + ((n * 37) % Math.max(1, h - 4)), z - d / 2 + 1 + ((n * 13) % Math.max(1, d - 2))); outside.add(dot); cityLights.push(dot); }
+const rain = []; for (let n = 0; n < 900; n++) { const x = 7 + Math.random() * 40, y = -9 + Math.random() * 30, z = -25 + Math.random() * 50; rain.push([x, y, z], [x - 0.15, y - 1.1, z]); }
+const rainLines = lines(rain, M.rain); outside.add(rainLines);
+
+// People as the page marks them: a capsule and a name over it.
+function person(name, color) {
+  const g = new THREE.Group(), body = new THREE.Mesh(new THREE.CapsuleGeometry(0.22, 1.05, 6, 12), new THREE.MeshLambertMaterial({ color, emissive: color, emissiveIntensity: 0.25 }));
+  body.position.y = 0.75; g.add(body);
+  const c = document.createElement('canvas'); c.width = 256; c.height = 64; const x = c.getContext('2d'); x.fillStyle = '#060c12cc'; x.fillRect(0, 8, 256, 48); x.fillStyle = '#e8f6ff'; x.font = '600 30px "Inter Tight", Arial, sans-serif'; x.textAlign = 'center'; x.fillText(name, 128, 43);
+  const label = new THREE.Sprite(new THREE.SpriteMaterial({ map: new THREE.CanvasTexture(c), depthTest: false, transparent: true })); label.scale.set(1.6, 0.4, 1); label.position.y = 2.0; label.renderOrder = 10; g.add(label);
+  g.body = body; scene.add(g); return g;
+}
+const kamijou = person('Kamijou', 0x6fd3ff), index = person('Index', 0xf3f0ff);
+
+// ── Shots ──────────────────────────────────────────────────────────────────────────────────────────────────────────
+const SKY = { day: { bg: 0x9cc6e8, hemi: 0.95, sun: 1.25, lamp: 0, lit: 0, city: 0, rain: 0 }, rain: { bg: 0x4f6475, hemi: 0.6, sun: 0, lamp: 0.0, lit: 0.0, city: 0.05, rain: 0.5 }, dusk: { bg: 0x1d2742, hemi: 0.35, sun: 0, lamp: 2.4, lit: 0.95, city: 0.85, rain: 0 } };
+const lerp = (a, b, t) => a + (b - a) * t, ease = t => t * t * (3 - 2 * t), clamp = t => Math.max(0, Math.min(1, t));
+function setSky(name) { const s = SKY[name]; scene.background = new THREE.Color(s.bg); scene.fog = new THREE.Fog(s.bg, 60, 220); hemi.intensity = s.hemi; sun.intensity = s.sun; lamp.intensity = s.lamp; M.litWindow.opacity = s.lit; for (const dot of cityLights) dot.material.opacity = s.city; for (const pane of litPanes) pane.material.opacity = s.lit; M.rain.opacity = s.rain; patches.visible = name === 'day'; }
+
+function shot(i, t) {
+  const s = SHOTS[i];
+  setSky(s.sky);
+  // The set: nothing above the room's floor height cut drawn; near walls an outline. Eye level and outside: all of it.
+  const set = i === 0 || (i === 2 && t > 7.2);
+  cutWalls.visible = set; fullNear.visible = !set; floorsAbove.visible = !set; facadeWindows.visible = i === 2 && t < 7.2;
+  shell.material.opacity = i === 2 ? lerp(0.16, 0.0, ease(clamp((t - 4.4) / 2.5))) : 0.05; shell.visible = i !== 1;
+  floorsBelow.visible = i === 2 && t < 7.2;
+  if (i === 0) {
+    // Index over the balcony rail; Kamijou from the bed to the balcony door.
+    index.position.set(ROOM.x1 + 1.25, 0.15, 1.3); index.body.rotation.set(0, 0, Math.PI / 2.3); index.children[1].position.set(0.6, 1.4, 0);
+    const k = ease(clamp((t - 3) / 5)); kamijou.position.set(lerp(3.2, ROOM.x1 - 0.6, k), 0, lerp(-1.6, 1.0, k)); kamijou.body.rotation.set(0, 0, 0);
+    // From the cut side (south-west), 35 degrees down, swinging a little round the room.
+    const a = THREE.MathUtils.degToRad(lerp(28, 48, ease(t / s.len))), r = 9.5;
+    camera.position.set(3.9 - Math.cos(a) * r, 6.4, 0.3 + Math.sin(a) * r); camera.lookAt(4.1, 0.5, 0);
+  } else if (i === 1) {
+    index.position.set(3.3, 0, -1.9); index.body.rotation.set(0, 0, 0); index.body.scale.set(1, 0.72, 1); index.children[1].position.set(0, 1.55, 0);
+    kamijou.position.set(4.9, 0, 1.9); kamijou.body.rotation.set(0, 0, 0);
+    const k = ease(clamp(t / s.len)); camera.position.set(lerp(1.85, 2.15, k), 1.6, lerp(2.7, 2.5, k)); camera.lookAt(6, lerp(1.45, 1.35, k), lerp(-0.7, -1.1, k));
+  } else {
+    // From the street across, rising to the room; then into the set on the room.
+    index.body.scale.set(1, 1, 1); index.position.set(0.95, 0.12, 1.65); index.body.rotation.set(Math.PI / 2, 0, 0.3); index.children[1].position.set(0, 0.8, 0);
+    // Kamijou coming down the corridor to his door, where Index lies.
+    kamijou.position.set(0.3, 0, lerp(5.2, 4.1, ease(clamp((t - 7.2) / 3.5)))); kamijou.body.rotation.set(0, 0, 0);
+    if (t < 7.2) { const k = ease(clamp(t / 7.2)); camera.position.set(lerp(36, 18, k), lerp(-6, 2.5, k), lerp(14, 6, k)); camera.lookAt(lerp(6, 4, k), lerp(0, 0.8, k), lerp(0, 0.2, k)); }
+    else { const k = ease(clamp((t - 7.2) / 2.5)); camera.position.set(lerp(18, -4.5, k), lerp(2.5, 8.5, k), lerp(6, 9, k)); camera.lookAt(lerp(4, 2.6, k), 0.5, lerp(0.2, 0.6, k)); }
+  }
+  if (i !== 1) index.body.scale.set(1, 1, 1);
+  // Names keep a readable size: smaller when the camera stands among the people.
+  for (const who of [kamijou, index]) who.children[1].scale.set(i === 1 ? 0.75 : 1.6, i === 1 ? 0.19 : 0.4, 1);
+  rainLines.position.y = -((performance.now() / 1000) * 14 % 1.2);
+}
+
+// ── Transport, captions and notes ─────────────────────────────────────────────────────────────────────────────────
+const tag = document.getElementById('tag'), callouts = document.getElementById('callouts'), prog = document.getElementById('prog'), notes = document.getElementById('notes');
+notes.innerHTML = SHOTS.map((s, i) => `<article class="note" data-note="${i}"><div class="when">${s.when}</div><h2>${i + 1} · ${s.title}</h2><ul>${s.notes.map(n => `<li>${n}</li>`).join('')}</ul></article>`).join('');
+let current = 0, at = 0, playing = !matchMedia('(prefers-reduced-motion: reduce)').matches, last = performance.now();
+function show(i) {
+  current = i; at = 0; const s = SHOTS[i];
+  tag.textContent = `${i + 1} · ${s.title} — ${s.when}`;
+  callouts.innerHTML = s.notes.map(n => `<span>${n}</span>`).join('');
+  for (const b of document.querySelectorAll('[data-shot]')) b.setAttribute('aria-pressed', String(+b.dataset.shot === i));
+  for (const n of document.querySelectorAll('[data-note]')) n.classList.toggle('active', +n.dataset.note === i);
+}
+document.querySelectorAll('[data-shot]').forEach(b => b.addEventListener('click', () => show(+b.dataset.shot)));
+const playBtn = document.getElementById('play');
+playBtn.addEventListener('click', () => { playing = !playing; playBtn.textContent = playing ? 'Pause' : 'Play'; playBtn.setAttribute('aria-pressed', String(playing)); });
+if (!playing) { playBtn.textContent = 'Play'; playBtn.setAttribute('aria-pressed', 'false'); }
+show(0); resize();
+window.__clip = { seek: (i, t) => { show(i); at = t; playing = false; playBtn.textContent = 'Play'; playBtn.setAttribute('aria-pressed', 'false'); } };
+if (!playing) at = 6;
+renderer.setAnimationLoop(now => {
+  const dt = Math.min(0.1, (now - last) / 1000); last = now;
+  if (playing) { at += dt; if (at > SHOTS[current].len) show((current + 1) % SHOTS.length); }
+  const s = SHOTS[current];
+  [...callouts.children].forEach((el, n) => el.classList.toggle('on', at >= s.cue[n] || !playing));
+  prog.style.width = `${(at / s.len) * 100}%`;
+  shot(current, at); renderer.render(scene, camera);
+});
+</script>

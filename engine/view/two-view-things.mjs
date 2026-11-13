@@ -62,7 +62,9 @@ export async function browser({ gpu = false } = {}) {
   // Metal, as alike run to run and some fifty times faster for a whole city of shells (terrain spawning, §2.0.18).
   const metal = (gpu && process.platform === 'darwin' && process.env.STILLS_GL !== 'swiftshader') || process.env.STILLS_GL === 'metal';
   const gl = metal ? ['--use-angle=metal', '--enable-gpu', '--ignore-gpu-blocklist'] : ['--use-angle=swiftshader', '--enable-unsafe-swiftshader'];
-  const chrome = spawn(CHROME, ['--headless=new', '--remote-debugging-port=0', `--user-data-dir=${profile}`, '--window-size=800,600', '--hide-scrollbars', ...gl, '--no-first-run', '--no-default-browser-check', 'about:blank'], { stdio: 'ignore' });
+  const chrome = spawn(CHROME, ['--headless=new', '--remote-debugging-port=0', `--user-data-dir=${profile}`, '--window-size=800,600', '--hide-scrollbars', ...gl, '--no-first-run', '--no-default-browser-check', 'about:blank', ...(process.env.NOVEL_CHROME_LOG ? ['--enable-logging=stderr', '--v=0'] : [])], { stdio: process.env.NOVEL_CHROME_LOG ? ['ignore', 'ignore', 'pipe'] : 'ignore' });
+  // NOVEL_CHROME_LOG=<file>: Chrome's own log kept there (a renderer or GPU process that dies says why).
+  if (process.env.NOVEL_CHROME_LOG) { const { createWriteStream } = await import('node:fs'); chrome.stderr.pipe(createWriteStream(process.env.NOVEL_CHROME_LOG, { flags: 'a' })); }
   // A script that ends without closing (an error, a timeout's signal) takes its Chrome with it: a left one keeps drawing,
   // parented to launchd, and ten of them held the machine at a load of forty.
   const orphaned = () => chrome.kill(), signalled = signal => { chrome.kill(); process.kill(process.pid, signal); };
@@ -72,11 +74,13 @@ export async function browser({ gpu = false } = {}) {
   if (!port) throw new Error('Chrome did not start');
   const socket = new WebSocket(`ws://127.0.0.1:${port[0]}${port[1]}`), waiting = new Map();
   let id = 0;
-  socket.onmessage = message => { const reply = JSON.parse(message.data); const entry = waiting.get(reply.id); if (!entry) return; waiting.delete(reply.id); if (reply.error) entry.reject(new Error(reply.error.message)); else entry.resolve(reply.result); };
+  let crashed = null;
+  socket.onmessage = message => { const reply = JSON.parse(message.data); if (reply.method === 'Inspector.targetCrashed' || reply.method === 'Target.targetCrashed') { crashed = new Error(`The page's renderer crashed (${reply.method}${reply.params?.status ? `: ${reply.params.status}, code ${reply.params.errorCode}` : ''}).`); for (const entry of waiting.values()) entry.reject(crashed); waiting.clear(); return; } const entry = waiting.get(reply.id); if (!entry) return; waiting.delete(reply.id); if (reply.error) entry.reject(new Error(reply.error.message)); else entry.resolve(reply.result); };
   await new Promise((done, fail) => { socket.onopen = done; socket.onerror = fail; });
-  const send = (method, params = {}, sessionId) => new Promise((done, fail) => { const n = ++id; waiting.set(n, { resolve: done, reject: fail }); socket.send(JSON.stringify({ id: n, method, params, ...(sessionId ? { sessionId } : {}) })); });
+  const send = (method, params = {}, sessionId) => new Promise((done, fail) => { if (crashed) { fail(crashed); return; } const n = ++id; waiting.set(n, { resolve: done, reject: fail }); socket.send(JSON.stringify({ id: n, method, params, ...(sessionId ? { sessionId } : {}) })); });
   const { targetId } = await send('Target.createTarget', { url: 'about:blank' }), { sessionId } = await send('Target.attachToTarget', { targetId, flatten: true });
   await send('Emulation.setDeviceMetricsOverride', { width: 800, height: 600, deviceScaleFactor: 1, mobile: false }, sessionId);
+  await send('Target.setDiscoverTargets', { discover: true }).catch(() => {}); await send('Inspector.enable', {}, sessionId).catch(() => {});
   // The still's frame: 800×600 unless a question asks for another (the visual context engine's overviews and maps).
   let frame = [800, 600];
   const evaluate = async expression => { const { result, exceptionDetails } = await send('Runtime.evaluate', { expression, awaitPromise: true, returnByValue: true }, sessionId); if (exceptionDetails) throw new Error(exceptionDetails.exception?.description ?? exceptionDetails.text); return result.value; };
