@@ -2,7 +2,7 @@
 // copy given to someone else must be opened once with right-click > Open), then a disk image with the app and a link to
 // Applications. Run after `npm run pack`.
 import { execFileSync } from "node:child_process";
-import { existsSync, mkdtempSync, readFileSync, symlinkSync } from "node:fs";
+import { existsSync, mkdtempSync, readFileSync, rmSync, symlinkSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -24,5 +24,7 @@ execFileSync("codesign", ["--force", "--deep", "--sign", "-", staged], { stdio: 
 execFileSync("codesign", ["--verify", "--deep", "--strict", staged], { stdio: "inherit" });
 symlinkSync("/Applications", join(stage, "Applications"));
 const dmg = join(app, "release", `Novel-Console-${version}-arm64.dmg`);
-execFileSync("hdiutil", ["create", "-volname", "Novel Console", "-srcfolder", stage, "-ov", "-format", "UDZO", dmg], { stdio: "inherit" });
+// The signed copy is only the image's source: half a gigabyte a build, gone once the image is made.
+try { execFileSync("hdiutil", ["create", "-volname", "Novel Console", "-srcfolder", stage, "-ov", "-format", "UDZO", dmg], { stdio: "inherit" }); }
+finally { rmSync(stage, { recursive: true, force: true }); }
 console.log(JSON.stringify({ dmg }));
