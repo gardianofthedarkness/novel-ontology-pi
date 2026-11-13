@@ -1080,6 +1080,15 @@ export async function direct(novelDir, { reading, readingPath = null, prefilm = 
           if (node !== null && node !== undefined) stagedTaken.add(node);
           return node ?? null;
         };
+        // Where a person the agent staged in this unit may go in it (moveTo): the room for a spot in the room; the room's
+        // floor of its building for `door` and `corridor` in a unit set in that building. Anyone it did not stage goes anywhere.
+        const stageLevel = stageAll?.size ? at([...stageAll][0])[1] : null;
+        const stagedKeeps = (who, node) => {
+          const entry = staging[who];
+          if (!entry || entry.at === 'elsewhere' || stageLevel === null || node === null || node === undefined) return true;
+          if (!boundRoom && (entry.at === 'door' || entry.at === 'corridor')) return stageAll.has(node) || (insideAt(node)?.lot === stageRoom.lot && Math.abs(at(node)[1] - stageLevel) < 1);
+          return stageAll.has(node);
+        };
         const positions = {}, travels = [];
         sceneRecord.spawned = []; sceneRecord.carried = []; sceneRecord.offPage = [];
         // Smoothed (§5a, W5b): someone whose start the least-action history moves stands where it has them.
@@ -1559,6 +1568,12 @@ export async function direct(novelDir, { reading, readingPath = null, prefilm = 
             // Reachable (L10): a move no walk reaches is held with why, and nobody moves. A quiet move (the background's
             // routine, a graded step) that finds no walk is left unplayed without a law.
             if (path && path.length < 2) { cardRecord.moves.push({ person, why: why ?? 'already there', moved: false }); return; }
+            // The agent's staging holds through the unit: someone it put in the room stays in it, someone it put at the room's
+            // door or in its corridor (a unit set in the room's building) stays on the room's floor of that building. A move
+            // that would end outside is not played (run d20261113210125, units 75 and 76: Kamijou staged in the corridor, then
+            // walked by a background routine to the fifth floor of another building). Leaving is the text's departure, played
+            // after the cards; a body thrown in a fight is not held.
+            if (path && !thrown && !stagedKeeps(person, path.at(-1))) { cardRecord.moves.push({ person, why, moved: false, held: `staged ${staging[person].at} by the agent` }); return; }
             if (!path && quiet) { cardRecord.moves.push({ person, why, moved: false, quiet: true, ...(walk.code ? { code: walk.code } : {}) }); return; }
             const pinKey = `${scene.id}|${card.id}|${person}`;
             if (!path && pins.arrive[pinKey] && walk.replay?.targets?.length) { positions[person] = [walk.replay.targets[0], positions[person][1]]; { const [x, y, z] = at(walk.replay.targets[0]); cardRecord.moves.push({ person, why: 'arrives (pinned by the review)', moved: true, arrived: true, pinned: true, to: said([x, y, z]), at: { x: round(x), y: round(y), z: round(z) } }); } (cardRecord.laws ??= []).push({ law: 'L10', who: person, verdict: 'pinned', why: 'no walk there, but they get there (the review)' }); return; }
