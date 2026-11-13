@@ -14,6 +14,7 @@
 //            opens <room> <balcony|window|none> --line <id> --why <t>
 //            at <unit> <person> <feature> [--through <unit>] --line <id> --why <t>   (features: FEATURES below; elsewhere: not in
 //            the room; --through: the same through the room's later units where they are present, the line in the first)
+//            shot <unit> <set|eye|outside> [--through <unit>] --line <id> --why <t>   (how the unit is filmed: SHOTS below)
 //   then:    check
 //   node engine/places/room-plan.mjs <command> <novel-dir> [args]
 import { mkdir, readFile, rename, rmdir, stat, writeFile } from 'node:fs/promises';
@@ -29,6 +30,13 @@ export const FEATURES = {
   balcony: 'out on the balcony', floor: 'somewhere on the room\'s floor (no piece said)', elsewhere: 'not in the room in this unit (on the phone, remembered, gone out)',
 };
 const OPENINGS = ['balcony', 'window', 'none'];
+/** How a unit set in a room is filmed (the shot stage, docs/v3/design.html#shot-stage): the room cut open from above, at eye
+ *  level inside it, or from the street outside up to its window and into it. */
+export const SHOTS = {
+  set: 'the room cut open, seen from above and a little aside: who is where in it, what they do (most units)',
+  eye: 'at eye level inside the room, looking toward its window: a moment seen as someone in the room sees it, the weather or the street outside, a quiet or close moment',
+  outside: 'from the street outside, up the building to the room\'s window, then into the room: an arrival, a return, the room at a new time of day, the place first shown',
+};
 
 function refuse(why) { const error = new Error(why); error.refused = true; throw error; }
 const needWhy = why => { if (!why || String(why).trim().length < 4) refuse('Say why (--why), in a few words.'); };
@@ -54,6 +62,22 @@ export function roomsOf(s) {
     out.get(room).units.push(scene.id);
   }
   return [...out.values()];
+}
+
+/** The units set in a room's building but in no room of it (a corridor, a doorway, the stairs): filmed on that room (the
+ *  first room of the building any unit is set in), so each has a shot to decide too. */
+export function buildingUnitsOf(s) {
+  const rooms = roomsOf(s), byBuilding = new Map();
+  for (const room of rooms) if (room.building && !byBuilding.has(room.building)) byBuilding.set(room.building, room);
+  const out = [];
+  for (const scene of s.script.scenes ?? []) {
+    if (!scene.place) continue;
+    const chain = s.chainOf(scene.place);
+    if (chain.some(id => s.script.places[id]?.scale === 'room')) continue;
+    const building = chain.find(id => byBuilding.has(id));
+    if (building) out.push({ unit: scene.id, room: byBuilding.get(building).id, building });
+  }
+  return out;
 }
 
 const nameOf = (s, id) => { const e = s.entity.get(id); return e?.name ?? e?.names?.[0]?.text ?? e?.names?.[0] ?? id; };
@@ -119,6 +143,16 @@ export function decide(s, command, { positional: [a, b, c], why, line, through =
     for (const u of span) (d.staging[u] ??= {})[person] = { at: feature, line, why, ...(u !== unit ? { from: unit } : {}) };
     d.log.push({ command, args: [a, b, c], through, line, why, at: new Date().toISOString() });
     return { ok: true, at: [unit, person, feature], units: span.length };
+  } else if (command === 'shot') {
+    const unit = a, kind = b, inBuilding = buildingUnitsOf(s), home = rooms.find(r => r.units.includes(unit)) ?? (() => { const found = inBuilding.find(entry => entry.unit === unit); return found ? { id: found.room, units: inBuilding.filter(entry => entry.room === found.room).map(entry => entry.unit) } : null; })();
+    if (!home) refuse(`${unit} is not set in a room or in the building of one (see: rooms).`);
+    if (!SHOTS[kind]) refuse(`No shot "${kind}"; shots: ${Object.keys(SHOTS).join(', ')}.`);
+    needLine(s, line, [unit], unit);
+    let span = [unit];
+    if (through) { const i = home.units.indexOf(unit), j = home.units.indexOf(through); if (j < i) refuse(`--through ${through} is not ${unit} or a later unit of ${home.id}.`); if (j - i > 30) refuse('--through covers at most 30 of the room\'s units at once.'); span = home.units.slice(i, j + 1); }
+    for (const u of span) (d.shots ??= {})[u] = { kind, line, why, ...(u !== unit ? { from: unit } : {}) };
+    d.log.push({ command, args: [a, b], through, line, why, at: new Date().toISOString() });
+    return { ok: true, shot: [unit, kind], units: span.length };
   } else refuse(`Unknown command ${command}.`);
   d.log.push({ command, args: [a, b, c].filter(Boolean), line: line ?? null, why, at: new Date().toISOString() });
   return { ok: true, [command]: [a, b, c].filter(Boolean) };
@@ -130,13 +164,15 @@ export function checkOf(s) {
   for (const room of rooms) {
     const mine = d.rooms[room.id] ?? {};
     for (const key of ['kind', 'floor', 'part', 'opens']) if (!mine[key]) left.push({ room: room.id, label: room.label, missing: key });
-    for (const unit of room.units) for (const person of presentOf(s, unit)) if (!d.staging[unit]?.[person]) left.push({ unit, room: room.id, person, missing: 'at' });
+    for (const unit of room.units) { for (const person of presentOf(s, unit)) if (!d.staging[unit]?.[person]) left.push({ unit, room: room.id, person, missing: 'at' }); if (!d.shots?.[unit]) left.push({ unit, room: room.id, missing: 'shot' }); }
   }
+  for (const entry of buildingUnitsOf(s)) if (!d.shots?.[entry.unit]) left.push({ unit: entry.unit, room: entry.room, missing: 'shot', building: entry.building });
   return { done: left.length === 0, rooms: rooms.length, units: rooms.reduce((n, r) => n + r.units.length, 0), left: left.length, items: left };
 }
 
 export function roomsView(s) {
-  return roomsOf(s).map(room => { const mine = s.plan.rooms[room.id] ?? {}; return `${room.id} ${room.label} in ${room.building ?? 'no building'}: ${room.units.length} units (${room.units[0]} … ${room.units.at(-1)}); kind ${mine.kind?.value ?? '?'}, floor ${mine.floor ? mine.floor.value ?? 'not said' : '?'}, part ${mine.part ? mine.part.of ?? 'own' : '?'}, opens ${mine.opens?.value ?? '?'}`; }).join('\n');
+  const inBuilding = buildingUnitsOf(s);
+  return roomsOf(s).map(room => { const mine = s.plan.rooms[room.id] ?? {}; return `${room.id} ${room.label} in ${room.building ?? 'no building'}: ${room.units.length} units (${room.units[0]} … ${room.units.at(-1)}); kind ${mine.kind?.value ?? '?'}, floor ${mine.floor ? mine.floor.value ?? 'not said' : '?'}, part ${mine.part ? mine.part.of ?? 'own' : '?'}, opens ${mine.opens?.value ?? '?'}${inBuilding.some(entry => entry.room === room.id) ? `; its building's other units (filmed on it): ${inBuilding.filter(entry => entry.room === room.id).map(entry => entry.unit).join(' ')}` : ''}`; }).join('\n');
 }
 export function roomView(s, id) {
   const room = roomsOf(s).find(entry => entry.id === id); if (!room) refuse(`${id} is not a room any unit is set in.`);
@@ -144,9 +180,9 @@ export function roomView(s, id) {
     firstLines: room.units.slice(0, 6).map(unit => ({ unit, lines: (s.sceneLines.get(unit) ?? []).slice(0, 4).map(line => `${line} ${s.text.get(line)?.text ?? ''}`) })) };
 }
 export async function stageView(s, unit) {
-  const room = roomsOf(s).find(r => r.units.includes(unit)); if (!room) refuse(`${unit} is not set in a room.`);
+  const inBuilding = buildingUnitsOf(s).find(entry => entry.unit === unit), room = roomsOf(s).find(r => r.units.includes(unit) || r.id === inBuilding?.room); if (!room) refuse(`${unit} is not set in a room or its building.`);
   const prefilm = await readJson(join(s.novel, '..', 'reading', 'prefilm.json'), null), notes = prefilm?.units?.[unit]?.scriptSupervisor?.digest?.people ?? [];
-  return { unit, room: `${room.id} ${room.label}`, opens: s.plan.rooms[room.id]?.opens?.value ?? '?', features: FEATURES,
+  return { unit, room: `${room.id} ${room.label}`, opens: s.plan.rooms[room.id]?.opens?.value ?? '?', features: FEATURES, shots: SHOTS, shot: s.plan.shots?.[unit] ?? null,
     people: presentOf(s, unit).map(id => ({ id, name: nameOf(s, id), notes: notes.find(note => note.who === id) ?? null, decided: s.plan.staging[unit]?.[id] ?? null })),
     lines: (s.sceneLines.get(unit) ?? []).map(line => `${line} ${s.text.get(line)?.text ?? ''}`) };
 }

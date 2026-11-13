@@ -2556,6 +2556,269 @@ function position(place, move, elapsed) {
   return { x: a.x + (b.x - a.x) * f, z: a.z + (b.z - a.z) * f, y: a.y + (b.y - a.y) * f, k };
 }
 
+// ── The shot stage (docs/v3/design.html#shot-stage; the user, 2026-11-13: "Fix all three tonight until fully automated
+// version matches the example clip at 95%") ──────────────────────────────────────────────────────────────────────────
+// A unit set in a bound room is filmed as the benchmark's clip films its room (engine/bench/indoor-set/clip.html), from the
+// run's own world: the room's walls cell edge by cell edge with its real windows, balcony door and doors, its furniture, the
+// building's shell, floors and window rows, its neighbours as faint blocks, a dark ground, the story's sky (day, rain, dusk,
+// night) with its sun and a lamp after dark, rain, and the people where the run has them, drawn slim. Three shots, each a
+// moving camera over its unit, as the clip's: the set (a slow swing round the room cut open), eye level (inside by the door at
+// 1.6 m, drifting toward the window wall), and from outside (up from the street to the room, then over into the set). The
+// shot of a unit is the director's (data.shots, from the agent's room plan); `?shots` or a capture's `shot: true` plays them.
+// The clip's own scene is kept as it is: no traces, pins, things or the city's skeletons are in it.
+const SHOT = {
+  wall: new THREE.MeshLambertMaterial({ color: 0xa9d4ef, transparent: true, opacity: 0.82 }),
+  cut: new THREE.MeshLambertMaterial({ color: 0xa9d4ef, transparent: true, opacity: 0.9 }),
+  floor: new THREE.MeshLambertMaterial({ color: 0x47708f }),
+  edge: new THREE.LineBasicMaterial({ color: 0xe0f3ff, transparent: true, opacity: 0.9 }),
+  ghost: new THREE.LineBasicMaterial({ color: 0xe0f3ff, transparent: true, opacity: 0.35 }),
+  frame: new THREE.LineBasicMaterial({ color: 0xffffff }),
+  glass: new THREE.MeshBasicMaterial({ color: 0xcfeaff, transparent: true, opacity: 0.08, depthWrite: false, side: THREE.DoubleSide }),
+  glint: new THREE.LineBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.55 }),
+  furniture: new THREE.MeshLambertMaterial({ color: 0xd9b48a, emissive: 0x2a1a0c }),
+  furnitureEdge: new THREE.LineBasicMaterial({ color: 0xffe2b8, transparent: true, opacity: 0.6 }),
+  patch: new THREE.MeshBasicMaterial({ color: 0xffd28a, transparent: true, opacity: 0.6, depthWrite: false, side: THREE.DoubleSide }),
+  rail: new THREE.LineBasicMaterial({ color: 0xbfe4ff }),
+  slab: new THREE.MeshLambertMaterial({ color: 0x3d6a8a, transparent: true, opacity: 0.35, depthWrite: false }),
+  shell: new THREE.MeshLambertMaterial({ color: 0x5fb4e8, transparent: true, opacity: 0.12, depthWrite: false }),
+  shellEdge: new THREE.LineBasicMaterial({ color: 0x8fd6ff, transparent: true, opacity: 0.35 }),
+  city: new THREE.MeshLambertMaterial({ color: 0x5fb4e8, transparent: true, opacity: 0.16, depthWrite: false }),
+  ground: new THREE.MeshLambertMaterial({ color: 0x1b2b39 }),
+  litWindow: new THREE.MeshBasicMaterial({ color: 0xffcf8a, transparent: true, opacity: 0, side: THREE.DoubleSide }),
+  darkWindow: new THREE.MeshBasicMaterial({ color: 0x9fd2f0, transparent: true, opacity: 0.22, side: THREE.DoubleSide }),
+  cityLight: new THREE.MeshBasicMaterial({ color: 0xffcf8a, transparent: true, opacity: 0, side: THREE.DoubleSide }),
+  rain: new THREE.LineBasicMaterial({ color: 0xbcd8ee, transparent: true, opacity: 0 }),
+};
+const SHOT_H = 2.7, SHOT_SIDES = [[0, -1], [0, 1], [-1, 0], [1, 0]];
+let shotMode = new URLSearchParams(location.search).has("shots"), shotStage = null;
+const shotPlan = data.shots ?? {};
+const shotEase = (t) => t * t * (3 - 2 * t), shotClamp = (t) => Math.max(0, Math.min(1, t)), shotLerp = (a, b, t) => a + (b - a) * t;
+
+/** A unit's light as the clip keys it (its SKY table): day, rain, dusk or night, from the story's hour and weather. */
+function shotPalette(unitId) {
+  const told = skyUnits?.[unitId] ?? null, hour = told?.hour ?? unitHours.get(unitId) ?? 12, wx = weatherTarget(told), wet = wx.rain > 0.2 || wx.snow > 0.2;
+  const dark = hour < 5.5 || hour >= 19.5, dusk = !dark && (hour >= 17.5 || hour < 6.5);
+  const out = dark ? { name: "night", bg: 0x0d1424, hemi: 0.28, sun: 0, lamp: 2.4, lit: 0.95, city: 0.85 } : dusk ? { name: "dusk", bg: 0x1d2742, hemi: 0.35, sun: 0, lamp: 2.4, lit: 0.95, city: 0.85 }
+    : wet ? { name: "rain", bg: 0x4f6475, hemi: 0.6, sun: 0, lamp: 0, lit: 0, city: 0.05 } : { name: "day", bg: 0x9cc6e8, hemi: 0.95, sun: 1.25, lamp: 0, lit: 0, city: 0 };
+  out.rain = wx.rain > 0.2 ? 0.5 : 0; out.hour = hour;
+  const sky = keyedLight(hour); out.sunDir = sky.sunAt.clone().normalize(); out.sunUp = hour > 6 && hour < 18;
+  return out;
+}
+
+/** The bound room of a shot in its lot's plan frame (u along the plan's i, v along its j, metres from the plan's middle). */
+function shotRoom(view) {
+  const lot = data.world?.lots?.[view.lot], room = lot?.rooms?.[view.room];
+  if (!lot || !room) return null;
+  // A part of a big plan room (the binding's `part`, room-binding.mjs partOf) is the room the shot films; the furniture stands
+  // from the plan room's own corner (pu0, pv0).
+  const plan = planOf(lot), [k, ri0, rj0, ri1, rj1, , , doors = []] = room, half = (n) => (n * CELL) / 2, [i0, j0, i1, j1] = view.part ?? [ri0, rj0, ri1, rj1];
+  const u0 = i0 * CELL - half(plan.sx), u1 = (i1 + 1) * CELL - half(plan.sx), v0 = j0 * CELL - half(plan.sz), v1 = (j1 + 1) * CELL - half(plan.sz), pu0 = ri0 * CELL - half(plan.sx), pv0 = rj0 * CELL - half(plan.sz);
+  const opens = new Map();
+  for (const [f, i, j, side, kind, sill, head] of lot.windows ?? []) if (f === k && i >= i0 && i <= i1 && j >= j0 && j <= j1) opens.set(`${i}|${j}|${side}`, { kind, sill: sill ?? 0.9, head: head ?? 2.1 });
+  // A room the plan has open onto a balcony: its first window (the order the page draws its edges) becomes the balcony door.
+  const typed = roomTyped.get(`${view.lot}|${view.room}`);
+  if (typed?.opening === "balcony" && ![...opens.values()].some((o) => o.kind === 2)) {
+    const order = []; for (let i = i0; i <= i1; i++) order.push(`${i}|${j0}|0`, `${i}|${j1}|1`); for (let j = j0; j <= j1; j++) order.push(`${i0}|${j}|2`, `${i1}|${j}|3`);
+    const first = order.find((key) => opens.get(key)?.kind === 1); if (first) opens.set(first, { kind: 2, sill: 0, head: 2.2 });
+  }
+  const count = [0, 0, 0, 0]; for (const key of opens.keys()) count[Number(key.split("|")[2])]++;
+  let outSide = count.indexOf(Math.max(...count));
+  if (!count[outSide]) { const cu = (u0 + u1) / 2, cv = (v0 + v1) / 2; outSide = Math.abs(cu) > Math.abs(cv) ? (cu > 0 ? 3 : 2) : (cv > 0 ? 1 : 0); }
+  const out = SHOT_SIDES[outSide], across = [-out[1], out[0]], depth = outSide < 2 ? v1 - v0 : u1 - u0, width = outSide < 2 ? u1 - u0 : v1 - v0;
+  const doorCells = new Set(doors.map((cell) => `${cell % plan.sx}|${Math.floor(cell / plan.sx) % plan.sz}`));
+  // A part's inner sides (inside the plan room) are walls; with no door of the plan room beside the part, the middle of its
+  // longest inner side is its door, onto the rest of the room.
+  if (view.part) {
+    const inner = [[0, j0 > rj0], [1, j1 < rj1], [2, i0 > ri0], [3, i1 < ri1]].filter(([, yes]) => yes).map(([side]) => side);
+    const touches = [...doorCells].some((key) => { const [di, dj] = key.split("|").map(Number); return (di >= i0 - 1 && di <= i1 + 1 && dj >= j0 - 1 && dj <= j1 + 1); });
+    if (!touches && inner.length) { const side = inner.sort((a, b) => (b < 2 ? i1 - i0 : j1 - j0) - (a < 2 ? i1 - i0 : j1 - j0))[0], [du, dv] = SHOT_SIDES[side]; const mi = side < 2 ? Math.floor((i0 + i1) / 2) : side === 2 ? i0 : i1, mj = side >= 2 ? Math.floor((j0 + j1) / 2) : side === 0 ? j0 : j1; doorCells.add(`${mi + du}|${mj + dv}`); }
+  }
+  return { pu0, pv0, lot, plan, k, i0, j0, i1, j1, u0, u1, v0, v1, opens, doorCells, typed, outSide, out, across, depth, width, y: (lot.k0 ?? 0) * FLOOR + k * FLOOR, centre: [(u0 + u1) / 2, (v0 + v1) / 2] };
+}
+/** A point of the clip's room frame (x toward its window wall at 6, its room 4.5 m deep from 1.5, z across, 6 m wide) on
+ *  the run's room, in the plan's frame [u, y, v]: inside the room scaled to it, beyond its walls in metres as they are. */
+function shotPoint(r, [x, y, z]) {
+  const depth = x >= 1.5 ? (x - 6) * r.depth / 4.5 : -r.depth + (x - 1.5), side = Math.abs(z) <= 3 ? z * r.width / 6 : Math.sign(z) * (r.width / 2 + Math.abs(z) - 3);
+  const wall = r.depth / 2 + depth;
+  return [r.centre[0] + r.out[0] * wall + r.across[0] * side, r.y + y, r.centre[1] + r.out[1] * wall + r.across[1] * side];
+}
+/** The shot's camera at a share f of its unit, in the clip's frame: [from, to], and whether the room shows as the set. */
+function shotCamera(kind, f) {
+  if (kind === "eye") { const k = shotEase(shotClamp(f)); return { from: [shotLerp(1.85, 2.15, k), 1.6, shotLerp(2.7, 2.5, k)], to: [6, shotLerp(1.45, 1.35, k), shotLerp(-0.7, -1.1, k)], set: false, phase: "eye" }; }
+  if (kind === "outside") {
+    const t = f * 11;
+    if (t < 7.2) { const k = shotEase(shotClamp(t / 7.2)); return { from: [shotLerp(36, 18, k), shotLerp(-6, 2.5, k), shotLerp(14, 6, k)], to: [shotLerp(6, 4, k), shotLerp(0, 0.8, k), shotLerp(0, 0.2, k)], set: false, phase: "outside", fade: shotEase(shotClamp((t - 4.4) / 2.5)) }; }
+    const k = shotEase(shotClamp((t - 7.2) / 2.5)); return { from: [shotLerp(18, -4.5, k), shotLerp(2.5, 8.5, k), shotLerp(6, 9, k)], to: [shotLerp(4, 2.6, k), 0.5, shotLerp(0.2, 0.6, k)], set: true, phase: "into" };
+  }
+  const a = THREE.MathUtils.degToRad(shotLerp(28, 48, shotEase(shotClamp(f))));
+  return { from: [3.9 - Math.cos(a) * 9.5, 6.4, 0.3 + Math.sin(a) * 9.5], to: [4.1, 0.5, 0], set: true, phase: "set" };
+}
+
+/** The stage of one shot (a room, a kind, a light): built once, its camera and people moved every frame. */
+function buildShotStage(view, entry, palette) {
+  const r = shotRoom(view); if (!r) return null;
+  const scene = new THREE.Scene(), lotGroup = new THREE.Group(), { plan } = r;
+  lotGroup.position.set(plan.x - entry.cx, 0, plan.z - entry.cz); lotGroup.rotation.y = -plan.angle; scene.add(lotGroup);
+  scene.background = new THREE.Color(palette.bg); scene.fog = new THREE.Fog(palette.bg, 60, 260);
+  const hemi = new THREE.HemisphereLight(0xcfe6ff, 0x1a2a38, palette.hemi), sunLight = new THREE.DirectionalLight(0xfff1d6, palette.sun);
+  scene.add(hemi, sunLight, sunLight.target);
+  const box = (w, h, d, material, x, y, z, edges = SHOT.edge) => { const g = new THREE.BoxGeometry(w, h, d), mesh = new THREE.Mesh(g, material); mesh.position.set(x, y, z); if (edges) mesh.add(new THREE.LineSegments(new THREE.EdgesGeometry(g), edges)); return mesh; };
+  const lines = (points, material) => new THREE.LineSegments(new THREE.BufferGeometry().setAttribute("position", new THREE.Float32BufferAttribute(points.flat(), 3)), material);
+  const parts = { cut: [new THREE.Group(), new THREE.Group(), new THREE.Group(), new THREE.Group()], full: [new THREE.Group(), new THREE.Group(), new THREE.Group(), new THREE.Group()], room: new THREE.Group(), above: new THREE.Group(), below: new THREE.Group(), facade: new THREE.Group(), patches: new THREE.Group(), people: new Map(), litPanes: [], windows: 0, balcony: false };
+  lotGroup.add(parts.room, parts.above, parts.below, parts.facade);
+  const y = r.y, room = parts.room;
+  room.add(box(r.u1 - r.u0, 0.12, r.v1 - r.v0, SHOT.floor, r.centre[0], y - 0.06, r.centre[1]));
+  // Each side cell edge by cell edge: a wall round its window, balcony door or door; also cut to an outline (the set).
+  const sideCells = (side) => side < 2 ? Array.from({ length: r.i1 - r.i0 + 1 }, (_, n) => [r.i0 + n, side === 0 ? r.j0 : r.j1]) : Array.from({ length: r.j1 - r.j0 + 1 }, (_, n) => [side === 2 ? r.i0 : r.i1, r.j0 + n]);
+  const sunLocal = (() => { const c = Math.cos(plan.angle), s = Math.sin(plan.angle), d = palette.sunDir; return [d.x * c + d.z * s, d.y, -d.x * s + d.z * c]; })();
+  for (let side = 0; side < 4; side++) {
+    const [du, dv] = SHOT_SIDES[side], along = side < 2;
+    for (const [i, j] of sideCells(side)) {
+      const cu = (i + 0.5) * CELL - (plan.sx * CELL) / 2, cv = (j + 0.5) * CELL - (plan.sz * CELL) / 2, wu = cu + du * CELL / 2, wv = cv + dv * CELL / 2;
+      const neighbour = `${i + du}|${j + dv}`, open = r.opens.get(`${i}|${j}|${side}`), door = r.doorCells.has(neighbour);
+      const hole = door ? { from: -0.45, to: 0.45, sill: 0, head: 2.1, kind: "door" } : open ? (open.kind === 2 ? { from: -0.45, to: 0.45, sill: 0, head: 2.2, kind: "balcony" } : open.kind === 3 ? { from: -0.9, to: 0.9, sill: 0.3, head: 2.6, kind: "storefront" } : { from: -0.7, to: 0.7, sill: open.sill, head: open.head, kind: "window" }) : null;
+      const at = (s, h) => (along ? [wu + s, h, wv] : [wu, h, wv + s]);
+      const piece = (group, a, b, h0, h1, material) => { if (b - a < 0.01 || h1 - h0 < 0.01) return; const m = (a + b) / 2, [px, , pz] = at(m, 0); group.add(along ? box(b - a, h1 - h0, 0.14, material, px, y + (h0 + h1) / 2, pz, null) : box(0.14, h1 - h0, b - a, material, px, y + (h0 + h1) / 2, pz, null)); };
+      const full = parts.full[side], cut = parts.cut[side];
+      if (hole) { piece(full, -1, hole.from, 0, SHOT_H, SHOT.wall); piece(full, hole.from, hole.to, 0, hole.sill, SHOT.wall); piece(full, hole.from, hole.to, hole.head, SHOT_H, SHOT.wall); piece(full, hole.to, 1, 0, SHOT_H, SHOT.wall); }
+      else piece(full, -1, 1, 0, SHOT_H, SHOT.wall);
+      const P = (s, h) => { const [px, , pz] = at(s, 0); return [px, y + h, pz]; };
+      full.add(lines([P(-1, SHOT_H), P(1, SHOT_H), ...(hole ? [P(hole.from, hole.sill), P(hole.to, hole.sill), P(hole.from, hole.head), P(hole.to, hole.head), P(hole.from, hole.sill), P(hole.from, hole.head), P(hole.to, hole.sill), P(hole.to, hole.head)] : [])], SHOT.frame));
+      if (door) { piece(cut, -1, -0.45, 0, 0.25, SHOT.cut); piece(cut, 0.45, 1, 0, 0.25, SHOT.cut); cut.add(lines([P(-0.45, 0.25), P(-0.45, 2.1), P(0.45, 0.25), P(0.45, 2.1), P(-0.45, 2.1), P(0.45, 2.1)], SHOT.ghost)); }
+      else piece(cut, -1, 1, 0, 0.25, SHOT.cut);
+      if (!hole || hole.kind === "door") continue;
+      // Glass with its highlight; a balcony door stands open onto its slab and rail.
+      parts.windows++;
+      const pane = new THREE.Mesh(new THREE.PlaneGeometry(hole.to - hole.from, hole.head - hole.sill), SHOT.glass), [gx, , gz] = at((hole.from + hole.to) / 2, 0);
+      pane.position.set(gx, y + (hole.sill + hole.head) / 2, gz); if (!along) pane.rotation.y = Math.PI / 2; full.add(pane);
+      full.add(lines([P(hole.from + 0.2, hole.sill + 0.25), P(hole.from + 0.75 * (hole.to - hole.from), hole.head - 0.2), P(hole.from + 0.3, hole.sill + 0.12), P(hole.from + 0.6, hole.sill + 0.5)], SHOT.glint));
+      if (hole.kind === "balcony") {
+        parts.balcony = true;
+        const [sx_, , sz_] = at(0, 0), outX = sx_ + du * 0.65, outZ = sz_ + dv * 0.65;
+        room.add(along ? box(3.2, 0.12, 1.3, SHOT.slab, outX, y - 0.06, outZ, SHOT.ghost) : box(1.3, 0.12, 3.2, SHOT.slab, outX, y - 0.06, outZ, SHOT.ghost));
+        const R = (s, h) => (along ? [sx_ + s, y + h, sz_ + dv * 1.3] : [sx_ + du * 1.3, y + h, sz_ + s]);
+        room.add(lines([R(-1.6, 1.1), R(1.6, 1.1), ...Array.from({ length: 9 }, (_, n) => [R(-1.6 + n * 0.4, 0), R(-1.6 + n * 0.4, 1.1)]).flat()], SHOT.rail));
+      }
+      // The sun through it on the floor: its corners along the light (by day, the sun on its side).
+      if (palette.name === "day" && palette.sunUp && sunLocal[1] > 0.05 && du * sunLocal[0] + dv * sunLocal[2] > 0) {
+        const corners = [[hole.from, hole.sill], [hole.to, hole.sill], [hole.to, hole.head], [hole.from, hole.head]].map(([s, h]) => { const [px, , pz] = at(s, 0), t = h / sunLocal[1]; return new THREE.Vector3(px - sunLocal[0] * t, y + 0.015, pz - sunLocal[2] * t); });
+        parts.patches.add(new THREE.Mesh(new THREE.BufferGeometry().setFromPoints([corners[0], corners[1], corners[2], corners[0], corners[2], corners[3]]), SHOT.patch));
+      }
+    }
+    lotGroup.add(parts.full[side], parts.cut[side]);
+  }
+  room.add(parts.patches);
+  // The room's furniture, the architect's pieces from its corner.
+  parts.furniture = [];
+  for (const [model, pu, pv, pa] of r.typed?.furniture ?? []) {
+    const shell = shellOf(`kk-furniture-${model}`); if (!shell) continue;
+    const item = new THREE.Group(); item.add(new THREE.Mesh(shell.fill, SHOT.furniture), new THREE.LineSegments(shell.edges, SHOT.furnitureEdge));
+    item.position.set(r.pu0 + pu, y, r.pv0 + pv); item.rotation.y = pa; room.add(item); parts.furniture.push(model);
+  }
+  // The lamp after dark: at the room's lamp, else a corner.
+  const lampAt = (r.typed?.furniture ?? []).find(([model]) => /lamp|light/.test(model)), lamp = new THREE.PointLight(0xffc98a, palette.lamp, 9, 1.6);
+  lamp.position.set(lampAt ? r.pu0 + lampAt[1] : r.u1 - 0.6, y + 2.2, lampAt ? r.pv0 + lampAt[2] : r.v0 + 0.6); room.add(lamp);
+  // The building: its shell, its floors' slabs (those below and above the room's), its window rows by its windows.
+  const lift = (r.lot.k0 ?? 0) * FLOOR, W = plan.sx * CELL, D = plan.sz * CELL, floors = r.lot.floors ?? 1;
+  parts.shell = box(W + 0.2, floors * FLOOR, D + 0.2, SHOT.shell.clone(), 0, lift + (floors * FLOOR) / 2, 0, SHOT.shellEdge); lotGroup.add(parts.shell);
+  for (let f = 0; f < floors; f++) if (f !== r.k) (f < r.k ? parts.below : parts.above).add(box(W, 0.1, D, SHOT.slab, 0, lift + f * FLOOR + (f > r.k ? 0 : 0), 0, SHOT.ghost));
+  parts.above.add(box(r.u1 - r.u0, 0.1, r.v1 - r.v0, SHOT.slab, r.centre[0], y + FLOOR - 0.05, r.centre[1], SHOT.ghost));
+  const seeded_ = (seed) => { let h = 2166136261; for (const c of String(seed)) h = Math.imul(h ^ c.charCodeAt(0), 16777619); return () => ((h = Math.imul(h ^ (h >>> 15), 2246822507) ^ Math.imul(h ^ (h >>> 13), 3266489909)) >>> 0) / 4294967296; };
+  const rng = seeded_(`${view.lot}|shot`);
+  for (const [f, i, j, side, kind] of r.lot.windows ?? []) {
+    const [du, dv] = SHOT_SIDES[side], cu = (i + 0.5) * CELL - W / 2, cv = (j + 0.5) * CELL - D / 2, mine = f === r.k && i >= r.i0 && i <= r.i1 && j >= r.j0 && j <= r.j1;
+    const lit = mine || rng() < 0.2, pane = new THREE.Mesh(new THREE.PlaneGeometry(kind === 3 ? 1.8 : 1.4, kind === 1 ? 1.2 : 2.1), lit ? SHOT.litWindow : SHOT.darkWindow);
+    pane.position.set(cu + du * (CELL / 2 + 0.06), lift + f * FLOOR + (kind === 1 ? 1.5 : 1.1), cv + dv * (CELL / 2 + 0.06)); if (side >= 2) pane.rotation.y = Math.PI / 2;
+    pane.userData.side = side; parts.facade.add(pane); if (lit) parts.litPanes.push(pane);
+  }
+  // The corridor outside the door: a faint slab over the corridor cells near the room.
+  for (let cell = 0; cell < (r.lot.cells?.length ?? 0); cell++) {
+    const type = r.lot.cells[cell]; if (type === "0") continue;
+    const i = cell % plan.sx, j = Math.floor(cell / plan.sx) % plan.sz, f = Math.floor(cell / (plan.sx * plan.sz));
+    if (f !== r.k || Math.max(r.i0 - i, 0, i - r.i1) > 2 || Math.max(r.j0 - j, 0, j - r.j1) > 2) continue;
+    room.add(box(CELL, 0.1, CELL, SHOT.slab, (i + 0.5) * CELL - W / 2, y - 0.05, (j + 0.5) * CELL - D / 2, SHOT.ghost));
+  }
+  // Its neighbours as the clip's city: faint blocks of their footprints and heights, lit dots after dark; the ground.
+  const outside = new THREE.Group(); scene.add(outside);
+  outside.add(box(900, 0.2, 900, SHOT.ground, plan.x - entry.cx, -0.1 + Math.min(0, lift), plan.z - entry.cz, null));
+  const lots = data.world?.lots ?? [];
+  lots.forEach((other, n) => {
+    if (n === view.lot) return;
+    const p = planOf(other); if (Math.hypot(p.x - plan.x, p.z - plan.z) > 170) return;
+    const h = Math.max(3, (other.floors ?? 1) * FLOOR), block = box(p.sx * CELL, h, p.sz * CELL, SHOT.city, p.x - entry.cx, (other.k0 ?? 0) * FLOOR + h / 2, p.z - entry.cz, SHOT.shellEdge); block.rotation.y = -p.angle; outside.add(block); (parts.blocks ??= []).push(block);
+    const lr = seeded_(`${n}|lights`); for (let m = 0; m < 3; m++) { const dot = new THREE.Mesh(new THREE.PlaneGeometry(1.6, 1.1), SHOT.cityLight); dot.position.set((lr() - 0.5) * (p.sx * CELL - 2), -h / 2 + 2 + lr() * Math.max(0, h - 4), (lr() < 0.5 ? 1 : -1) * ((p.sz * CELL) / 2 + 0.05)); block.add(dot); }
+  });
+  // Rain round the room.
+  const drops = []; const dr = seeded_("rain");
+  for (let n = 0; n < 900; n++) { const [px, , pz] = [r.centre[0] + r.out[0] * (6 + dr() * 40) + r.across[0] * (dr() - 0.5) * 50, 0, r.centre[1] + r.out[1] * (6 + dr() * 40) + r.across[1] * (dr() - 0.5) * 50], py = y - 15 + dr() * 35; drops.push([px, py, pz], [px - 0.15, py - 1.1, pz]); }
+  parts.rain = lines(drops, SHOT.rain); lotGroup.add(parts.rain);
+  SHOT.litWindow.opacity = palette.lit; SHOT.cityLight.opacity = palette.city; SHOT.rain.opacity = palette.rain;
+  sunLight.position.copy(palette.sunDir).multiplyScalar(60).add(new THREE.Vector3(plan.x - entry.cx, y, plan.z - entry.cz)); sunLight.target.position.set(plan.x - entry.cx, y, plan.z - entry.cz);
+  return { key: `${view.lot}|${view.room}|${(view.part ?? []).join(',')}|${palette.name}`, scene, lotGroup, r, parts, palette, view };
+}
+
+/** A shot's facts (engine/bench/indoor-set/check.mjs), as last drawn. */
+let shotFacts = null;
+window.__shotFacts = () => shotFacts;
+/** The shot of the unit at the time shown, drawn in place of the world; false when the unit has none. */
+function renderShot(segment, entry) {
+  const unitId = segment?.scene?.id, view = unitId ? shotPlan[unitId] : null;
+  if (!shotMode || !view || !entry) return false;
+  const palette = shotPalette(unitId), key = `${view.lot}|${view.room}|${(view.part ?? []).join(',')}|${palette.name}`;
+  if (!shotStage || shotStage.key !== key) shotStage = buildShotStage(view, entry, palette);
+  if (!shotStage) return false;
+  const span = unitSpan(unitId), f = span ? (time - span.start) / Math.max(1e-6, span.end - span.start) : 0.5, cam = shotCamera(view.kind ?? "set", f), { r, parts, lotGroup } = shotStage;
+  const toScene = ([u, yy, v]) => lotGroup.localToWorld(new THREE.Vector3(u, yy, v));
+  const from = toScene(shotPoint(r, cam.from)), to = toScene(shotPoint(r, cam.to));
+  camera.position.copy(from); controls.target.copy(to); camera.lookAt(to); camera.updateMatrixWorld();
+  // The set: the walls facing the camera cut low, the floors above and the window rows gone, the shell faint.
+  const camLocal = lotGroup.worldToLocal(from.clone()), toCam = [camLocal.x - r.centre[0], camLocal.z - r.centre[1]];
+  const cutSides = [];
+  for (let side = 0; side < 4; side++) { const near = cam.set && SHOT_SIDES[side][0] * toCam[0] + SHOT_SIDES[side][1] * toCam[1] > 0; parts.cut[side].visible = near; parts.full[side].visible = !near; if (near) cutSides.push(side); }
+  parts.above.visible = !cam.set; parts.below.visible = cam.phase === "outside"; parts.facade.visible = cam.phase === "outside";
+  // Only the building's faces toward the camera show their windows (its shell is glass: the far faces' would show through).
+  const lotCam = lotGroup.worldToLocal(from.clone());
+  for (const pane of parts.facade.children) { const [du, dv] = SHOT_SIDES[pane.userData.side], W2 = (r.plan.sx * CELL) / 2, D2 = (r.plan.sz * CELL) / 2; pane.visible = du ? du * lotCam.x > W2 : dv * lotCam.z > D2; }
+  // A neighbour standing between the camera and the room is left out of the shot, as a camera crew would frame past it.
+  const sight = new THREE.Ray(from.clone(), to.clone().sub(from).normalize()), reach = from.distanceTo(to);
+  for (const block of parts.blocks ?? []) { const hit = sight.intersectBox(new THREE.Box3().setFromObject(block), new THREE.Vector3()); block.visible = !hit || from.distanceTo(hit) > reach - 2; }
+  parts.shell.visible = cam.phase !== "eye"; parts.shell.material.opacity = cam.phase === "outside" ? shotLerp(0.16, 0, cam.fade ?? 0) : 0.05;
+  parts.patches.visible = palette.name === "day";
+  parts.rain.position.y = -((performance.now() / 1000) * 14 % 1.2);
+  // The people where the run has them, slim, named, in the building or near the room.
+  const box = new THREE.Box3().setFromObject(parts.shell).expandByScalar(4), people = [], present = new Set(Object.keys(segment.scene.starts ?? {}));
+  for (const [id, pawnEntry] of pawns) {
+    const person = data.people?.[id]; if (!person || person.crowd || person.prop) continue;
+    let figure = parts.people.get(id);
+    const shown = present.has(id) && !!pawnEntry.pawn.parent && box.containsPoint(pawnEntry.pawn.position);
+    if (!figure && shown) {
+      figure = new THREE.Group(); const tint = new THREE.Color(person.color ?? 0x6fd3ff);
+      const body = new THREE.Mesh(new THREE.CapsuleGeometry(0.22, 1.05, 6, 12), new THREE.MeshLambertMaterial({ color: tint, emissive: tint, emissiveIntensity: 0.25 })); body.position.y = 0.75; figure.add(body);
+      const tag = label(person.name, "#e8f6ff", 26); tag.position.y = 2.0; tag.userData.aspect = tag.scale.x / tag.scale.y; labels.delete(tag); figure.add(tag);
+      shotStage.scene.add(figure); parts.people.set(id, figure);
+    }
+    if (!figure) continue;
+    figure.visible = shown; if (!shown) continue;
+    figure.position.copy(pawnEntry.pawn.position);
+    { const tag = figure.children[1], high = cam.phase === "eye" ? 0.19 : 0.4; tag.scale.set(high * (tag.userData.aspect ?? 4), high, 1); }
+    const local = lotGroup.worldToLocal(pawnEntry.pawn.position.clone()), inRoom = local.x >= r.u0 && local.x <= r.u1 && local.z >= r.v0 && local.z <= r.v1 && Math.abs(local.y - r.y) < 1.5;
+    const onBalcony = !inRoom && parts.balcony && Math.abs(local.y - r.y) < 1.5 && Math.hypot(local.x - r.centre[0], local.z - r.centre[1]) <= Math.max(r.depth, r.width) / 2 + 2;
+    const away = Math.round(Math.hypot(Math.max(r.u0 - local.x, 0, local.x - r.u1), Math.max(r.v0 - local.z, 0, local.z - r.v1)) * 10) / 10;
+    people.push({ id, inRoom, onBalcony, away, level: Math.abs(local.y - r.y) < 1.5 });
+  }
+  renderer.render(shotStage.scene, camera);
+  const flat = Math.hypot(from.x - to.x, from.z - to.z), pitch = Math.round(THREE.MathUtils.radToDeg(Math.atan2(from.y - to.y, flat)));
+  const start = shotCamera(view.kind ?? "set", 0), end = shotCamera(view.kind ?? "set", 1), dir = (c) => { const a = shotPoint(r, c.from), b = shotPoint(r, c.to); return Math.atan2(a[2] - b[2], a[0] - b[0]); };
+  shotFacts = { unit: unitId, kind: view.kind ?? "set", phase: cam.phase, lot: view.lot, room: view.room, light: palette.name, walls: { opacity: SHOT.wall.opacity, edges: true, cut: cutSides, standing: [0, 1, 2, 3].filter((side) => !cutSides.includes(side)) },
+    ceiling: parts.above.visible, windows: parts.windows, balcony: parts.balcony, patches: parts.patches.visible ? parts.patches.children.length : 0, rain: SHOT.rain.opacity > 0, litPanes: parts.facade.visible && palette.lit > 0 ? parts.litPanes.length : 0, facadePanes: parts.facade.visible ? parts.facade.children.length : 0,
+    shellOpacity: parts.shell.visible ? Math.round(parts.shell.material.opacity * 100) / 100 : 0, furniture: parts.furniture, people, overlays: 0, figure: { radius: 0.22, ring: false },
+    camera: { pitch, distance: Math.round(from.distanceTo(new THREE.Vector3(...lotGroup.localToWorld(new THREE.Vector3(r.centre[0], r.y + 0.5, r.centre[1])).toArray())) * 10) / 10, height: Math.round((camLocal.y - r.y) * 10) / 10, inside: camLocal.x >= r.u0 && camLocal.x <= r.u1 && camLocal.z >= r.v0 && camLocal.z <= r.v1 && camLocal.y > r.y && camLocal.y < r.y + SHOT_H },
+    moves: { degrees: Math.round(Math.abs(THREE.MathUtils.radToDeg(dir(end) - dir(start)))), metres: Math.round(new THREE.Vector3(...shotPoint(r, start.from)).distanceTo(new THREE.Vector3(...shotPoint(r, end.from))) * 10) / 10 } };
+  return true;
+}
+/** A unit's span on the timeline. */
+function unitSpan(unitId) { let start = Infinity, end = -Infinity; for (const segment of segments) if (segment.scene.id === unitId) { start = Math.min(start, segment.start); end = Math.max(end, segment.end); } return start < end ? { start, end } : null; }
+
 function frame(now) {
   const dt = Math.min(0.1, (now - last) / 1000); last = now;
   if (playing) { time += dt * speed; if (time >= total) time = liveMode ? total - 0.001 : 0; }
@@ -2730,7 +2993,7 @@ function frame(now) {
   decor(time); blinkProposal(now); blinkSampled(now); playSettle(now);
   if (seeing && !sheetView) seeThrough(entry, segment, now, dt, elapsed);
   if (focusGlide) { const u = Math.min(1, (performance.now() - focusGlide.start) / 600), e = u * u * (3 - 2 * u); controls.target.lerpVectors(focusGlide.fromTarget, focusGlide.toTarget, e); camera.position.lerpVectors(focusGlide.fromCamera, focusGlide.toCamera, e); if (u >= 1) focusGlide = null; }
-  if (sheetView) renderer.render(sheetView.scene, sheetView.camera); else { controls.update(); if (liveMode) showBorn(); capLabels(); orbitTick(); rippleTick(dt); ceilingTick(dt); inkTick(); renderer.render(world, camera); ceilingRestore(); } if (!shownNotice) { shownNotice = true; document.querySelector(".notice")?.remove(); } requestAnimationFrame(frame);
+  if (sheetView) renderer.render(sheetView.scene, sheetView.camera); else if (renderShot(segment, entry)) { /* the shot stage drew the frame */ } else { controls.update(); if (liveMode) showBorn(); capLabels(); orbitTick(); rippleTick(dt); ceilingTick(dt); inkTick(); renderer.render(world, camera); ceilingRestore(); } if (!shownNotice) { shownNotice = true; document.querySelector(".notice")?.remove(); } requestAnimationFrame(frame);
 }
 
 /**
@@ -3293,7 +3556,7 @@ if (capture) {
       return { at: segment.start + 0.05, place: segment.scene.place, people };
     },
     /** One still: `place` at the start of an event, the reader's camera turned by `yaw` about it; `hide` things, `beams` of earlier boxes, `boxes` and a `solved` 3D box drawn for checking. */
-    async capture({ id, scene, event, place, set = null, cutAbove = null, yaw = 0, hide = [], beams = [], boxes = [], solved = null, aim = null, elevation = null, mask = false, ghosts = [], form = null, focus = null, marker = null, radius = null, poles = [], topdown = null, beforeHit = false, spheres = [], pins = [], play = null, at = null, caption = null, frame = null, view = null, slices = [], cuts = [], areas = [], free = [], vague = null, labelScale = 1, dash = 2, arrows = [], wedge = null, people = false, only = null, mover = null, grid = null, storySky = false }) {
+    async capture({ id, scene, event, place, set = null, cutAbove = null, yaw = 0, hide = [], beams = [], boxes = [], solved = null, aim = null, elevation = null, mask = false, ghosts = [], form = null, focus = null, marker = null, radius = null, poles = [], topdown = null, beforeHit = false, spheres = [], pins = [], play = null, at = null, caption = null, frame = null, view = null, slices = [], cuts = [], areas = [], free = [], vague = null, labelScale = 1, dash = 2, arrows = [], wedge = null, people = false, only = null, mover = null, grid = null, storySky = false, shot = null }) {
       // `play`: that many seconds into the event, its hit's effects on (to look at a destruction as it plays).
       // `at`: any moment of the strand, everything playing (to record a scene).
       // Terrain spawning (docs/v3/design.html#visual-context-engine): a frame of its own size, an explicit camera in world metres,
@@ -3302,6 +3565,8 @@ if (capture) {
       // `storySky`: the story's sky of the unit at `at` from now on (time of day, weather), as the reader sees it; stills are
       // otherwise unlit by it. The indoor set's sun and its patches follow it (the indoor benchmark, engine/bench/indoor-set).
       if (storySky && !daylight.on) { daylight.on = true; daylight.force = null; daylight.snap = 3; }
+      // `shot`: the unit's shot (the shot stage, data.shots) in place of the world from now on, or the world again (false).
+      if (shot !== null) shotMode = !!shot;
       world.fog = vague ? new THREE.Fog(0x060c12, vague.near, vague.far) : defaultFog;
       time = at ?? (eventStart.get(`${scene}|${event}`) ?? 0) + (play ?? 0.02); quiet = play === null && at === null; seeing = at !== null; shownPlace = place; glide = null; hiddenThings = new Set(hide); sheetView = null;
       // Just before this event's own hit: the buildings as they stood.

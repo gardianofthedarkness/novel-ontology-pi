@@ -152,7 +152,14 @@ you put them; nothing is guessed from a room's name.
    or `elsewhere` (in the unit but not in the room: on the phone, remembered,
    gone out). Someone who stays at one feature through the room's next units:
    `--through <last unit>`. A balcony needs the room's `opens ... balcony` first.
-4. The step is done when `novel rooms check <workspace>` shows `"done": true`.
+4. For each unit set in a room, how it is filmed:
+   `shot <workspace> <unit> <set|eye|outside> --line <id> --why <text>`
+   (`--through <last unit>` for a run filmed alike): `set` the room cut open
+   from above (most units); `eye` at eye level inside, toward its window (a
+   moment seen from inside: the weather or the street through the window, a
+   quiet or close moment); `outside` from the street up to the room's window
+   and into it (an arrival, a return at a new time of day, the place first shown).
+5. The step is done when `novel rooms check <workspace>` shows `"done": true`.
 
 Use only what the sentences say; never what you know of the book from outside.
 

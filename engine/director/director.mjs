@@ -387,7 +387,10 @@ export async function direct(novelDir, { reading, readingPath = null, prefilm = 
       const vehiclesUsed = data => { const used = new Set([...Object.entries(data.people ?? {}).map(([id, person]) => carModel(slotProp(id), propSheet?.ids?.[id] ?? person.name)), ...thingsOnPage().map(thing => thing.vehicleModel), 'car-sedan'].filter(Boolean)); return Object.fromEntries([...used].filter(name => vehicleModels?.models?.[name]).map(name => [name, vehicleModels.models[name]])); };
       const scadUsed = data => { const used = new Set([...Object.entries(data.people ?? {}).map(([id, person]) => carModel(slotProp(id), propSheet?.ids?.[id] ?? person.name)), ...thingsOnPage().map(thing => thing.vehicleModel), ...[...wrecks.values()].map(wreck => wreck.model)].filter(model => String(model ?? '').startsWith('scad:')).map(model => model.slice(5))); return Object.fromEntries([...used].map(id => [id, scadMeshes.get(id)])); };
       const furnitureUsed = () => Object.fromEntries([...new Set([...E.rooms.values()].flatMap(room => room.furniture.map(piece => `kk-furniture-${piece[0]}`)))].filter(name => furnitureModels?.models?.[name]).map(name => [name, furnitureModels.models[name]]));
-      const withLine = data => ({ ...data, ...(skyPage ? { sky: { units: skyPage } } : {}), people: Object.fromEntries(Object.entries(data.people ?? {}).map(([id, person]) => { const prop = slotProp(id); return [id, prop?.shape ? { ...person, prop: { kind: prop.kind, shape: prop.shape, size: scadSize(carModel(prop, propSheet?.ids?.[id] ?? person.name)) ?? prop.size, airborne: prop.airborne ?? 0, ...(prop.vehicle ? { vehicle: true } : {}), ...(carModel(prop, propSheet?.ids?.[id] ?? person.name) ? { model: carModel(prop, propSheet?.ids?.[id] ?? person.name) } : {}), ...(ownerOf(propSheet?.ids?.[id]) && ownerOf(propSheet?.ids?.[id]) !== 'not said' ? { owner: ownerOf(propSheet?.ids?.[id]) } : {}), ...(wrecks.has(id) ? { wreck: { model: wrecks.get(id).model, scene: wrecks.get(id).scene, event: wrecks.get(id).event, at: wrecks.get(id).at } } : {}) } } : person]; })), models: { ...(data.models ?? {}), ...vehiclesUsed(data), ...furnitureUsed() }, ...(scadMeshes.size || data.scadModels ? { scadModels: { ...(data.scadModels ?? {}), ...scadUsed(data) } } : {}), ...(E.rooms?.size ? { rooms: [...E.rooms.values()] } : {}), macro: (data.macro ?? []).map(node => (bornOf.has(node.id) ? { ...node, born: bornOf.get(node.id) } : node)), things: [...(data.things ?? []), ...thingsOnPage()], scenes: data.scenes.map(entry => { const piece = played.has(entry.id) ? pieceOf(played.get(entry.id)) : null; return piece ? { ...entry, starts: piece.starts, events: piece.events, cast: piece.cast, landed: true } : { ...entry, landed: false }; }) });
+      // Each unit's shot (the shot stage, docs/v3/design.html#shot-stage): the agent's (room-plan.json), set by default, for the
+      // units set in a bound room; filled once the rooms are bound.
+      const shotsPage = {};
+      const withLine = data => ({ ...data, ...(skyPage ? { sky: { units: skyPage } } : {}), ...(Object.keys(shotsPage).length ? { shots: shotsPage } : {}), people: Object.fromEntries(Object.entries(data.people ?? {}).map(([id, person]) => { const prop = slotProp(id); return [id, prop?.shape ? { ...person, prop: { kind: prop.kind, shape: prop.shape, size: scadSize(carModel(prop, propSheet?.ids?.[id] ?? person.name)) ?? prop.size, airborne: prop.airborne ?? 0, ...(prop.vehicle ? { vehicle: true } : {}), ...(carModel(prop, propSheet?.ids?.[id] ?? person.name) ? { model: carModel(prop, propSheet?.ids?.[id] ?? person.name) } : {}), ...(ownerOf(propSheet?.ids?.[id]) && ownerOf(propSheet?.ids?.[id]) !== 'not said' ? { owner: ownerOf(propSheet?.ids?.[id]) } : {}), ...(wrecks.has(id) ? { wreck: { model: wrecks.get(id).model, scene: wrecks.get(id).scene, event: wrecks.get(id).event, at: wrecks.get(id).at } } : {}) } } : person]; })), models: { ...(data.models ?? {}), ...vehiclesUsed(data), ...furnitureUsed() }, ...(scadMeshes.size || data.scadModels ? { scadModels: { ...(data.scadModels ?? {}), ...scadUsed(data) } } : {}), ...(E.rooms?.size ? { rooms: [...E.rooms.values()] } : {}), macro: (data.macro ?? []).map(node => (bornOf.has(node.id) ? { ...node, born: bornOf.get(node.id) } : node)), things: [...(data.things ?? []), ...thingsOnPage()], scenes: data.scenes.map(entry => { const piece = played.has(entry.id) ? pieceOf(played.get(entry.id)) : null; return piece ? { ...entry, starts: piece.starts, events: piece.events, cast: piece.cast, landed: true } : { ...entry, landed: false }; }) });
       const dense = id => { const { i, j, k } = W.cellOf(world, id), g = page.world; return ((k + g.ok) * g.NZ + (j + g.oj)) * g.NX + (i + g.oi); };
       const at = id => { const p = W.nodePos(world, id); return [p.x, p.y, p.z]; };
       const changesFloor = path => { if (!path || path.length < 2 || path.drove || path.air) return false; const y0 = at(path[0])[1]; return path.some(id => Math.abs(at(id)[1] - y0) > 1); };
@@ -755,14 +758,25 @@ export async function direct(novelDir, { reading, readingPath = null, prefilm = 
       }
       RBM.storyHints(roomsWanted, id => floorFacts.get(id) ?? [], roomPlan);
       const boundRooms = RBM.bindRooms(roomsWanted, lotsOfBuilding, keptRooms);
+      // A plan room much bigger than its kind is bound as a room-sized part of it, along its outer wall (room-binding.mjs partOf):
+      // outside is beyond the plan, or a cell no room nor corridor fills (as the windows have it, windows.mjs).
+      for (const binding of Object.values(boundRooms.rooms)) {
+        delete binding.part;
+        const lot = world.lots[binding.lot], room = lot?.rooms?.[binding.room]; if (!lot || !room || binding.entry) continue;
+        const sx = lot.skeleton?.nx ?? 0, sz = lot.skeleton?.nz ?? 0, k = binding.floor, cellAt = (i, j) => lot.skeleton?.cells?.[(k * sz + j) * sx + i];
+        const outer = (i, j) => i < 0 || j < 0 || i >= sx || j >= sz || (!cellAt(i, j) && !(lot.rooms ?? []).some(other => k >= other.floor && k <= (other.top ?? other.floor) && i >= other.i0 && i <= other.i1 && j >= other.j0 && j <= other.j1));
+        const part = RBM.partOf(room, binding.kind, outer); if (part) binding.part = part;
+      }
+      for (const binding of Object.values(boundRooms.rooms)) if (binding.entry && binding.within) { const home = boundRooms.rooms[binding.within]; if (home?.part) binding.part = home.part; }
       // Each bound room furnished by its kind (the architect's recipes), drawn on the page and known to the director (a talk in it
       // asks no more), with what its lines name of its outside (a balcony, a window).
       for (const [place, binding] of Object.entries(boundRooms.rooms)) {
         const lot = world.lots[binding.lot], room = lot?.rooms?.[binding.room], key = `${binding.lot}|${binding.room}`;
         if (!room || E.rooms.has(key)) continue;
         const type = binding.kind ?? 'not said', opens = roomPlan.rooms?.[binding.within && binding.entry ? binding.within : place]?.opens?.value, opening = opens === 'balcony' || opens === 'window' ? opens : null;
-        const furniture = RM.furnish(type, (room.i1 - room.i0 + 1) * CELL, (room.j1 - room.j0 + 1) * CELL, furnitureSizes, `${key}|${type}`).map(piece => [piece.model, piece.u, piece.v, piece.angle]);
-        E.rooms.set(key, { lot: binding.lot, room: binding.room, type, sure: null, scene: roomsWanted.find(entry => entry.id === place)?.first ?? null, card: null, furniture, bound: place, ...(opening ? { opening } : {}) });
+        const [pi0, pj0, pi1, pj1] = binding.part ?? [room.i0, room.j0, room.i1, room.j1], du = (pi0 - room.i0) * CELL, dv = (pj0 - room.j0) * CELL;
+        const furniture = RM.furnish(type, (pi1 - pi0 + 1) * CELL, (pj1 - pj0 + 1) * CELL, furnitureSizes, `${key}|${type}`).map(piece => [piece.model, piece.u + du, piece.v + dv, piece.angle]);
+        E.rooms.set(key, { ...(binding.part ? { part: binding.part } : {}), lot: binding.lot, room: binding.room, type, sure: null, scene: roomsWanted.find(entry => entry.id === place)?.first ?? null, card: null, furniture, bound: place, ...(opening ? { opening } : {}) });
       }
       await writeFile(roomsFile, JSON.stringify({ version: 1, at: new Date().toISOString(), rooms: { ...keptRooms, ...boundRooms.rooms }, problems: boundRooms.problems }, null, 1));
       record.rooms = { bound: Object.keys(boundRooms.rooms).length, problems: boundRooms.problems };
@@ -770,13 +784,17 @@ export async function direct(novelDir, { reading, readingPath = null, prefilm = 
       // A unit's bound room (its place, or the first room above it) and the walkable nodes inside that room, each found once.
       const roomNodeCache = new Map();
       const boundOf = scene => { for (let at_ = scene.placeId, guard = 0; at_ && guard < 16; at_ = script.places?.[at_]?.parent, guard++) if (boundRooms.rooms[at_]) return { place: at_, ...boundRooms.rooms[at_] }; return null; };
+      // A unit set in a bound room is filmed on it; one set in the building of a bound room (its corridor, its door) on that room.
+      const roomOfBuilding = unit => { for (let at_ = unit?.place, guard = 0; at_ && guard < 16; at_ = script.places?.[at_]?.parent, guard++) { const found = Object.entries(boundRooms.rooms).find(([, binding]) => binding.building === at_ && !binding.entry); if (found) return { place: found[0], ...found[1] }; } return null; };
+      for (const entry of E.chosen) { const unit = script.scenes.find(scene => scene.id === entry.id), bound = unit ? boundOf({ placeId: unit.place }) ?? roomOfBuilding(unit) : null; if (bound) shotsPage[entry.id] = { kind: roomPlan.shots?.[entry.id]?.kind ?? 'set', lot: bound.lot, room: bound.room, ...(bound.part ? { part: bound.part } : {}) }; }
       const roomNodesOf = bound => {
-        const key = `${bound.lot}|${bound.room}`;
+        const key = `${bound.lot}|${bound.room}${bound.part ? `|${bound.part.join(',')}` : ''}`;
         if (roomNodeCache.has(key)) return roomNodeCache.get(key);
         const lot = world.lots[bound.lot], room = lot?.rooms?.[bound.room], found = new Set();
         if (room) {
           const k = (lot.k0 ?? 0) + bound.floor, points = [];
-          for (let i = lot.i0; i < lot.i0 + lot.nx; i++) for (let j = lot.j0; j < lot.j0 + lot.nz; j++) { const local = W.localCell(lot, i, j); if (local && local[0] >= room.i0 && local[0] <= room.i1 && local[1] >= room.j0 && local[1] <= room.j1) points.push([(i + 0.5) * CELL, (j + 0.5) * CELL]); }
+          const [ri0, rj0, ri1, rj1] = bound.part ?? [room.i0, room.j0, room.i1, room.j1];
+          for (let i = lot.i0; i < lot.i0 + lot.nx; i++) for (let j = lot.j0; j < lot.j0 + lot.nz; j++) { const local = W.localCell(lot, i, j); if (local && local[0] >= ri0 && local[0] <= ri1 && local[1] >= rj0 && local[1] <= rj1) points.push([(i + 0.5) * CELL, (j + 0.5) * CELL]); }
           if (points.length) {
             const cx = points.reduce((sum, q) => sum + q[0], 0) / points.length, cz = points.reduce((sum, q) => sum + q[1], 0) / points.length, half = Math.max(8, ...points.map(q => Math.max(Math.abs(q[0] - cx), Math.abs(q[1] - cz)))) + 4;
             E.reach(cx, cz, half + 8);
@@ -791,6 +809,7 @@ export async function direct(novelDir, { reading, readingPath = null, prefilm = 
             for (const [x, z] of points) {
               const node = W.nodeNear(world, graph, x, z, k); if (node === null || node === undefined) continue;
               const there = roomAt(node); if (!there || there.lot !== bound.lot || there.room !== bound.room) continue;
+              if (bound.part) { const q = W.nodePos(world, node), lc = W.localCell(lot, q.i, q.j); if (!lc || lc[0] < bound.part[0] || lc[0] > bound.part[2] || lc[1] < bound.part[1] || lc[1] > bound.part[3]) continue; }
               found.add(node);
               const p = W.nodePos(world, node), local = W.localCell(lot, p.i, p.j);
               if (local && !under(local[0], local[1])) free.add(node);

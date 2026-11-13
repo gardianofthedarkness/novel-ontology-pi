@@ -1,7 +1,7 @@
 // One room, one place in the world: each room place bound once to one plan room of its building's lot, kept between runs.
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { bindRooms, roomsOf, storyHints } from './room-binding.mjs';
+import { bindRooms, partOf, roomsOf, storyHints } from './room-binding.mjs';
 
 const script = {
   places: { city: { label: 'city', scale: 'city' }, dorm: { label: 'dorm', scale: 'building', parent: 'city' }, room: { label: 'his room', scale: 'room', parent: 'dorm' }, hall: { label: 'entrance', scale: 'room', parent: 'room' }, lost: { label: 'a room', scale: 'room', parent: 'city' } },
@@ -48,4 +48,11 @@ test('a room one cell wide is the last choice: a 2 x 3 room before a 1 x 4 strip
   assert.equal(rooms.room.room, 1, 'the 2 x 3 room, though the strip is a bedroom\'s very area');
   const again = bindRooms([{ id: 'room', label: 'his room', building: 'dorm', within: null, kind: 'bedroom' }], () => strip, { room: { lot: 1, lotPlace: 'dorm', room: 0, floor: 1, building: 'dorm', kind: 'bedroom' } });
   assert.equal(again.rooms.room.room, 1, 'a kept strip is bound again');
+});
+
+test('a plan room much bigger than its kind is bound as a room-sized part along its outer wall', () => {
+  const room = { i0: 0, j0: 3, i1: 3, j1: 5 }, outer = (i, j) => j > 5;
+  assert.deepEqual(partOf(room, 'bedroom', outer), [0, 4, 2, 5], '3 cells along the outer side j = 5, 2 deep');
+  assert.equal(partOf({ i0: 0, j0: 0, i1: 1, j1: 1 }, 'bedroom', outer), null, 'a 2 x 2 room is a bedroom\'s size already');
+  assert.equal(partOf(room, 'bedroom', () => false), null, 'no outer wall: no part');
 });

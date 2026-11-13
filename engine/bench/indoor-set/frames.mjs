@@ -34,13 +34,18 @@ function placed(room, point) {
   return [wallX + ox * depth + sx * across, room.at[1] + point.up, wallZ + oz * depth + sz * across];
 }
 
-export async function framesOf(novelDir, { run, out, log = console.error }) {
+export async function framesOf(novelDir, { run, out, force = null, log = console.error }) {
   const novel = resolve(novelDir), standard = JSON.parse(await readFile(join(here, 'standard.json'), 'utf8'));
   const page = JSON.parse(await readFile(join(novel, 'stage', 'simulation', 'runs', 'director', `${run}.page.json`), 'utf8'));
+  const plan = JSON.parse(await readFile(join(novel, 'stage', 'world', 'room-plan.json'), 'utf8').catch(() => 'null')) ?? {};
   const script = JSON.parse(await readFile(join(novel, 'stage', 'world', 'script.json'), 'utf8'));
   const bound = JSON.parse(await readFile(join(novel, 'stage', 'world', 'rooms.json'), 'utf8').catch(() => 'null'))?.rooms ?? {};
   const chainOf = id => { const chain = []; for (let at = id, guard = 0; at && guard < 16; at = script.places?.[at]?.parent, guard++) chain.push(at); return chain; };
-  const bindingOf = unitId => { const place = script.scenes?.find(scene => scene.id === unitId)?.place, room = place ? chainOf(place).find(id => bound[id]) : null; return room ? bound[room] : null; };
+  const bindingOf = unitId => { const place = script.scenes?.find(scene => scene.id === unitId)?.place, chain = place ? chainOf(place) : [], room = chain.find(id => bound[id]); if (room) return bound[room]; const building = chain.find(id => Object.values(bound).some(b => b.building === id && !b.entry)); return building ? Object.values(bound).find(b => b.building === building && !b.entry) : null; };
+  // The run's shots (the director writes them); a run made before shots: those the director would have written, from the
+  // agent's room plan. `force` ({ unit: kind }) only for looking at the shot stage by hand, never for the measure.
+  if (!page.shots) { page.shots = {}; for (const scene of script.scenes ?? []) { const b = bindingOf(scene.id); if (b) page.shots[scene.id] = { kind: plan.shots?.[scene.id]?.kind ?? 'set', lot: b.lot, room: b.room }; } log('shots filled from the room plan (a run made before shots)'); }
+  for (const [unit, kind] of Object.entries(force ?? {})) if (page.shots[unit]) page.shots[unit] = { ...page.shots[unit], kind };
   const { browser, serve } = await import('../../view/two-view-things.mjs'), { VENDOR_FILES } = await import('../../live/sim-jev.mjs');
   const work = join(out, 'page'), pairs = join(out, 'pairs');
   await mkdir(pairs, { recursive: true });
@@ -58,18 +63,19 @@ export async function framesOf(novelDir, { run, out, log = console.error }) {
     for (const shot of standard.shots) for (const moment of shot.moments) {
       const unit = units.get(shot.unit), length = { set: 11, eye: 10, outside: 11 }[shot.id] ?? 10;
       if (!unit || !room) { result.push({ moment: moment.id, missing: !unit ? 'the unit is not in this run' : 'no bound room' }); continue; }
-      const at = unit.start + (unit.end - unit.start) * Math.min(0.98, moment.t / length), cam = clipCamera(shot.id, moment.t);
-      const base = { id: `${moment.id}-run`, scene: unit.id, place: unit.place, at, people: true, frame: [1440, 810], storySky: true };
+      // The run's own shot of the unit at the same share of it as the clip's moment: the camera is the shot's, none of ours.
+      const at = unit.start + (unit.end - unit.start) * Math.min(0.98, moment.t / length), cam = null;
+      const base = { id: `${moment.id}-run`, scene: unit.id, place: unit.place, at, people: true, frame: [1440, 810], storySky: true, shot: true };
       await chrome.evaluate(`window.__stage.capture(${JSON.stringify({ ...base, id: 'warm' })})`);
-      await new Promise(done => setTimeout(done, 900));
-      const options = cam ? { ...base, view: { position: placed(room, cam.from), target: placed(room, cam.to), fov: cam.fov } } : { ...base, set: { lot: home.lot, room: home.room, floor: home.floor } };
-      await chrome.evaluate(`window.__stage.capture(${JSON.stringify(options)})`);
-      await new Promise(done => setTimeout(done, 400));
+      await new Promise(done => setTimeout(done, 1200));
+      await chrome.evaluate(`window.__stage.capture(${JSON.stringify(base)})`);
+      await new Promise(done => setTimeout(done, 600));
       const file = join(out, `${moment.id}-run.png`);
       await writeFile(file, Buffer.from(await chrome.still('png'), 'base64'));
       const sky = (await chrome.evaluate('window.__replay()'))?.sky ?? null;
-      result.push({ moment: moment.id, unit: unit.id, at: Math.round(at * 10) / 10, camera: cam ? 'clip' : 'set', run: file, sky: sky ? { hour: sky.hour, weather: sky.weather } : null });
-      log(`${moment.id}: ${unit.id} at ${Math.round(at)} s (${cam ? 'the clip\'s camera' : 'the set view'})`);
+      const facts = await chrome.evaluate('window.__shotFacts()');
+      result.push({ moment: moment.id, unit: unit.id, at: Math.round(at * 10) / 10, shot: facts?.kind ?? null, phase: facts?.phase ?? null, run: file, facts, sky: sky ? { hour: sky.hour, weather: sky.weather } : null });
+      log(`${moment.id}: ${unit.id} at ${Math.round(at)} s, the run's shot ${facts?.kind ?? 'none'} (${facts?.phase ?? '-'})`);
     }
     // The pairs: the clip's frame left, the run's right, each moment one picture.
     const label = text => `<div style="position:absolute;left:10px;top:8px;font:600 22px system-ui;color:#fff;background:#000a;padding:3px 9px;border-radius:4px">${text}</div>`;
@@ -88,9 +94,9 @@ export async function framesOf(novelDir, { run, out, log = console.error }) {
 }
 
 if (process.argv[1] === fileURLToPath(import.meta.url)) {
-  const { values, positionals: [novelDir] } = parseArgs({ allowPositionals: true, options: { run: { type: 'string' }, out: { type: 'string' } } });
+  const { values, positionals: [novelDir] } = parseArgs({ allowPositionals: true, options: { run: { type: 'string' }, out: { type: 'string' }, force: { type: 'string' } } });
   if (!novelDir || !values.run || !values.out) { console.error('usage: node engine/bench/indoor-set/frames.mjs <novel-dir> --run <id> --out <folder>'); process.exit(2); }
-  const result = await framesOf(novelDir, { run: values.run, out: resolve(values.out) });
+  const result = await framesOf(novelDir, { run: values.run, out: resolve(values.out), force: values.force ? Object.fromEntries(values.force.split(',').map(pair => pair.split('='))) : null });
   console.log(JSON.stringify(result.map(entry => ({ moment: entry.moment, pair: entry.pair ?? null, missing: entry.missing ?? null }))));
   process.exit(0);
 }

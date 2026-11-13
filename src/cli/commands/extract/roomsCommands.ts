@@ -22,7 +22,7 @@ async function repository(): Promise<string> {
 }
 const roomPlan = async () => import(pathToFileURL(join(await repository(), "engine", "places", "room-plan.mjs")).href) as Promise<RoomPlanModule>;
 
-export const ROOMS_COMMANDS = ["rooms", "room", "stage", "kind", "floor", "part", "opens", "at", "check"] as const;
+export const ROOMS_COMMANDS = ["rooms", "room", "stage", "kind", "floor", "part", "opens", "at", "shot", "check"] as const;
 
 /** One room-plan command; a claim the text does not show comes back as { refused: why } (never thrown), so the agent can correct it. */
 export async function roomsCommand(command: string, novelDir: string, rest: string[]): Promise<unknown> {

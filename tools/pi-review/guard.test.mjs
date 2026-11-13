@@ -368,6 +368,7 @@ test('the rooms: the assigned book only, a why for every decision, a sentence id
     `novel rooms floor '${novel}' unnamed:place_000025_2 7 --line b0002_s0040 --why 'the seventh floor'`, `novel rooms part '${novel}' unnamed:place_000049_1 unnamed:place_000025_2 --line b0002_s0700 --why 'its entrance'`,
     `novel rooms opens '${novel}' unnamed:place_000025_2 balcony --line b0002_s0050 --why 'he opens the balcony door'`,
     `novel rooms at '${novel}' scene_000026 slot_000026_4 balcony --line b0002_s0060 --why 'over the rail'`, `novel rooms at '${novel}' scene_000027 char_000001 floor --through scene_000030 --line b0002_s0070 --why 'stays in'`,
+    `novel rooms shot '${novel}' scene_000038 eye --line b0002_s0400 --why 'rain seen from inside'`, `novel rooms shot '${novel}' scene_000025 set --through scene_000037 --line b0002_s0050 --why 'who is where'`,
   ]) assert.equal(authorize(command).kind, 'cli', command);
   assert.equal(authorize(`novel rooms check '${novel}'`).label, 'novel rooms check');
   for (const command of [

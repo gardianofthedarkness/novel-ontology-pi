@@ -1,5 +1,5 @@
 {
-  "about": "The indoor set's benchmark (the user, 2026-11-12: the indoor clip is the standard the automated run's first indoor scenes must match). clip.html is the clip unchanged; reference/ its frames at the moments below (reference.mjs); check.mjs measures a run's page against each check. Numbers are the clip's own: metres, degrees, the page's opacities.",
+  "about": "The indoor set's benchmark (the user, 2026-11-12: the indoor clip is the standard the automated run's first indoor scenes must match; 2026-11-13: match it at 95%). clip.html is the clip unchanged; reference/ its frames at the moments below (reference.mjs); check.mjs plays the run with its own shots (the shot stage) at each moment and passes or fails each check from what the shot drew; the score is the share passed. Numbers are the clip's own.",
   "book": "vol-1 of the 17r reading (the Documents world v2-host-state-17r-vol-1-0018-after-d20261112225518)",
   "room": {
     "place": "the bound room of unit 25 (stage/world/rooms.json)",
@@ -44,6 +44,11 @@
       },
       "checks": [
         {
+          "id": "set.shot",
+          "what": "The unit is filmed as the set",
+          "measure": "the run's shot of the unit is set"
+        },
+        {
           "id": "set.room-bound",
           "what": "The unit is set in its bound room: that lot, that room, that floor",
           "measure": "rooms.json binding for the unit's place; the capture's set equals it"
@@ -79,6 +84,11 @@
           "measure": "set-room wall pieces on the other sides reach the room's height; openings from the lot's windows"
         },
         {
+          "id": "set.walls-read",
+          "what": "The walls read as the clip's: light, dense (0.82), outlined",
+          "measure": "wall opacity 0.7 or more with edges"
+        },
+        {
           "id": "set.window",
           "what": "At least one window on the outer wall: sill 0.9, head 2.1, faint glass (opacity 0.08-0.16) with a highlight",
           "measure": "__setInfo.windows >= 1; setGlass opacity; setFrames drawn"
@@ -109,9 +119,24 @@
           "measure": "capture pitch 26-40, distance 8-14 m, target within 1 m of the room's middle"
         },
         {
+          "id": "set.moves",
+          "what": "The camera swings slowly round the room over the unit (28 to 48 degrees in the clip)",
+          "measure": "15 degrees or more over the unit"
+        },
+        {
           "id": "set.surround",
           "what": "Round the room only a faint slab of the corridor outside its door: no stair blocks, nothing standing over the floor",
           "measure": "no stair drawn on the set floor (__setInfo.stairs = 0)"
+        },
+        {
+          "id": "set.no-overlays",
+          "what": "Nothing but the room, its building and neighbours, and the people with their names: no pins, traces, things or other labels",
+          "measure": "the shot draws no overlay"
+        },
+        {
+          "id": "set.figures",
+          "what": "People drawn slim, as the clip's (0.44 m, no ring)",
+          "measure": "figure radius 0.25 or less, no ring"
         },
         {
           "id": "set.outside",
@@ -156,9 +181,19 @@
       },
       "checks": [
         {
+          "id": "eye.shot",
+          "what": "The unit is filmed at eye level",
+          "measure": "the run's shot of the unit is eye at both moments"
+        },
+        {
           "id": "eye.inside",
-          "what": "The camera inside the room at 1.6 m, every wall standing, the ceiling on",
-          "measure": "camera in the room's cells at floor + 1.6 m; no wall cut"
+          "what": "The camera inside the room at 1.6 m",
+          "measure": "camera in the room, 1.4 to 1.8 m above its floor"
+        },
+        {
+          "id": "eye.walls-ceiling",
+          "what": "Every wall standing and the ceiling on",
+          "measure": "4 sides standing, the slab above drawn"
         },
         {
           "id": "eye.window-view",
@@ -174,6 +209,16 @@
           "id": "eye.people",
           "what": "Index and Kamijou in the room at their spots, names small",
           "measure": "both in the room's cells"
+        },
+        {
+          "id": "eye.moves",
+          "what": "The camera drifts toward the window over the unit",
+          "measure": "0.2 m or more"
+        },
+        {
+          "id": "eye.no-overlays",
+          "what": "Nothing but the room, the view out and the people",
+          "measure": "the shot draws no overlay"
         }
       ]
     },
@@ -222,6 +267,11 @@
       },
       "checks": [
         {
+          "id": "outside.shot",
+          "what": "The unit is filmed from outside, ending in the set",
+          "measure": "outside at the first moments, into the set at the last"
+        },
+        {
           "id": "outside.facade",
           "what": "The dorm's windows by its kind: one every two cells on the street face, balcony doors",
           "measure": "the lot's windows from config/windows.json's dormitory pattern"
@@ -242,9 +292,19 @@
           "measure": "the last frame is the set view of the bound room"
         },
         {
+          "id": "outside.rises",
+          "what": "The camera rises from the street to the room",
+          "measure": "10 m or more of travel"
+        },
+        {
           "id": "outside.story",
           "what": "Index fallen at the room's door in the corridor; Kamijou coming down the corridor",
           "measure": "Index's spot on the corridor cell at the room's door; Kamijou's move along the corridor to it"
+        },
+        {
+          "id": "outside.no-overlays",
+          "what": "Nothing but the building, its neighbours, the room and the people",
+          "measure": "the shot draws no overlay"
         }
       ]
     }
