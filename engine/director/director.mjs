@@ -1084,12 +1084,15 @@ export async function direct(novelDir, { reading, readingPath = null, prefilm = 
         };
         sceneRecord.revised = [];
         for (const who of [...present.filter(other => !moved(other)), ...present.filter(moved)]) {
-          const from = was.get(who), revised = revisedAt(who);
+          // A smoothed start from the last run's history that lies outside this unit's bound room is that run's, not this one's
+          // (a room bound elsewhere then): left out.
+          const from = was.get(who), revisedRaw = revisedAt(who), revised = roomSet?.size && revisedRaw !== null && revisedRaw !== undefined && !inBound(revisedRaw) ? null : revisedRaw;
           // Staged by the agent: elsewhere stays where they were (out of the room); at a feature starts there, walking in from
           // outside the room, stepping to it within the room.
           const feature = staging[who]?.at ?? null;
           if (feature === 'elsewhere') { if (from) positions[who] = from; (sceneRecord.elsewhere ??= []).push(who); continue; }
-          const stagedAt = feature ? featureNode(who, feature) : null;
+          // At a feature: its spot; anywhere in the room (floor, or a feature it has no piece for): the scene's own spot in it.
+          const stagedAt = feature ? (featureNode(who, feature) ?? (roomSet?.size ? beside(who) ?? null : null)) : null;
           if (stagedAt !== null) {
             (sceneRecord.staged ??= []).push({ who, at: feature });
             if (!from) { positions[who] = [stagedAt, 0]; sceneRecord.spawned.push(who); continue; }
