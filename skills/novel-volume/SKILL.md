@@ -154,11 +154,14 @@ you put them; nothing is guessed from a room's name.
    `--through <last unit>`. A balcony needs the room's `opens ... balcony` first.
 4. For each unit set in a room, how it is filmed:
    `shot <workspace> <unit> <set|eye|outside> --line <id> --why <text>`
-   (`--through <last unit>` for a run filmed alike): `set` the room cut open
-   from above (most units); `eye` at eye level inside, toward its window (a
-   moment seen from inside: the weather or the street through the window, a
-   quiet or close moment); `outside` from the street up to the room's window
-   and into it (an arrival, a return at a new time of day, the place first shown).
+   (`--through <last unit>` for a run filmed alike; it stops where the story's
+   light changes): `set` the room cut open from above, the default, a room's
+   first unit too; `eye` at eye level inside, toward its window, where the
+   unit's sky (`stage` shows it) has rain, snow or a storm and its people are
+   indoors, or for a quiet, close moment; `outside` from the street up to the
+   room's window and into it, where the story comes back to the room from
+   elsewhere at a new time of day or someone arrives at its door, never a
+   room's first unit.
 5. The step is done when `novel rooms check <workspace>` shows `"done": true`.
 
 Use only what the sentences say; never what you know of the book from outside.

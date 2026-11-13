@@ -2699,6 +2699,7 @@ function buildShotStage(view, entry, palette) {
         const R = (s, h) => (along ? [sx_ + s, y + h, sz_ + dv * 1.3] : [sx_ + du * 1.3, y + h, sz_ + s]);
         room.add(lines([R(-1.6, 1.1), R(1.6, 1.1), ...Array.from({ length: 9 }, (_, n) => [R(-1.6 + n * 0.4, 0), R(-1.6 + n * 0.4, 1.1)]).flat()], SHOT.rail));
       }
+      if (palette.sunUp && sunLocal[1] > 0.05 && du * sunLocal[0] + dv * sunLocal[2] > 0) parts.sunFacing = (parts.sunFacing ?? 0) + 1;
       // The sun through it on the floor: its corners along the light (by day, the sun on its side).
       if (palette.name === "day" && palette.sunUp && sunLocal[1] > 0.05 && du * sunLocal[0] + dv * sunLocal[2] > 0) {
         const corners = [[hole.from, hole.sill], [hole.to, hole.sill], [hole.to, hole.head], [hole.from, hole.head]].map(([s, h]) => { const [px, , pz] = at(s, 0), t = h / sunLocal[1]; return new THREE.Vector3(px - sunLocal[0] * t, y + 0.015, pz - sunLocal[2] * t); });
@@ -2807,10 +2808,16 @@ function renderShot(segment, entry) {
     people.push({ id, inRoom, onBalcony, away, level: Math.abs(local.y - r.y) < 1.5 });
   }
   renderer.render(shotStage.scene, camera);
+  // How the frame holds the room: its floor's corners on the screen (the share of the frame their box covers, clipped).
+  const ndc = (u, yy, v) => lotGroup.localToWorld(new THREE.Vector3(u, yy, v)).project(camera);
+  const corners = [[r.u0, r.v0], [r.u1, r.v0], [r.u0, r.v1], [r.u1, r.v1]].flatMap(([u, v]) => [ndc(u, r.y, v), ndc(u, r.y + SHOT_H, v)]).filter((p) => p.z < 1);
+  const clip = (value) => Math.max(-1, Math.min(1, value)), xs = corners.map((p) => clip(p.x)), ys = corners.map((p) => clip(p.y));
+  const frameShare = corners.length ? Math.round(((Math.max(...xs) - Math.min(...xs)) * (Math.max(...ys) - Math.min(...ys))) / 4 * 100) / 100 : 0;
+  for (const person of people) { const figure = parts.people.get(person.id), p = figure.position.clone().add(new THREE.Vector3(0, 1, 0)).project(camera); person.inFrame = p.z < 1 && Math.abs(p.x) <= 1 && Math.abs(p.y) <= 1; }
   const flat = Math.hypot(from.x - to.x, from.z - to.z), pitch = Math.round(THREE.MathUtils.radToDeg(Math.atan2(from.y - to.y, flat)));
   const start = shotCamera(view.kind ?? "set", 0), end = shotCamera(view.kind ?? "set", 1), dir = (c) => { const a = shotPoint(r, c.from), b = shotPoint(r, c.to); return Math.atan2(a[2] - b[2], a[0] - b[0]); };
   shotFacts = { unit: unitId, kind: view.kind ?? "set", phase: cam.phase, lot: view.lot, room: view.room, light: palette.name, walls: { opacity: SHOT.wall.opacity, edges: true, cut: cutSides, standing: [0, 1, 2, 3].filter((side) => !cutSides.includes(side)) },
-    ceiling: parts.above.visible, windows: parts.windows, balcony: parts.balcony, patches: parts.patches.visible ? parts.patches.children.length : 0, rain: SHOT.rain.opacity > 0, litPanes: parts.facade.visible && palette.lit > 0 ? parts.litPanes.length : 0, facadePanes: parts.facade.visible ? parts.facade.children.length : 0,
+    ceiling: parts.above.visible, frameShare, sunFacing: parts.sunFacing ?? 0, windows: parts.windows, balcony: parts.balcony, patches: parts.patches.visible ? parts.patches.children.length : 0, rain: SHOT.rain.opacity > 0, litPanes: parts.facade.visible && palette.lit > 0 ? parts.litPanes.length : 0, facadePanes: parts.facade.visible ? parts.facade.children.length : 0,
     shellOpacity: parts.shell.visible ? Math.round(parts.shell.material.opacity * 100) / 100 : 0, furniture: parts.furniture, people, present: [...present], shown: [...pawns].filter(([id, e]) => present.has(id)).map(([id, e]) => ({ id, parent: !!e.pawn.parent, inBox: box.containsPoint(e.pawn.position), at: e.pawn.position.toArray().map((v) => Math.round(v)) })), overlays: 0, figure: { radius: 0.22, ring: false },
     camera: { pitch, distance: Math.round(from.distanceTo(new THREE.Vector3(...lotGroup.localToWorld(new THREE.Vector3(r.centre[0], r.y + 0.5, r.centre[1])).toArray())) * 10) / 10, height: Math.round((camLocal.y - r.y) * 10) / 10, inside: camLocal.x >= r.u0 && camLocal.x <= r.u1 && camLocal.z >= r.v0 && camLocal.z <= r.v1 && camLocal.y > r.y && camLocal.y < r.y + SHOT_H },
     moves: { degrees: Math.round(Math.abs(THREE.MathUtils.radToDeg(dir(end) - dir(start)))), metres: Math.round(new THREE.Vector3(...shotPoint(r, start.from)).distanceTo(new THREE.Vector3(...shotPoint(r, end.from))) * 10) / 10 } };

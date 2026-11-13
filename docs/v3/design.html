@@ -181,7 +181,7 @@ which script writes it; the tests fail when one is stale (<code>npm test</code> 
 <li><a href="#laws">8.4 The laws</a></li>
 <li><a href="#smoothing">8.5 Smoothing: back-propagation as Bayesian smoothing</a></li>
 <li><a href="#figures">8.6 Figures that act: the action animation system</a></li>
-<li><a href="#actor-cast">8.7 The actor cast: what each one sees</a></li><li><a href="#indoor-mode">8.8 Indoor scene mode: rooms, windows and the camera inside</a></li><li><a href="#indoor-fixes">8.9 Indoor scenes: the fixes, issue by issue</a></li><li><a href="#indoor-benchmark">8.10 The indoor benchmark</a></li><li><a href="#room-plan">8.11 The rooms by the agent</a></li>
+<li><a href="#actor-cast">8.7 The actor cast: what each one sees</a></li><li><a href="#indoor-mode">8.8 Indoor scene mode: rooms, windows and the camera inside</a></li><li><a href="#indoor-fixes">8.9 Indoor scenes: the fixes, issue by issue</a></li><li><a href="#indoor-benchmark">8.10 The indoor benchmark</a></li><li><a href="#room-plan">8.11 The rooms by the agent</a></li><li><a href="#shot-stage">8.12 The shot stage</a></li>
 </ul>
 </li>
 <li><a href="#canon">9. Canon, the ledger and review</a><ul>
@@ -2396,6 +2396,31 @@ part binds inside its room, the kind types and furnishes it, the openings give i
 starts at it (the free cell by a piece of that kind, a cell just inside the door, a cell by the outer wall; walking in from outside the
 room), one staged on the balcony is drawn on its slab, one elsewhere is left out of the room and never pulled into it. Law L23 brings back
 only those who were in the room, from no farther than the building's span.</li>
+</ul>
+
+<h2 id="shot-stage">8.12 The shot stage: the film's frames as the clip draws them</h2>
+<p>The user, 2026-11-13, of the frame-by-frame comparison (&sect;8.10.1): &ldquo;Fix all three tonight until fully automated version matches the
+example clip at 95%.&rdquo; The hologram page draws the world for exploring it (every skeleton, trace, pin and thing); the film needs the clip's
+picture. So a unit set in a bound room, or in its building, is filmed on a stage of its own, built the way the clip builds its scene from the
+run's own world, with no camera or object placed by hand:</p>
+<ul>
+<li><b>What it draws.</b> The bound room cell edge by cell edge, each wall round the run's real window, balcony door, shop front or door
+(the clip's light walls, 0.82, outlined; faint glass with a highlight; a balcony's slab and rail); its furniture (the architect's pieces);
+the building's faint shell, its floors' slabs and its window rows (on the faces toward the camera); its neighbours as faint blocks (one standing
+between the camera and the room is left out); a dark ground; the story's light keyed as the clip keys it (day, rain, dusk, night, from the
+unit's hour and weather), the sun from the story's hour with its patch through the windows it reaches, a lamp after dark, rain; and the
+unit's own people where the run has them, slim (0.44 m) and named. Nothing else.</li>
+<li><b>Three shots, each a moving camera over its unit</b>, the clip's moves scaled to the run's room: <i>set</i> (a swing from 28&deg; to 48&deg;
+round the room cut open, 32&deg; down), <i>eye</i> (inside by the door at 1.6 m, drifting toward the window wall, the ceiling on), <i>outside</i>
+(up from the street across to the room's window, the shell fading, then over into the set).</li>
+<li><b>The agent chooses each unit's shot</b> in the rooms pass (<code>novel rooms shot &lt;unit&gt; &lt;set|eye|outside&gt;</code>, with a line), for
+the units set in a room and those set in its building (its corridor, its door); <code>rooms stage</code> shows the unit's story sky, and a
+<code>--through</code> stops where the time of day or the weather changes: a shot is chosen for its light. The director writes the shots into
+the page (<code>data.shots</code>); <code>?shots</code> or a capture's <code>shot: true</code> plays them.</li>
+<li><b>A room-sized part.</b> A plan room much bigger than its kind is bound as a room-sized part of it along its outer wall
+(<code>partOf</code>, room-binding.mjs), its inner side a wall with a door: staging, furniture, the pull back and the shot use the part.</li>
+<li><b>Measured.</b> <code>engine/bench/indoor-set/check.mjs</code> plays the run with its own shots at the clip's moments and reads what the shot
+drew (<code>window.__shotFacts</code>): 37 checks, the score the share passed; <code>frames.mjs</code> puts each frame beside the clip's.</li>
 </ul>
 
 <h2 id="ontology-layers">9.1 The layers of the ontology</h2>

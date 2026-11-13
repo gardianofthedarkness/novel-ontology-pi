@@ -33,9 +33,9 @@ const OPENINGS = ['balcony', 'window', 'none'];
 /** How a unit set in a room is filmed (the shot stage, docs/v3/design.html#shot-stage): the room cut open from above, at eye
  *  level inside it, or from the street outside up to its window and into it. */
 export const SHOTS = {
-  set: 'the room cut open, seen from above and a little aside: who is where in it, what they do (most units)',
-  eye: 'at eye level inside the room, looking toward its window: a moment seen as someone in the room sees it, the weather or the street outside, a quiet or close moment',
-  outside: 'from the street outside, up the building to the room\'s window, then into the room: an arrival, a return, the room at a new time of day, the place first shown',
+  set: 'the default: the room cut open, seen from above and a little aside: who is where in it and what they do; also a room\'s first unit',
+  eye: 'at eye level inside the room, looking toward its window, when the story\'s weather is rain, snow or a storm and the people are indoors (the shot looks out at it with them), or for a quiet, close moment between people in the room',
+  outside: 'from the street outside, up the building to the room\'s window, then into the room: when the story comes back to the room from elsewhere at a new time of day (evening, night), or someone arrives at its door from outside; never a room\'s first unit',
 };
 
 function refuse(why) { const error = new Error(why); error.refused = true; throw error; }
@@ -191,7 +191,10 @@ export function roomView(s, id) {
 export async function stageView(s, unit) {
   const inBuilding = buildingUnitsOf(s).find(entry => entry.unit === unit), room = roomsOf(s).find(r => r.units.includes(unit) || r.id === inBuilding?.room); if (!room) refuse(`${unit} is not set in a room or its building.`);
   const prefilm = await readJson(join(s.novel, '..', 'reading', 'prefilm.json'), null), notes = prefilm?.units?.[unit]?.scriptSupervisor?.digest?.people ?? [];
-  return { unit, room: `${room.id} ${room.label}`, sky: skyOf(s, unit), opens: s.plan.rooms[room.id]?.opens?.value ?? '?', features: FEATURES, shots: SHOTS, shot: s.plan.shots?.[unit] ?? null,
+  // What came before it: the unit before in the book, where it was and its sky; whether this is the room's first unit.
+  const order = s.script.scenes.map(scene => scene.id), k = order.indexOf(unit), before = k > 0 ? s.script.scenes[k - 1] : null;
+  const previous = before ? { unit: before.id, place: before.place ? `${before.place} ${s.script.places[before.place]?.label ?? ''}` : 'nowhere', inThisRoom: room.units.includes(before.id), sky: skyOf(s, before.id) } : null;
+  return { unit, room: `${room.id} ${room.label}`, firstInRoom: room.units[0] === unit, previous, sky: skyOf(s, unit), opens: s.plan.rooms[room.id]?.opens?.value ?? '?', features: FEATURES, shots: SHOTS, shot: s.plan.shots?.[unit] ?? null,
     people: presentOf(s, unit).map(id => ({ id, name: nameOf(s, id), notes: notes.find(note => note.who === id) ?? null, decided: s.plan.staging[unit]?.[id] ?? null })),
     lines: (s.sceneLines.get(unit) ?? []).map(line => `${line} ${s.text.get(line)?.text ?? ''}`) };
 }
