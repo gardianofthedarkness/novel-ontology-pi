@@ -12,7 +12,8 @@ usage: python find_refs.py <album-root> <name> <out-dir> [--forms=a,b] [--top=3]
     2b. the same character where no caption names her (covers above all): every head in every picture that CCIP calls the
        same character: as close to every verified head as those are to each other;
   4. ranked as setting pictures (most complete figure, fewest other people in its box, then most pixels) and as
-     portraits (largest head), never a figure that is mostly bare skin below the head (swimwear); the top ones
+     portraits (largest head), never a figure rated other than safe (imgutils anime_rating) or mostly bare skin below the
+     head (swimwear); the top ones
        are cropped into <out-dir> with refs.json. Pass the best to make_figure.py (setting picture, --full, --portrait).
   Runs in the portrait tool's Python (dghs-imgutils, pillow)."""
 import json, os, sys
@@ -121,7 +122,11 @@ for f in kept:
     f['others_in_box'] = len(others); f['skin'] = round(skin_share(img, best, f['head']), 2)
     # a figure that is mostly bare skin below the head (swimwear) is never a setting picture: this pipeline makes no
     # swimwear figures, and characters may be minors
-    f['revealing'] = f['skin'] > 0.30
+    # and the figure's content rating (imgutils anime_rating: safe, r15, r18) must be safe: white swimwear on white reads
+    # as clothing to the skin share (Index's swimwear plate had 13% skin) but not to the rating model
+    from imgutils.validate import anime_rating
+    x0_, y0_, x1_, y1_ = best; f['rating'] = anime_rating(img.crop((int(x0_), int(y0_), int(x1_), int(y1_))))[0]
+    f['revealing'] = f['skin'] > 0.30 or f['rating'] != 'safe'
     f['setting_score'] = round(min(f['heads_tall'], 7) * 100 + (best[3] - best[1]) / 10 - (150 if f['cut_at_bottom'] else 0) - 120 * len(others), 1)
 
 def save(f, box, name, margin):
@@ -131,9 +136,9 @@ def save(f, box, name, margin):
     return os.path.join(OUT, name)
 settings = sorted([f for f in kept if not f['revealing']], key=lambda f: -f['setting_score'])[:TOP]
 portraits = sorted([f for f in kept if not f['revealing']], key=lambda f: -f['head_px'])[:TOP]
-print('FIG left out as revealing (mostly skin below the head): %d' % sum(f['revealing'] for f in kept))
+print('FIG left out as revealing (rated other than safe, or mostly skin below the head): %d %s' % (sum(f['revealing'] for f in kept), sorted({f['source'] for f in kept if f['revealing']})))
 out = {'name': NAME, 'found': found, 'setting': [], 'portrait': []}
-for i, f in enumerate(settings): out['setting'].append({**{k: f.get(k) for k in ('album', 'source', 'by', 'heads_tall', 'head_px', 'cut_at_bottom', 'others_in_box', 'skin')}, 'file': save(f, f['person'], 'setting_%d.png' % i, 0.06)})
+for i, f in enumerate(settings): out['setting'].append({**{k: f.get(k) for k in ('album', 'source', 'by', 'heads_tall', 'head_px', 'cut_at_bottom', 'others_in_box', 'skin', 'rating')}, 'file': save(f, f['person'], 'setting_%d.png' % i, 0.06)})
 for i, f in enumerate(portraits):
     x0, y0, x1, y1 = f['head']; hh = y1 - y0
     out['portrait'].append({**{k: f.get(k) for k in ('album', 'source', 'by', 'head_px')}, 'file': save(f, (x0 - hh, y0 - 0.6 * hh, x1 + hh, y1 + 1.6 * hh), 'portrait_%d.png' % i, 0.0)})

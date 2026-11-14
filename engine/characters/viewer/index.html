@@ -105,6 +105,8 @@
       <div class="group"><span>Rig</span>
         <div class="seg" data-group="rig">
           <button data-v="v07" aria-pressed="true">Face + hair (v0.7)</button>
+          <button data-v="eyes" aria-pressed="false">Quad eyes (test)</button>
+          <button data-v="quad" aria-pressed="false">Quad head (test)</button>
           <button data-v="layers" aria-pressed="false">Soft layers (v0.6)</button>
           <button data-v="body" aria-pressed="false">Base body + clothes</button>
           <button data-v="skirt" aria-pressed="false">Skirt springs only</button>
@@ -287,6 +289,57 @@ function fillMaterial() {
   };
   return m;
 }
+// The eyes (eye_parts.py) are carved, as a sculptor carves them in plain stone: the eyeball a dome, the iris a cut ring
+// and a dish, the pupil a drilled hole, the highlight a bump, the lids rims. They are drawn in the hologram's own language,
+// the same as the rest of the figure: the dark body with a fresnel rim and scanlines (the relief shows as rims where the
+// form turns: the cuts, the dome's edge, the lids) and lines as dense as the head's triangles (eye_parts.py marks which
+// quad loops to draw, plus the cuts and part edges). Only the hole is darker and the highlight glows.
+const EYE_LIGHT = { white: 1.0, iris: 1.0, pupil: 0.35, highlight: 1.6, lid: 1.0 };
+function eyeMaterial(part) {
+  const m = new THREE.MeshBasicMaterial({ color: 0x03101e, side: THREE.DoubleSide, polygonOffset: true, polygonOffsetFactor: 1, polygonOffsetUnits: 1 });
+  const level = { value: EYE_LIGHT[part] };      // a uniform: three.js shares one program between materials with the same code
+  m.onBeforeCompile = (sh) => {
+    sh.uniforms.uLevel = level; sh.uniforms.uTime = uniforms.uTime;
+    sh.vertexShader = 'varying vec3 vN; varying vec3 vP;\n' + sh.vertexShader.replace('#include <project_vertex>',
+      `#include <project_vertex>
+      #ifdef USE_SKINNING
+        vec3 hn = objectNormal;
+      #else
+        vec3 hn = normal;
+      #endif
+      vN = normalize(normalMatrix * hn); vP = -mvPosition.xyz;`);
+    sh.fragmentShader = 'uniform float uLevel; uniform float uTime; varying vec3 vN; varying vec3 vP;\n' + sh.fragmentShader.replace('#include <dithering_fragment>',
+      `#include <dithering_fragment>
+      vec3 n = normalize(vN); vec3 e = normalize(vP); if (dot(n, e) < 0.0) n = -n;
+      float f = pow(1.0 - abs(dot(n, e)), 2.2);
+      float s = 0.5 + 0.5 * sin(gl_FragCoord.y * 1.4 - uTime * 6.0);
+      gl_FragColor.rgb += vec3(0.16, 0.55, 0.95) * (min(uLevel, 1.0) * (0.75 * f + 0.05 * s) + step(1.01, uLevel) * 0.55);`);
+  };
+  return m;
+}
+// in the white look the eyes are plaster: smooth, one white, the deep parts shaded as a cast's cavities are
+const eyeWhite = Object.fromEntries(Object.entries({ white: 0xeef1f5, iris: 0xbfc6cf, pupil: 0x3c434c, highlight: 0xffffff, lid: 0xdfe3e8 })
+  .map(([k, c]) => [k, new THREE.MeshStandardMaterial({ color: c, roughness: 0.8, metalness: 0, side: THREE.DoubleSide })]));
+// the lines where the form breaks: a part's open edges and its creases (neighbouring faces turned more than ~35 degrees),
+// points welded by position first (an exporter may split them); drawn as degenerate triangles like quadWire
+function featureWire(g, creaseDeg = 35) {
+  const idx = g.index.array, P = g.attributes.position, nT = idx.length / 3, weld = new Map(), id = new Int32Array(P.count);
+  for (let i = 0; i < P.count; i++) { const k = [P.getX(i), P.getY(i), P.getZ(i)].map(x => Math.round(x * 1e5)).join(','); if (!weld.has(k)) weld.set(k, i); id[i] = weld.get(k); }
+  const a = new THREE.Vector3(), b = new THREE.Vector3(), c = new THREE.Vector3(), N = [], own = new Map();
+  const key = (x, y) => x < y ? x * 1048576 + y : y * 1048576 + x;
+  for (let t = 0; t < nT; t++) {
+    const v = [id[idx[3 * t]], id[idx[3 * t + 1]], id[idx[3 * t + 2]]];
+    a.fromBufferAttribute(P, v[0]); b.fromBufferAttribute(P, v[1]); c.fromBufferAttribute(P, v[2]);
+    N.push(b.clone().sub(a).cross(c.clone().sub(a)).normalize());
+    for (let k = 0; k < 3; k++) { const kk = key(v[k], v[(k + 1) % 3]); (own.get(kk) || own.set(kk, []).get(kk)).push(t); }
+  }
+  const cos = Math.cos(creaseDeg * Math.PI / 180), out = [];
+  // marked loops (eye_parts.py): u = 1 on a shown ring's points, v = 1 on a shown radial's (glTF stores v flipped)
+  const UV = g.attributes.uv, U = (i, c) => UV ? (c ? 1 - UV.getY(i) : UV.getX(i)) > 0.5 : false;
+  const marked = (x, y) => (U(x, 0) && U(y, 0)) || (U(x, 1) && U(y, 1));
+  for (const [k, ts] of own) if (ts.length === 1 || (ts.length === 2 && N[ts[0]].dot(N[ts[1]]) < cos) || marked(Math.floor(k / 1048576), k % 1048576)) { const x = Math.floor(k / 1048576), y = k % 1048576; out.push(x, y, y); }
+  const q = new THREE.BufferGeometry(); for (const name in g.attributes) q.setAttribute(name, g.attributes[name]); q.setIndex(out); return q;
+}
 const wireMat = new THREE.MeshBasicMaterial({ color: 0x4fc8f0, wireframe: true, transparent: true, opacity: 0.75, blending: THREE.AdditiveBlending, depthWrite: false });
 const whiteMat = new THREE.MeshStandardMaterial({ color: 0xeef1f5, roughness: 0.75, metalness: 0, flatShading: true });
 
@@ -305,7 +358,7 @@ async function load() {
   if (vrm) { scene.remove(vrm.scene); parts.length = 0; vrm = null; }
   for (const s of soft.items) scene.remove(s.group); soft.items = [];
   const file = FIGURE_PARAM || (state.who !== 'misaka' ? `${state.who}_v07.txt`
-    : { v07: 'misaka_v07.txt', final: 'misaka_final.txt', skirt: 'misaka_skirt.txt', body: 'misaka_body.txt', layers: 'misaka_layers.txt' }[state.rig]);
+    : { v07: 'misaka_v07.txt', quad: 'misaka_quad.txt', eyes: 'misaka_eyes.txt', final: 'misaka_final.txt', skirt: 'misaka_skirt.txt', body: 'misaka_body.txt', layers: 'misaka_layers.txt' }[state.rig]);
   const b64 = await (await fetch(file)).text();
   const raw = Uint8Array.from(atob(b64.trim()), ch => ch.charCodeAt(0));
   const gzipped = raw[0] === 0x1f && raw[1] === 0x8b;
@@ -317,18 +370,47 @@ async function load() {
   const meshes = []; vrm.scene.traverse(o => { if (o.isMesh) meshes.push(o); });
   for (const m of meshes) {
     const wire = m.clone(); wire.material = wireMat; wire.position.set(0, 0, 0); wire.quaternion.identity(); wire.scale.set(1, 1, 1);
-    wire.renderOrder = 2; m.add(wire); parts.push({ mesh: m, wire, key: outfitKey(m) });
+    const eye = (/^eye_(white|iris|pupil|highlight|lid)/.exec((m.material && m.material.name) || '') || [])[1];
+    if (eye) wire.geometry = featureWire(m.geometry);
+    else if (/_quad/.test(m.name)) wire.geometry = quadWire(m.geometry);
+    wire.renderOrder = 2; m.add(wire); parts.push({ mesh: m, wire, key: outfitKey(m), eye });
   }
   scene.add(vrm.scene); vrm.scene.updateMatrixWorld(true); buildSoft(); outfitButtons(); applyLook(); applyOutfit(); findHair(); resetSprings();
   const springs = vrm.springBoneManager ? [...vrm.springBoneManager.joints].length : 0;
   const who = ((vrm.meta && (vrm.meta.name || vrm.meta.title)) || 'Figure').replace(/\s*\(prototype figure\)/, '');
-  status.textContent = who + ' · ' + (state.rig === 'v07' || state.who !== 'misaka' || FIGURE_PARAM ? `soft layers, skull lock and jaw, ${hair.length} hair spring joints`
+  status.textContent = who + ' · ' + (state.rig === 'quad' ? `quad head (test), ${hair.length} hair spring joints` : state.rig === 'eyes' ? `v0.7 head + quad eyes (faired), ${hair.length} hair spring joints` : state.rig === 'v07' || state.who !== 'misaka' || FIGURE_PARAM ? `soft layers, skull lock and jaw, ${hair.length} hair spring joints`
     : state.rig === 'layers' ? 'one-shot figure on soft layers'
     : state.rig === 'final' ? 'benchmark' : (state.rig === 'body' ? 'base body · ' : '') + springs + ' skirt spring joints') + ' · VRM 1.0';
 }
+// a mesh made of four-sided faces (Head_quad, quad_head.py) reaches the page as two triangles a quad: its wireframe is drawn
+// without each quad's diagonal (the edge shared by two nearly flat triangles that is the longest edge of both), so the
+// hologram shows the quads' own lines. Drawn as degenerate triangles (a, b, b), which wireframe mode draws as the line a-b.
+function quadWire(g) {
+  const idx = g.index.array, P = g.attributes.position, nT = idx.length / 3, v = new THREE.Vector3(), w = new THREE.Vector3(), u = new THREE.Vector3();
+  const key = (a, b) => a < b ? a * 1048576 + b : b * 1048576 + a, owner = new Map(), longest = new Int32Array(nT * 2), normal = [];
+  for (let t = 0; t < nT; t++) {
+    const a = idx[3 * t], b = idx[3 * t + 1], c = idx[3 * t + 2], E = [[a, b], [b, c], [c, a]];
+    let best = -1, bl = -1;
+    E.forEach(([x, y], k) => { v.fromBufferAttribute(P, x); w.fromBufferAttribute(P, y); const l = v.distanceToSquared(w); if (l > bl) { bl = l; best = k; } (owner.get(key(x, y)) || owner.set(key(x, y), []).get(key(x, y))).push(t); });
+    longest[2 * t] = E[best][0]; longest[2 * t + 1] = E[best][1];
+    v.fromBufferAttribute(P, a); w.fromBufferAttribute(P, b); u.fromBufferAttribute(P, c); normal.push(w.clone().sub(v).cross(u.clone().sub(v)).normalize());
+  }
+  const out = [];
+  for (const [k, ts] of owner) {
+    const a = Math.floor(k / 1048576), b = k % 1048576;
+    if (ts.length === 2) {
+      const [s, t] = ts, isLong = (q) => key(longest[2 * q], longest[2 * q + 1]) === k;
+      if (isLong(s) && isLong(t) && normal[s].dot(normal[t]) > 0.8) continue;     // a quad's diagonal
+    }
+    out.push(a, b, b);
+  }
+  const q = new THREE.BufferGeometry();
+  for (const name in g.attributes) q.setAttribute(name, g.attributes[name]);
+  q.setIndex(out); return q;
+}
 function applyLook() {
   const holo = state.look !== 'white';
-  for (const p of parts) { p.mesh.material = holo ? (p.fill ||= fillMaterial()) : whiteMat; p.wire.visible = holo; }
+  for (const p of parts) { p.mesh.material = holo ? (p.fill ||= (p.eye ? eyeMaterial(p.eye) : fillMaterial())) : (p.eye ? eyeWhite[p.eye] : whiteMat); p.wire.visible = holo; }
   for (const s of soft.items) { s.fill.material = holo ? (s.fillMat ||= fillMaterial()) : whiteMat; s.wire.visible = holo; s.wire.material = state.look === 'layers' ? wireLayersMat : wireMat; }
   floor.visible = beamCol.visible = holo; bloom.enabled = holo;
   renderer.setClearColor(holo ? 0x050b14 : 0x1a2230, 1);

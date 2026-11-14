@@ -12,7 +12,7 @@ argv = sys.argv[sys.argv.index('--') + 1:] if '--' in sys.argv else []
 flags = dict(a[2:].split('=', 1) for a in argv if a.startswith('--'))
 rig = bpy.data.objects['Armature']; B = rig.data.bones
 F = json.load(open(flags['face'])) if flags.get('face') else json.loads(rig['figure_face']) if 'figure_face' in rig else None
-head = bpy.data.objects['Head']; outfits = [o for o in bpy.data.objects if o.type == 'MESH' and o.name.startswith('Outfit_')]
+head = bpy.data.objects.get('Head') or bpy.data.objects['Head_quad']; outfits = [o for o in bpy.data.objects if o.type == 'MESH' and o.name.startswith('Outfit_')]
 def rest(ob): return np.array([(ob.matrix_world @ v.co)[:] for v in ob.data.vertices])
 def smooth(t): t = np.clip(t, 0, 1); return t * t * (3 - 2 * t)
 H = rest(head)

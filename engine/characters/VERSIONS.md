@@ -14,7 +14,8 @@ assigned to its person by EM (`README.md`; design §8.6, figures in the warehous
 | v0.4 | experiments | wardrobe from the books (`epub_scan.py`, `garments.py`, `cloth_settle.py`), joint smoothing (`smooth_joints.py`), skirt spring bones (`skirt_rig.py`), separate base body + clothes (`body_fit.py`, `mannequin.py`) |
 | v0.5 | stable (tag `figures-v0.5.0`) | the v0.3 one-shot figure kept whole as the surface, its generated base body underneath as a hidden layer (`layer_pack.py`); in the viewer each point's distance from the base body is its layer thickness: thin points stay on the skeleton, thick points hang on soft springs (stretch limit, 25% edge limit, leg and torso capsules), fast CPU skinning (`viewer/index.html`) |
 | v0.6 | stable (tag `figures-v0.6.0`) | v0.5 + rigid needles: the base body moves by dual-quaternion blending (rotation about each joint, no collapse); thin skin rides its nearest base-body point with its offset turned with it; loose cloth never sinks below 80% of its own depth above the body. Thigh's narrowest point in a deep lunge 71% → 92% of rest; ~21 ms a frame on a laptop. The viewer's "Base layer" switch compares with v0.5 |
-| **v0.7** | **stable** (tag `figures-v0.7.0`) | v0.6 + a face and hair of their own, for any character from a setting picture (`make_figure.py`, below). Skull lock (`head_lock.py`, on the Head mesh only): the head owns the head, the neck only the column under a jaw plane; the clothes and the base body keep v0.6's weights (the first v0.7 build also rewrote them by height and, in a T-pose, caught the arms: the arms and shoulders ballooned). Face points (`face_render.py`, `face_marks.py`: RTMW's 68 face points on grey renders of the head, 68 of 68 found in all three views) cast onto the mesh (`face_rig.py`); the head pivot moved up to the skull base; a VRM `jaw` bone hinged between the ears. Hair (`hair_rig.py`): the portrait's labels mapped onto the head through the face points, a solid-or-sheet test for cheeks under side locks, ten spring chains from the scalp line (three bangs, seven around), hair touching skin eased into its chain over 2 cm (no cut). Viewer: springs at a fixed 1/60 s posed at their own time, cone limits per link. See "v0.7 measured" |
+| v0.7 | stable (tag `figures-v0.7.0`) | v0.6 + a face and hair of their own, for any character from a setting picture (`make_figure.py`, below). Skull lock (`head_lock.py`, on the Head mesh only): the head owns the head, the neck only the column under a jaw plane; the clothes and the base body keep v0.6's weights (the first v0.7 build also rewrote them by height and, in a T-pose, caught the arms: the arms and shoulders ballooned). Face points (`face_render.py`, `face_marks.py`: RTMW's 68 face points on grey renders of the head, 68 of 68 found in all three views) cast onto the mesh (`face_rig.py`); the head pivot moved up to the skull base; a VRM `jaw` bone hinged between the ears. Hair (`hair_rig.py`): the portrait's labels mapped onto the head through the face points, a solid-or-sheet test for cheeks under side locks, ten spring chains from the scalp line (three bangs, seven around), hair touching skin eased into its chain over 2 cm (no cut). Viewer: springs at a fixed 1/60 s posed at their own time, cone limits per link. See "v0.7 measured" |
+| **v0.8** | **stable** (tag `figures-v0.8.0`) | v0.7 + carved eyes (`eye_shapes.py`, `eye_parts.py`; two new `make_figure.py` steps). The head stays v0.7's triangles; each eye is its own quad part, built as a sculptor carves an eye in plain stone so a one-colour hologram can show it: an eyeball dome, the iris a cut ring and a dish, the pupil a drilled hole, the highlights bumps, the lash and the lower lid rims. Placed from the portrait (anime-face-detector's 28 points; iris, pupil, highlights and lash read from the pixels) on a smooth surface fitted to the skin around the eye (hair and thin sheets of bangs skipped); the two lids are smooth curves meeting at sharp corner nodes. A socket is cut: the head's triangles hidden under the eye split once and the skin pushed behind it; eye points the skin still covers are moved out in front of it. Viewer: the eyes drawn in the hologram's own style (the head's dark fill, fresnel rim and scanlines, the figure's line material), lines only where the form breaks plus quad loops marked in the UV map at the head's own spacing; in the white look they are plaster. See "v0.8 measured" |
 
 ## v0.7 measured (Misaka, against v0.6)
 
@@ -35,6 +36,24 @@ assigned to its person by EM (`README.md`; design §8.6, figures in the warehous
 `check_head.py` measures the head and the body in Blender poses; the hair and clothes numbers are from the viewer's
 test hooks (`__figure.applyPose`, `stepVRM`, `resetSprings`, `soft`). The first v0.7 build (springs relative to the hips,
 stiffness 1.0, drag 0.4) moved the hair only 9 mm walking and 24 mm running: too little to see.
+
+
+## v0.8 measured (eyes, Misaka and Index)
+
+| Test | Misaka | Index |
+|---|---|---|
+| Eye parts' outline against the portrait (opening, iris, pupil, lash) | on the drawn lines | on the drawn lines |
+| Smooth surface fitted to the skin around each eye, median / max distance | 1.2–1.7 / 3.5–5.2 mm | 0.6–1.2 / 1.6–2.8 mm |
+| Head triangles split under the eyes (hidden by them); visible skin | 84; unchanged | 21; unchanged |
+| Eye points under the skin after the socket and settling | 5 of 1259 (the eyeball's edge at a corner, < 3 mm) | 0 of 1334 |
+| Eyes attached through head shake and nod | yes | yes |
+
+Before the socket the skin stood up to 5 mm (Misaka) and 31 mm (Index, whose bangs are fused and not weighted as hair)
+in front of the eye's surface. Moving the eye out instead left it standing proud like a plate; splitting every triangle
+near the eye made a dense patch of lines that glowed around it in the hologram. The first carved eyes were drawn as solid
+lit parts and no longer looked like the hologram; they now use its fill and lines. The eye points behind the skin were
+first 102 of 1311 (the lash wing past the corners where the face curves back, and the eyeball's edge under large
+triangles crossing the opening).
 
 ## v0.5 in order
 
@@ -120,3 +139,15 @@ Tokens live in Windows Credential Manager (`vault.py`), never in files.
 - The hair droops 7 mm from its drawn shape at rest; the spring values and cone limits are tuned on one character.
 - No eye bones (the eyes are part of the head mesh; gaze would not show on the wireframe).
 - RTMW found all 68 face points on this grey head; a head where it fails has no geometric fallback yet.
+
+## Known issues at v0.8
+
+- Only the eyes are carved; brows, nose and mouth are still the head's own triangles.
+- The eyes do not move (no eye bones, no blinking); the lids are fixed in the drawn expression.
+- The lash and the lower lid are read from one portrait; a closed or half-closed eye in that portrait would give a thin
+  opening. The detector picks the most confident face; a portrait with two faces is not handled.
+- The eyes need anime-face-detector (the album portrait tool's Python, `--portrait-py`); without it the build stops at
+  `eyes_read`.
+- The quad template experiments (`template_head.py`, `fit_template.py`, `export_head.py`, `head_from_fit.py`,
+  `quad_head.py`, `draw_quads.py`) are kept as tools but not used by `make_figure.py`: a fitted template head wrapped the
+  hair into a smooth helmet.

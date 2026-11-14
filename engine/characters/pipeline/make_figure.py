@@ -1,4 +1,4 @@
-"""Make a character's figure from one setting picture: the whole pipeline (VERSIONS.md, v0.7), in order, resumable.
+"""Make a character's figure from one setting picture: the whole pipeline (VERSIONS.md, v0.8), in order, resumable.
 usage: python make_figure.py <setting.png> <out-dir> --name=<Name> [--portrait=<head.png>] [--full=<full-length.png>]
         [--remove="<what to leave out>"]
         [--seed=11] [--blender=<blender.exe>] [--from=<step>] [--only=<step>]
@@ -10,7 +10,8 @@ usage: python make_figure.py <setting.png> <out-dir> --name=<Name> [--portrait=<
   standing full-length one as --full. Every step writes into <out-dir> and is skipped when its output is there, so a run
   can be resumed; --from reruns from a step on, --only runs one step. The Hugging Face token comes from the system's
   credential store (vault.py), never from a file. Seven GPU calls in all (four image edits, three shapes).
-  The result: <out-dir>/figure.vrm (+ .blend), check.json (check_head.py), figure.txt (gzip+base64, for the viewer)."""
+  The result: <out-dir>/organs.vrm (+ .blend; figure.vrm is the same without the carved eyes), check.json (check_head.py),
+  figure.txt (gzip+base64, for the viewer). --portrait-py: the Python with anime-face-detector (for the eyes)."""
 import base64, gzip, json, os, shutil, subprocess, sys, time
 HERE = os.path.dirname(os.path.abspath(__file__))
 args = [a for a in sys.argv[1:] if not a.startswith('--')]
@@ -19,6 +20,8 @@ if len(args) < 2 or not flags.get('name'): raise SystemExit(__doc__)
 SRC, OUT = os.path.abspath(args[0]), os.path.abspath(args[1]); NAME = flags['name']
 BLENDER = flags.get('blender') or os.environ.get('BLENDER') or r'C:\Program Files\Blender Foundation\Blender 5.3\blender.exe'
 PY = sys.executable; SEED = flags.get('seed', '11')
+# the Python with anime-face-detector (the album portrait tool's, tools/album-portraits): --portrait-py or FIG_PORTRAIT_PY
+PORTRAIT_PY = flags.get('portrait-py') or os.environ.get('FIG_PORTRAIT_PY') or os.path.join('E:' + os.sep, 'figures', 'portrait-venv', 'Scripts', 'python.exe')
 REMOVE = flags.get('remove', '').strip()
 FULL = os.path.abspath(flags['full']) if flags.get('full') else None   # a second picture showing the whole length of the outfit
 os.makedirs(OUT, exist_ok=True)
@@ -87,8 +90,12 @@ STEPS = [
     ('face_marks', P('face', 'marks.json'), lambda: run([PY, os.path.join(HERE, 'face_marks.py'), P('face'), '--portrait=' + P('portrait.png')])),
     ('face_rig', P('face.blend'), lambda: blender('face_rig.py', P('face'), P('face.blend'), blend=P('lock.blend'))),
     ('hair', P('figure.blend'), lambda: blender('hair_rig.py', P('prep_portrait'), P('face'), P('figure.blend'), blend=P('face.blend'))),
-    ('check', P('check.json'), lambda: blender('check_head.py', '--json=' + P('check.json'), blend=P('figure.blend'))),
-    ('page', P('figure.txt'), lambda: open(P('figure.txt'), 'w').write(base64.b64encode(gzip.compress(open(P('figure.vrm'), 'rb').read(), 9)).decode())),
+    # the eyes (v0.8): read from the portrait with an anime face detector (in the portrait tool's Python), then carved as
+    # quad parts on the head, a socket cut for them
+    ('eyes_read', P('eyes', 'eyes.json'), lambda: run([PORTRAIT_PY, os.path.join(HERE, 'eye_shapes.py'), P('portrait.png'), P('eyes')])),
+    ('eyes', P('organs.blend'), lambda: blender('eye_parts.py', P('eyes', 'eyes.json'), P('face'), P('organs.blend'), blend=P('figure.blend'))),
+    ('check', P('check.json'), lambda: blender('check_head.py', '--json=' + P('check.json'), blend=P('organs.blend'))),
+    ('page', P('figure.txt'), lambda: open(P('figure.txt'), 'w').write(base64.b64encode(gzip.compress(open(P('organs.vrm'), 'rb').read(), 9)).decode())),
 ]
 names = [s[0] for s in STEPS]
 start = names.index(flags['from']) if flags.get('from') else 0
@@ -101,4 +108,4 @@ for i, (name, done, do) in enumerate(STEPS):
     if not os.path.exists(done):     # Blender exits 0 even when its script fails: the step's output is the proof
         log('FAILED: %s wrote no %s (its messages are above)' % (name, done)); raise SystemExit(1)
     log('%-12s %4d s' % (name, round(time.time() - t)))
-log('== done: %s' % P('figure.vrm'))
+log('== done: %s' % P('organs.vrm'))
