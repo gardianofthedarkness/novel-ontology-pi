@@ -17,6 +17,7 @@ import { evaluate, forPlayer, measure, readOff, solidOf } from "./scad.js";
 import { KIT_CATEGORIES, KITS, catalogOf, storeOf } from "./models.js";
 import { PART_REF, idOfRef, slugOf, splitRef } from "./partRefs.js";
 import { interactOf } from "./interact.js";
+import { assignFigure, figureStore, readFiguresSync } from "../../characters/figures.js";
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..", "..", "..", "..");
 export const PACKS_ROOT = process.env.NOVEL_MODEL_PACKS ?? join(process.env.HOME ?? "", "claude-world-first", "model-packs");
@@ -25,7 +26,7 @@ export const REGISTRY_FILE = process.env.NOVEL_WAREHOUSE ?? join(PACKS_ROOT, "wa
 export const ALLOWED_LICENCES = ["CC0-1.0", "MIT", "Apache-2.0", "BSD-2-Clause", "BSD-3-Clause", "CC-BY-4.0"];
 const BAKED_DIR = join(ROOT, "apps", "playground", "src", "data");
 
-export type SourceKind = "scad" | "gltf" | "baked" | "own";
+export type SourceKind = "scad" | "gltf" | "baked" | "own" | "figure";
 export interface Source { kind: SourceKind; path: string; licence: string; url?: string | null; fetched?: string; by?: string; note?: string; categories?: Record<string, string>; unit?: "m" | "kit"; builtIn?: boolean }
 export interface Registry { version: 1; sources: Record<string, Source> }
 export interface Part { ref: string; source: string; name: string; category: string; footprint: [number, number]; height: number; triangles: number; ok: boolean; file?: string; params?: string; unit: "m" | "kit"; note?: string; id?: string }
@@ -77,11 +78,21 @@ export async function ownParts(novelDir: string): Promise<Part[]> {
   return Object.values(catalog.models).filter((record) => (record.state === "ok" || record.state === "part") && record.size).map((record) => ({ ref: `own:${slugOf(record.label) || record.id}`, source: "own", name: slugOf(record.label) || record.id, category: record.kind, footprint: [record.size![0], record.size![2]], height: record.size![1], triangles: record.triangles ?? 0, ok: true, note: [record.label, glossOf(record.id)].filter(Boolean).join(" "), id: record.id, unit: "m" as const }));
 }
 
+/**
+ * The universe's figures as a source (`figure:<id>`, design §8.6): each person's rigged VRM, kept beside the universe's
+ * cast (src/characters/figures.ts). The note carries the figure's names and its person's, so a search by name finds it.
+ */
+export async function figureParts(novelDir: string): Promise<Part[]> {
+  const { dir } = await figureStore(novelDir), records = readFiguresSync(dir);
+  return records.map((figure) => ({ ref: `figure:${figure.id}`, source: "figure", name: figure.id, category: "figure", footprint: [figure.size[0], figure.size[2]], height: figure.size[1], triangles: figure.triangles, ok: existsSync(join(dir, figure.file)), file: join(dir, figure.file), note: [figure.name, ...figure.forms, figure.personId ? `person ${figure.personId}` : "unassigned", ...figure.outfits].join(" "), id: figure.id, unit: "m" as const }));
+}
+
 /** Every part of every source (and the universe's own, given a novel). */
 export async function partsOf(options: { source?: string; novelDir?: string } = {}): Promise<Part[]> {
   const registry = readRegistry(), out: Part[] = [];
   for (const [name, source] of Object.entries(registry.sources)) if (!options.source || options.source === name) out.push(...catalogueOf(name, source));
   if (options.novelDir && (!options.source || options.source === "own")) out.push(...(await ownParts(options.novelDir)));
+  if (options.novelDir && (!options.source || options.source === "figure")) out.push(...(await figureParts(options.novelDir)));
   return out;
 }
 
@@ -95,6 +106,7 @@ export async function listSources(options: { source?: string; novelDir?: string 
     rows.push({ name, kind: source.kind, path: absolute(source.path), licence: source.licence, url: source.url ?? null, fetched: source.fetched ?? null, parts: parts.length, ok: parts.filter((part) => part.ok).length, categories, builtIn: !!source.builtIn, note: source.note ?? null });
   }
   if (options.novelDir && (!options.source || options.source === "own")) { const own = await ownParts(options.novelDir); rows.push({ name: "own", kind: "own", path: storeOf(options.novelDir), licence: "ours", url: null, fetched: null, parts: own.length, ok: own.length, categories: Object.fromEntries([...new Set(own.map((part) => part.category))].map((kind) => [kind, own.filter((part) => part.category === kind).length])), builtIn: true, note: "the universe's own models (novel model write|put)" }); }
+  if (options.novelDir && (!options.source || options.source === "figure")) { const figures = await figureParts(options.novelDir); rows.push({ name: "figure", kind: "figure", path: (await figureStore(options.novelDir)).dir, licence: "ours", url: null, fetched: null, parts: figures.length, ok: figures.filter((part) => part.ok).length, categories: figures.length ? { figure: figures.length } : {}, builtIn: true, note: "the universe's people as rigged figures (novel figure add; assigned to people by EM, novel figure list)" }); }
   return { registry: REGISTRY_FILE, packs: PACKS_ROOT, allowedLicences: ALLOWED_LICENCES, sources: rows };
 }
 
@@ -216,7 +228,7 @@ export interface AddOptions { kind?: "scad" | "gltf"; licence: string; url?: str
 /** Register a folder already on disk as a source and build its catalogue (kept when a gk-shaped one is already there). */
 export async function addSource(name: string, path: string, options: AddOptions) {
   if (!/^[a-z][a-z0-9_-]{0,31}$/.test(name)) throw new Error("A source's name is lower-case letters, digits, - and _ (e.g. my-kit).");
-  if (name in builtIn() || name === "own") throw new Error(`${name} is a built-in source (kit, pack, own): pick another name.`);
+  if (name in builtIn() || name === "own" || name === "figure") throw new Error(`${name} is a built-in source (kit, pack, own, figure): pick another name.`);
   if (!options.why?.trim()) throw new Error("--why <text> is required: say what this source is for.");
   const folder = absolute(path);
   if (!existsSync(folder) || !statSync(folder).isDirectory()) throw new Error(`${folder} is not a folder on disk (novel warehouse fetch downloads one, with the user's OK).`);
@@ -253,7 +265,7 @@ export async function refreshSource(name: string, options: { onPart?: (part: str
 export async function fetchSource(name: string, url: string, options: AddOptions & { ok: string; path?: string; limitMB?: number }) {
   if (!options.ok?.trim()) throw new Error("A download needs the user's permission: ask them (name, licence, size), then pass --ok \"<their words>\".");
   if (!/^https:\/\//.test(url)) throw new Error("Only https URLs.");
-  if (!/^[a-z][a-z0-9_-]{0,31}$/.test(name) || name in builtIn() || name === "own") throw new Error("A source's name is lower-case letters, digits, - and _, not kit, pack or own.");
+  if (!/^[a-z][a-z0-9_-]{0,31}$/.test(name) || name in builtIn() || name === "own" || name === "figure") throw new Error("A source's name is lower-case letters, digits, - and _, not kit, pack, own or figure.");
   const dest = join(PACKS_ROOT, name), limit = (options.limitMB ?? 200) * 1024 * 1024;
   if (existsSync(dest)) throw new Error(`${dest} exists: novel warehouse add ${name} ${dest} registers it, or pick another name.`);
   await mkdir(PACKS_ROOT, { recursive: true });
@@ -319,6 +331,7 @@ export async function partOf(ref: string, options: { novelDir?: string } = {}): 
   const split = splitRef(ref);
   if (!split) return null;
   if (split.source === "own") { if (!options.novelDir) return null; const want = slugOf(split.part); return (await ownParts(options.novelDir)).find((part) => part.name === split.part || part.id === split.part || part.name === want) ?? null; }
+  if (split.source === "figure") return options.novelDir ? (await figureParts(options.novelDir)).find((part) => part.name === split.part) ?? null : null;
   const source = readRegistry().sources[split.source];
   if (!source) return null;
   return catalogueOf(split.source, source).find((part) => part.name === split.part) ?? null;
@@ -329,6 +342,8 @@ export async function meshOfPart(ref: string, options: { novelDir?: string } = {
   const split = splitRef(ref);
   if (!split) return null;
   if (split.source === "own") { if (!options.novelDir) return null; const part = await partOf(ref, options); return part?.id ? readJson<Mesh | null>(join(storeOf(options.novelDir), `${part.id}.mesh.json`), null) : null; }
+  // A figure's mesh in its rest pose (the T-pose), read from its VRM; the page draws the figure itself with three-vrm.
+  if (split.source === "figure") { const part = await partOf(ref, options); return part?.ok && part.file ? meshOfGltf(part.file) : null; }
   const source = readRegistry().sources[split.source];
   if (!source) return null;
   const path = absolute(source.path);
@@ -357,7 +372,7 @@ export async function meshOfPart(ref: string, options: { novelDir?: string } = {
 
 // ---- connecting parts to the configuration -----------------------------------------------------------------------
 
-export const SLOTS = ["prop", "vehicle", "kind", "use", "role"] as const;
+export const SLOTS = ["prop", "vehicle", "kind", "use", "role", "person"] as const;
 /** The setting (or table part) a slot writes, with the value. */
 export function slotWrite(slot: string, ref: string | null, options: { floors?: [number, number] } = {}): { key: string; value: unknown; isTable: boolean } {
   const m = slot.match(/^(prop|vehicle|kind|use|role):(.+)$/);
@@ -377,12 +392,21 @@ export async function usePart(novelDir: string, ref: string, slot: string, optio
   const part = await partOf(ref, { novelDir });
   if (!part) throw new Error(`No part ${ref} in the warehouse (novel warehouse find "<words>" lists parts; list shows the sources).`);
   if (!part.ok) throw new Error(`${ref} failed its catalogue check (${part.note ?? "not ok"}): pick another.`);
+  if (slot.startsWith("person:")) throw new Error("A person's slot takes a figure: useFigure (novel warehouse use figure:<id> for person:<person>).");
   const write = slotWrite(slot, ref, { floors: options.floors });
   const { settingsSet } = await import("../../cli/commands/extract/settingsCommands.js");
   const set = await settingsSet(novelDir, write.key, JSON.stringify(write.value), { place: options.place, why: options.why, before: options.before, isTable: write.isTable, by: options.by });
   return { connected: { slot, part: ref, size: [part.footprint[0], part.height, part.footprint[1]], unit: part.unit, category: part.category }, pageId: `scad:${idOfRef(ref)}`, ...set };
 }
 
+/** A person's slot takes a figure: the assignment EM and the reviewer make (src/characters/figures.ts), not a setting. */
+export async function useFigure(novelDir: string, ref: string, slot: string, options: { why: string; by?: string }) {
+  const person = slot.match(/^person:(.+)$/)?.[1];
+  if (!person) throw new Error("A figure goes in a person's slot: person:<person id> (novel em show; novel figure tasks).");
+  const part = PART_REF.test(ref) ? await partOf(ref, { novelDir }) : null;
+  if (!part || part.source !== "figure") throw new Error(`A person takes a figure (figure:<id>; novel figure list), not ${ref}.`);
+  return { connected: { slot, part: ref, size: [part.footprint[0], part.height, part.footprint[1]], unit: part.unit, category: part.category }, ...(await assignFigure(novelDir, part.name, person, options)) };
+}
 /** A part's interaction sheet as it resolves for a book (its kind's defaults, then the book's overrides). */
 export async function interactionOf(ref: string, options: { novelDir?: string } = {}) {
   const part = await partOf(ref, options);

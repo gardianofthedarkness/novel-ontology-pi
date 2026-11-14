@@ -2,7 +2,9 @@
 
 Rigged hologram figures for the novel's characters (design §8.6, milestones F10–F13). Code only lives here: the
 characters' pictures, generated models and VRM files are copyrighted fan material and stay on the working machine
-(`E:\figures`), never in this public repository.
+(`E:\figures`), never in this public repository. A finished figure goes into its universe with `novel figure add` and is
+assigned to its person by EM (`README.md`; design §8.6, figures in the warehouse). Until 2026-11-14 this folder was
+`experiments/figures/` on the branch `figures/misaka-prototype`.
 
 | Version | Status | Pipeline structure |
 |---|---|---|

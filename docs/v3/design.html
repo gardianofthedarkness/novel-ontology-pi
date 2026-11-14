@@ -180,7 +180,7 @@ which script writes it; the tests fail when one is stale (<code>npm test</code> 
 <li><a href="#movement">8.3 Movement</a></li>
 <li><a href="#laws">8.4 The laws</a></li>
 <li><a href="#smoothing">8.5 Smoothing: back-propagation as Bayesian smoothing</a></li>
-<li><a href="#figures">8.6 Figures that act: the action animation system</a> (<a href="#figure-making">figures from pictures</a>, <a href="#model-factory">the model factory</a>, <a href="#text-to-motion">text to motion</a>)</li>
+<li><a href="#figures">8.6 Figures that act: the action animation system</a> (<a href="#figure-making">figures from pictures</a>, <a href="#model-factory">the model factory</a>, <a href="#figure-warehouse">figures in the warehouse</a>, <a href="#text-to-motion">text to motion</a>)</li>
 <li><a href="#actor-cast">8.7 The actor cast: what each one sees</a></li><li><a href="#indoor-mode">8.8 Indoor scene mode: rooms, windows and the camera inside</a></li><li><a href="#indoor-fixes">8.9 Indoor scenes: the fixes, issue by issue</a></li><li><a href="#indoor-benchmark">8.10 The indoor benchmark</a></li><li><a href="#room-plan">8.11 The rooms by the agent</a></li><li><a href="#shot-stage">8.12 The shot stage</a></li>
 </ul>
 </li>
@@ -2125,7 +2125,7 @@ page. There he can configure using cloud gpu or his own card").</p>
 <li><strong>The line</strong>, each stage shown as it finishes, each with a retake: the T-pose tries (Jev's pick marked, the user may
   pick another), the back view, the white model turning, the rig in test poses with the figure laws' marks, the triangle
   hologram with the outfits and a few motions.</li>
-<li><strong>Kept</strong> in the user's world folder as a figure part of the warehouse (<a href="#models">§7.6</a>): the head, the skeleton,
+<li><strong>Kept</strong> in the user's world folder as a figure part of the warehouse (<a href="#models">§7.6</a>; <a href="#figure-warehouse">built</a>): the head, the skeleton,
   the outfits and the references they came from; never in this public repository. The run then draws that person with it.</li>
 <li><strong>The same steps as the workflow</strong> (<a href="#agent-workflows">§6.2</a>): a <code>figure</code> workflow with a fixed prompt,
   verbs and a check (each picture one person, whole, hands in frame, a gap under each arm; every vertex weighted; each arm
@@ -2133,6 +2133,33 @@ page. There he can configure using cloud gpu or his own card").</p>
   page, with the choices the page last saved.</li>
 <li><strong>Windows too</strong>: the console is built for Apple Silicon today (<a href="#console-app">§4.2</a>); Electron builds for
   Windows, where a user's own NVIDIA card is likeliest.</li>
+</ul>
+<h3 id="figure-warehouse">Figures in the warehouse, assigned by EM</h3>
+<p><span class="st built">Built</span> 2026-11-14 (the user: "It should be put into a character engine path in v3 branch. It should
+also be managed under model warehouse system, and em can assign models just like how the old portrait system worked").</p>
+<ul>
+<li><strong>The engine path</strong>: <code>engine/characters/</code> holds the figure pipeline (<code>pipeline/</code>, the Hugging Face
+  and Blender scripts in their order, <code>VERSIONS.md</code> for which structure is stable) and the figure page
+  (<code>viewer/</code>, the triangle hologram, the soft layers and the rigid needles); <code>src/characters/figures.ts</code> keeps and
+  assigns what the pipeline makes.</li>
+<li><strong>Kept beside the cast</strong>: a made figure (a VRM) is put with <code>novel figure add</code> into
+  <code>&lt;library&gt;/figures/&lt;universe&gt;/</code> (a standalone book's own folder), next to the universe's one character list
+  (<a href="#universal-em">§5.2</a>), never in this repository: <code>figures.jsonl</code> (each figure's names, outfits, size,
+  triangles, the pipeline version that made it and its person), <code>&lt;id&gt;/figure.vrm</code>, the reviewer's
+  <code>figure-tasks.jsonl</code> and <code>log.jsonl</code> (every assignment with its reason).</li>
+<li><strong>A warehouse source</strong> (<a href="#models">§7.6</a>): <code>figure</code> is built in beside <code>own</code>; a figure
+  is the part <code>figure:&lt;id&gt;</code>, listed, found by its names (<code>novel warehouse find "Misaka"</code>) and shown with
+  its rest-pose mesh. Its slot is a person: <code>novel warehouse use figure:&lt;id&gt; for person:&lt;person&gt;</code>.</li>
+<li><strong>Assigned as the portraits are</strong> (<a href="#reading">§5</a>, <code>reading/album/portraits.ts</code>), on the
+  universe's people instead of one book's records, since one figure serves every volume: (a) <em>by name</em>, a figure whose
+  name or one of its forms folds to exactly one person's name is that person (a form two people share, like 御坂 for two sisters,
+  says nothing); (b) <em>EM merges</em>, a figure follows the survivor when EM finds two people are one, and a figure whose
+  person left the cast is unassigned; (c) <em>the rest are tasks</em> for the main agent, each unassigned figure with the people
+  it may be (likest names first, then those in the most books), assigned with <code>novel figure assign</code> or left
+  unassigned, never guessed. EM settles the figures each time it saves the cast; a figure is a look, never canon and never a
+  gate proposal.</li>
+<li><strong>Drawn</strong>: whoever draws people asks for a person's figure (<code>figureOfPerson</code>) and falls back to the
+  pawn without one. <span class="st proposed">Proposed</span>: the world page and the console's Characters view drawing it.</li>
 </ul>
 <h3 id="text-to-motion">Text to motion: one clip library for every figure</h3>
 <p><span class="st designed">Designed</span> 2026-11-14 (the user: "Let's design a universal text to motion engine"; of the first test:

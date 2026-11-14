@@ -9,6 +9,7 @@ The full map, concept by concept: [design §2.5, the code map](../docs/v3/design
 | `reading/` | the reading's runner the console starts (`read.mjs`), and pages and tools over a reading (`inspect`, `compare`, `marks`, `time`, `strands`, `workspace`) | §5 |
 | `library/` | adopting a v2 universe library | §3 |
 | `casts/` | the casts before the film and the digests (settei, stills, sky, transport, set dresser, rooms, mounts, in-use); `run/` runs each on a reading | §8.2 |
+| `characters/` | the figure pipeline (pictures to a rigged VRM hologram figure; `pipeline/`, versions in `VERSIONS.md`) and the figure page (`viewer/`); the store and EM's assignment are `src/characters/` | §8.6 |
 | `terrain/` | the terrain loop, composite buildings, highways, the terrain's pages and the street compatibility tables; `run/float.mjs` | §7 |
 | `world/` | the world built from the terrain: layers, roads, highways, air, composite parts, the carry across books, one strand's page data | §6–§7 |
 | `spawning/` | where each person and thing stands when a scene begins | §7.8 |

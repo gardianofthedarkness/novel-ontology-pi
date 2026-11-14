@@ -1,4 +1,5 @@
 import { createHash } from "node:crypto";
+import { settleFigures } from "../../characters/figures.js";
 import { mkdir, readFile, readdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { BundleStore } from "../../ground/connectors/bundle.js";
@@ -192,6 +193,7 @@ export async function runIdentityAfterApply(input: {
   const targets = characters.filter((entity) => !settled.has(entity.id) && (input.all || minted.has(entity.id))).slice(0, input.limit ?? Number.MAX_SAFE_INTEGER);
   if (!targets.length || !input.decisions) {
     await saveCast(scope, cast);
+  await settleFigures(scope, cast).catch(() => undefined);
     return { ...summary, ...(targets.length ? { note: "No decision model: new characters were added to the shared list unchecked." } : {}) };
   }
 
@@ -274,6 +276,7 @@ export async function runIdentityAfterApply(input: {
     });
   }
   await saveCast(scope, cast);
+  await settleFigures(scope, cast).catch(() => undefined);
   if (proposals.length) {
     const packet: IdentityPacket = { id: `um_${createHash("sha256").update(JSON.stringify([scope.sourceId, proposals.map((proposal) => proposal.id)])).digest("hex").slice(0, 24)}`, universeId: scope.universeId, sourceId: scope.sourceId, createdAt: new Date().toISOString(), proposals, decisions: [] };
     await saveIdentityPacket(scope, packet);
