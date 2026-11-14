@@ -4,7 +4,7 @@
  * with a catalogue of evaluated records; parts are `<source>:<part>`; `use` connects a part to a slot of the world's
  * configuration through the settings schema. JSON out; nothing here asks a model; a download needs the user's OK.
  */
-import { addSource, fetchSource, findParts, interactionOf, listSources, meshOfPart, partOf, refreshSource, setInteraction, SLOTS, usePart, type AddOptions } from "../../../world/models/warehouse.js";
+import { addSource, fetchSource, findParts, interactionOf, listSources, meshOfPart, partOf, refreshSource, setInteraction, SLOTS, useFigure, usePart, type AddOptions } from "../../../world/models/warehouse.js";
 
 export async function warehouseList(options: { source?: string; novelDir?: string } = {}) {
   const out = await listSources(options);
@@ -45,5 +45,6 @@ export async function warehouseInteract(novelDir: string, key: string, raw: stri
 
 export async function warehouseUse(novelDir: string, ref: string, slot: string, options: { why?: string; place?: string; before?: boolean; floors?: [number, number]; by?: string }) {
   if (!options.why?.trim()) throw new Error("--why <text> is required: say why this part goes in this slot.");
+  if (slot.startsWith("person:")) return useFigure(novelDir, ref, slot, { why: options.why, by: options.by });
   return usePart(novelDir, ref, slot, { ...options, why: options.why });
 }

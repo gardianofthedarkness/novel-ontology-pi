@@ -35,6 +35,7 @@ import { volumeDone, volumeLog, volumeRun, volumeStatus } from "./commands/extra
 import { folderCommand } from "./commands/v3/folderCommands.js";
 import { settingsDiff, settingsExplain, settingsProfileApply, settingsProfileList, settingsProfileSave, settingsSet, settingsShow, settingsUnset } from "./commands/extract/settingsCommands.js";
 import { warehouseAdd, warehouseFetch, warehouseFind, warehouseInteract, warehouseList, warehouseRefresh, warehouseShow, warehouseUse } from "./commands/extract/warehouseCommands.js";
+import { addFigure, assignFigure, figureTasksOf, listFigures } from "../characters/figures.js";
 import { lookContext } from "./commands/extract/lookCommands.js";
 import { PLACES_COMMANDS, placesCommand } from "./commands/extract/placesCommands.js";
 import { ROOMS_COMMANDS, roomsCommand } from "./commands/extract/roomsCommands.js";
@@ -75,7 +76,11 @@ const COMMANDS: Record<string, string> = {
   "novel warehouse find '<words>' [--kind '<thing kind>'] [--category <c>] [--size <m>] [--source <name>] [--top N] [<novel-dir>]": "Parts ranked for a few words over every catalogue: an exact name (a model's label, given at birth) first, then name, category, the kind's categories and size closeness, as <source>:<part>",
   "novel warehouse show <source>:<part> [<novel-dir>]": "A part's record and its mesh's size",
   "novel warehouse interact <source>:<part>|'<kind>' [<json sheet>] <novel-dir> [--why <text>] [--before]": "A part's interaction sheet as it resolves for the book (solid, layer, seats, crash degree and radius, what it becomes when broken, its wreck part); with a JSON sheet and --why, the book's override, written as the models.interact setting",
-  "novel warehouse use <source>:<part> for <slot> <novel-dir> --why <text> [--place <id>] [--before] [--floors a b]": "Connect a part to a slot of the world's configuration: prop:<kind> (fill.props), vehicle:<kind> (models.vehicles), kind:<thing kind> (models.parts), use:<building use> or role:<role> (the models.uses table); written through the settings schema",
+  "novel warehouse use <source>:<part> for <slot> <novel-dir> --why <text> [--place <id>] [--before] [--floors a b]": "Connect a part to a slot of the world's configuration: prop:<kind> (fill.props), vehicle:<kind> (models.vehicles), kind:<thing kind> (models.parts), use:<building use> or role:<role> (the models.uses table); written through the settings schema; person:<person> takes a figure (figure:<id>), the figure's assignment",
+  "novel figure add <novel-dir> <figure.vrm> --name <the person's name> --why <text> [--forms a,b] [--id <id>] [--outfits a,b] [--pipeline v0.6] [--references a;b] [--person <person>]": "Put a figure made by engine/characters' pipeline (a VRM) into the universe's store beside its cast (outside the repository), measured, as the warehouse part figure:<id>; a figure whose name is one person's is assigned at once (design §8.6)",
+  "novel figure list <novel-dir>": "The universe's figures with the person each is assigned to (by name, through EM merges, or by hand), how many people have one, and the reviewer's tasks",
+  "novel figure tasks <novel-dir>": "Figures EM could not assign, each with the people it may be (likest names first); assign or leave unassigned, never guess",
+  "novel figure assign <novel-dir> <figure> <person>|--none --why <text>": "Assign a figure to a person of the universe's cast (or unassign it); logged; EM's merges still carry it (same as novel warehouse use figure:<id> for person:<person>)",
   "novel model nominate <novel-dir> [--reading <data.json>] [--top N]": "Rank the book's things (scenes, sentences, kind); the important, well-described ones get a model of their own, the rest a warehouse part (no model call)",
   "novel model list <novel-dir> [--state todo|made|failed|part]": "The nominated things and their models' state",
   "novel model brief <novel-dir> <thing>": "What a writer needs for one thing: its lines, kind, the reading's size, the contract and its checks",
@@ -325,6 +330,16 @@ async function main(): Promise<void> {
     return;
   }
 
+  if (cmd === "figure") {
+    const novelDir = positional[2], usage = "Usage: novel figure add <novel-dir> <figure.vrm> --name <name> --why <text> [...] | list <novel-dir> | tasks <novel-dir> | assign <novel-dir> <figure> <person>|--none --why <text>";
+    if (!novelDir || novelDir.startsWith("--")) throw new Error(usage);
+    const list = (name: string, by = ",") => flag(positional, name)?.split(by).map((item) => item.trim()).filter(Boolean);
+    if (sub === "add") { const file = positional[3]; if (!file || file.startsWith("--")) throw new Error(usage); out(await addFigure(novelDir, file, { name: flag(positional, "--name") ?? "", why: flag(positional, "--why") ?? "", forms: list("--forms"), id: flag(positional, "--id"), outfits: list("--outfits"), pipeline: flag(positional, "--pipeline"), references: list("--references", ";"), person: flag(positional, "--person") }), pretty); return; }
+    if (sub === "list") { out(await listFigures(novelDir), pretty); return; }
+    if (sub === "tasks") { out(await figureTasksOf(novelDir), pretty); return; }
+    if (sub === "assign") { const figure = positional[3], person = positional.includes("--none") ? null : positional[4]; if (!figure || figure.startsWith("--") || (person !== null && (!person || person.startsWith("--")))) throw new Error(usage); out(await assignFigure(novelDir, figure, person, { why: flag(positional, "--why") ?? "" }), pretty); return; }
+    throw new Error(usage);
+  }
   if (cmd === "model") {
     const novelDir = positional[2], usage = "Usage: novel model nominate|list|brief|write|put|check|use|show <novel-dir> ... (novel help)";
     if (sub === "parts") { if (!novelDir) throw new Error("novel model parts '<kind>' (e.g. 'a small weapon')"); out(await modelParts(novelDir), pretty); return; }

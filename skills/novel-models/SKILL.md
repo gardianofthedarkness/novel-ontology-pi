@@ -1,6 +1,6 @@
 ---
 name: novel-models
-description: Give a book's important things their own 3D models written as OpenSCAD code, bind small things to parts of the model warehouse, and change how the world is generated through the world generator's settings, with the novel model and novel settings CLI. Use after a volume's reading and before its terrain loop or director run, or when asked to change how buildings, streets, roads or the fill look; not for canon (a model or a setting is a look, never a fact).
+description: Give a book's important things their own 3D models written as OpenSCAD code, put each person's rigged figure in the warehouse for EM to assign, bind small things to parts of the model warehouse, and change how the world is generated through the world generator's settings, with the novel model and novel settings CLI. Use after a volume's reading and before its terrain loop or director run, or when asked to change how buildings, streets, roads or the fill look; not for canon (a model or a setting is a look, never a fact).
 ---
 
 # Models as code, and the world generator's settings
@@ -106,5 +106,20 @@ any you register. A part is `<source>:<part>`.
    `novel warehouse interact <part>|'<kind>' '<json>' <dir> --why <text>` (e.g. a wide-body
    airliner: `'{"crash":{"degree":4,"radius":40}}'`). Nothing crashes by itself: the text says
    when, the sheet says how much.
+
+## Figures (each person's rigged figure)
+
+A figure is a person's rigged VRM made by `engine/characters/`'s pipeline (design §8.6). It is a part of the warehouse,
+`figure:<id>`, kept beside the universe's cast, and assigned to a person the way the album's portraits are.
+
+1. `novel figure add <dir> <figure.vrm> --name "<the person's name>" [--forms a,b] [--outfits a,b] [--pipeline v0.6] --why <text>`
+   puts a made figure in the store. A name that is one person's binds at once; a name several people share never does.
+2. EM settles the figures each time it saves the cast: merged people take their figures to the survivor, and a figure
+   whose person left the cast is unassigned again.
+3. `novel figure tasks <dir>` lists the figures EM could not assign, each with the people it may be. Assign with
+   `novel figure assign <dir> <figure> <person> --why "<how you know>"` (or
+   `novel warehouse use figure:<id> for person:<person> <dir> --why ...`). Leave it unassigned when you cannot tell; never
+   guess: a wrong figure on a person is a visible error.
+4. `novel figure list <dir>` shows every figure with its person. A figure is a look, never canon.
 
 Say what you changed and why in `--why`; the user reads the log.

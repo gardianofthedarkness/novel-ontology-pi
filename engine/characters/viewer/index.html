@@ -1,0 +1,726 @@
+<title>Figure Pipeline Trials</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Chakra+Petch:wght@500;600&family=Inter:wght@400;500;600&display=swap">
+<style>
+  /* one visual world: a dark hologram bay, in every host theme */
+  :root {
+    color-scheme: dark;
+    --bg: #050b14; --panel: #0a1626; --panel-2: #0e1d31; --line: #1a3350;
+    --fg: #d7e6f5; --muted: #8aa3bd; --cyan: #6fe3ff; --cyan-dim: #2a8fb3; --warn: #ffcf7a;
+    --display: 'Chakra Petch', 'Segoe UI', system-ui, sans-serif;
+    --body: 'Inter', 'Segoe UI', system-ui, sans-serif;
+  }
+  body { background: var(--bg); color: var(--fg); font: 15px/1.6 var(--body); }
+  .wrap { max-width: 1080px; margin: 0 auto; padding-block: 28px 64px;
+    padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px));
+    display: grid; gap: 36px; }
+  h1, h2, h3 { font-family: var(--display); font-weight: 600; letter-spacing: .01em; text-wrap: balance; margin: 0; }
+  h1 { font-size: clamp(26px, 4.4vw, 40px); line-height: 1.15; }
+  h2 { font-size: 22px; color: var(--cyan); }
+  h3 { font-size: 16px; }
+  p { margin: 0; max-width: 68ch; }
+  .kicker { font: 600 12px/1 var(--display); letter-spacing: .14em; text-transform: uppercase; color: var(--cyan); }
+  header { display: grid; gap: 12px; }
+  header p { color: var(--muted); }
+
+  /* viewer */
+  .bay { display: grid; grid-template-columns: minmax(0, 1fr) 260px; gap: 16px; align-items: start; }
+  @media (max-width: 760px) { .bay { grid-template-columns: minmax(0, 1fr); } }
+  .stage { position: relative; aspect-ratio: 4 / 5; max-width: 100%; max-height: 82vh; width: 100%;
+    background: radial-gradient(ellipse at 50% 85%, #0d2a44 0%, var(--bg) 62%); border: 1px solid var(--line); border-radius: 14px; overflow: hidden; }
+  .stage canvas { display: block; width: 100%; height: 100%; touch-action: none; }
+  .stage::after { content: ""; position: absolute; inset: 0; pointer-events: none;
+    background: repeating-linear-gradient(to bottom, rgba(111,227,255,.045) 0 1px, transparent 1px 4px); mix-blend-mode: screen; }
+  .status { position: absolute; left: 14px; bottom: 12px; font: 500 12px/1.4 var(--display); letter-spacing: .08em; color: var(--cyan); text-transform: uppercase; }
+  .controls { display: grid; gap: 18px; background: var(--panel); border: 1px solid var(--line); border-radius: 14px; padding: 16px; }
+  .group { display: grid; gap: 8px; }
+  .group > span { font: 600 11px/1 var(--display); letter-spacing: .14em; text-transform: uppercase; color: var(--muted); }
+  .seg { display: flex; flex-wrap: wrap; gap: 6px; }
+  .seg button { font: 500 13px/1 var(--body); color: var(--fg); background: var(--panel-2); border: 1px solid var(--line);
+    border-radius: 8px; padding: 9px 11px; cursor: pointer; }
+  .seg button:hover { border-color: var(--cyan-dim); }
+  .seg button[aria-pressed="true"] { background: #103552; border-color: var(--cyan); color: #fff; box-shadow: 0 0 0 1px var(--cyan) inset; }
+  .hint { color: var(--muted); font-size: 13px; }
+
+  /* pipeline */
+  .steps { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 14px; }
+  @media (max-width: 860px) { .steps { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+  @media (max-width: 460px) { .steps { grid-template-columns: minmax(0, 1fr); } }
+  .step { background: var(--panel); border: 1px solid var(--line); border-radius: 12px; overflow: hidden; display: grid; grid-template-rows: auto 1fr; }
+  .step img { width: 100%; aspect-ratio: 4 / 5; object-fit: contain; background: #e9edf2; display: block; }
+  .step img.dark { background: #050b14; }
+  .step div { padding: 12px 14px 14px; display: grid; gap: 6px; }
+  .step b { font: 600 12px/1 var(--display); letter-spacing: .12em; color: var(--cyan); text-transform: uppercase; }
+  .step p { font-size: 13.5px; color: var(--muted); }
+  figure { margin: 0; display: grid; gap: 8px; }
+  figure img { border-radius: 10px; border: 1px solid var(--line); width: 100%; display: block; }
+  figcaption { color: var(--muted); font-size: 13px; max-width: 80ch; }
+  section { display: grid; gap: 14px; }
+  .cols { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 18px; }
+  @media (max-width: 760px) { .cols { grid-template-columns: minmax(0, 1fr); } }
+  .card { background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 16px 18px; display: grid; gap: 10px; min-width: 0; }
+  ul { margin: 0; padding-left: 18px; display: grid; gap: 6px; }
+  li { max-width: 70ch; }
+  code { font: 13px/1.4 ui-monospace, Consolas, monospace; color: var(--cyan); }
+  .note { color: var(--muted); font-size: 13px; border-left: 2px solid var(--warn); padding-left: 12px; }
+</style>
+
+<div class="wrap">
+  <header>
+    <div class="kicker">Novel figure pipeline · current final · Misaka Mikoto</div>
+    <h1>Misaka as a triangle hologram, with a skirt that moves</h1>
+    <p><strong>Face + hair</strong> (v0.7, the default) is v0.6 with a face and hair of their own. The skull is locked to the head bone and the neck owns only the column under the jaw, so the chin no longer moves with the body; the clothes and the body are v0.6's, unchanged. The head turns about the base of the skull, found from 68 face points detected on renders of the head. A jaw bone hinges between the ears (<strong>Talk</strong>). The hair hangs on ten spring chains from the scalp line (three bangs, seven around the sides and back) that feel the whole body's motion, stepped at a fixed 60 per second, each link held within a cone, pushed off the skull, face, neck and shoulders by colliders (<strong>Head shake</strong>, <strong>Nod</strong>).</p>
+    <p>The figure from trial 2, before the separate clothing system: one skeleton with the summer and winter uniforms as whole bodies to swap, now wearing the detailed head made from a high-resolution portrait. <strong>Soft layers</strong> (v0.6) keeps the one-shot figure whole and puts its generated base body underneath as a hidden layer: each point's distance from that body is its layer thickness, so skin and tight cloth stay on the skeleton while thick cloth (the skirt, hems) hangs on soft springs from where the skeleton puts it, swings and settles, stretches at most 25% between neighbours, and is pushed out of capsules around the legs and torso; <strong>Layers</strong> in Look colours the triangles from tight (cyan) to loose (pink). <strong>Rigid needles</strong> (v0.6, the default) moves the base body by dual-quaternion blending (rotation about each joint, so a bent hip keeps its volume), rides the skin on it, and never lets the floating layer sink below 80% of its own depth; <strong>Plain skinning</strong> is v0.5. <strong>Base body + clothes</strong> puts a separately generated base body under the clothes, fitted bone by bone to the benchmark's proportions; the clothes are the benchmark's own, and the skirt hangs from the hips on ten spring-bone chains pushed aside by colliders on the legs, so the legs bend freely and a swinging skirt shows real thighs. <strong>Skirt springs only</strong> is the same skirt on the fused figure; <strong>Benchmark</strong> is the saved version without either. Every motion plays on the standard VRM humanoid bones, so it works on any figure made this way. The clothing system below is parked as work in progress.</p>
+  </header>
+
+  <div class="bay">
+    <div class="stage" id="stage"><canvas id="c"></canvas><div class="status" id="status">Loading figure…</div></div>
+    <div class="controls">
+      <div class="group"><span>Character</span>
+        <div class="seg" data-group="who">
+          <button data-v="misaka" aria-pressed="true">Misaka Mikoto</button>
+          <button data-v="index" aria-pressed="false">Index</button>
+        </div></div>
+      <div class="group"><span>Outfit</span>
+        <div class="seg" data-group="outfit">
+          <button data-v="summer" aria-pressed="true">Summer uniform</button>
+          <button data-v="winter" aria-pressed="false">Winter uniform</button>
+        </div></div>
+      <div class="group"><span>Motion</span>
+        <div class="seg" data-group="motion">
+          <button data-v="idle" aria-pressed="true">Idle</button>
+          <button data-v="walk" aria-pressed="false">Walk</button>
+          <button data-v="run" aria-pressed="false">Run</button>
+          <button data-v="wave" aria-pressed="false">Wave</button>
+          <button data-v="jump" aria-pressed="false">Jump</button>
+          <button data-v="railgun" aria-pressed="false">Railgun</button>
+          <button data-v="lunge" aria-pressed="false">Lunge</button>
+          <button data-v="shake" aria-pressed="false">Head shake</button>
+          <button data-v="nod" aria-pressed="false">Nod</button>
+          <button data-v="talk" aria-pressed="false">Talk</button>
+          <button data-v="tpose" aria-pressed="false">Rest (T)</button>
+        </div></div>
+      <div class="group"><span>Rig</span>
+        <div class="seg" data-group="rig">
+          <button data-v="v07" aria-pressed="true">Face + hair (v0.7)</button>
+          <button data-v="layers" aria-pressed="false">Soft layers (v0.6)</button>
+          <button data-v="body" aria-pressed="false">Base body + clothes</button>
+          <button data-v="skirt" aria-pressed="false">Skirt springs only</button>
+          <button data-v="final" aria-pressed="false">Benchmark</button>
+        </div></div>
+      <div class="group"><span>Base layer</span>
+        <div class="seg" data-group="needles">
+          <button data-v="on" aria-pressed="true">Rigid needles (v0.6)</button>
+          <button data-v="off" aria-pressed="false">Plain skinning (v0.5)</button>
+        </div></div>
+      <div class="group"><span>Look</span>
+        <div class="seg" data-group="look">
+          <button data-v="holo" aria-pressed="true">Triangles</button>
+          <button data-v="layers" aria-pressed="false">Layers</button>
+          <button data-v="white" aria-pressed="false">White model</button>
+        </div></div>
+      <div class="group"><span>Camera</span>
+        <div class="seg" data-group="spin">
+          <button data-v="on" aria-pressed="false">Turntable</button>
+          <button data-v="off" aria-pressed="true">Still</button>
+        </div></div>
+      <p class="hint">Drag to orbit, scroll or pinch to zoom.</p>
+    </div>
+  </div>
+
+  <section>
+    <h2>Work in progress: the wardrobe, read from the books</h2>
+    <p><strong>Parked for now</strong>; the figure above is the earlier version, before the separate clothing system.</p>
+    <p>An agent pass over 57 volumes on this computer found where Misaka appears, what the text says she wears, and which illustrations sit next to those passages. Swimwear was left out on purpose: she is fourteen.</p>
+    <div class="tablewrap" style="overflow-x:auto;border:1px solid var(--line);border-radius:12px;background:var(--panel)">
+      <table style="border-collapse:collapse;width:100%;min-width:620px;font-size:14px">
+        <thead><tr><th style="text-align:left;padding:10px 14px">Outfit</th><th style="text-align:left;padding:10px 14px">What the text says</th><th style="text-align:left;padding:10px 14px">Volumes</th><th style="text-align:left;padding:10px 14px">Picture used</th></tr></thead>
+        <tbody>
+          <tr><td style="padding:10px 14px">Summer uniform</td><td style="padding:10px 14px">white short-sleeved blouse, thin summer sweater vest, grey pleated skirt</td><td style="padding:10px 14px">Old Testament 1, 3, 5, 6, 10; New Testament 9</td><td style="padding:10px 14px">your official art</td></tr>
+          <tr><td style="padding:10px 14px">Winter uniform</td><td style="padding:10px 14px">beige blazer, <em>navy fine-check</em> pleated skirt (our earlier grey skirt was wrong)</td><td style="padding:10px 14px">Old Testament 12; New Testament 8, 12</td><td style="padding:10px 14px">an anime still</td></tr>
+          <tr><td style="padding:10px 14px">Duffle coat</td><td style="padding:10px 14px">Tokiwadai's beige duffle coat over the winter uniform</td><td style="padding:10px 14px">New Testament 12, 15, 17; Genesis Testament 9</td><td style="padding:10px 14px">Genesis Testament 9 colour plate</td></tr>
+          <tr><td style="padding:10px 14px">Furisode</td><td style="padding:10px 14px">a furisode at the New Year shrine visit</td><td style="padding:10px 14px">Genesis Testament 7</td><td style="padding:10px 14px">Genesis Testament 7 colour plate</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <div class="steps" style="grid-template-columns:repeat(auto-fit,minmax(200px,1fr))">
+      <div class="step"><img src="img/w_plate_coat.jpg" alt="Book plate: Misaka in a beige duffle coat with a pink scarf"><div><b>Plate · Genesis 9</b><p>The duffle coat, pink scarf, navy check skirt and navy socks.</p></div></div>
+      <div class="step"><img src="img/w_plate_furisode.jpg" alt="Book plate: Misaka in an orange furisode"><div><b>Plate · Genesis 7</b><p>The orange furisode with a green obi.</p></div></div>
+    </div>
+    <figure><img src="img/w_fronts.jpg" alt="Five T-pose drawings of the same girl: plain base layer, summer uniform, winter uniform, duffle coat, furisode"><figcaption>Every outfit is drawn on the same base picture (left), with the face and hair locked, so all five line up: same pose, same body, same face.</figcaption></figure>
+    <div class="cols">
+      <div class="card">
+        <h3>How the clothes come off the body</h3>
+        <ul>
+          <li>The base body is the character in a plain fitted base layer, made once, with the portrait head on it.</li>
+          <li>The diffusion model's drawings changed her proportions (limbs by 2–13%, shoulders and hips by up to 14%), so its bodies are thrown away: each outfit model is rigged with the same 21 bones and its clothes are moved bone by bone onto the base skeleton, each bone's piece stretched to the base bone's length.</li>
+          <li>Cloth that ends up inside the body or touching it is pushed out to 4 mm; loose cloth is then settled by a cloth simulation with the base body as the collider.</li>
+          <li>The clothes are whatever stands out from the base body: more than 6 mm along its surface, or more than 2 cm away in any direction.</li>
+          <li>The clothes take the body's skin weights from the point beneath; loose cloth follows the hips more than the legs, and a long robe hangs from the hips.</li>
+          <li>The body parts each outfit covers (24–37% of the body) are hidden, so nothing pokes through the cloth.</li>
+        </ul>
+      </div>
+      <div class="card">
+        <h3>What is left to fix</h3>
+        <ul>
+          <li>The furisode's hem still pulls a strip toward the back sandal in a long stride. Robes should tell the motion layer to take shorter steps, as a kimono does.</li>
+          <li>The coat came out with its hood up; only its lower part survives as a collar, since every outfit uses the shared head.</li>
+          <li>The black mourning kimono (Genesis 12–13) needs her hair tied back: a hairstyle slot on the head, next.</li>
+        </ul>
+      </div>
+    </div>
+    <div class="pair" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:16px">
+      <figure><img src="img/w_holo.jpg" alt="Hologram renders of the body only and the four outfits from front, three-quarter and back"><figcaption>Body only, then each outfit: front, three-quarter, back.</figcaption></figure>
+      <figure><img src="img/w_walk.jpg" alt="Hologram renders of each outfit in a walking pose"><figcaption>The same in a walk test: the skirts and coat swing with the hips.</figcaption></figure>
+    </div>
+  </section>
+
+  <section>
+    <h2>How she was made</h2>
+    <div class="steps">
+      <div class="step"><img src="img/v2_ref_official.jpg" alt="Official anime art of Misaka flicking a coin with lightning"><div><b>1 · Mainstream picture</b><p>Your official Railgun art. Other mainstream pictures supplied the winter blazer and a second view.</p></div></div>
+      <div class="step"><img src="img/v2_tpose_summer.jpg" alt="Misaka redrawn in a T-pose, summer uniform"><div><b>2 · T-pose redraw</b><p>Qwen image edit redraws her alone, arms straight out, on white. The same edit dresses her in the winter blazer, keeping the same face and body.</p></div></div>
+      <div class="step"><img src="img/v2_tpose_winter.jpg" alt="Misaka redrawn in a T-pose, winter blazer with red bow"><div><b>3 · Outfit swap</b><p>The winter blazer is just another body mesh. It is fitted onto the summer skeleton, scaled per axis over the matching bones; the worst bone sits 1.6 cm off.</p></div></div>
+      <div class="step"><img class="dark" src="img/v2_holo_tpose.jpg" alt="Triangle hologram of the rigged figure in T-pose"><div><b>4 · Triangles + bones</b><p>Hunyuan3D gives the shape (30 steps, about 45 s). It is cut to about 16,000 triangles, and each arm is found by surface connectivity so a raised arm never drags the body.</p></div></div>
+    </div>
+  </section>
+
+  <section>
+    <h2>The white model the hologram is drawn from</h2>
+    <figure>
+      <img src="img/v2_white_model.jpg" alt="Untextured 3D model from four sides: front, three-quarter, side, back">
+      <figcaption>Straight out of Hunyuan3D-2.1, before any rigging: front, three-quarter, side and back. The bob haircut, sleeves, pleated skirt, loose socks and loafers are all geometry, and the face has a faint relief of eyes and mouth.</figcaption>
+    </figure>
+  </section>
+
+  <section class="cols">
+    <div class="card">
+      <h3>What changed since the first trial</h3>
+      <ul>
+        <li><b>T-pose instead of A-pose.</b> With the arms hanging, the generated upper arms were fused to the ribs, and raising an arm pulled a sheet of triangles off the hip. In a T-pose the arms are separate, and the T-pose is also VRM's rest pose.</li>
+        <li><b>No colour work.</b> The hologram draws the model's own triangles: the back ones are hidden by a dark inner body and the front ones glow.</li>
+        <li><b>One skeleton, many outfits.</b> The head and hair come from one model, the bodies from each outfit model, cut at the neck.</li>
+        <li><b>Motions are character-independent.</b> They target VRM humanoid bone names, not this mesh.</li>
+      </ul>
+    </div>
+    <div class="card">
+      <h3>Next</h3>
+      <ul>
+        <li><b>Motion library from text.</b> A text-to-motion model can turn the novel's own action lines ("she flicks the coin") into bone animation, saved as VRM animation files that any figure can play.</li>
+        <li><b>Outfits per volume.</b> An agent reads each volume, lists what the character wears, and generates the missing outfit meshes onto the same skeleton.</li>
+        <li><b>The rest of the cast,</b> and a non-anime book to check that the method generalises.</li>
+      </ul>
+    </div>
+  </section>
+
+  <p class="note">The GPU work ran on your Hugging Face PRO daily quota: about 10 image edits and 4 shape generations, a few minutes in all. No paid Jobs time was used. Hunyuan3D-2.1's licence excludes the EU, UK and South Korea. The figure is of a copyrighted character, so it stays out of the public repo.</p>
+</div>
+
+<script type="importmap">
+{ "imports": {
+  "three": "https://cdn.jsdelivr.net/npm/three@0.169.0/build/three.module.js",
+  "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.169.0/examples/jsm/",
+  "@pixiv/three-vrm": "https://cdn.jsdelivr.net/npm/@pixiv/three-vrm@3.1.0/lib/three-vrm.module.min.js"
+} }
+</script>
+<script type="module">
+import * as THREE from 'three';
+import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
+import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+import { EffectComposer } from 'three/addons/postprocessing/EffectComposer.js';
+import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
+import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js';
+import { OutputPass } from 'three/addons/postprocessing/OutputPass.js';
+import { VRMLoaderPlugin, VRMUtils } from '@pixiv/three-vrm';
+
+const stage = document.getElementById('stage'), canvas = document.getElementById('c'), status = document.getElementById('status');
+const state = { who: 'misaka', outfit: 'summer', motion: 'idle', look: 'holo', spin: 'off', rig: 'v07' };
+// any figure made by make_figure.py: ?figure=<file.txt> loads it (its name and outfits come from the file itself);
+// characters other than Misaka have only the current build, <who>_v07.txt
+const FIGURE_PARAM = new URLSearchParams(location.search).get('figure');
+const renderer = new THREE.WebGLRenderer({ canvas, antialias: true });
+renderer.setPixelRatio(Math.min(devicePixelRatio, 2)); renderer.setClearColor(0x050b14, 1);
+const scene = new THREE.Scene();
+const camera = new THREE.PerspectiveCamera(30, 0.8, 0.05, 50); camera.position.set(0.5, 1.0, 3.6);
+const controls = new OrbitControls(camera, canvas); controls.target.set(0, 0.82, 0); controls.enableDamping = true;
+controls.minDistance = 1.5; controls.maxDistance = 9; controls.update();
+scene.add(new THREE.HemisphereLight(0xffffff, 0x404858, 1.6));
+const sun = new THREE.DirectionalLight(0xffffff, 2.2); sun.position.set(1.5, 3, 2.5); scene.add(sun);
+const composer = new EffectComposer(renderer); composer.addPass(new RenderPass(scene, camera));
+const bloom = new UnrealBloomPass(new THREE.Vector2(512, 640), 0.32, 0.3, 0.55); composer.addPass(bloom); composer.addPass(new OutputPass());
+
+// projector floor: rings and spokes
+const floor = new THREE.Group(); scene.add(floor);
+const ringMat = new THREE.MeshBasicMaterial({ color: 0x6fe3ff, transparent: true, opacity: 0.35, blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide });
+[[0.42, 0.43], [0.62, 0.625], [0.8, 0.83], [1.1, 1.105]].forEach(([a, b], i) => {
+  const r = new THREE.Mesh(new THREE.RingGeometry(a, b, 96, 1, 0, i === 2 ? Math.PI * 1.6 : Math.PI * 2), ringMat);
+  r.rotation.x = -Math.PI / 2; r.position.y = 0.002; floor.add(r);
+});
+const disc = new THREE.Mesh(new THREE.CircleGeometry(0.8, 64), new THREE.MeshBasicMaterial({ color: 0x0c3557, transparent: true, opacity: 0.55, depthWrite: false }));
+disc.rotation.x = -Math.PI / 2; floor.add(disc);
+// a faint beam column
+const beamCol = new THREE.Mesh(new THREE.CylinderGeometry(0.62, 0.8, 2.0, 48, 1, true),
+  new THREE.MeshBasicMaterial({ color: 0x1b7fb0, transparent: true, opacity: 0.05, blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide }));
+beamCol.position.y = 1.0; scene.add(beamCol);
+
+// hologram materials: a dark inner body (hides the back triangles) with a fresnel rim, and glowing triangle edges
+const uniforms = { uTime: { value: 0 } };
+function fillMaterial() {
+  const m = new THREE.MeshBasicMaterial({ color: 0x03101e, polygonOffset: true, polygonOffsetFactor: 1, polygonOffsetUnits: 1 });
+  m.onBeforeCompile = (sh) => {
+    sh.uniforms.uTime = uniforms.uTime;
+    sh.vertexShader = 'varying vec3 vN; varying vec3 vP;\n' + sh.vertexShader.replace('#include <project_vertex>',
+      `#include <project_vertex>
+      #ifdef USE_SKINNING
+        vec3 hn = objectNormal;
+      #else
+        vec3 hn = normal;
+      #endif
+      vN = normalize(normalMatrix * hn); vP = -mvPosition.xyz;`);
+    sh.fragmentShader = 'uniform float uTime; varying vec3 vN; varying vec3 vP;\n' + sh.fragmentShader.replace('#include <dithering_fragment>',
+      `#include <dithering_fragment>
+      float f = pow(1.0 - abs(dot(normalize(vN), normalize(vP))), 2.2);
+      float s = 0.5 + 0.5 * sin(gl_FragCoord.y * 1.4 - uTime * 6.0);
+      gl_FragColor.rgb += vec3(0.16, 0.55, 0.95) * (0.75 * f + 0.05 * s);`);
+  };
+  return m;
+}
+const wireMat = new THREE.MeshBasicMaterial({ color: 0x4fc8f0, wireframe: true, transparent: true, opacity: 0.75, blending: THREE.AdditiveBlending, depthWrite: false });
+const whiteMat = new THREE.MeshStandardMaterial({ color: 0xeef1f5, roughness: 0.75, metalness: 0, flatShading: true });
+
+let vrm = null; const parts = [];   // { mesh, wire, key }
+// meshes: Head (shared), Body_<outfit> (the fixed body minus what that outfit covers), Garment_<outfit> (only the clothes)
+function outfitKey(o) {
+  for (let n = o; n; n = n.parent) {
+    const m = /(?:Body|Garment|Outfit)_([a-z]+)/i.exec(n.name); if (m) return m[1].toLowerCase();
+    if (/Head/.test(n.name)) return 'head';
+  }
+  return 'head';
+}
+async function load() {
+  // the VRM ships gzipped and base64-encoded (artifacts serve text); unpacked here with the browser's own gunzip
+  status.textContent = 'Loading figure…';
+  if (vrm) { scene.remove(vrm.scene); parts.length = 0; vrm = null; }
+  for (const s of soft.items) scene.remove(s.group); soft.items = [];
+  const file = FIGURE_PARAM || (state.who !== 'misaka' ? `${state.who}_v07.txt`
+    : { v07: 'misaka_v07.txt', final: 'misaka_final.txt', skirt: 'misaka_skirt.txt', body: 'misaka_body.txt', layers: 'misaka_layers.txt' }[state.rig]);
+  const b64 = await (await fetch(file)).text();
+  const raw = Uint8Array.from(atob(b64.trim()), ch => ch.charCodeAt(0));
+  const gzipped = raw[0] === 0x1f && raw[1] === 0x8b;
+  const bin = gzipped ? await new Response(new Blob([raw]).stream().pipeThrough(new DecompressionStream('gzip'))).arrayBuffer() : raw.buffer;
+  const loader = new GLTFLoader(); loader.register(p => new VRMLoaderPlugin(p));
+  const gltf = await loader.parseAsync(bin, '');
+  vrm = gltf.userData.vrm; VRMUtils.rotateVRM0(vrm);
+  vrm.scene.traverse(o => { if (o.isMesh) o.frustumCulled = false; });
+  const meshes = []; vrm.scene.traverse(o => { if (o.isMesh) meshes.push(o); });
+  for (const m of meshes) {
+    const wire = m.clone(); wire.material = wireMat; wire.position.set(0, 0, 0); wire.quaternion.identity(); wire.scale.set(1, 1, 1);
+    wire.renderOrder = 2; m.add(wire); parts.push({ mesh: m, wire, key: outfitKey(m) });
+  }
+  scene.add(vrm.scene); vrm.scene.updateMatrixWorld(true); buildSoft(); outfitButtons(); applyLook(); applyOutfit(); findHair(); resetSprings();
+  const springs = vrm.springBoneManager ? [...vrm.springBoneManager.joints].length : 0;
+  const who = ((vrm.meta && (vrm.meta.name || vrm.meta.title)) || 'Figure').replace(/\s*\(prototype figure\)/, '');
+  status.textContent = who + ' · ' + (state.rig === 'v07' || state.who !== 'misaka' || FIGURE_PARAM ? `soft layers, skull lock and jaw, ${hair.length} hair spring joints`
+    : state.rig === 'layers' ? 'one-shot figure on soft layers'
+    : state.rig === 'final' ? 'benchmark' : (state.rig === 'body' ? 'base body · ' : '') + springs + ' skirt spring joints') + ' · VRM 1.0';
+}
+function applyLook() {
+  const holo = state.look !== 'white';
+  for (const p of parts) { p.mesh.material = holo ? (p.fill ||= fillMaterial()) : whiteMat; p.wire.visible = holo; }
+  for (const s of soft.items) { s.fill.material = holo ? (s.fillMat ||= fillMaterial()) : whiteMat; s.wire.visible = holo; s.wire.material = state.look === 'layers' ? wireLayersMat : wireMat; }
+  floor.visible = beamCol.visible = holo; bloom.enabled = holo;
+  renderer.setClearColor(holo ? 0x050b14 : 0x1a2230, 1);
+}
+// the outfit switch from the outfits the figure has (Outfit_<name> meshes)
+function outfitButtons() {
+  const keys = [...new Set(parts.map(p => p.key).filter(k => k !== 'head' && k !== 'layer'))];
+  if (!keys.includes(state.outfit)) state.outfit = keys[0];
+  const seg = document.querySelector('[data-group="outfit"]');
+  const label = (k) => k === 'main' ? 'Outfit' : k[0].toUpperCase() + k.slice(1) + (['summer', 'winter'].includes(k) ? ' uniform' : '');
+  seg.innerHTML = keys.map(k => `<button data-v="${k}" aria-pressed="${k === state.outfit}">${label(k)}</button>`).join('');
+}
+function applyOutfit() {
+  for (const p of parts) p.mesh.visible = !p.soft && (p.key === 'head' || p.key === state.outfit);
+  for (const s of soft.items) { s.group.visible = s.key === state.outfit; s.fresh = true; }
+}
+
+// ── soft layers: the one-shot figure is the surface; a hidden base body (LayerBody, generated as its pair) is the layer
+// underneath. Each point's distance from the base body is its layer thickness: thin points (skin, a tight blouse) stay on
+// the skeleton, thick points (a skirt's flare, a hem) hang on soft springs from where the skeleton puts them, lag, swing
+// and settle, stretch within a limit, and are pushed out of capsules around the legs and the torso.
+const soft = { items: [] };
+const COL_TIGHT = new THREE.Color(0x4fc8f0), COL_LOOSE = new THREE.Color(0xff5ad2);
+const wireLayersMat = new THREE.MeshBasicMaterial({ vertexColors: true, wireframe: true, transparent: true, opacity: 0.85, blending: THREE.AdditiveBlending, depthWrite: false });
+function buildSoft() {
+  soft.items = [];
+  let layer = null; vrm.scene.traverse(o => { if (o.isSkinnedMesh && o.name === 'LayerBody' && !(o.parent && o.parent.isMesh)) layer = o; });
+  if (!layer) return;
+  layer.visible = false;
+  for (const p of parts) if (p.mesh === layer) { p.soft = true; p.key = 'layer'; }
+  // the base body's points in bind space, in a 3 cm grid for nearest-point lookups
+  const lp = layer.geometry.attributes.position, cell = 0.03, grid = new Map();
+  const ck = (x, y, z) => `${Math.floor(x / cell)},${Math.floor(y / cell)},${Math.floor(z / cell)}`;
+  for (let i = 0; i < lp.count; i++) { const k = ck(lp.getX(i), lp.getY(i), lp.getZ(i)); (grid.get(k) || grid.set(k, []).get(k)).push(i); }
+  let bestId = -1;
+  const nearest = (x, y, z) => {
+    let best = 1e9; bestId = -1;
+    for (let r = 1; r <= 4 && best > (r - 1) * cell; r++)
+      for (let a = -r; a <= r; a++) for (let b = -r; b <= r; b++) for (let c = -r; c <= r; c++) {
+        const ids = grid.get(`${Math.floor(x / cell) + a},${Math.floor(y / cell) + b},${Math.floor(z / cell) + c}`); if (!ids) continue;
+        for (const i of ids) { const d = Math.hypot(lp.getX(i) - x, lp.getY(i) - y, lp.getZ(i) - z); if (d < best) { best = d; bestId = i; } }
+      }
+    return best;
+  };
+  // the base body as rigid needles: its points welded (one per place), each with its normal averaged over its faces and
+  // its own bone weights; they move by dual-quaternion blending (rotation about the joints, no collapse)
+  const lg = layer.geometry, ln = lg.attributes.normal, lsi = lg.attributes.skinIndex, lsw = lg.attributes.skinWeight;
+  const lu = new Int32Array(lp.count), lrep = [], lseen = new Map();
+  for (let i = 0; i < lp.count; i++) { const k = `${lp.getX(i).toFixed(5)},${lp.getY(i).toFixed(5)},${lp.getZ(i).toFixed(5)}`; let u = lseen.get(k); if (u === undefined) { u = lrep.length; lseen.set(k, u); lrep.push(i); } lu[i] = u; }
+  const LU = lrep.length, inner = { mesh: layer, U: LU, bp: new Float32Array(LU * 3), bn: new Float32Array(LU * 3), si: new Uint16Array(LU * 4), sw: new Float32Array(LU * 4),
+    IT: new Float32Array(LU * 3), IQ: new Float32Array(LU * 4) };
+  for (let i = 0; i < lp.count; i++) { const u = lu[i]; inner.bn[u * 3] += ln.getX(i); inner.bn[u * 3 + 1] += ln.getY(i); inner.bn[u * 3 + 2] += ln.getZ(i); }
+  for (let u = 0; u < LU; u++) { const r = lrep[u]; inner.bp.set([lp.getX(r), lp.getY(r), lp.getZ(r)], u * 3);
+    const L = Math.hypot(inner.bn[u * 3], inner.bn[u * 3 + 1], inner.bn[u * 3 + 2]) || 1; inner.bn[u * 3] /= L; inner.bn[u * 3 + 1] /= L; inner.bn[u * 3 + 2] /= L;
+    for (let k = 0; k < 4; k++) { inner.si[u * 4 + k] = lsi.getComponent(r, k); inner.sw[u * 4 + k] = lsw.getComponent(r, k); } }
+  soft.inner = inner;
+  for (const p of parts) {
+    if (p.soft || p.key === 'head' || !p.mesh.isSkinnedMesh) continue;
+    const m = p.mesh, g = m.geometry, pos = g.attributes.position, n = pos.count;
+    // weld the split points (flat shading duplicates them) so each place is one particle
+    const uid = new Int32Array(n), rep = [], seen = new Map();
+    for (let i = 0; i < n; i++) { const k = `${pos.getX(i).toFixed(5)},${pos.getY(i).toFixed(5)},${pos.getZ(i).toFixed(5)}`; let u = seen.get(k); if (u === undefined) { u = rep.length; seen.set(k, u); rep.push(i); } uid[i] = u; }
+    const U = rep.length, thick = new Float32Array(U), pair = new Int32Array(U), off = new Float32Array(U * 3), d0 = new Float32Array(U);
+    for (let u = 0; u < U; u++) {
+      const px = pos.getX(rep[u]), py = pos.getY(rep[u]), pz = pos.getZ(rep[u]);
+      thick[u] = nearest(px, py, pz); const j = lu[bestId]; pair[u] = j;
+      off[u * 3] = px - inner.bp[j * 3]; off[u * 3 + 1] = py - inner.bp[j * 3 + 1]; off[u * 3 + 2] = pz - inner.bp[j * 3 + 2];
+      d0[u] = off[u * 3] * inner.bn[j * 3] + off[u * 3 + 1] * inner.bn[j * 3 + 1] + off[u * 3 + 2] * inner.bn[j * 3 + 2];   // the layer's own depth along the body's normal
+    }
+    // smooth the thickness over the surface twice (neighbours from the triangles)
+    const nb = Array.from({ length: U }, () => []); const idx = g.index;
+    for (let t = 0; t < idx.count; t += 3) { const a = uid[idx.getX(t)], b = uid[idx.getX(t + 1)], c = uid[idx.getX(t + 2)]; nb[a].push(b, c); nb[b].push(a, c); nb[c].push(a, b); }
+    for (let it = 0; it < 2; it++) { const nt = new Float32Array(U); for (let u = 0; u < U; u++) { let s = thick[u], c = 1; for (const w of nb[u]) { s += thick[w]; c++; } nt[u] = s / c; } thick.set(nt); }
+    const sft = new Float32Array(U); for (let u = 0; u < U; u++) sft[u] = Math.min(1, Math.max(0, (thick[u] - 0.008) / 0.045));
+    // what is drawn: a plain mesh in world space whose points the springs move
+    const dg = new THREE.BufferGeometry(); dg.setIndex(g.index); dg.setAttribute('position', new THREE.BufferAttribute(new Float32Array(n * 3), 3).setUsage(THREE.DynamicDrawUsage));
+    if (g.attributes.normal) dg.setAttribute('normal', g.attributes.normal);
+    const col = new Float32Array(n * 3), cc = new THREE.Color();
+    for (let i = 0; i < n; i++) { cc.copy(COL_TIGHT).lerp(COL_LOOSE, sft[uid[i]]); col.set([cc.r, cc.g, cc.b], i * 3); }
+    dg.setAttribute('color', new THREE.BufferAttribute(col, 3));
+    const fill = new THREE.Mesh(dg, fillMaterial()), wire = new THREE.Mesh(dg, wireMat); wire.renderOrder = 2;
+    const group = new THREE.Group(); group.add(fill, wire); fill.frustumCulled = wire.frustumCulled = false; scene.add(group);
+    p.soft = true;
+    // cloth's own limit: no edge stretches past 125% of its rest length (only edges touching a loose point are checked)
+    const es = new Set(), ea = [], eb = [], er = [];
+    for (let u = 0; u < U; u++) for (const w of nb[u]) if (u < w && (sft[u] > 0.04 || sft[w] > 0.04) && !es.has(u * U + w)) {
+      es.add(u * U + w); ea.push(u); eb.push(w);
+      er.push(Math.hypot(pos.getX(rep[u]) - pos.getX(rep[w]), pos.getY(rep[u]) - pos.getY(rep[w]), pos.getZ(rep[u]) - pos.getZ(rep[w])));
+    }
+    soft.items.push({ key: p.key, mesh: m, group, fill, wire, uid, rep, U, sft, pair, off, d0, ea: Int32Array.from(ea), eb: Int32Array.from(eb), er: Float32Array.from(er),
+      x: new Float32Array(U * 3), v: new Float32Array(U * 3), T: new Float32Array(U * 3), fresh: true,
+      looseShare: sft.reduce((a, b) => a + (b > 0.2 ? 1 : 0), 0) / U });
+  }
+}
+const _v = new THREE.Vector3(), _a = new THREE.Vector3(), _b = new THREE.Vector3();
+function capsules() {
+  const W = (n) => vrm.humanoid.getRawBoneNode(n).getWorldPosition(new THREE.Vector3());
+  const caps = [];
+  for (const s of ['left', 'right']) { caps.push([W(s + 'UpperLeg'), W(s + 'LowerLeg'), 0.062], [W(s + 'LowerLeg'), W(s + 'Foot'), 0.048]); }
+  caps.push([W('hips'), W('chest'), 0.095]);
+  return caps;
+}
+// ── the needles: the base body moved by dual quaternions. Each bone's motion as a unit dual quaternion (rotation R and
+// D = t*R/2); a point blends its bones' (hemisphere-aligned), normalises, and turns about the blended joint instead of
+// averaging positions, so a bent hip or knee keeps its volume
+const _q = new THREE.Quaternion(), _m4 = new THREE.Matrix4(), _pre = new THREE.Matrix4();
+function boneDQs(m, cache) {
+  const sk = m.skeleton, nb = sk.bones.length;
+  const R = cache.R || (cache.R = new Float32Array(nb * 4)), Dq = cache.D || (cache.D = new Float32Array(nb * 4));
+  _pre.multiplyMatrices(m.matrixWorld, m.bindMatrixInverse);
+  for (let k = 0; k < nb; k++) {
+    _m4.multiplyMatrices(sk.bones[k].matrixWorld, sk.boneInverses[k]).premultiply(_pre).multiply(m.bindMatrix);
+    _q.setFromRotationMatrix(_m4); const e = _m4.elements, tx = e[12], ty = e[13], tz = e[14];
+    R[k * 4] = _q.x; R[k * 4 + 1] = _q.y; R[k * 4 + 2] = _q.z; R[k * 4 + 3] = _q.w;
+    Dq[k * 4 + 3] = -0.5 * (tx * _q.x + ty * _q.y + tz * _q.z);
+    Dq[k * 4] = 0.5 * (tx * _q.w + ty * _q.z - tz * _q.y);
+    Dq[k * 4 + 1] = 0.5 * (-tx * _q.z + ty * _q.w + tz * _q.x);
+    Dq[k * 4 + 2] = 0.5 * (tx * _q.y - ty * _q.x + tz * _q.w);
+  }
+  return cache;
+}
+function rotV(qx, qy, qz, qw, vx, vy, vz, out, o) {        // v' = v + w*t + q x t, t = 2 q x v
+  const tx = 2 * (qy * vz - qz * vy), ty = 2 * (qz * vx - qx * vz), tz = 2 * (qx * vy - qy * vx);
+  out[o] = vx + qw * tx + (qy * tz - qz * ty); out[o + 1] = vy + qw * ty + (qz * tx - qx * tz); out[o + 2] = vz + qw * tz + (qx * ty - qy * tx);
+}
+const _r3 = new Float32Array(3);
+function stepNeedles() {
+  const I = soft.inner; if (!I) return;
+  const { R, D } = boneDQs(I.mesh, I);
+  for (let u = 0; u < I.U; u++) {
+    let bx = 0, by = 0, bz = 0, bw = 0, ex = 0, ey = 0, ez = 0, ew = 0, fx = 0, fy = 0, fz = 0, fw = 0, first = true;
+    for (let k = 0; k < 4; k++) {
+      const w = I.sw[u * 4 + k]; if (w === 0) continue; const b = I.si[u * 4 + k] * 4;
+      let s = w; if (first) { fx = R[b]; fy = R[b + 1]; fz = R[b + 2]; fw = R[b + 3]; first = false; }
+      else if (fx * R[b] + fy * R[b + 1] + fz * R[b + 2] + fw * R[b + 3] < 0) s = -w;
+      bx += s * R[b]; by += s * R[b + 1]; bz += s * R[b + 2]; bw += s * R[b + 3]; ex += s * D[b]; ey += s * D[b + 1]; ez += s * D[b + 2]; ew += s * D[b + 3];
+    }
+    const L = Math.hypot(bx, by, bz, bw) || 1; bx /= L; by /= L; bz /= L; bw /= L; ex /= L; ey /= L; ez /= L; ew /= L;
+    const tx = 2 * (-ew * bx + ex * bw - ey * bz + ez * by), ty = 2 * (-ew * by + ex * bz + ey * bw - ez * bx), tz = 2 * (-ew * bz - ex * by + ey * bx + ez * bw);
+    rotV(bx, by, bz, bw, I.bp[u * 3], I.bp[u * 3 + 1], I.bp[u * 3 + 2], I.IT, u * 3);
+    I.IT[u * 3] += tx; I.IT[u * 3 + 1] += ty; I.IT[u * 3 + 2] += tz;
+    I.IQ[u * 4] = bx; I.IQ[u * 4 + 1] = by; I.IQ[u * 4 + 2] = bz; I.IQ[u * 4 + 3] = bw;
+  }
+}
+soft.needles = true;
+function stepSoft(dt) {
+  if (!vrm || !soft.items.length) return;
+  const caps = capsules(), h = Math.max(1e-4, dt) / 2;
+  const NI = soft.needles && soft.inner; if (NI) stepNeedles();
+  for (const s of soft.items) {
+    if (!s.group.visible) continue;
+    const m = s.mesh, { x, v, T, sft, rep, U } = s;
+    // skinning on the CPU, fast: each bone's full matrix once a frame (mesh world x bind inverse x bone x bone inverse x
+    // bind), then a weighted sum of four per point
+    const sk = m.skeleton, nbn = sk.bones.length, BM = s.BM || (s.BM = new Float32Array(nbn * 16));
+    if (!s.sw) { const g = m.geometry, si = g.attributes.skinIndex, sw = g.attributes.skinWeight, ps = g.attributes.position;
+      s.si = new Uint16Array(U * 4); s.sw = new Float32Array(U * 4); s.bp = new Float32Array(U * 3);
+      for (let u = 0; u < U; u++) { const r = rep[u]; for (let k = 0; k < 4; k++) { s.si[u * 4 + k] = si.getComponent(r, k); s.sw[u * 4 + k] = sw.getComponent(r, k); } s.bp[u * 3] = ps.getX(r); s.bp[u * 3 + 1] = ps.getY(r); s.bp[u * 3 + 2] = ps.getZ(r); } }
+    const tmp = s.tmpM || (s.tmpM = new THREE.Matrix4()), pre = s.preM || (s.preM = new THREE.Matrix4());
+    pre.multiplyMatrices(m.matrixWorld, m.bindMatrixInverse);
+    for (let k = 0; k < nbn; k++) { tmp.multiplyMatrices(sk.bones[k].matrixWorld, sk.boneInverses[k]).premultiply(pre).multiply(m.bindMatrix); BM.set(tmp.elements, k * 16); }
+    const SI = s.si, SW = s.sw, BP = s.bp;
+    for (let u = 0; u < U; u++) {
+      const px = BP[u * 3], py = BP[u * 3 + 1], pz = BP[u * 3 + 2]; let ox = 0, oy = 0, oz = 0;
+      for (let k = 0; k < 4; k++) { const w = SW[u * 4 + k]; if (w === 0) continue; const e = SI[u * 4 + k] * 16;
+        ox += w * (BM[e] * px + BM[e + 4] * py + BM[e + 8] * pz + BM[e + 12]); oy += w * (BM[e + 1] * px + BM[e + 5] * py + BM[e + 9] * pz + BM[e + 13]); oz += w * (BM[e + 2] * px + BM[e + 6] * py + BM[e + 10] * pz + BM[e + 14]); }
+      T[u * 3] = ox; T[u * 3 + 1] = oy; T[u * 3 + 2] = oz;
+    }
+    // skin rides the needles: a thin point's target is its base-body point plus its own offset turned with that point;
+    // a loose point keeps its own bones' target (a skirt follows the hips, not the thigh it hangs over)
+    if (NI) {
+      const I = soft.inner, { pair, off } = s;
+      for (let u = 0; u < U; u++) {
+        const q = sft[u]; if (q >= 0.999) continue; const j = pair[u], o = u * 3;
+        rotV(I.IQ[j * 4], I.IQ[j * 4 + 1], I.IQ[j * 4 + 2], I.IQ[j * 4 + 3], off[o], off[o + 1], off[o + 2], _r3, 0);
+        const nx = I.IT[j * 3] + _r3[0], ny = I.IT[j * 3 + 1] + _r3[1], nz = I.IT[j * 3 + 2] + _r3[2];
+        T[o] = nx + (T[o] - nx) * q; T[o + 1] = ny + (T[o + 1] - ny) * q; T[o + 2] = nz + (T[o + 2] - nz) * q;
+      }
+    }
+    if (s.fresh || dt <= 0) { x.set(T); v.fill(0); s.fresh = false; }
+    else for (let sub = 0; sub < 2; sub++) for (let u = 0; u < U; u++) {
+      const q = sft[u], o = u * 3;
+      if (q < 0.04) { x[o] = T[o]; x[o + 1] = T[o + 1]; x[o + 2] = T[o + 2]; v[o] = v[o + 1] = v[o + 2] = 0; continue; }
+      const k = 900 + (40 - 900) * q, c = 2 * Math.sqrt(k) * 0.3, g = -3.0 * q;
+      for (let a = 0; a < 3; a++) { const acc = k * (T[o + a] - x[o + a]) - c * v[o + a] + (a === 1 ? g : 0); v[o + a] += acc * h; x[o + a] += v[o + a] * h; }
+      // stretch within a limit: a tight point barely, a loose one up to 9 cm from where the skeleton puts it
+      const dx = x[o] - T[o], dy = x[o + 1] - T[o + 1], dz = x[o + 2] - T[o + 2], L = Math.hypot(dx, dy, dz), lim = 0.01 + 0.08 * q;
+      if (L > lim) { const f = lim / L; x[o] = T[o] + dx * f; x[o + 1] = T[o + 1] + dy * f; x[o + 2] = T[o + 2] + dz * f; v[o] *= 0.5; v[o + 1] *= 0.5; v[o + 2] *= 0.5; }
+      // no cloth inside the legs or the torso
+      if (q > 0.15) for (const [A, B, r] of caps) {
+        _a.set(x[o], x[o + 1], x[o + 2]); _b.subVectors(B, A); const tt = Math.max(0, Math.min(1, _v.subVectors(_a, A).dot(_b) / _b.lengthSq()));
+        _v.copy(A).addScaledVector(_b, tt); const d = _a.distanceTo(_v);
+        if (d < r + 0.004 && d > 1e-5) { _a.sub(_v).multiplyScalar((r + 0.004) / d).add(_v); x[o] = _a.x; x[o + 1] = _a.y; x[o + 2] = _a.z; }
+      }
+    }
+    if (!(s.fresh || dt <= 0)) for (let it = 0; it < 3; it++) {
+      const { ea, eb, er } = s;
+      for (let e = 0; e < ea.length; e++) {
+        const a = ea[e] * 3, b = eb[e] * 3, wa = sft[ea[e]] < 0.04 ? 0 : sft[ea[e]], wb = sft[eb[e]] < 0.04 ? 0 : sft[eb[e]], ws = wa + wb;
+        if (ws <= 0) continue;
+        const dx = x[b] - x[a], dy = x[b + 1] - x[a + 1], dz = x[b + 2] - x[a + 2], L = Math.hypot(dx, dy, dz), M = er[e] * 1.25;
+        if (L <= M) continue;
+        const f = (L - M) / L, fa = f * wa / ws, fb = f * wb / ws;
+        x[a] += dx * fa; x[a + 1] += dy * fa; x[a + 2] += dz * fa; x[b] -= dx * fb; x[b + 1] -= dy * fb; x[b + 2] -= dz * fb;
+      }
+    }
+    // the floating layer is never intruded: a loose point keeps at least 80% of its own depth above its base-body point
+    if (NI && !(s.fresh || dt <= 0)) {
+      const I = soft.inner, { pair, d0 } = s;
+      for (let u = 0; u < U; u++) {
+        if (sft[u] < 0.04 || d0[u] < 0.003) continue; const j = pair[u], o = u * 3;
+        rotV(I.IQ[j * 4], I.IQ[j * 4 + 1], I.IQ[j * 4 + 2], I.IQ[j * 4 + 3], I.bn[j * 3], I.bn[j * 3 + 1], I.bn[j * 3 + 2], _r3, 0);
+        const d = (x[o] - I.IT[j * 3]) * _r3[0] + (x[o + 1] - I.IT[j * 3 + 1]) * _r3[1] + (x[o + 2] - I.IT[j * 3 + 2]) * _r3[2], need = 0.8 * d0[u];
+        if (d < need) { x[o] += _r3[0] * (need - d); x[o + 1] += _r3[1] * (need - d); x[o + 2] += _r3[2] * (need - d); }
+      }
+    }
+    const P = s.fill.geometry.attributes.position, uid = s.uid;
+    for (let i = 0; i < uid.length; i++) { const o = uid[i] * 3; P.setXYZ(i, x[o], x[o + 1], x[o + 2]); }
+    P.needsUpdate = true;
+  }
+}
+
+// motions on normalized humanoid bones (rest = T-pose, figure faces +Z; angles in degrees, Euler XYZ)
+const D = Math.PI / 180, e = new THREE.Euler();
+const BONES = ['hips', 'spine', 'chest', 'neck', 'head', 'leftUpperArm', 'rightUpperArm', 'leftLowerArm', 'rightLowerArm', 'leftHand', 'rightHand',
+  'leftUpperLeg', 'rightUpperLeg', 'leftLowerLeg', 'rightLowerLeg', 'leftFoot', 'rightFoot', 'leftShoulder', 'rightShoulder', 'jaw'];
+const arms = (l, r, extra = {}) => Object.assign({ leftUpperArm: [0, 0, -l], rightUpperArm: [0, 0, r] }, extra);
+const sm = (x) => x * x * (3 - 2 * x);
+const MOTIONS = {
+  tpose: () => ({}),
+  // the head alone, to see the hair: a quick shake left and right that stops (the hair swings on and settles), a nod
+  shake: (t) => { const u = t % 3, k = u < 1.2 ? Math.sin(u / 1.2 * Math.PI * 3) * (1 - u / 1.2 * 0.3) : 0;
+    return { ...arms(72, 72), neck: [0, 14 * k, 0], head: [0, 22 * k, 0] }; },
+  nod: (t) => { const s = Math.sin(t * 3.2);
+    return { ...arms(72, 72), neck: [10 * s, 0, 0], head: [14 * s, 0, 0] }; },
+  // talking: the jaw (VRM humanoid jaw, v0.7) opens and closes on a syllable rhythm, the head moves a little
+  talk: (t) => { const o = Math.max(0, Math.sin(t * 11) * 0.6 + Math.sin(t * 4.3) * 0.5);
+    return { ...arms(72, 72), jaw: [13 * Math.min(1, o), 0, 0], head: [3 * Math.sin(t * 1.3), 8 * Math.sin(t * 0.7), 2 * Math.sin(t * 0.9)] }; },
+  lunge: (t) => { const u = sm(0.5 - 0.5 * Math.cos(t * 1.6));
+    return { leftUpperArm: [0, 0, -68], rightUpperArm: [0, 0, 68], leftLowerArm: [0, -12, 0], rightLowerArm: [0, 12, 0],
+      leftUpperLeg: [-75 * u, 0, -4 * u], leftLowerLeg: [85 * u, 0, 0], rightUpperLeg: [25 * u, 0, 3 * u], rightLowerLeg: [35 * u, 0, 0],
+      spine: [10 * u, 0, 0], _y: -0.16 * u }; },
+  idle: (t) => { const s = Math.sin(t * 1.7);
+    return { ...arms(72 + 2 * s, 72 + 2 * s), leftLowerArm: [0, -10, 0], rightLowerArm: [0, 10, 0], spine: [2 + s, 0, 0], chest: [s, 0, 0],
+      head: [2, 10 * Math.sin(t * 0.45), 2 * Math.sin(t * 0.7)], hips: [0, 0, 1.5 * Math.sin(t * 0.85)] }; },
+  walk: (t) => { const w = t * 6.2, p = Math.sin(w);
+    return { leftUpperArm: [20 * p, 0, -74], rightUpperArm: [-20 * p, 0, 74], leftLowerArm: [0, -14, 0], rightLowerArm: [0, 14, 0],
+      leftUpperLeg: [-26 * p, 0, 0], rightUpperLeg: [26 * p, 0, 0], leftLowerLeg: [8 + 38 * Math.max(0, -Math.cos(w - 0.6)), 0, 0], rightLowerLeg: [8 + 38 * Math.max(0, Math.cos(w - 0.6)), 0, 0],
+      spine: [3, 5 * p, 0], head: [0, -4 * p, 0], _y: 0.018 * Math.abs(Math.cos(w)) }; },
+  run: (t) => { const w = t * 10, p = Math.sin(w);
+    return { leftUpperArm: [42 * p, 0, -70], rightUpperArm: [-42 * p, 0, 70], leftLowerArm: [0, -85, 0], rightLowerArm: [0, 85, 0],
+      leftUpperLeg: [-48 * p - 10, 0, 0], rightUpperLeg: [48 * p - 10, 0, 0], leftLowerLeg: [20 + 70 * Math.max(0, -Math.cos(w - 0.5)), 0, 0], rightLowerLeg: [20 + 70 * Math.max(0, Math.cos(w - 0.5)), 0, 0],
+      spine: [12, 8 * p, 0], head: [-6, -6 * p, 0], _y: 0.05 * Math.abs(Math.cos(w)) - 0.02 }; },
+  wave: (t) => { const s = Math.sin(t * 9);
+    return { leftUpperArm: [0, 0, -72], leftLowerArm: [0, -10, 0], rightUpperArm: [0, 10, -25], rightLowerArm: [0, 0, -78 + 22 * s], rightHand: [0, 0, 10 * s],
+      head: [4, -8, -6], spine: [0, 0, 3], hips: [0, 0, -3] }; },
+  jump: (t) => { const u = (t % 1.7) / 1.7; let c = 0, y = 0, up = 0;
+    if (u < 0.3) c = sm(u / 0.3); else if (u < 0.42) c = 1 - sm((u - 0.3) / 0.12);
+    if (u >= 0.38 && u < 0.78) { const k = (u - 0.38) / 0.4; y = 0.42 * 4 * k * (1 - k); up = Math.sin(Math.PI * k); }
+    if (u >= 0.78 && u < 0.92) c = Math.sin(Math.PI * (u - 0.78) / 0.14) * 0.7;
+    return { leftUpperArm: [-30 * c, 0, -72 + 140 * up], rightUpperArm: [-30 * c, 0, 72 - 140 * up], leftLowerArm: [0, -15, 0], rightLowerArm: [0, 15, 0],
+      leftUpperLeg: [-55 * c - 10 * up, 0, 0], rightUpperLeg: [-55 * c - 10 * up, 0, 0], leftLowerLeg: [95 * c + 25 * up, 0, 0], rightLowerLeg: [95 * c + 25 * up, 0, 0],
+      leftFoot: [-40 * c, 0, 0], rightFoot: [-40 * c, 0, 0], spine: [18 * c, 0, 0], head: [-10 * c, 0, 0], _y: y - 0.2 * c }; },
+  railgun: (t) => { const u = (t % 3.2) / 3.2, a = sm(Math.min(1, u / 0.25)), back = u > 0.85 ? sm((u - 0.85) / 0.15) : 0, k = a * (1 - back);
+    const kick = (u > 0.5 && u < 0.6) ? Math.sin(Math.PI * (u - 0.5) / 0.1) : 0;
+    return { chest: [0, 22 * k, 0], spine: [0, 8 * k, 0], head: [0, -24 * k, 0], neck: [0, -6 * k, 0],
+      rightUpperArm: [0, 68 * k, 72 * (1 - k) - 4 * kick], rightLowerArm: [0, 6 * (1 - k), 0], rightHand: [-15 * kick, 0, 0],
+      leftUpperArm: [12 * k, 0, -72 + 6 * k], leftLowerArm: [0, -20 * k - 10, 0],
+      leftUpperLeg: [-14 * k, 0, -4 * k], rightUpperLeg: [10 * k, 0, 6 * k], leftLowerLeg: [8 * k, 0, 0], _shot: kick > 0 ? kick : 0, _aim: k }; },
+};
+
+// the railgun: a beam out of the right hand and arcs around the forearm
+const beam = new THREE.Mesh(new THREE.CylinderGeometry(0.012, 0.012, 1, 10, 1, true), new THREE.MeshBasicMaterial({ color: 0xbff3ff, transparent: true, opacity: 0, blending: THREE.AdditiveBlending, depthWrite: false }));
+beam.renderOrder = 3; scene.add(beam);
+const arcMat = new THREE.LineBasicMaterial({ color: 0x9feaff, transparent: true, opacity: 0, blending: THREE.AdditiveBlending, depthWrite: false });
+const arcs = Array.from({ length: 5 }, () => { const g = new THREE.BufferGeometry(); g.setAttribute('position', new THREE.BufferAttribute(new Float32Array(10 * 3), 3)); const l = new THREE.Line(g, arcMat); l.frustumCulled = false; scene.add(l); return l; });
+const vA = new THREE.Vector3(), vB = new THREE.Vector3(), dir = new THREE.Vector3(), up = new THREE.Vector3(0, 1, 0);
+function effects(pose, t) {
+  const shot = pose._shot || 0, aim = pose._aim || 0;
+  beam.material.opacity = shot * 0.95; arcMat.opacity = state.look === 'holo' ? Math.min(1, aim * (0.35 + 0.65 * shot)) * (Math.random() < 0.85 ? 1 : 0.2) : 0;
+  if (!vrm || (shot <= 0 && aim <= 0)) return;
+  vrm.humanoid.getRawBoneNode('rightLowerArm').getWorldPosition(vA); vrm.humanoid.getRawBoneNode('rightHand').getWorldPosition(vB);
+  dir.subVectors(vB, vA).normalize();
+  if (shot > 0) { const len = 7; beam.position.copy(vB).addScaledVector(dir, len / 2 + 0.05); beam.quaternion.setFromUnitVectors(up, dir); beam.scale.set(1 + 2.5 * shot, len, 1 + 2.5 * shot); }
+  for (const l of arcs) {
+    const pos = l.geometry.attributes.position.array;
+    for (let i = 0; i < 10; i++) {
+      const f = i / 9, p = vA.clone().lerp(vB, f * 1.3).addScaledVector(dir, f * 0.05);
+      p.x += (Math.random() - 0.5) * 0.09; p.y += (Math.random() - 0.5) * 0.09; p.z += (Math.random() - 0.5) * 0.09;
+      pos.set([p.x, p.y, p.z], i * 3);
+    }
+    l.geometry.attributes.position.needsUpdate = true;
+  }
+}
+
+function applyPose(t) {
+  if (!vrm) return {};
+  const pose = MOTIONS[state.motion](t);
+  for (const n of BONES) { const b = vrm.humanoid.getNormalizedBoneNode(n); if (b) b.quaternion.identity(); }
+  for (const [n, v] of Object.entries(pose)) {
+    if (n.startsWith('_')) continue;
+    const b = vrm.humanoid.getNormalizedBoneNode(n); if (!b) continue;
+    b.quaternion.setFromEuler(e.set(v[0] * D, v[1] * D, v[2] * D, 'XYZ'));
+  }
+  const hips = vrm.humanoid.getNormalizedBoneNode('hips');
+  if (hips) { hips.userData.y0 ??= hips.position.y; hips.position.y = hips.userData.y0 + (pose._y || 0); }
+  return pose;
+}
+
+// v0.7: the spring bones stepped at a fixed 1/60 s whatever the frame rate, each step with the body posed at its own time
+// (three-vrm applies a joint's drag once per call, so stepping with each frame's own dt makes hair stiffer at higher frame
+// rates, and a 30 fps frame would make both steps feel one jump); after each step every hair link is held within a cone
+// around its rest direction (VRM springs have no angle limits). three-vrm's own spring rule otherwise, so the hair moves
+// as it would in any VRM player (a solver of our own measured no faster here). When every spring is hair (its colliders
+// all on the upper body), each step refreshes the upper body's matrices once and steps the joints in chain order itself,
+// skipping the manager's dependency bookkeeping (0.84 ms a step instead of 1.31 on the test laptop).
+const SPRING_H = 1 / 60; let simT = 0, hair = [], springJoints = null, springTop = null;
+const hQ = new THREE.Quaternion();
+function findHair() {
+  hair = []; springJoints = null; springTop = null;
+  if (!vrm || !vrm.springBoneManager) return;
+  const all = [...vrm.springBoneManager.joints];
+  if (all.length && all.every(j => /^hair_/.test(j.bone.name))) { springJoints = all; springTop = vrm.humanoid.getRawBoneNode('upperChest') || vrm.humanoid.getRawBoneNode('chest'); }
+  for (const j of vrm.springBoneManager.joints) {
+    const m = /^hair_(\d+)_(\d+)$/.exec(j.bone.name); if (!m) continue;
+    hair.push({ bone: j.bone, rest: j.bone.quaternion.clone(), max: (+m[2] === 0 ? 20 : 22) * D });
+  }
+}
+function limitHair() {
+  for (const h of hair) {
+    hQ.copy(h.rest).invert().multiply(h.bone.quaternion);
+    const a = 2 * Math.acos(Math.min(1, Math.abs(hQ.w)));
+    if (a > h.max) h.bone.quaternion.copy(h.rest).slerp(h.bone.quaternion, h.max / a);
+  }
+}
+function stepVRM(dt) {
+  const sb = vrm.springBoneManager;
+  if (sb) {
+    if (t - simT > 4 * SPRING_H) simT = t - 4 * SPRING_H;   // at most four steps a frame
+    while (simT + SPRING_H <= t + 1e-9) {
+      simT += SPRING_H; applyPose(simT); vrm.humanoid.update();
+      if (springJoints) { springTop.updateWorldMatrix(true, true); for (const j of springJoints) j.update(SPRING_H); } else sb.update(SPRING_H);
+      limitHair();
+    }
+    applyPose(t);
+  }
+  vrm.humanoid.update(); if (vrm.lookAt) vrm.lookAt.update(dt); if (vrm.expressionManager) vrm.expressionManager.update();
+  if (vrm.nodeConstraintManager) vrm.nodeConstraintManager.update();
+  if (vrm.materials) for (const m of vrm.materials) m.update?.(dt);
+}
+function resetSprings() {
+  simT = t; if (!vrm || !vrm.springBoneManager) return;
+  applyPose(t); vrm.humanoid.update(); vrm.scene.updateMatrixWorld(true); vrm.springBoneManager.reset();
+}
+
+function resize() {
+  const w = stage.clientWidth, h = stage.clientHeight;
+  renderer.setSize(w, h, false); composer.setSize(w, h); camera.aspect = w / h; camera.updateProjectionMatrix();
+}
+new ResizeObserver(resize).observe(stage); resize();
+
+const clock = new THREE.Clock(); let t = 0;
+renderer.setAnimationLoop(() => {
+  const dt = Math.min(clock.getDelta(), 0.05); t += dt; uniforms.uTime.value = t;
+  const pose = applyPose(t);
+  if (vrm) { stepVRM(dt); if (state.spin === 'on') vrm.scene.rotation.y += dt * 0.5; vrm.scene.updateMatrixWorld(true); stepSoft(dt); }
+  wireMat.opacity = 0.42 + 0.05 * Math.sin(t * 13) + (Math.random() < 0.015 ? -0.25 : 0);
+  floor.rotation.y = t * 0.25;
+  effects(pose, t);
+  controls.update();
+  if (state.look === 'holo') composer.render(); else renderer.render(scene, camera);
+});
+
+document.querySelectorAll('.seg').forEach(seg => seg.addEventListener('click', ev => {
+  const b = ev.target.closest('button'); if (!b) return;
+  seg.querySelectorAll('button').forEach(x => x.setAttribute('aria-pressed', String(x === b)));
+  state[seg.dataset.group] = b.dataset.v;
+  if (seg.dataset.group === 'look') applyLook();
+  if (seg.dataset.group === 'needles') soft.needles = b.dataset.v === 'on';
+  if (seg.dataset.group === 'who') { const rigs = document.querySelectorAll('[data-group="rig"] button'); rigs.forEach(x => { x.disabled = state.who !== 'misaka' && x.dataset.v !== 'v07'; }); if (state.who !== 'misaka') { state.rig = 'v07'; rigs.forEach(x => x.setAttribute('aria-pressed', String(x.dataset.v === 'v07'))); } }
+  if (seg.dataset.group === 'rig' || seg.dataset.group === 'who') load().catch(err => { status.textContent = 'Could not load the figure: ' + err.message; });
+  if (seg.dataset.group === 'outfit') applyOutfit();
+  if (seg.dataset.group === 'motion') { t = 0; clock.getDelta(); resetSprings(); }
+}));
+
+window.__figure = { state, get vrm() { return vrm; }, camera, controls, renderer,
+  // step the motion and the spring bones for a while at 60 frames a second, without drawing (for tests)
+  simulate: (m, seconds, fps = 60) => { state.motion = m; const dt = 1 / fps; for (const s of soft.items) s.fresh = true; t = 0; resetSprings();
+    for (let i = 0; i < seconds * fps; i++) { t = i * dt; applyPose(t); stepVRM(dt); vrm.scene.updateMatrixWorld(true); stepSoft(dt); } },
+  hair: () => hair, stepVRM: (dt) => stepVRM(dt), applyPose: (time) => applyPose(time), stepSoft: (dt) => stepSoft(dt), resetSprings: () => resetSprings(), get t() { return t; }, set t(v) { t = v; },
+  soft,
+  draw: () => { composer.render(); },
+  pose: (m, time) => { state.motion = m; t = time; applyPose(time); vrm.update(0); vrm.scene.updateMatrixWorld(true); effects(MOTIONS[m](time), time); composer.render(); } };
+load().catch(err => { status.textContent = 'Could not load the figure: ' + err.message; console.error(err); });
+</script>
