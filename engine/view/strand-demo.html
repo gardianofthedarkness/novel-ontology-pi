@@ -43,6 +43,15 @@
   .hint { position: absolute; left: 10px; bottom: 8px; font-size: 11px; color: var(--dim); pointer-events: none; }
   .flash { position: absolute; right: 10px; top: 8px; font-size: 12px; color: var(--red); font-weight: 600; opacity: 0; transition: opacity .3s; pointer-events: none; }
   .fade { position: absolute; inset: 0; background: var(--bg); opacity: 0; pointer-events: none; transition: opacity .35s; }
+  .roombar { position: absolute; left: 50%; transform: translateX(-50%); bottom: max(14px, calc(env(safe-area-inset-bottom) + 14px)); z-index: 7; display: flex; flex-wrap: wrap; justify-content: center; align-items: center; gap: 8px; width: max-content; max-width: calc(100% - 32px); }
+  .roombar:empty { display: none; }
+  .roombar span { font-size: 12px; color: #d8e6ee; background: #0b1620cc; padding: 6px 10px; border-radius: 6px; }
+  .roombar button { background: #0b1620e6; }
+  @media (max-width: 560px) { .roombar span { display: none; } }
+  /* In World · Live its own bar of buttons runs along the bottom: the room's stand above it. */
+  body.live .roombar { bottom: var(--below, max(68px, calc(env(safe-area-inset-bottom) + 68px))); }
+  .stage.in-room .hint { display: none; }
+  .capture .roombar { display: none; }
   .overlay { position: absolute; inset: 0; pointer-events: none; }
   .capture .stage { position: fixed; left: 0; top: 0; width: 800px; height: 600px; aspect-ratio: auto; border: 0; border-radius: 0; z-index: 5; }
   .capture .hint, .capture .flash, .capture .fade { display: none; }
@@ -2701,6 +2710,8 @@ function buildShotStage(view, entry, palette) {
       if (hole.kind === "balcony") {
         parts.balcony = true;
         const [sx_, , sz_] = at(0, 0), outX = sx_ + du * 0.65, outZ = sz_ + dv * 0.65;
+        // Where the room view may step on it (half its size each way, in the plan's frame).
+        (parts.slabs ??= []).push({ u: outX, v: outZ, hu: along ? 1.6 : 0.65, hv: along ? 0.65 : 1.6 });
         room.add(along ? box(3.2, 0.12, 1.3, SHOT.slab, outX, y - 0.06, outZ, SHOT.ghost) : box(1.3, 0.12, 3.2, SHOT.slab, outX, y - 0.06, outZ, SHOT.ghost));
         const R = (s, h) => (along ? [sx_ + s, y + h, sz_ + dv * 1.3] : [sx_ + du * 1.3, y + h, sz_ + s]);
         room.add(lines([R(-1.6, 1.1), R(1.6, 1.1), ...Array.from({ length: 9 }, (_, n) => [R(-1.6 + n * 0.4, 0), R(-1.6 + n * 0.4, 1.1)]).flat()], SHOT.rail));
@@ -2767,41 +2778,58 @@ function buildShotStage(view, entry, palette) {
 /** A shot's facts (engine/bench/indoor-set/check.mjs), as last drawn. */
 let shotFacts = null;
 window.__shotFacts = () => shotFacts;
-/** The shot of the unit at the time shown, drawn in place of the world; false when the unit has none. */
-function renderShot(segment, entry) {
-  const unitId = segment?.scene?.id, view = unitId ? shotPlan[unitId] : null;
-  if (!shotMode || !view || !entry) return false;
-  const palette = shotPalette(unitId), key = `${view.lot}|${view.room}|${(view.part ?? []).join(',')}|${palette.name}`;
-  if (!shotStage || shotStage.key !== key) shotStage = buildShotStage(view, entry, palette);
-  if (!shotStage) return false;
+/** The shot stage of a unit's room in its light, built once (and its matrices set, so its points place before it is drawn). */
+function ensureShotStage(view, entry, palette) {
+  const key = `${view.lot}|${view.room}|${(view.part ?? []).join(',')}|${palette.name}`;
+  if (!shotStage || shotStage.key !== key) { shotStage = buildShotStage(view, entry, palette); shotStage?.scene.updateMatrixWorld(true); }
+  return shotStage;
+}
+/**
+ * At eye level, the run's own room decides where the camera stands: one of eight spots along its walls (its corners and the
+ * middles of its walls, half a metre in), each looking across the room at 1.4 m, the one that frames the most of the unit's
+ * people a metre or more away (a little preferred when it looks at the window wall, as the clip does); chosen once per unit.
+ * Trying the spots moves the camera: a caller that keeps its own camera puts it back.
+ */
+function eyePick(stage, segment, unitId) {
+  const { r, lotGroup } = stage, toScene = ([u, yy, v]) => lotGroup.localToWorld(new THREE.Vector3(u, yy, v));
+  stage.eyeChoice ??= new Map();
+  const inset = 0.5, mu = (r.u0 + r.u1) / 2, mv = (r.v0 + r.v1) / 2, spots = [[r.u0 + inset, r.v0 + inset], [r.u1 - inset, r.v0 + inset], [r.u0 + inset, r.v1 - inset], [r.u1 - inset, r.v1 - inset], [mu, r.v0 + inset], [mu, r.v1 - inset], [r.u0 + inset, mv], [r.u1 - inset, mv]];
+  const aimOf = ([u, v]) => [2 * mu - u, 2 * mv - v], winSide = SHOT_SIDES[r.outSide];
+  if (!stage.eyeChoice.has(unitId)) {
+    const here = [...pawns].filter(([id, e]) => (segment.scene.starts ?? {})[id] !== undefined && e.pawn.parent).map(([, e]) => e.pawn.position.clone().add(new THREE.Vector3(0, 1, 0)));
+    let best = 0, most = -Infinity;
+    spots.forEach((spot, v) => {
+      const a = toScene([spot[0], r.y + 1.6, spot[1]]), aim = aimOf(spot), b = toScene([aim[0], r.y + 1.4, aim[1]]);
+      camera.position.copy(a); camera.lookAt(b); camera.updateMatrixWorld();
+      const framed = here.filter((p) => { const q = p.clone().project(camera); return q.z < 1 && Math.abs(q.x) <= 0.9 && Math.abs(q.y) <= 0.9 && p.distanceTo(a) >= 1.0; }).length;
+      const toWindow = (aim[0] - spot[0]) * winSide[0] + (aim[1] - spot[1]) * winSide[1] > 0.5 ? 0.5 : 0;
+      if (framed + toWindow > most) { most = framed + toWindow; best = v; }
+    });
+    stage.eyeChoice.set(unitId, best);
+  }
+  const variant = stage.eyeChoice.get(unitId), spot = spots[variant];
+  return { variant, spot, aim: aimOf(spot) };
+}
+/**
+ * The shot of the unit at the time shown, drawn in place of the world; false when the unit has none. `manual` (the room view
+ * below): the viewer's camera in place of the shot's ({ unit, from, to, kind: "eye" | "set" }), drawn whether or not the
+ * page plays shots, and the shot's facts left as the last scripted frame had them.
+ */
+function renderShot(segment, entry, manual = null) {
+  const unitId = manual?.unit ?? segment?.scene?.id, view = unitId ? shotPlan[unitId] : null;
+  if (!(shotMode || manual) || !view || !entry) return false;
+  const palette = shotPalette(unitId);
+  if (!ensureShotStage(view, entry, palette)) return false;
   const span = unitSpan(unitId), f = span ? (time - span.start) / Math.max(1e-6, span.end - span.start) : 0.5, { r, parts, lotGroup } = shotStage;
   const toScene = ([u, yy, v]) => lotGroup.localToWorld(new THREE.Vector3(u, yy, v));
-  // At eye level, the run's own room decides where the camera stands: one of eight spots along its walls (its corners and the
-  // middles of its walls, half a metre in), each looking across the room at 1.4 m, the one that frames the most of the unit's
-  // people a metre or more away (a little preferred when it looks at the window wall, as the clip does); chosen once per unit.
   let variant = 0, eyeSpot = null;
-  if ((view.kind ?? "set") === "eye") {
-    shotStage.eyeChoice ??= new Map();
-    const inset = 0.5, mu = (r.u0 + r.u1) / 2, mv = (r.v0 + r.v1) / 2, spots = [[r.u0 + inset, r.v0 + inset], [r.u1 - inset, r.v0 + inset], [r.u0 + inset, r.v1 - inset], [r.u1 - inset, r.v1 - inset], [mu, r.v0 + inset], [mu, r.v1 - inset], [r.u0 + inset, mv], [r.u1 - inset, mv]];
-    const aimOf = ([u, v]) => [2 * mu - u, 2 * mv - v], winSide = SHOT_SIDES[r.outSide];
-    if (!shotStage.eyeChoice.has(unitId)) {
-      const here = [...pawns].filter(([id, e]) => (segment.scene.starts ?? {})[id] !== undefined && e.pawn.parent).map(([, e]) => e.pawn.position.clone().add(new THREE.Vector3(0, 1, 0)));
-      let best = 0, most = -Infinity;
-      spots.forEach((spot, v) => {
-        const a = toScene([spot[0], r.y + 1.6, spot[1]]), aim = aimOf(spot), b = toScene([aim[0], r.y + 1.4, aim[1]]);
-        camera.position.copy(a); camera.lookAt(b); camera.updateMatrixWorld();
-        const framed = here.filter((p) => { const q = p.clone().project(camera); return q.z < 1 && Math.abs(q.x) <= 0.9 && Math.abs(q.y) <= 0.9 && p.distanceTo(a) >= 1.0; }).length;
-        const toWindow = (aim[0] - spot[0]) * winSide[0] + (aim[1] - spot[1]) * winSide[1] > 0.5 ? 0.5 : 0;
-        if (framed + toWindow > most) { most = framed + toWindow; best = v; }
-      });
-      shotStage.eyeChoice.set(unitId, best);
-    }
-    variant = shotStage.eyeChoice.get(unitId);
-    const spot = spots[variant], aim = aimOf(spot), k = shotEase(shotClamp(f)), step = 0.3 * k, d = Math.hypot(aim[0] - spot[0], aim[1] - spot[1]) || 1;
+  if (!manual && (view.kind ?? "set") === "eye") {
+    const pick = eyePick(shotStage, segment, unitId), { spot, aim } = pick, k = shotEase(shotClamp(f)), step = 0.3 * k, d = Math.hypot(aim[0] - spot[0], aim[1] - spot[1]) || 1;
+    variant = pick.variant;
     eyeSpot = { from: [spot[0] + (aim[0] - spot[0]) / d * step, r.y + 1.6, spot[1] + (aim[1] - spot[1]) / d * step], to: [aim[0], r.y + shotLerp(1.45, 1.35, k), aim[1]], moved: 0.3 };
   }
-  const cam = shotCamera(view.kind ?? "set", f, variant);
-  const from = toScene(eyeSpot ? eyeSpot.from : shotPoint(r, cam.from)), to = toScene(eyeSpot ? eyeSpot.to : shotPoint(r, cam.to));
+  const cam = manual ? { set: manual.kind === "set", phase: manual.kind === "set" ? "set" : "eye" } : shotCamera(view.kind ?? "set", f, variant);
+  const from = manual ? manual.from.clone() : toScene(eyeSpot ? eyeSpot.from : shotPoint(r, cam.from)), to = manual ? manual.to.clone() : toScene(eyeSpot ? eyeSpot.to : shotPoint(r, cam.to));
   camera.position.copy(from); controls.target.copy(to); camera.lookAt(to); camera.updateMatrixWorld();
   // The set: the walls facing the camera cut low, the floors above and the window rows gone, the shell faint.
   const camLocal = lotGroup.worldToLocal(from.clone()), toCam = [camLocal.x - r.centre[0], camLocal.z - r.centre[1]];
@@ -2839,7 +2867,16 @@ function renderShot(segment, entry) {
     const away = Math.round(Math.hypot(Math.max(r.u0 - local.x, 0, local.x - r.u1), Math.max(r.v0 - local.z, 0, local.z - r.v1)) * 10) / 10;
     people.push({ id, inRoom, onBalcony, away, level: Math.abs(local.y - r.y) < 1.5 });
   }
+  // The viewer's own eye level: the walls nearly solid (stood close to, the clip's glass walls would show the city through
+  // them), for this frame only, so a scripted shot draws them as the clip does.
+  // Its camera's near plane a few centimetres off (the page's half metre cuts a wall the viewer stands by out of the frame).
+  const wallWas = SHOT.wall.opacity, nearWas = camera.near, farWas = camera.far;
+  if (manual?.kind === "eye") SHOT.wall.opacity = 0.96;
+  if (manual) { camera.near = 0.05; camera.far = 900; camera.updateProjectionMatrix(); }
   renderer.render(shotStage.scene, camera);
+  SHOT.wall.opacity = wallWas;
+  if (manual) { camera.near = nearWas; camera.far = farWas; camera.updateProjectionMatrix(); }
+  if (manual) return true;
   // How the frame holds the room: its floor's corners on the screen (the share of the frame their box covers, clipped).
   const ndc = (u, yy, v) => lotGroup.localToWorld(new THREE.Vector3(u, yy, v)).project(camera);
   const corners = [[r.u0, r.v0], [r.u1, r.v0], [r.u0, r.v1], [r.u1, r.v1]].flatMap(([u, v]) => [ndc(u, r.y, v), ndc(u, r.y + SHOT_H, v)]).filter((p) => p.z < 1);
@@ -2857,6 +2894,187 @@ function renderShot(segment, entry) {
 }
 /** A unit's span on the timeline. */
 function unitSpan(unitId) { let start = Infinity, end = -Infinity; for (const segment of segments) if (segment.scene.id === unitId && segment.kind !== "macro") { start = Math.min(start, segment.start); end = Math.max(end, segment.end); } return start < end ? { start, end } : null; }
+
+// ── The room view (the user, 2026-11-13: "in world live we don't have indoor eye level, and in replay indoor eye level
+// animation is fixed none interactable. We can bridge them") ────────────────────────────────────────────────────────────
+// A unit set in a bound room (data.shots) can be entered from the world: the camera glides from where it is up to the room's
+// window, the world gives way to the shot stage (the two share their metres, so the room stands where its building does),
+// and inside the viewer stands at eye level, 1.6 m: dragging looks round, a tap on the floor steps there, the arrow keys or
+// WASD walk, all kept to the room and its balcony; Cut open swaps to the set (the room cut low, orbited), Eye level back.
+// Leaving glides out again to the camera the world had. In the replay's shots (`?shots`) a drag takes the shot's camera the
+// same way, and Resume the shot gives it back. The story plays on throughout; a capture never uses it (check.mjs films the
+// shots as scripted).
+const ROOM_EYE = 1.6, ROOM_WALK = 1.4, ROOM_IN = 2.2, ROOM_INSIDE = 1.1, ROOM_LEAVE = 0.9, ROOM_OUT = 1.6;
+/** The viewer in a room: { unit, phase: enter-city | enter-room | inside | leave-room | leave-city, kind: eye | set, pos [u, v],
+ *  yaw, pitch (the plan's frame), walk, saved (the world's camera), shot (taken from the replay's shot) }; null outside. */
+let room = null, roomNow = null;
+/** Where the viewer stands in a room (for checking the page): its phase, view, spot and heading; null outside. */
+window.__roomView = () => room && { unit: room.unit, phase: room.phase, kind: room.kind, shot: !!room.shot, pos: room.pos.map((n) => Math.round(n * 100) / 100), yaw: Math.round(room.yaw * 100) / 100,
+  room: shotStage ? [shotStage.r.u0, shotStage.r.u1, shotStage.r.v0, shotStage.r.v1].map((n) => Math.round(n * 100) / 100) : null, slabs: shotStage?.parts.slabs ?? [] };
+const roomBar = document.createElement("div"); roomBar.className = "roombar"; host.append(roomBar);
+const roomKeys = new Set(), roomPointer = { id: null, x: 0, y: 0, yaw: 0, pitch: 0, moved: 0 };
+const sameRoom = (a, b) => { const x = shotPlan[a], y = shotPlan[b]; return !!x && !!y && x.lot === y.lot && x.room === y.room && (x.part ?? []).join(",") === (y.part ?? []).join(","); };
+const roomTell = (inside) => { if (parent !== window) parent.postMessage({ type: "room", inside, unit: room?.unit ?? null }, location.origin); };
+/** The stage the room view stands in (the unit's room, in the unit's light). */
+const roomStage = (entry) => ensureShotStage(shotPlan[room.unit], entry, shotPalette(room.unit));
+/** A dip to the page's dark between the world and the room (the one cut of the glide), then `then`. */
+function roomDip(then) {
+  if (room.dipping) return; room.dipping = true;
+  const fade = $("fade"); fade.style.opacity = "1";
+  setTimeout(() => { if (room) { room.dipping = false; then(); } fade.style.opacity = ""; }, 360);
+}
+/** Where the room view may stand: the room (a quarter metre off its walls) or a balcony slab. */
+function roomAllowed(stage, u, v) {
+  const { r, parts } = stage, m = 0.25;
+  if (u >= r.u0 + m && u <= r.u1 - m && v >= r.v0 + m && v <= r.v1 - m) return true;
+  return (parts.slabs ?? []).some((slab) => Math.abs(u - slab.u) <= slab.hu - 0.15 && Math.abs(v - slab.v) <= slab.hv - 0.15);
+}
+function enterRoom() {
+  const { segment, entry } = roomNow ?? {}, unit = segment?.scene?.id;
+  if (room || !unit || !shotPlan[unit] || !entry || capture) return;
+  const stage = ensureShotStage(shotPlan[unit], entry, shotPalette(unit)); if (!stage) return;
+  const saved = { position: camera.position.clone(), target: controls.target.clone() };
+  const { spot, aim } = eyePick(stage, segment, unit);
+  camera.position.copy(saved.position); camera.lookAt(saved.target);
+  room = { unit, phase: "enter-city", since: performance.now(), kind: "eye", pos: [...spot], yaw: Math.atan2(aim[1] - spot[1], aim[0] - spot[0]), pitch: -0.06, walk: null, saved, minD: controls.minDistance, maxD: controls.maxDistance, follow };
+  follow = false; glide = null; pinGlide = null; focusGlide = null; controls.enabled = false;
+  host.classList.add("in-room"); roomTell(true);
+}
+function leaveRoom() {
+  if (!room) return;
+  if (room.shot) { endRoom(); return; }
+  if (room.phase !== "inside") return;
+  if (room.kind === "set") { room.kind = "eye"; controls.enabled = false; }
+  room.phase = "leave-room"; room.since = performance.now(); room.walk = null;
+}
+function endRoom() {
+  if (!room) return;
+  controls.enabled = true; controls.minDistance = room.minD ?? controls.minDistance; controls.maxDistance = room.maxD ?? controls.maxDistance;
+  if (room.saved && !room.shot) { camera.position.copy(room.saved.position); controls.target.copy(room.saved.target); camera.lookAt(controls.target); }
+  room = null; roomKeys.clear(); roomPointer.id = null; host.classList.remove("in-room"); roomTell(false);
+}
+/** Eye level ⇄ the set: the set orbits the room as the clip's set shot looks at it; eye level stands where it last stood. */
+function roomSwapKind() {
+  const { entry } = roomNow ?? {}; if (!room || room.phase !== "inside" || !entry) return;
+  const stage = roomStage(entry); if (!stage) return;
+  const toScene = (p) => stage.lotGroup.localToWorld(new THREE.Vector3(...p));
+  if (room.kind === "eye") {
+    room.kind = "set"; room.walk = null;
+    camera.position.copy(toScene(shotPoint(stage.r, shotCamera("set", 0.5).from))); controls.target.copy(toScene(shotPoint(stage.r, [4.1, 0.5, 0])));
+    controls.minDistance = 2.5; controls.maxDistance = 60; controls.enabled = true; controls.update();
+  } else { room.kind = "eye"; controls.enabled = false; }
+}
+/** The replay's shot taken by a drag: eye level where the shot's camera stands, or the set orbited from where it looks. */
+function takeShot() {
+  const { segment, entry } = roomNow ?? {}, unit = segment?.scene?.id;
+  if (room || capture || !shotMode || !unit || !shotPlan[unit] || !entry) return;
+  const stage = ensureShotStage(shotPlan[unit], entry, shotPalette(unit)); if (!stage) return;
+  const kind = (shotPlan[unit].kind ?? "set") === "eye" ? "eye" : "set";
+  const at = stage.lotGroup.worldToLocal(camera.position.clone()), aim = stage.lotGroup.worldToLocal(controls.target.clone()).sub(at);
+  room = { unit, shot: true, phase: "inside", since: performance.now(), kind, pos: [at.x, at.z], yaw: Math.atan2(aim.z, aim.x), pitch: Math.atan2(aim.y, Math.hypot(aim.x, aim.z)), walk: null, minD: controls.minDistance, maxD: controls.maxDistance };
+  if (kind === "set") { controls.minDistance = 2.5; controls.maxDistance = 60; controls.enabled = true; } else controls.enabled = false;
+  host.classList.add("in-room"); roomTell(true);
+}
+/**
+ * A tap: walk toward the floor tapped, as far as the room (or its balcony) lets, short of its wall. At eye level a level look
+ * meets the floor three or four metres off, past a small room's far wall, so a tap is a heading more often than a spot.
+ */
+function roomStep(event) {
+  const { entry } = roomNow ?? {}; if (!room || room.phase !== "inside" || room.kind !== "eye" || !entry) return;
+  const stage = roomStage(entry); if (!stage) return;
+  const box = renderer.domElement.getBoundingClientRect(), ndc = new THREE.Vector2(((event.clientX - box.left) / box.width) * 2 - 1, -((event.clientY - box.top) / box.height) * 2 + 1);
+  const ray = new THREE.Raycaster(); ray.setFromCamera(ndc, camera);
+  // Above the horizon, the heading the tap points along, a long way off.
+  const hit = ray.ray.intersectPlane(new THREE.Plane(new THREE.Vector3(0, 1, 0), -stage.r.y), new THREE.Vector3()) ?? ray.ray.at(30, new THREE.Vector3());
+  const target = stage.lotGroup.worldToLocal(hit), [u0, v0] = room.pos;
+  let last = 0;
+  for (let n = 1; n <= 80; n++) { const t = n / 80; if (!roomAllowed(stage, u0 + (target.x - u0) * t, v0 + (target.z - v0) * t)) break; last = t; }
+  // Short of a wall by half a metre (a wall is in the way, not the floor tapped), so the step ends facing the room.
+  const span = Math.hypot(target.x - u0, target.z - v0), stop = last < 1 ? Math.max(0, last - 0.5 / Math.max(span, 1e-6)) : 1;
+  const reach = [u0 + (target.x - u0) * stop, v0 + (target.z - v0) * stop], distance = Math.hypot(reach[0] - u0, reach[1] - v0);
+  if (distance < 0.1) return;
+  room.walk = { from: [u0, v0], to: reach, t: 0, seconds: Math.max(0.25, distance / ROOM_WALK) };
+}
+renderer.domElement.addEventListener("pointerdown", (event) => {
+  if (capture) return;
+  if (!room && shotMode) takeShot();
+  if (!room || room.phase !== "inside" || room.kind !== "eye") return;
+  Object.assign(roomPointer, { id: event.pointerId, x: event.clientX, y: event.clientY, yaw: room.yaw, pitch: room.pitch, moved: 0 });
+});
+addEventListener("pointermove", (event) => {
+  if (roomPointer.id !== event.pointerId || !room || room.kind !== "eye") return;
+  const dx = event.clientX - roomPointer.x, dy = event.clientY - roomPointer.y;
+  roomPointer.moved = Math.max(roomPointer.moved, Math.hypot(dx, dy));
+  // The room is grabbed, as a photo sphere is: dragging right turns the view left.
+  room.yaw = roomPointer.yaw - dx * 0.0045; room.pitch = Math.max(-1.1, Math.min(1.1, roomPointer.pitch + dy * 0.0035));
+});
+const roomLift = (event) => { if (roomPointer.id !== event.pointerId) return; roomPointer.id = null; if (roomPointer.moved < 6 && event.type === "pointerup") roomStep(event); };
+addEventListener("pointerup", roomLift); addEventListener("pointercancel", roomLift);
+const ROOM_KEYS = { KeyW: "f", ArrowUp: "f", KeyS: "b", ArrowDown: "b", KeyA: "l", ArrowLeft: "l", KeyD: "r", ArrowRight: "r" };
+addEventListener("keydown", (event) => { if (room?.phase === "inside" && room.kind === "eye" && ROOM_KEYS[event.code]) { roomKeys.add(ROOM_KEYS[event.code]); event.preventDefault(); } if (room && event.code === "Escape") leaveRoom(); });
+addEventListener("keyup", (event) => { if (ROOM_KEYS[event.code]) roomKeys.delete(ROOM_KEYS[event.code]); });
+addEventListener("blur", () => roomKeys.clear());
+roomBar.addEventListener("click", (event) => {
+  const what = event.target.closest("button")?.dataset.room;
+  if (what === "enter") enterRoom(); else if (what === "leave") leaveRoom(); else if (what === "kind") roomSwapKind();
+});
+/** The buttons over the stage for the room view, as the unit and the view stand. */
+function roomBarShow(segment) {
+  const unit = segment?.scene?.id, here = !capture && !!unit && !!shotPlan[unit];
+  const state = room ? `${room.phase}|${room.kind}|${!!room.shot}` : shotMode && here ? "shot" : here ? "can" : "none";
+  if (state === roomBar.dataset.state) return; roomBar.dataset.state = state;
+  roomBar.innerHTML = room?.phase === "inside"
+    ? `<span>${room.kind === "eye" ? "drag to look · tap the floor to step" : "drag to turn · pinch or scroll to zoom"}</span><button type="button" data-room="kind">${room.kind === "eye" ? "Cut open" : "Eye level"}</button><button type="button" data-room="leave">${room.shot ? "Resume the shot" : "Leave the room"}</button>`
+    : room ? "" : state === "shot" ? "<span>drag to take the camera</span>" : state === "can" ? '<button type="button" data-room="enter">Enter the room</button>' : "";
+}
+/** The world drawn as the frame draws it, but with the camera the room view sets (no orbit, no follow). */
+function roomWorld(dt) { if (liveMode) showBorn(); capLabels(); rippleTick(dt); ceilingTick(dt); inkTick(); renderer.render(world, camera); ceilingRestore(); }
+/** Each frame: the room view draws the frame and returns true, or returns false (the world, or the replay's shot, draws). */
+function roomFrame(segment, entry, dt) {
+  roomNow = { segment, entry };
+  roomBarShow(segment);
+  if (!room) return false;
+  // The story moved on to another room (or none): a taken shot is given back, the room is left.
+  if (!sameRoom(room.unit, segment.scene.id)) { if (room.shot) { endRoom(); return false; } if (room.phase === "inside") leaveRoom(); }
+  else room.unit = segment.scene.id;
+  const stage = roomStage(entry); if (!stage) { endRoom(); return false; }
+  const { r } = stage, L = (u, yy, v) => stage.lotGroup.localToWorld(new THREE.Vector3(u, yy, v));
+  // The glides by the clock (a frame's own step is capped, so a slow device would glide the slower).
+  const elapsed = (performance.now() - room.since) / 1000;
+  const share = (seconds) => shotEase(shotClamp(elapsed / seconds));
+  const eyeFrom = () => L(room.pos[0], r.y + ROOM_EYE, room.pos[1]);
+  const eyeTo = () => { const c = Math.cos(room.pitch); return L(room.pos[0] + c * Math.cos(room.yaw), r.y + ROOM_EYE + Math.sin(room.pitch), room.pos[1] + c * Math.sin(room.yaw)); };
+  const window_ = (d, h) => L(r.centre[0] + r.out[0] * (r.depth / 2 + d), r.y + h, r.centre[1] + r.out[1] * (r.depth / 2 + d));
+  const middle = () => L(r.centre[0], r.y + 1.3, r.centre[1]);
+  const draw = (from, to, kind) => renderShot(segment, entry, { unit: room.unit, from, to, kind });
+  if (room.phase === "enter-city" || room.phase === "leave-city") {
+    // In the world: from the world's camera up past the building to the room's window, three metres out (or back).
+    const entering = room.phase === "enter-city", f = share(entering ? ROOM_IN : ROOM_OUT), e = entering ? f : 1 - f;
+    const p0 = room.saved.position, p1 = window_(24, 7), p2 = window_(3, ROOM_EYE), a = p0.clone().lerp(p1, e), b = p1.clone().lerp(p2, e);
+    camera.position.copy(a.lerp(b, e)); controls.target.copy(room.saved.target.clone().lerp(middle(), Math.min(1, e * 1.4))); camera.lookAt(controls.target);
+    roomWorld(dt);
+    if (f >= 1) { if (entering) roomDip(() => { room.phase = "enter-room"; room.since = performance.now(); }); else endRoom(); }
+    return true;
+  }
+  if (room.phase === "enter-room" || room.phase === "leave-room") {
+    // In the room's stage: through the window to where the eye stands (or back out to the window).
+    const entering = room.phase === "enter-room", f = share(entering ? ROOM_INSIDE : ROOM_LEAVE), e = entering ? f : 1 - f;
+    draw(window_(3, ROOM_EYE).lerp(eyeFrom(), e), middle().lerp(eyeTo(), e), "eye");
+    if (f >= 1) { if (entering) { room.phase = "inside"; room.since = performance.now(); } else roomDip(() => { room.phase = "leave-city"; room.since = performance.now(); }); }
+    return true;
+  }
+  if (room.kind === "set") { controls.update(); draw(camera.position.clone(), controls.target.clone(), "set"); return true; }
+  // Inside at eye level: a step under way, then the keys.
+  if (room.walk) { room.walk.t += dt; const w = shotEase(shotClamp(room.walk.t / room.walk.seconds)); room.pos = [shotLerp(room.walk.from[0], room.walk.to[0], w), shotLerp(room.walk.from[1], room.walk.to[1], w)]; if (w >= 1) room.walk = null; }
+  if (roomKeys.size) {
+    room.walk = null;
+    const ahead = (roomKeys.has("f") ? 1 : 0) - (roomKeys.has("b") ? 1 : 0), aside = (roomKeys.has("r") ? 1 : 0) - (roomKeys.has("l") ? 1 : 0), c = Math.cos(room.yaw), s = Math.sin(room.yaw), step = ROOM_WALK * dt;
+    const u = room.pos[0] + (c * ahead - s * aside) * step, v = room.pos[1] + (s * ahead + c * aside) * step;
+    if (roomAllowed(stage, u, v)) room.pos = [u, v]; else if (roomAllowed(stage, u, room.pos[1])) room.pos = [u, room.pos[1]]; else if (roomAllowed(stage, room.pos[0], v)) room.pos = [room.pos[0], v];
+  }
+  draw(eyeFrom(), eyeTo(), "eye");
+  return true;
+}
 
 function frame(now) {
   const dt = Math.min(0.1, (now - last) / 1000); last = now;
@@ -3032,7 +3250,7 @@ function frame(now) {
   decor(time); blinkProposal(now); blinkSampled(now); playSettle(now);
   if (seeing && !sheetView) seeThrough(entry, segment, now, dt, elapsed);
   if (focusGlide) { const u = Math.min(1, (performance.now() - focusGlide.start) / 600), e = u * u * (3 - 2 * u); controls.target.lerpVectors(focusGlide.fromTarget, focusGlide.toTarget, e); camera.position.lerpVectors(focusGlide.fromCamera, focusGlide.toCamera, e); if (u >= 1) focusGlide = null; }
-  if (sheetView) renderer.render(sheetView.scene, sheetView.camera); else if (renderShot(segment, entry)) { /* the shot stage drew the frame */ } else { controls.update(); if (liveMode) showBorn(); capLabels(); orbitTick(); rippleTick(dt); ceilingTick(dt); inkTick(); renderer.render(world, camera); ceilingRestore(); } if (!shownNotice) { shownNotice = true; document.querySelector(".notice")?.remove(); } requestAnimationFrame(frame);
+  if (sheetView) renderer.render(sheetView.scene, sheetView.camera); else if (roomFrame(segment, entry, dt)) { /* the room view drew the frame */ } else if (renderShot(segment, entry)) { /* the shot stage drew the frame */ } else { controls.update(); if (liveMode) showBorn(); capLabels(); orbitTick(); rippleTick(dt); ceilingTick(dt); inkTick(); renderer.render(world, camera); ceilingRestore(); } if (!shownNotice) { shownNotice = true; document.querySelector(".notice")?.remove(); } requestAnimationFrame(frame);
 }
 
 /**
@@ -3130,6 +3348,8 @@ if (liveMode) {
     // Unframed (a page on its own, or a check), its own camera messages are not a world view's.
     if (parent === window && event.data?.type === "camera") return;
     if (event.data?.type === "follow") { follow = !!event.data.on; return; }
+    // How much of the frame's foot the world view's own buttons cover: the room view's stand above them.
+    if (event.data?.type === "inset") { document.body.style.setProperty("--below", `${Math.max(0, Number(event.data.bottom) || 0)}px`); return; }
     if (event.data?.type === "portraits") { portraitsArrived(event.data.portraits); return; }
     if (event.data?.type === "sky") { skyUnits = event.data.units ?? null; return; }
     if (event.data?.type === "daylightMode") { daylight.on = !!event.data.on && !capture; if (!daylight.on) { world.background.set(0x060c12); world.fog?.color.set(0x060c12); defaultFog.color.set(0x060c12); ambient.color.set(0xffffff); ambient.intensity = 0.75; sun.color.set(0xffffff); sun.intensity = 0.75; sun.position.set(30, 70, 20); daylight.sky.set(0x060c12); daylight.day = 0; daylight.phase = null; daylight.said = null; for (const object of [snowFall.object, rainFall.object, snowSheet, wetSheet, cloudLayer, sunPatch, ...shafts]) object.visible = false; for (const key of WX) wx[key] = 0; flash.level = 0; daylight.ambientI = 0.75; defaultFog.near = baseFog.near; defaultFog.far = baseFog.far; parent.postMessage({ type: "daylight", phase: "night", hour: null }, origin); } return; }
@@ -3606,6 +3826,8 @@ if (capture) {
       if (storySky && !daylight.on) { daylight.on = true; daylight.force = null; daylight.snap = 3; }
       // `shot`: the unit's shot (the shot stage, data.shots) in place of the world from now on, or the world again (false).
       if (shot !== null) shotMode = !!shot;
+      // A capture films as scripted: no viewer in a room.
+      if (room) endRoom();
       world.fog = vague ? new THREE.Fog(0x060c12, vague.near, vague.far) : defaultFog;
       time = at ?? (eventStart.get(`${scene}|${event}`) ?? 0) + (play ?? 0.02); quiet = play === null && at === null; seeing = at !== null; shownPlace = place; glide = null; hiddenThings = new Set(hide); sheetView = null;
       // Just before this event's own hit: the buildings as they stood.

@@ -875,7 +875,7 @@
   // every moment since the one shown before it, so none is skipped; a phone keeps the time between for drawing and for
   // the viewer's finger. While a finger is down, or just lifted, the swap waits: it would cut the gesture off.
   const GAP = 5000, SETTLE = 1500;
-  let shown = null, next = null, page = 0, shownPage = 0, wanted = 0, epoch = null, shownMoment = null, camera = null, touching = false, ready = false, lastLoad = 0, lastTouch = 0, swapTimer = 0, loadTimer = 0;
+  let shown = null, next = null, page = 0, shownPage = 0, wanted = 0, epoch = null, shownMoment = null, camera = null, touching = false, inRoom = false, ready = false, lastLoad = 0, lastTouch = 0, swapTimer = 0, loadTimer = 0;
   /** A frame goes: told first to let its WebGL context go (a phone allows only a few), then emptied and removed. */
   const retire = (frame) => { try { frame.contentWindow?.postMessage({ type: "dispose" }, origin); } catch {} setTimeout(() => { frame.src = "about:blank"; frame.remove(); }, 100); };
   /** A frame that could not start its 3D view (or never got ready): dropped, the shown one stays, and the moment is loaded again. */
@@ -923,18 +923,25 @@
   const swap = () => {
     clearTimeout(swapTimer);
     if (!next || !ready) return;
-    const wait = touching ? SETTLE : lastTouch + SETTLE - Date.now();
+    // A viewer inside a room (the frame's room view) keeps this frame: the next moment comes in once they leave.
+    const wait = touching || inRoom ? SETTLE : lastTouch + SETTLE - Date.now();
     if (wait > 0) { swapTimer = setTimeout(swap, wait); return; }
     ready = false;
     if (camera) next.contentWindow.postMessage({ ...camera, type: "camera" }, origin);
     next.contentWindow.postMessage({ type: "underground", on: $("under").getAttribute("aria-pressed") === "true" }, origin);
     next.contentWindow.postMessage({ type: "traces", on: tracesOn }, origin); next.contentWindow.postMessage({ type: "strand", fork: strandPick }, origin); next.contentWindow.postMessage({ type: "cuts", on: cutsOn }, origin); next.contentWindow.postMessage({ type: "reading", line: readingLine }, origin);
-    const old = shown; shown = next; next = null; shownMoment = shown.moment ?? shownMoment; shownPage = page;
+    const old = shown; shown = next; next = null; inRoom = false; sendInset(shown); shownMoment = shown.moment ?? shownMoment; shownPage = page;
     shown.classList.remove("waiting"); $("empty").hidden = true;
     if (old) setTimeout(() => retire(old), 450);
     if (cardAt >= 0) setTimeout(() => { sendClouds(); sendDev(); }, 300);
     queue();
   };
+  /** How much of the frame's foot the bar of buttons covers (it wraps on a narrow window): the frame's room view stands above it. */
+  function sendInset(frame) {
+    const bar = document.querySelector("nav.bar"); if (!frame || !bar) return;
+    frame.contentWindow?.postMessage({ type: "inset", bottom: Math.ceil(innerHeight - bar.getBoundingClientRect().top + 10) }, origin);
+  }
+  addEventListener("resize", () => sendInset(shown));
   /** Load the newest moment wanted, when none is loading and the last load was long enough ago. */
   const queue = () => {
     clearTimeout(loadTimer);
@@ -953,6 +960,7 @@
       if ($("skyword")) $("skyword").textContent = message.daypart ? `${message.daypart}${message.weather && !["clear", "unknown"].includes(message.weather) ? ` · ${skyName(message.weather, message.strength, message.wind)}` : ""}${{ breezy: " · windy", gale: message.weather === "snow" && message.strength === "heavy" ? "" : " · a gale" }[message.wind] ?? ""}${message.lying ? " · snow on the ground" : ""}` : "";
     }
     if (message?.type === "touch" && shown && event.source === shown.contentWindow) { touching = message.active; lastTouch = Date.now(); if (!touching) swap(); }
+    if (message?.type === "room" && shown && event.source === shown.contentWindow) { inRoom = !!message.inside; lastTouch = Date.now(); if (!inRoom) swap(); }
     if (message?.type === "interact" && shown && event.source === shown.contentWindow) lastTouch = Date.now();
     // A way tapped in the world: who, which card, and that card's Jev steps.
     if (message?.type === "way" && shown && event.source === shown.contentWindow) {
