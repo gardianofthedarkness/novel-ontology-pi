@@ -15,7 +15,8 @@ assigned to its person by EM (`README.md`; design §8.6, figures in the warehous
 | v0.5 | stable (tag `figures-v0.5.0`) | the v0.3 one-shot figure kept whole as the surface, its generated base body underneath as a hidden layer (`layer_pack.py`); in the viewer each point's distance from the base body is its layer thickness: thin points stay on the skeleton, thick points hang on soft springs (stretch limit, 25% edge limit, leg and torso capsules), fast CPU skinning (`viewer/index.html`) |
 | v0.6 | stable (tag `figures-v0.6.0`) | v0.5 + rigid needles: the base body moves by dual-quaternion blending (rotation about each joint, no collapse); thin skin rides its nearest base-body point with its offset turned with it; loose cloth never sinks below 80% of its own depth above the body. Thigh's narrowest point in a deep lunge 71% → 92% of rest; ~21 ms a frame on a laptop. The viewer's "Base layer" switch compares with v0.5 |
 | v0.7 | stable (tag `figures-v0.7.0`) | v0.6 + a face and hair of their own, for any character from a setting picture (`make_figure.py`, below). Skull lock (`head_lock.py`, on the Head mesh only): the head owns the head, the neck only the column under a jaw plane; the clothes and the base body keep v0.6's weights (the first v0.7 build also rewrote them by height and, in a T-pose, caught the arms: the arms and shoulders ballooned). Face points (`face_render.py`, `face_marks.py`: RTMW's 68 face points on grey renders of the head, 68 of 68 found in all three views) cast onto the mesh (`face_rig.py`); the head pivot moved up to the skull base; a VRM `jaw` bone hinged between the ears. Hair (`hair_rig.py`): the portrait's labels mapped onto the head through the face points, a solid-or-sheet test for cheeks under side locks, ten spring chains from the scalp line (three bangs, seven around), hair touching skin eased into its chain over 2 cm (no cut). Viewer: springs at a fixed 1/60 s posed at their own time, cone limits per link. See "v0.7 measured" |
-| **v0.8** | **stable** (tag `figures-v0.8.0`) | v0.7 + carved eyes (`eye_shapes.py`, `eye_parts.py`; two new `make_figure.py` steps). The head stays v0.7's triangles; each eye is its own quad part, built as a sculptor carves an eye in plain stone so a one-colour hologram can show it: an eyeball dome, the iris a cut ring and a dish, the pupil a drilled hole, the highlights bumps, the lash and the lower lid rims. Placed from the portrait (anime-face-detector's 28 points; iris, pupil, highlights and lash read from the pixels) on a smooth surface fitted to the skin around the eye (hair and thin sheets of bangs skipped); the two lids are smooth curves meeting at sharp corner nodes. A socket is cut: the head's triangles hidden under the eye split once and the skin pushed behind it; eye points the skin still covers are moved out in front of it. Viewer: the eyes drawn in the hologram's own style (the head's dark fill, fresnel rim and scanlines, the figure's line material), lines only where the form breaks plus quad loops marked in the UV map at the head's own spacing; in the white look they are plaster. See "v0.8 measured" |
+| v0.8 | stable (tag `figures-v0.8.0`) | v0.7 + carved eyes (`eye_shapes.py`, `eye_parts.py`; two new `make_figure.py` steps). The head stays v0.7's triangles; each eye is its own quad part, built as a sculptor carves an eye in plain stone so a one-colour hologram can show it: an eyeball dome, the iris a cut ring and a dish, the pupil a drilled hole, the highlights bumps, the lash and the lower lid rims. Placed from the portrait (anime-face-detector's 28 points; iris, pupil, highlights and lash read from the pixels) on a smooth surface fitted to the skin around the eye (hair and thin sheets of bangs skipped); the two lids are smooth curves meeting at sharp corner nodes. A socket is cut: the head's triangles hidden under the eye split once and the skin pushed behind it; eye points the skin still covers are moved out in front of it. Viewer: the eyes drawn in the hologram's own style (the head's dark fill, fresnel rim and scanlines, the figure's line material), lines only where the form breaks plus quad loops marked in the UV map at the head's own spacing; in the white look they are plaster. See "v0.8 measured" |
+| **v0.9** | **stable** (tag `figures-v0.9.0`) | v0.8 + the whole face, automatic: every organ is read from the portrait and built as a basic structure aligned to the head, the same way for every character (no per-character settings; `make_figure.py`'s `eyes` step builds them all). Brows: ridges along the drawing's strokes, following the real skin. Nose: the face's own structure, not a bump on it: the two cheek planes (the face's faired surface) run together into a bridge ridge from just under the eyes to a sharp tip, and a short underside cuts back to the face; the face's axis runs from between the inner eye corners to the mouth, the tip goes where the head's own nose stands furthest out and keeps its height, the width follows the eyes' spacing. The region is rebuilt in the face's own triangles (a constrained triangulation at the face's triangle size, the bridge and the tip's cross line kept as edges, easing onto the face around it; locks of hair fused to the face left standing; the face the old tip hid rebuilt too); its weights blend from the rim. Mouth: the drawing's line rebuilt in 3D, as the modelling tutorial does: a strip on the skin from the portrait's mouth stroke, thin in the middle and heavier toward the corners, ends rounded; it glows in the hologram, ink-dark in the white look. See "v0.9 measured" |
 
 ## v0.7 measured (Misaka, against v0.6)
 
@@ -54,6 +55,24 @@ near the eye made a dense patch of lines that glowed around it in the hologram. 
 lit parts and no longer looked like the hologram; they now use its fill and lines. The eye points behind the skin were
 first 102 of 1311 (the lash wing past the corners where the face curves back, and the eyeball's edge under large
 triangles crossing the opening).
+
+## v0.9 measured (the whole face, Misaka and Index)
+
+| Test | Misaka | Index |
+|---|---|---|
+| Built with no per-character settings | yes (`eye_parts.py`) | yes, end to end (`make_figure.py --from=eyes_read`) |
+| Nose tip: the head's own, from the portrait's nose point | 6.8 / 18.2 px off; 9.0 mm high | 19.6 / 3.2 px off; 6.8 mm high |
+| Face triangles rebuilt for the nose (+ under the old tip); new points | 43 (+27); 23 | 27 (+4); 11 |
+| Organ points under the skin | 5 (v0.8's eyeball edge) | 0 |
+| Jaw open: head edges stretched past 1.25×; organ edges | 72; 0 (v0.8: 72) | 39; 0 (v0.8: 39) |
+| Skull drift in nod, look up, turn, tilt | 0 mm | 0 mm |
+
+Tried and dropped on the way (2026-11-14): a mouth built as the tutorial's inside (a slit in oval loops, a dark cavity
+and teeth, the face cut open under it): it read as a disc set on the face; set into the face's triangles it fitted, but
+the face's large triangles and the head's own sculpted mouth crease (off the portrait's line on Index) made the cut
+fragile, and the drawing, not the inside, is what makes the anime look. A teardrop nose mark copied from the tutorial's
+character: our portraits draw no such mark. A nose as a diamond of loops lifted off a fitted surface: a bump on a flat
+face, where the nose is the cheeks' own structure.
 
 ## v0.5 in order
 
@@ -139,6 +158,17 @@ Tokens live in Windows Credential Manager (`vault.py`), never in files.
 - The hair droops 7 mm from its drawn shape at rest; the spring values and cone limits are tuned on one character.
 - No eye bones (the eyes are part of the head mesh; gaze would not show on the wireframe).
 - RTMW found all 68 face points on this grey head; a head where it fails has no geometric fallback yet.
+
+## Known issues at v0.9
+
+- The mouth is a line on the head: it does not open with the jaw (the jaw still moves the chin and the face under the
+  mouth).
+- The nose's region is rebuilt at the face's own triangle size; a head with very large face triangles gives a coarse
+  nose. Its tip follows the head's own nose, so a head whose nose sits off the portrait's (Index: 20 px to one side) keeps
+  its own place.
+- The brows are raised ridges, still the v0.8-era stroke reading; they are not yet checked against the drawing as the
+  mouth is.
+- Everything else as at v0.8 (eyes fixed in the drawn expression; anime-face-detector needed).
 
 ## Known issues at v0.8
 

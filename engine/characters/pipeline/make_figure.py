@@ -10,8 +10,8 @@ usage: python make_figure.py <setting.png> <out-dir> --name=<Name> [--portrait=<
   standing full-length one as --full. Every step writes into <out-dir> and is skipped when its output is there, so a run
   can be resumed; --from reruns from a step on, --only runs one step. The Hugging Face token comes from the system's
   credential store (vault.py), never from a file. Seven GPU calls in all (four image edits, three shapes).
-  The result: <out-dir>/organs.vrm (+ .blend; figure.vrm is the same without the carved eyes), check.json (check_head.py),
-  figure.txt (gzip+base64, for the viewer). --portrait-py: the Python with anime-face-detector (for the eyes)."""
+  The result: <out-dir>/organs.vrm (+ .blend; figure.vrm is the same without the face's organs), check.json (check_head.py),
+  figure.txt (gzip+base64, for the viewer). --portrait-py: the Python with anime-face-detector (for the face's organs)."""
 import base64, gzip, json, os, shutil, subprocess, sys, time
 HERE = os.path.dirname(os.path.abspath(__file__))
 args = [a for a in sys.argv[1:] if not a.startswith('--')]
@@ -90,10 +90,11 @@ STEPS = [
     ('face_marks', P('face', 'marks.json'), lambda: run([PY, os.path.join(HERE, 'face_marks.py'), P('face'), '--portrait=' + P('portrait.png')])),
     ('face_rig', P('face.blend'), lambda: blender('face_rig.py', P('face'), P('face.blend'), blend=P('lock.blend'))),
     ('hair', P('figure.blend'), lambda: blender('hair_rig.py', P('prep_portrait'), P('face'), P('figure.blend'), blend=P('face.blend'))),
-    # the eyes (v0.8): read from the portrait with an anime face detector (in the portrait tool's Python), then carved as
-    # quad parts on the head, a socket cut for them
+    # the face's organs, all automatic: read from the portrait with an anime face detector (in the portrait tool's
+    # Python), then built on the head as structure aligned to it: the eyes carved (a socket cut for them), the brows as
+    # ridges, the nose rebuilt in the face as the cheek planes meeting in a bridge, the mouth as the drawing's line
     ('eyes_read', P('eyes', 'eyes.json'), lambda: run([PORTRAIT_PY, os.path.join(HERE, 'eye_shapes.py'), P('portrait.png'), P('eyes')])),
-    ('eyes', P('organs.blend'), lambda: blender('eye_parts.py', P('eyes', 'eyes.json'), P('face'), P('organs.blend'), blend=P('figure.blend'))),
+    ('eyes', P('organs.blend'), lambda: blender('eye_parts.py', P('eyes', 'eyes.json'), P('face'), P('organs.blend'), '--organs=eyes,brows,nose,mouth', blend=P('figure.blend'))),
     ('check', P('check.json'), lambda: blender('check_head.py', '--json=' + P('check.json'), blend=P('organs.blend'))),
     ('page', P('figure.txt'), lambda: open(P('figure.txt'), 'w').write(base64.b64encode(gzip.compress(open(P('organs.vrm'), 'rb').read(), 9)).decode())),
 ]

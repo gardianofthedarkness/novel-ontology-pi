@@ -74,6 +74,50 @@ for name, ids in (('eye_r', (11, 12, 13, 16, 15, 14)), ('eye_l', (19, 18, 17, 20
     for x, y, t in lash: cv2.line(check, (int(x), int(y - t / 2)), (int(x), int(y + t / 2)), (0, 165, 255), 1)
     print('FIG %s: opening %.0f px wide; iris %.0f x %.0f px; pupil %.0f x %.0f; %d highlights; lash over %d columns, %.0f-%.0f px thick'
           % (name, span, ie[1][0], ie[1][1], pe[1][0], pe[1][1], len(hls), len(lash), min(t for *_, t in lash), max(t for *_, t in lash)))
+# the other organs as strokes: the brows (5-7, 8-10), the nose (23) and the mouth (24-27). Each stroke's path starts at
+# the detector's points and is refined by the dark pixels across it, column by column (row by row for the nose), with
+# its thickness there; strands of hair crossing a brow give outliers, so the path is a robust fit and the thickness is
+# clamped near its median.
+def stroke(P, n=28, band=None, dark=115, vertical=False, ext=0.0):
+    P = np.asarray(P, float); A = P[:, ::-1] if vertical else P            # work as y(x); the nose as x(y)
+    o = np.argsort(A[:, 0]); A = A[o]; span = np.ptp(A[:, 0]) or 10.0
+    band = band or max(6.0, 0.18 * span)
+    co = np.polyfit(A[:, 0], A[:, 1], min(2, len(A) - 1))
+    xs = np.linspace(A[0, 0] - ext * span, A[-1, 0] + ext * span, n); rows = []
+    for x in xs:
+        y0 = np.polyval(co, x); lo, hi = int(y0 - band), int(y0 + band) + 1
+        col = (V[max(0, lo):hi, int(round(x))] if not vertical else V[int(round(x)), max(0, lo):hi]).astype(int)
+        d = np.where(col < dark)[0]
+        if len(d) == 0: rows.append((x, y0, 0.0)); continue
+        k = d[np.argmin(np.abs(d + max(0, lo) - y0))]; a_ = b_ = k          # the dark run nearest the path
+        while a_ - 1 in d: a_ -= 1
+        while b_ + 1 in d: b_ += 1
+        rows.append((x, max(0, lo) + (a_ + b_) / 2, float(b_ - a_ + 1)))
+    R = np.array(rows); ok = R[:, 2] > 0
+    if ok.sum() >= 4:
+        for _ in range(3):
+            c2 = np.polyfit(R[ok, 0], R[ok, 1], 2); r = np.abs(np.polyval(c2, R[:, 0]) - R[:, 1])
+            ok = ok & (r < max(2.0, 2.5 * np.median(r[ok])))
+        R[:, 1] = np.polyval(c2, R[:, 0])
+        med = np.median(R[ok, 2]); R[:, 2] = np.where(ok, np.minimum(R[:, 2], 1.8 * med), med)
+        R[:, 2] = np.convolve(np.pad(R[:, 2], 2, mode='edge'), np.ones(5) / 5, mode='valid')
+    else:
+        R[:, 1] = np.polyval(co, R[:, 0]); R[:, 2] = 3.0
+    R = R[:, [1, 0, 2]] if vertical else R
+    return R.round(2).tolist()
+V = hsv[..., 2]
+out['brow_r'] = {'line': stroke(K[[5, 6, 7]], ext=0.05)}
+out['brow_l'] = {'line': stroke(K[[8, 9, 10]], ext=0.05)}
+nose_len = 0.35 * np.linalg.norm(K[23] - K[25])
+out['nose'] = {'line': stroke(np.array([K[23] - [0, nose_len / 2], K[23], K[23] + [0, nose_len / 2]]), n=10, band=8, vertical=True)}
+mouth_open = float(np.linalg.norm(K[27] - K[25]))
+out['mouth'] = {'line': stroke(K[[24, 25, 26]], n=24, band=max(5.0, mouth_open + 4)), 'open_px': mouth_open,
+                'corners': [K[24].tolist(), K[26].tolist()]}
+for k in ('brow_r', 'brow_l', 'nose', 'mouth'):
+    L = np.array(out[k]['line'])
+    for x, y, t in L: cv2.line(check, (int(x), int(y - t / 2)), (int(x), int(y + t / 2)), (0, 255, 255), 1)
+    print('FIG %s: %d samples, %.0f px long, %.1f-%.1f px thick' % (k, len(L), np.hypot(*np.ptp(L[:, :2], 0)), L[:, 2].min(), L[:, 2].max()))
 json.dump(out, open(os.path.join(OUT, 'eyes.json'), 'w'), indent=1)
 x0, y0, x1, y1 = [int(v) for v in pred['bbox'][:4]]
 cv2.imwrite(os.path.join(OUT, 'eyes_check.png'), cv2.resize(check[y0 + (y1 - y0) // 6:y0 + (y1 - y0) // 2, x0:x1], None, fx=1.6, fy=1.6))
+cv2.imwrite(os.path.join(OUT, 'face_check.png'), check[y0:y1, x0:x1])

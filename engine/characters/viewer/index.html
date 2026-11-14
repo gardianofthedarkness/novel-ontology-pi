@@ -105,7 +105,8 @@
       <div class="group"><span>Rig</span>
         <div class="seg" data-group="rig">
           <button data-v="v07" aria-pressed="true">Face + hair (v0.7)</button>
-          <button data-v="eyes" aria-pressed="false">Quad eyes (test)</button>
+          <button data-v="eyes" aria-pressed="false">Carved eyes (v0.8)</button>
+          <button data-v="organs" aria-pressed="false">Carved face (test)</button>
           <button data-v="quad" aria-pressed="false">Quad head (test)</button>
           <button data-v="layers" aria-pressed="false">Soft layers (v0.6)</button>
           <button data-v="body" aria-pressed="false">Base body + clothes</button>
@@ -294,7 +295,7 @@ function fillMaterial() {
 // the same as the rest of the figure: the dark body with a fresnel rim and scanlines (the relief shows as rims where the
 // form turns: the cuts, the dome's edge, the lids) and lines as dense as the head's triangles (eye_parts.py marks which
 // quad loops to draw, plus the cuts and part edges). Only the hole is darker and the highlight glows.
-const EYE_LIGHT = { white: 1.0, iris: 1.0, pupil: 0.35, highlight: 1.6, lid: 1.0 };
+const EYE_LIGHT = { white: 1.0, iris: 1.0, pupil: 0.35, highlight: 1.6, lid: 1.0, brow: 1.0, nose: 1.25, lip: 1.0, mouth: 1.25, inner: 0.25, teeth: 1.0, skin: 1.0 };
 function eyeMaterial(part) {
   const m = new THREE.MeshBasicMaterial({ color: 0x03101e, side: THREE.DoubleSide, polygonOffset: true, polygonOffsetFactor: 1, polygonOffsetUnits: 1 });
   const level = { value: EYE_LIGHT[part] };      // a uniform: three.js shares one program between materials with the same code
@@ -317,8 +318,10 @@ function eyeMaterial(part) {
   };
   return m;
 }
+// the nose and mouth are drawn lines (ink strips on the face, eye_parts.py ink()): lit in the hologram (its lines glow),
+// dark in the white look (ink on plaster)
 // in the white look the eyes are plaster: smooth, one white, the deep parts shaded as a cast's cavities are
-const eyeWhite = Object.fromEntries(Object.entries({ white: 0xeef1f5, iris: 0xbfc6cf, pupil: 0x3c434c, highlight: 0xffffff, lid: 0xdfe3e8 })
+const eyeWhite = Object.fromEntries(Object.entries({ white: 0xeef1f5, iris: 0xbfc6cf, pupil: 0x3c434c, highlight: 0xffffff, lid: 0xdfe3e8, brow: 0xdfe3e8, nose: 0x3c434c, lip: 0xe6e9ee, mouth: 0x3c434c, inner: 0x3c434c, teeth: 0xffffff, skin: 0xeef1f5 })
   .map(([k, c]) => [k, new THREE.MeshStandardMaterial({ color: c, roughness: 0.8, metalness: 0, side: THREE.DoubleSide })]));
 // the lines where the form breaks: a part's open edges and its creases (neighbouring faces turned more than ~35 degrees),
 // points welded by position first (an exporter may split them); drawn as degenerate triangles like quadWire
@@ -342,6 +345,7 @@ function featureWire(g, creaseDeg = 35) {
 }
 const wireMat = new THREE.MeshBasicMaterial({ color: 0x4fc8f0, wireframe: true, transparent: true, opacity: 0.75, blending: THREE.AdditiveBlending, depthWrite: false });
 const whiteMat = new THREE.MeshStandardMaterial({ color: 0xeef1f5, roughness: 0.75, metalness: 0, flatShading: true });
+eyeWhite.skin = whiteMat;     // the face's fill around a stitched mouth or nose is face: flat-shaded like the head
 
 let vrm = null; const parts = [];   // { mesh, wire, key }
 // meshes: Head (shared), Body_<outfit> (the fixed body minus what that outfit covers), Garment_<outfit> (only the clothes)
@@ -358,7 +362,7 @@ async function load() {
   if (vrm) { scene.remove(vrm.scene); parts.length = 0; vrm = null; }
   for (const s of soft.items) scene.remove(s.group); soft.items = [];
   const file = FIGURE_PARAM || (state.who !== 'misaka' ? `${state.who}_v07.txt`
-    : { v07: 'misaka_v07.txt', quad: 'misaka_quad.txt', eyes: 'misaka_eyes.txt', final: 'misaka_final.txt', skirt: 'misaka_skirt.txt', body: 'misaka_body.txt', layers: 'misaka_layers.txt' }[state.rig]);
+    : { v07: 'misaka_v07.txt', quad: 'misaka_quad.txt', eyes: 'misaka_eyes.txt', organs: 'misaka_organs.txt', final: 'misaka_final.txt', skirt: 'misaka_skirt.txt', body: 'misaka_body.txt', layers: 'misaka_layers.txt' }[state.rig]);
   const b64 = await (await fetch(file)).text();
   const raw = Uint8Array.from(atob(b64.trim()), ch => ch.charCodeAt(0));
   const gzipped = raw[0] === 0x1f && raw[1] === 0x8b;
@@ -370,7 +374,7 @@ async function load() {
   const meshes = []; vrm.scene.traverse(o => { if (o.isMesh) meshes.push(o); });
   for (const m of meshes) {
     const wire = m.clone(); wire.material = wireMat; wire.position.set(0, 0, 0); wire.quaternion.identity(); wire.scale.set(1, 1, 1);
-    const eye = (/^eye_(white|iris|pupil|highlight|lid)/.exec((m.material && m.material.name) || '') || [])[1];
+    const eye = (/^(?:eye|face)_(white|iris|pupil|highlight|lid|brow|nose|lip|mouth|inner|teeth|skin)/.exec((m.material && m.material.name) || '') || [])[1];
     if (eye) wire.geometry = featureWire(m.geometry);
     else if (/_quad/.test(m.name)) wire.geometry = quadWire(m.geometry);
     wire.renderOrder = 2; m.add(wire); parts.push({ mesh: m, wire, key: outfitKey(m), eye });
@@ -378,7 +382,7 @@ async function load() {
   scene.add(vrm.scene); vrm.scene.updateMatrixWorld(true); buildSoft(); outfitButtons(); applyLook(); applyOutfit(); findHair(); resetSprings();
   const springs = vrm.springBoneManager ? [...vrm.springBoneManager.joints].length : 0;
   const who = ((vrm.meta && (vrm.meta.name || vrm.meta.title)) || 'Figure').replace(/\s*\(prototype figure\)/, '');
-  status.textContent = who + ' · ' + (state.rig === 'quad' ? `quad head (test), ${hair.length} hair spring joints` : state.rig === 'eyes' ? `v0.7 head + quad eyes (faired), ${hair.length} hair spring joints` : state.rig === 'v07' || state.who !== 'misaka' || FIGURE_PARAM ? `soft layers, skull lock and jaw, ${hair.length} hair spring joints`
+  status.textContent = who + ' · ' + (state.rig === 'quad' ? `quad head (test), ${hair.length} hair spring joints` : state.rig === 'eyes' ? `v0.8: carved eyes, ${hair.length} hair spring joints` : state.rig === 'organs' ? `face organs, automatic: carved eyes, brows, the nose as cheek structure, the mouth as a drawn line (test), ${hair.length} hair spring joints` : state.rig === 'v07' || state.who !== 'misaka' || FIGURE_PARAM ? `soft layers, skull lock and jaw, ${hair.length} hair spring joints`
     : state.rig === 'layers' ? 'one-shot figure on soft layers'
     : state.rig === 'final' ? 'benchmark' : (state.rig === 'body' ? 'base body · ' : '') + springs + ' skirt spring joints') + ' · VRM 1.0';
 }
@@ -796,7 +800,7 @@ document.querySelectorAll('.seg').forEach(seg => seg.addEventListener('click', e
   if (seg.dataset.group === 'motion') { t = 0; clock.getDelta(); resetSprings(); }
 }));
 
-window.__figure = { state, get vrm() { return vrm; }, camera, controls, renderer,
+window.__figure = { state, get vrm() { return vrm; }, camera, controls, renderer, parts,
   // step the motion and the spring bones for a while at 60 frames a second, without drawing (for tests)
   simulate: (m, seconds, fps = 60) => { state.motion = m; const dt = 1 / fps; for (const s of soft.items) s.fresh = true; t = 0; resetSprings();
     for (let i = 0; i < seconds * fps; i++) { t = i * dt; applyPose(t); stepVRM(dt); vrm.scene.updateMatrixWorld(true); stepSoft(dt); } },
