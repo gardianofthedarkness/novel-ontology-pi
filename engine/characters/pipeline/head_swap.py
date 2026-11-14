@@ -56,7 +56,8 @@ print('FIG body head', {k: round(v, 3) for k, v in Lb.items()}, 'bust', {k: roun
 print('FIG scale', round(s, 4), 'ear width body', round(Lb['ears'], 3), 'bust scaled', round(Lh['ears'] * s, 3))
 # scale about the bust's chin, then move chin onto chin and nose x onto nose x
 head.data.transform(Matrix.Translation((Lb['x'] - Lh['x'], 0, Lb['chin'] - Lh['chin'])) @ Matrix.Translation((Lh['x'], 0, Lh['chin'])) @ Matrix.Scale(s, 4) @ Matrix.Translation((-Lh['x'], 0, -Lh['chin'])))
-cut = rig.data.bones['head'].head_local.z
+# the neck seam's height is kept on the armature (neck_seam_z), apart from the head's pivot, which v0.7 moves up to the skull base
+cut = float(rig.get('neck_seam_z', rig.data.bones['head'].head_local.z)); rig['neck_seam_z'] = cut
 hco = np.array([v.co[:] for v in head.data.vertices])
 bh = bco[bco[:, 2] > cut + 0.02]; hh = hco[hco[:, 2] > cut + 0.02]
 dy = float(np.median(bh[:, 1]) - np.median(hh[:, 1])); head.data.transform(Matrix.Translation((0, dy, 0)))
@@ -83,7 +84,7 @@ for v in me.vertices:
 head.parent = rig; am = head.modifiers.new('Armature', 'ARMATURE'); am.object = rig
 me.materials.clear(); me.materials.append(body.data.materials[0])
 head.name = me.name = 'Head'
-if body.name == 'Body': body.name = body.data.name = 'Outfit_summer'
+if body.name == 'Body': body.name = body.data.name = 'Outfit_' + flags.get('outfit', 'main')
 print('FIG head', len(me.polygons), 'triangles; body', len(body.data.polygons))
 for o in sc.objects: o.select_set(False)
 rig.select_set(True); bpy.context.view_layer.objects.active = rig

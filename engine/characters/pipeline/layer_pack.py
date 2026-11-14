@@ -12,7 +12,8 @@ SRC, BASE, OUT = [a for a in argv if not a.startswith('--')][:3]
 import addon_utils
 addon_utils.enable('bl_ext.blender_org.vrm', default_set=True)
 bpy.ops.wm.open_mainfile(filepath=SRC)
-sc = bpy.context.scene; rig = bpy.data.objects['Armature']; cut = rig.data.bones['head'].head_local.z
+sc = bpy.context.scene; rig = bpy.data.objects['Armature']
+cut = float(rig.get('neck_seam_z', rig.data.bones['head'].head_local.z))   # the seam, not the head's pivot (v0.7)
 with bpy.data.libraries.load(BASE) as (src, dst):
     dst.objects = [n for n in src.objects if n in ('Armature', 'Body')]
 brig = [o for o in dst.objects if o.type == 'ARMATURE'][0]; body = [o for o in dst.objects if o.type == 'MESH'][0]

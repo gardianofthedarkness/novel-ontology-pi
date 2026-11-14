@@ -71,12 +71,18 @@
   <header>
     <div class="kicker">Novel figure pipeline · current final · Misaka Mikoto</div>
     <h1>Misaka as a triangle hologram, with a skirt that moves</h1>
-    <p>The figure from trial 2, before the separate clothing system: one skeleton with the summer and winter uniforms as whole bodies to swap, now wearing the detailed head made from a high-resolution portrait. <strong>One-shot + soft layers</strong> (the default) keeps the one-shot figure whole and puts its generated base body underneath as a hidden layer: each point's distance from that body is its layer thickness, so skin and tight cloth stay on the skeleton while thick cloth (the skirt, hems) hangs on soft springs from where the skeleton puts it, swings and settles, stretches at most 25% between neighbours, and is pushed out of capsules around the legs and torso; <strong>Layers</strong> in Look colours the triangles from tight (cyan) to loose (pink). <strong>Rigid needles</strong> (v0.6, the default) moves the base body by dual-quaternion blending (rotation about each joint, so a bent hip keeps its volume), rides the skin on it, and never lets the floating layer sink below 80% of its own depth; <strong>Plain skinning</strong> is v0.5. <strong>Base body + clothes</strong> puts a separately generated base body under the clothes, fitted bone by bone to the benchmark's proportions; the clothes are the benchmark's own, and the skirt hangs from the hips on ten spring-bone chains pushed aside by colliders on the legs, so the legs bend freely and a swinging skirt shows real thighs. <strong>Skirt springs only</strong> is the same skirt on the fused figure; <strong>Benchmark</strong> is the saved version without either. Every motion plays on the standard VRM humanoid bones, so it works on any figure made this way. The clothing system below is parked as work in progress.</p>
+    <p><strong>Face + hair</strong> (v0.7, the default) is v0.6 with a face and hair of their own. The skull is locked to the head bone and the neck owns only the column under the jaw, so the chin no longer moves with the body; the clothes and the body are v0.6's, unchanged. The head turns about the base of the skull, found from 68 face points detected on renders of the head. A jaw bone hinges between the ears (<strong>Talk</strong>). The hair hangs on ten spring chains from the scalp line (three bangs, seven around the sides and back) that feel the whole body's motion, stepped at a fixed 60 per second, each link held within a cone, pushed off the skull, face, neck and shoulders by colliders (<strong>Head shake</strong>, <strong>Nod</strong>).</p>
+    <p>The figure from trial 2, before the separate clothing system: one skeleton with the summer and winter uniforms as whole bodies to swap, now wearing the detailed head made from a high-resolution portrait. <strong>Soft layers</strong> (v0.6) keeps the one-shot figure whole and puts its generated base body underneath as a hidden layer: each point's distance from that body is its layer thickness, so skin and tight cloth stay on the skeleton while thick cloth (the skirt, hems) hangs on soft springs from where the skeleton puts it, swings and settles, stretches at most 25% between neighbours, and is pushed out of capsules around the legs and torso; <strong>Layers</strong> in Look colours the triangles from tight (cyan) to loose (pink). <strong>Rigid needles</strong> (v0.6, the default) moves the base body by dual-quaternion blending (rotation about each joint, so a bent hip keeps its volume), rides the skin on it, and never lets the floating layer sink below 80% of its own depth; <strong>Plain skinning</strong> is v0.5. <strong>Base body + clothes</strong> puts a separately generated base body under the clothes, fitted bone by bone to the benchmark's proportions; the clothes are the benchmark's own, and the skirt hangs from the hips on ten spring-bone chains pushed aside by colliders on the legs, so the legs bend freely and a swinging skirt shows real thighs. <strong>Skirt springs only</strong> is the same skirt on the fused figure; <strong>Benchmark</strong> is the saved version without either. Every motion plays on the standard VRM humanoid bones, so it works on any figure made this way. The clothing system below is parked as work in progress.</p>
   </header>
 
   <div class="bay">
     <div class="stage" id="stage"><canvas id="c"></canvas><div class="status" id="status">Loading figure…</div></div>
     <div class="controls">
+      <div class="group"><span>Character</span>
+        <div class="seg" data-group="who">
+          <button data-v="misaka" aria-pressed="true">Misaka Mikoto</button>
+          <button data-v="index" aria-pressed="false">Index</button>
+        </div></div>
       <div class="group"><span>Outfit</span>
         <div class="seg" data-group="outfit">
           <button data-v="summer" aria-pressed="true">Summer uniform</button>
@@ -91,11 +97,15 @@
           <button data-v="jump" aria-pressed="false">Jump</button>
           <button data-v="railgun" aria-pressed="false">Railgun</button>
           <button data-v="lunge" aria-pressed="false">Lunge</button>
+          <button data-v="shake" aria-pressed="false">Head shake</button>
+          <button data-v="nod" aria-pressed="false">Nod</button>
+          <button data-v="talk" aria-pressed="false">Talk</button>
           <button data-v="tpose" aria-pressed="false">Rest (T)</button>
         </div></div>
       <div class="group"><span>Rig</span>
         <div class="seg" data-group="rig">
-          <button data-v="layers" aria-pressed="true">One-shot + soft layers</button>
+          <button data-v="v07" aria-pressed="true">Face + hair (v0.7)</button>
+          <button data-v="layers" aria-pressed="false">Soft layers (v0.6)</button>
           <button data-v="body" aria-pressed="false">Base body + clothes</button>
           <button data-v="skirt" aria-pressed="false">Skirt springs only</button>
           <button data-v="final" aria-pressed="false">Benchmark</button>
@@ -226,7 +236,10 @@ import { OutputPass } from 'three/addons/postprocessing/OutputPass.js';
 import { VRMLoaderPlugin, VRMUtils } from '@pixiv/three-vrm';
 
 const stage = document.getElementById('stage'), canvas = document.getElementById('c'), status = document.getElementById('status');
-const state = { outfit: 'summer', motion: 'idle', look: 'holo', spin: 'off', rig: 'layers' };
+const state = { who: 'misaka', outfit: 'summer', motion: 'idle', look: 'holo', spin: 'off', rig: 'v07' };
+// any figure made by make_figure.py: ?figure=<file.txt> loads it (its name and outfits come from the file itself);
+// characters other than Misaka have only the current build, <who>_v07.txt
+const FIGURE_PARAM = new URLSearchParams(location.search).get('figure');
 const renderer = new THREE.WebGLRenderer({ canvas, antialias: true });
 renderer.setPixelRatio(Math.min(devicePixelRatio, 2)); renderer.setClearColor(0x050b14, 1);
 const scene = new THREE.Scene();
@@ -291,7 +304,8 @@ async function load() {
   status.textContent = 'Loading figure…';
   if (vrm) { scene.remove(vrm.scene); parts.length = 0; vrm = null; }
   for (const s of soft.items) scene.remove(s.group); soft.items = [];
-  const file = { final: 'misaka_final.txt', skirt: 'misaka_skirt.txt', body: 'misaka_body.txt', layers: 'misaka_layers.txt' }[state.rig];
+  const file = FIGURE_PARAM || (state.who !== 'misaka' ? `${state.who}_v07.txt`
+    : { v07: 'misaka_v07.txt', final: 'misaka_final.txt', skirt: 'misaka_skirt.txt', body: 'misaka_body.txt', layers: 'misaka_layers.txt' }[state.rig]);
   const b64 = await (await fetch(file)).text();
   const raw = Uint8Array.from(atob(b64.trim()), ch => ch.charCodeAt(0));
   const gzipped = raw[0] === 0x1f && raw[1] === 0x8b;
@@ -305,9 +319,11 @@ async function load() {
     const wire = m.clone(); wire.material = wireMat; wire.position.set(0, 0, 0); wire.quaternion.identity(); wire.scale.set(1, 1, 1);
     wire.renderOrder = 2; m.add(wire); parts.push({ mesh: m, wire, key: outfitKey(m) });
   }
-  scene.add(vrm.scene); vrm.scene.updateMatrixWorld(true); buildSoft(); applyLook(); applyOutfit();
+  scene.add(vrm.scene); vrm.scene.updateMatrixWorld(true); buildSoft(); outfitButtons(); applyLook(); applyOutfit(); findHair(); resetSprings();
   const springs = vrm.springBoneManager ? [...vrm.springBoneManager.joints].length : 0;
-  status.textContent = 'Misaka Mikoto · ' + (state.rig === 'layers' ? 'one-shot figure on soft layers'
+  const who = ((vrm.meta && (vrm.meta.name || vrm.meta.title)) || 'Figure').replace(/\s*\(prototype figure\)/, '');
+  status.textContent = who + ' · ' + (state.rig === 'v07' || state.who !== 'misaka' || FIGURE_PARAM ? `soft layers, skull lock and jaw, ${hair.length} hair spring joints`
+    : state.rig === 'layers' ? 'one-shot figure on soft layers'
     : state.rig === 'final' ? 'benchmark' : (state.rig === 'body' ? 'base body · ' : '') + springs + ' skirt spring joints') + ' · VRM 1.0';
 }
 function applyLook() {
@@ -316,6 +332,14 @@ function applyLook() {
   for (const s of soft.items) { s.fill.material = holo ? (s.fillMat ||= fillMaterial()) : whiteMat; s.wire.visible = holo; s.wire.material = state.look === 'layers' ? wireLayersMat : wireMat; }
   floor.visible = beamCol.visible = holo; bloom.enabled = holo;
   renderer.setClearColor(holo ? 0x050b14 : 0x1a2230, 1);
+}
+// the outfit switch from the outfits the figure has (Outfit_<name> meshes)
+function outfitButtons() {
+  const keys = [...new Set(parts.map(p => p.key).filter(k => k !== 'head' && k !== 'layer'))];
+  if (!keys.includes(state.outfit)) state.outfit = keys[0];
+  const seg = document.querySelector('[data-group="outfit"]');
+  const label = (k) => k === 'main' ? 'Outfit' : k[0].toUpperCase() + k.slice(1) + (['summer', 'winter'].includes(k) ? ' uniform' : '');
+  seg.innerHTML = keys.map(k => `<button data-v="${k}" aria-pressed="${k === state.outfit}">${label(k)}</button>`).join('');
 }
 function applyOutfit() {
   for (const p of parts) p.mesh.visible = !p.soft && (p.key === 'head' || p.key === state.outfit);
@@ -530,11 +554,19 @@ function stepSoft(dt) {
 // motions on normalized humanoid bones (rest = T-pose, figure faces +Z; angles in degrees, Euler XYZ)
 const D = Math.PI / 180, e = new THREE.Euler();
 const BONES = ['hips', 'spine', 'chest', 'neck', 'head', 'leftUpperArm', 'rightUpperArm', 'leftLowerArm', 'rightLowerArm', 'leftHand', 'rightHand',
-  'leftUpperLeg', 'rightUpperLeg', 'leftLowerLeg', 'rightLowerLeg', 'leftFoot', 'rightFoot', 'leftShoulder', 'rightShoulder'];
+  'leftUpperLeg', 'rightUpperLeg', 'leftLowerLeg', 'rightLowerLeg', 'leftFoot', 'rightFoot', 'leftShoulder', 'rightShoulder', 'jaw'];
 const arms = (l, r, extra = {}) => Object.assign({ leftUpperArm: [0, 0, -l], rightUpperArm: [0, 0, r] }, extra);
 const sm = (x) => x * x * (3 - 2 * x);
 const MOTIONS = {
   tpose: () => ({}),
+  // the head alone, to see the hair: a quick shake left and right that stops (the hair swings on and settles), a nod
+  shake: (t) => { const u = t % 3, k = u < 1.2 ? Math.sin(u / 1.2 * Math.PI * 3) * (1 - u / 1.2 * 0.3) : 0;
+    return { ...arms(72, 72), neck: [0, 14 * k, 0], head: [0, 22 * k, 0] }; },
+  nod: (t) => { const s = Math.sin(t * 3.2);
+    return { ...arms(72, 72), neck: [10 * s, 0, 0], head: [14 * s, 0, 0] }; },
+  // talking: the jaw (VRM humanoid jaw, v0.7) opens and closes on a syllable rhythm, the head moves a little
+  talk: (t) => { const o = Math.max(0, Math.sin(t * 11) * 0.6 + Math.sin(t * 4.3) * 0.5);
+    return { ...arms(72, 72), jaw: [13 * Math.min(1, o), 0, 0], head: [3 * Math.sin(t * 1.3), 8 * Math.sin(t * 0.7), 2 * Math.sin(t * 0.9)] }; },
   lunge: (t) => { const u = sm(0.5 - 0.5 * Math.cos(t * 1.6));
     return { leftUpperArm: [0, 0, -68], rightUpperArm: [0, 0, 68], leftLowerArm: [0, -12, 0], rightLowerArm: [0, 12, 0],
       leftUpperLeg: [-75 * u, 0, -4 * u], leftLowerLeg: [85 * u, 0, 0], rightUpperLeg: [25 * u, 0, 3 * u], rightLowerLeg: [35 * u, 0, 0],
@@ -606,6 +638,52 @@ function applyPose(t) {
   return pose;
 }
 
+// v0.7: the spring bones stepped at a fixed 1/60 s whatever the frame rate, each step with the body posed at its own time
+// (three-vrm applies a joint's drag once per call, so stepping with each frame's own dt makes hair stiffer at higher frame
+// rates, and a 30 fps frame would make both steps feel one jump); after each step every hair link is held within a cone
+// around its rest direction (VRM springs have no angle limits). three-vrm's own spring rule otherwise, so the hair moves
+// as it would in any VRM player (a solver of our own measured no faster here). When every spring is hair (its colliders
+// all on the upper body), each step refreshes the upper body's matrices once and steps the joints in chain order itself,
+// skipping the manager's dependency bookkeeping (0.84 ms a step instead of 1.31 on the test laptop).
+const SPRING_H = 1 / 60; let simT = 0, hair = [], springJoints = null, springTop = null;
+const hQ = new THREE.Quaternion();
+function findHair() {
+  hair = []; springJoints = null; springTop = null;
+  if (!vrm || !vrm.springBoneManager) return;
+  const all = [...vrm.springBoneManager.joints];
+  if (all.length && all.every(j => /^hair_/.test(j.bone.name))) { springJoints = all; springTop = vrm.humanoid.getRawBoneNode('upperChest') || vrm.humanoid.getRawBoneNode('chest'); }
+  for (const j of vrm.springBoneManager.joints) {
+    const m = /^hair_(\d+)_(\d+)$/.exec(j.bone.name); if (!m) continue;
+    hair.push({ bone: j.bone, rest: j.bone.quaternion.clone(), max: (+m[2] === 0 ? 20 : 22) * D });
+  }
+}
+function limitHair() {
+  for (const h of hair) {
+    hQ.copy(h.rest).invert().multiply(h.bone.quaternion);
+    const a = 2 * Math.acos(Math.min(1, Math.abs(hQ.w)));
+    if (a > h.max) h.bone.quaternion.copy(h.rest).slerp(h.bone.quaternion, h.max / a);
+  }
+}
+function stepVRM(dt) {
+  const sb = vrm.springBoneManager;
+  if (sb) {
+    if (t - simT > 4 * SPRING_H) simT = t - 4 * SPRING_H;   // at most four steps a frame
+    while (simT + SPRING_H <= t + 1e-9) {
+      simT += SPRING_H; applyPose(simT); vrm.humanoid.update();
+      if (springJoints) { springTop.updateWorldMatrix(true, true); for (const j of springJoints) j.update(SPRING_H); } else sb.update(SPRING_H);
+      limitHair();
+    }
+    applyPose(t);
+  }
+  vrm.humanoid.update(); if (vrm.lookAt) vrm.lookAt.update(dt); if (vrm.expressionManager) vrm.expressionManager.update();
+  if (vrm.nodeConstraintManager) vrm.nodeConstraintManager.update();
+  if (vrm.materials) for (const m of vrm.materials) m.update?.(dt);
+}
+function resetSprings() {
+  simT = t; if (!vrm || !vrm.springBoneManager) return;
+  applyPose(t); vrm.humanoid.update(); vrm.scene.updateMatrixWorld(true); vrm.springBoneManager.reset();
+}
+
 function resize() {
   const w = stage.clientWidth, h = stage.clientHeight;
   renderer.setSize(w, h, false); composer.setSize(w, h); camera.aspect = w / h; camera.updateProjectionMatrix();
@@ -616,7 +694,7 @@ const clock = new THREE.Clock(); let t = 0;
 renderer.setAnimationLoop(() => {
   const dt = Math.min(clock.getDelta(), 0.05); t += dt; uniforms.uTime.value = t;
   const pose = applyPose(t);
-  if (vrm) { vrm.update(dt); if (state.spin === 'on') vrm.scene.rotation.y += dt * 0.5; vrm.scene.updateMatrixWorld(true); stepSoft(dt); }
+  if (vrm) { stepVRM(dt); if (state.spin === 'on') vrm.scene.rotation.y += dt * 0.5; vrm.scene.updateMatrixWorld(true); stepSoft(dt); }
   wireMat.opacity = 0.42 + 0.05 * Math.sin(t * 13) + (Math.random() < 0.015 ? -0.25 : 0);
   floor.rotation.y = t * 0.25;
   effects(pose, t);
@@ -630,15 +708,17 @@ document.querySelectorAll('.seg').forEach(seg => seg.addEventListener('click', e
   state[seg.dataset.group] = b.dataset.v;
   if (seg.dataset.group === 'look') applyLook();
   if (seg.dataset.group === 'needles') soft.needles = b.dataset.v === 'on';
-  if (seg.dataset.group === 'rig') load().catch(err => { status.textContent = 'Could not load the figure: ' + err.message; });
+  if (seg.dataset.group === 'who') { const rigs = document.querySelectorAll('[data-group="rig"] button'); rigs.forEach(x => { x.disabled = state.who !== 'misaka' && x.dataset.v !== 'v07'; }); if (state.who !== 'misaka') { state.rig = 'v07'; rigs.forEach(x => x.setAttribute('aria-pressed', String(x.dataset.v === 'v07'))); } }
+  if (seg.dataset.group === 'rig' || seg.dataset.group === 'who') load().catch(err => { status.textContent = 'Could not load the figure: ' + err.message; });
   if (seg.dataset.group === 'outfit') applyOutfit();
-  if (seg.dataset.group === 'motion') t = 0;
+  if (seg.dataset.group === 'motion') { t = 0; clock.getDelta(); resetSprings(); }
 }));
 
-window.__figure = { state, get vrm() { return vrm; },
+window.__figure = { state, get vrm() { return vrm; }, camera, controls, renderer,
   // step the motion and the spring bones for a while at 60 frames a second, without drawing (for tests)
-  simulate: (m, seconds) => { state.motion = m; const dt = 1 / 60; for (const s of soft.items) s.fresh = true;
-    for (let i = 0; i < seconds * 60; i++) { t = i * dt; applyPose(t); vrm.update(dt); vrm.scene.updateMatrixWorld(true); stepSoft(dt); } },
+  simulate: (m, seconds, fps = 60) => { state.motion = m; const dt = 1 / fps; for (const s of soft.items) s.fresh = true; t = 0; resetSprings();
+    for (let i = 0; i < seconds * fps; i++) { t = i * dt; applyPose(t); stepVRM(dt); vrm.scene.updateMatrixWorld(true); stepSoft(dt); } },
+  hair: () => hair, stepVRM: (dt) => stepVRM(dt), applyPose: (time) => applyPose(time), stepSoft: (dt) => stepSoft(dt), resetSprings: () => resetSprings(), get t() { return t; }, set t(v) { t = v; },
   soft,
   draw: () => { composer.render(); },
   pose: (m, time) => { state.motion = m; t = time; applyPose(time); vrm.update(0); vrm.scene.updateMatrixWorld(true); effects(MOTIONS[m](time), time); composer.render(); } };

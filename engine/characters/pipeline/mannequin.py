@@ -25,9 +25,34 @@ def shrink(m): m.strength = -SHRINK; m.direction = 'NORMAL'; m.mid_level = 0.0
 def relax(m): m.iterations = 6; m.smooth_type = 'SIMPLE'; m.factor = 0.5; m.use_only_smooth = True
 def dec(m): m.ratio = 1.0; m.use_collapse_triangulate = True
 body.vertex_groups.clear()
-apply(body, [('REMESH', remesh), ('LAPLACIANSMOOTH', lap), ('DISPLACE', shrink), ('CORRECTIVE_SMOOTH', relax)])
+import bmesh
+def outward(ob, keep_largest=False):
+    """every face turned outward (the second Index base had half its faces inward: the shrink then pushed them out and the
+    page's back-face culling hid them), and with keep_largest only the biggest piece kept (a voxel remesh can close
+    pockets, between long hair and the back, into inner shells)"""
+    bm = bmesh.new(); bm.from_mesh(ob.data)
+    if keep_largest:
+        seen, parts = set(), []
+        for f in bm.faces:
+            if f.index in seen: continue
+            stack, part = [f], []
+            seen.add(f.index)
+            while stack:
+                g = stack.pop(); part.append(g)
+                for e in g.edges:
+                    for h in e.link_faces:
+                        if h.index not in seen: seen.add(h.index); stack.append(h)
+            parts.append(part)
+        parts.sort(key=len, reverse=True)
+        bmesh.ops.delete(bm, geom=[f for p in parts[1:] for f in p], context='FACES')
+        bmesh.ops.delete(bm, geom=[v for v in bm.verts if not v.link_faces], context='VERTS')
+    bmesh.ops.recalc_face_normals(bm, faces=bm.faces); bm.to_mesh(ob.data); bm.free(); ob.data.update()
+apply(body, [('REMESH', remesh)])
+outward(body, keep_largest=True)
+apply(body, [('LAPLACIANSMOOTH', lap), ('DISPLACE', shrink), ('CORRECTIVE_SMOOTH', relax)])
 n = len(body.data.polygons)
 apply(body, [('DECIMATE', lambda m: (setattr(m, 'ratio', min(1.0, TRIS / max(1, n))), setattr(m, 'use_collapse_triangulate', True))), ('TRIANGULATE', lambda m: None)])
+outward(body)
 for p in body.data.polygons: p.use_smooth = False
 for g in src.vertex_groups: body.vertex_groups.new(name=g.name)
 dt = body.modifiers.new('dt', 'DATA_TRANSFER'); dt.object = src; dt.use_vert_data = True

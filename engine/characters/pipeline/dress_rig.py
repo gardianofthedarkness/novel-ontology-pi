@@ -156,6 +156,8 @@ for n, (h_, t_, par) in BONES.items():
 for n, (_, _, par) in BONES.items():
     if par: arm.edit_bones[n].parent = arm.edit_bones[par]
 bpy.ops.object.mode_set(mode='OBJECT')
+# the neck seam's height, kept apart from the head's pivot (face_rig.py later moves the pivot up to the skull base)
+rig['neck_seam_z'] = float(neck_z)
 hb = arm.vrm_addon_extension.vrm1.humanoid.human_bones
 VRM = {'hips': 'hips', 'spine': 'spine', 'chest': 'chest', 'neck': 'neck', 'head': 'head'}
 for side, word in (('L', 'left'), ('R', 'right')):
