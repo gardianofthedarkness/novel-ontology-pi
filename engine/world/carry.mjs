@@ -35,6 +35,12 @@ const universeOf = novelDir => join(resolve(novelDir), '..', '..', 'universe');
 export const bookNumber = book => Number(String(book).match(/(\d+)\s*$/)?.[1] ?? NaN);
 /** How many segments with someone acting make a strand's first or last group. */
 export const EDGE = 3;
+/**
+ * The passages the work model reads: the last lines of a strand's last units and the first lines of the new strand's first
+ * units, wide enough to reach past a book's front or back matter into its story: a book's text may hold its title page,
+ * contents or afterword as units of its own (the first carry, 2026-11-14: one unit at vol 1's end, five at vol 2's start).
+ */
+export const PASSAGE = { units: 8, lines: 80 };
 
 // ---- The registry (M16a) -------------------------------------------------------------------------------------------
 
@@ -122,8 +128,8 @@ export function decide({ candidates, strands, checked = null }) {
 
 /** The work model's check of a match: the candidate's last lines against the new strand's first. */
 export async function workCheck(work, { lastLines, firstLines }) {
-  const system = 'You compare the end of one book\'s story line with the start of a story line in the next book of the series. Answer only as JSON {"inherits": true|false, "reason": "<one short sentence>"}.';
-  const prompt = JSON.stringify({ task: 'strand-inherit', question: 'Does the second passage go on from the first one: the same story line, carried on (true), or another one (false)?', first: lastLines, second: firstLines });
+  const system = 'You compare the end of one book\'s story line with the start of a story line in the next book of the series. Either passage may hold some of a book\'s front or back matter (a cover or title page, credits, a blurb, contents, an afterword, a note from the author or the translator): leave that aside and judge by the story alone. Answer only as JSON {"inherits": true|false, "reason": "<one short sentence>"}.';
+  const prompt = JSON.stringify({ task: 'strand-inherit', question: 'Leaving aside any front or back matter, does the story of the second passage go on from the story of the first: the same story line, carried on (true), or another one (false)?', first: lastLines, second: firstLines });
   const request = { system, prompt, jsonSchema: { type: 'object' }, maxTokens: 200 };
   // A metered client (cachedWork) answers generateWithUsage; the plain one (workModelFromEnv) generate.
   let content = null;
@@ -144,7 +150,8 @@ export async function inherit(novelDir, { reading = null, work = null, write = t
     const lines = async (novel, ids) => { const { loadWorkspaceSentences } = await import('../../dist/src/cli/commands/extract/timeplaceCommands.js'), text = await loadWorkspaceSentences(novel), data = await json(join(novel, '..', 'reading', 'data.json')); const sentences = new Map((data?.scenes ?? []).map(scene => [scene.id, scene.sentences])); return ids.flatMap(id => sentences.get(id) ?? []).map(id => text.get(id)?.text ?? '').filter(Boolean); };
     const answers = new Map(), lastDir = join(universe, '..', last, 'novel');
     for (const candidate of candidates) for (const strand of entry.strands) {
-      const lastLines = (await lines(lastDir, [candidate.lastScene])).slice(-12), firstLines = (await lines(dir, [strand.scenes[0]])).slice(0, 12);
+      const lastLines = (await lines(lastDir, (candidate.scenes ?? [candidate.lastScene]).slice(-PASSAGE.units))).slice(-PASSAGE.lines);
+      const firstLines = (await lines(dir, strand.scenes.slice(0, PASSAGE.units))).slice(0, PASSAGE.lines);
       answers.set(`${candidate.key}|${strand.key}`, await workCheck(work, { lastLines, firstLines }));
     }
     checked = (candidate, strand) => answers.get(`${candidate.key}|${strand.key}`) ?? null;
@@ -193,12 +200,24 @@ export function damageOf({ book, run, page, entry, slots }) {
         const lot = page.world?.lots?.[part.lot];
         if (!lot?.source) continue;
         const { slot, nominated, owner } = slotOfSource(lot.source, slots);
-        out.push({ book, run, scene: scene.id, story, strand: strandOf.get(scene.id) ?? null, building: lot.source, manifold: lot.manifold ?? '', slot, nominated, ...(owner ? { owner } : {}), blasted: part.blasted ?? [], fallen: part.fallen ?? [], destroyed: part.destroyed ?? [], fell: part.fell ?? [] });
+        // The lot's shape as it stood (where, how large, how tall): a later book whose lot of this id has the
+        // same shape stands the same building, whatever newer ground came before it in its place's claim order.
+        out.push({ book, run, scene: scene.id, story, strand: strandOf.get(scene.id) ?? null, building: lot.source, manifold: lot.manifold ?? '', shape: shapeOf(lot), slot, nominated, ...(owner ? { owner } : {}), blasted: part.blasted ?? [], fallen: part.fallen ?? [], destroyed: part.destroyed ?? [], fell: part.fell ?? [] });
       }
     }
   });
   return out;
 }
+
+/** A lot's frame as the page keeps it, [x, z, angle] to a centimetre and a ten-thousandth: from the page's array or the world's {x, z, angle}. */
+const frameOf = frame => (!frame ? null : Array.isArray(frame) ? frame : [Math.round(frame.x * 100) / 100, Math.round(frame.z * 100) / 100, Math.round(frame.angle * 10000) / 10000]);
+/**
+ * A lot's shape, the structure its damage is written on: its frame in the world, its cells across, its floors and height.
+ * Not its model: the page picks a look by the lot's index, which another book's world numbers otherwise.
+ */
+export const shapeOf = lot => ({ frame: frameOf(lot.frame), nx: lot.nx ?? null, nz: lot.nz ?? null, floors: lot.floors ?? null, height: lot.height ?? null });
+/** Whether a lot (the page's or the world's) stands as a kept shape did. */
+export const sameShape = (shape, lot) => !!shape?.frame && JSON.stringify(shapeOf(lot)) === JSON.stringify(shapeOf(shape));
 
 /** Keeps a book's run's damage in the universe (replacing what that book kept before). */
 export async function keep(novelDir, { run, write = true } = {}) {

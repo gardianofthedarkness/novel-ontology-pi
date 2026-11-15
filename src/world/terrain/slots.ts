@@ -13,6 +13,7 @@
  */
 import { CHILD, type Level, type Parent, type Resolver, spawnsOf } from "./config.js";
 import { setting } from "../settings.js";
+import { placeKey } from "../../universe/placeKeys.js";
 
 export type Point = [number, number];
 export interface Share { book: string; mention: string; scene: string | null }
@@ -120,7 +121,7 @@ export function spawnChildren(area: Parent, resolver: Resolver, book: string, ex
   if (!level) return [];
   const { counts, layer } = spawnsOf(area, resolver), slots: Slot[] = [];
   for (const [kind, n] of Object.entries(counts))
-    for (let k = 0; k < n; k++) slots.push({ id: `slot:${area.id}:${kind}:${k + 1}`, parent: area.id, level, kind, at: null, owner: null, sharers: [], damaged: [], layer, book });
+    for (let k = 0; k < n; k++) slots.push({ id: `slot:${placeKey(area.id)}:${kind}:${k + 1}`, parent: area.id, level, kind, at: null, owner: null, sharers: [], damaged: [], layer, book });
   const known = new Set(existing.map((slot) => slot.id));
   return slots.filter((slot) => !known.has(slot.id));
 }
@@ -192,7 +193,7 @@ export function chooseSlots(problem: LevelProblem): Choice {
     const placed = problem.place(m, null, slots.filter((s) => s.at));
     if (!placed) { log.push(`${m.label}: nothing to borrow and nowhere to spawn`); continue; }
     const n = slots.filter((s) => s.parent === placed.parent && s.kind === m.kind).length + 1;
-    const slot: Slot = { id: `slot:${placed.parent}:${m.kind}:${n}`, parent: placed.parent, level: problem.level, kind: m.kind, at: placed.at, owner: null, sharers: [], damaged: [], layer: m.named ? "named" : "unnamed", book };
+    const slot: Slot = { id: `slot:${placeKey(placed.parent)}:${m.kind}:${n}`, parent: placed.parent, level: problem.level, kind: m.kind, at: placed.at, owner: null, sharers: [], damaged: [], layer: m.named ? "named" : "unnamed", book };
     slots.push(slot); byId.set(slot.id, slot); spawned.push(slot.id);
     take(m, slot, placed.at);
     log.push(`${m.label}: spawns ${slot.id} (${m.named ? "every slot of its kind holds another name" : "no slot of its kind it may share"})`);

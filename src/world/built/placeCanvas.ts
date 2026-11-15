@@ -1,6 +1,7 @@
 import { addPatch, circleOf, firstLandscape, LANDSCAPE_VERSION, placeBeside, type Landscape, type LandscapeType, type Patch } from "./landscape.js";
 import type { Building, Point } from "./cityFill.js";
 import { setting } from "../settings.js";
+import { placeKey } from "../../universe/placeKeys.js";
 
 /**
  * The canvas of places, built from the bottom up. Every recognised place (a city, a district like 第七学区, a street,
@@ -34,7 +35,7 @@ export interface Unit { id: string; label: string; kind: "building" | "street" |
  * `plane`: the layer it lies in (docs/v3/design.html#terrain-levels §3.3; absent: the surface). A place in another layer is never
  * picked as the area a surface building is sampled into, dwells in, or is hosted by: adding one changes nothing on top.
  */
-export interface CanvasPlace { id: string; label: string; scale: string; parent: string | null; at: Point; landscape: Landscape | null; units: Unit[]; r: number; born: number; embedded?: boolean; fixed?: boolean; temporary?: boolean; dwelling?: string; pool?: string; plane?: string }
+export interface CanvasPlace { id: string; label: string; scale: string; parent: string | null; at: Point; landscape: Landscape | null; units: Unit[]; r: number; born: number; embedded?: boolean; fixed?: boolean; kept?: boolean; temporary?: boolean; dwelling?: string; pool?: string; plane?: string }
 /** Whether a canvas place lies on the surface (the layer the city's buildings are sampled into). */
 export const onSurface = (place: { plane?: string } | undefined) => !place?.plane || place.plane === "surface";
 export interface Canvas { places: Record<string, CanvasPlace>; born: number }
@@ -69,12 +70,14 @@ export function grow(canvas: Canvas, id: string): Canvas {
       // A place in another layer neither pushes nor is pushed by those on top (terrain-levels §3.3).
       if (a.embedded || onSurface(a) !== onSurface(place)) continue;
       const fromOwn = Math.hypot(...a.at), clearOwn = own ? own + a.r + GAP : 0;
-      if (own && fromOwn < clearOwn) { const u: Point = fromOwn > 1e-6 ? [a.at[0] / fromOwn, a.at[1] / fromOwn] : [1, 0]; a.at = [Math.round(u[0] * clearOwn * 10) / 10, Math.round(u[1] * clearOwn * 10) / 10]; moved = true; }
+      // A place standing where an earlier book's world put it (`kept`) is never pushed: the others give way round it.
+      if (own && fromOwn < clearOwn && !a.kept) { const u: Point = fromOwn > 1e-6 ? [a.at[0] / fromOwn, a.at[1] / fromOwn] : [1, 0]; a.at = [Math.round(u[0] * clearOwn * 10) / 10, Math.round(u[1] * clearOwn * 10) / 10]; moved = true; }
       for (const b of siblings) {
         if (a === b || b.embedded || onSurface(b) !== onSurface(a)) continue;
         const d = Math.hypot(b.at[0] - a.at[0], b.at[1] - a.at[1]), need = a.r + b.r + GAP;
         if (d >= need) continue;
-        const pushed = b.id === id ? a : a.id === id ? b : a.born > b.born ? a : b, other = pushed === a ? b : a;
+        if (a.kept && b.kept) continue;
+        const pushed = a.kept ? b : b.kept ? a : b.id === id ? a : a.id === id ? b : a.born > b.born ? a : b, other = pushed === a ? b : a;
         const u: Point = d > 1e-6 ? [(pushed.at[0] - other.at[0]) / d, (pushed.at[1] - other.at[1]) / d] : [1, 0];
         pushed.at = [Math.round((other.at[0] + u[0] * need) * 10) / 10, Math.round((other.at[1] + u[1] * need) * 10) / 10];
         moved = true;
@@ -89,7 +92,7 @@ export function grow(canvas: Canvas, id: string): Canvas {
  * A place born on the canvas: at the free spot nearest its parent's middle (or toward a direction), then grown up. `ground`:
  * its first patch as given (terrain spawning: the type and the size Jev chose), in place of one sampled from its type.
  */
-export function bear(canvas: Canvas, place: { id: string; label: string; scale: string; parent: string | null; landscape?: LandscapeType | null; toward?: Point; ground?: Patch | null; at?: Point; embedded?: boolean; fixed?: Point; plane?: string }): Canvas {
+export function bear(canvas: Canvas, place: { id: string; label: string; scale: string; parent: string | null; landscape?: LandscapeType | null; toward?: Point; ground?: Patch | null; at?: Point; embedded?: boolean; fixed?: Point; kept?: boolean; plane?: string }): Canvas {
   if (canvas.places[place.id]) return canvas;
   // A manifold of its parent's ground stands exactly where it was kept, in the parent's ground (no spot of its own to find).
   if (place.embedded && place.parent && canvas.places[place.parent]) {
@@ -97,7 +100,8 @@ export function bear(canvas: Canvas, place: { id: string; label: string; scale: 
     canvas.places[place.id].r = radiusOf(canvas, place.id);
     return grow(canvas, place.parent);
   }
-  const landscape = place.ground ? { version: LANDSCAPE_VERSION, seed: place.id, patches: [place.ground] } : place.landscape ? firstLandscape(place.id, place.landscape) : null, born = ++canvas.born;
+  // Seeded by the place's universe key (src/universe/placeKeys.ts): the same place stands the same in every book.
+  const landscape = place.ground ? { version: LANDSCAPE_VERSION, seed: placeKey(place.id), patches: [place.ground] } : place.landscape ? firstLandscape(placeKey(place.id), place.landscape) : null, born = ++canvas.born;
   const entry: CanvasPlace = { id: place.id, label: place.label, scale: place.scale, parent: place.parent, at: [0, 0], landscape, units: [], r: 0, born, ...(place.plane && place.plane !== "surface" ? { plane: place.plane } : {}) };
   canvas.places[place.id] = entry;
   entry.r = radiusOf(canvas, place.id);
@@ -105,8 +109,8 @@ export function bear(canvas: Canvas, place: { id: string; label: string; scale: 
   const occupied = [...own, ...(parent?.units ?? []).map((unit) => ({ x: unit.at[0], z: unit.at[1], r: unit.r })), ...childrenOf(canvas, place.parent).filter((child) => child.id !== place.id && !child.embedded && onSurface(child) === onSurface(place)).map((child) => ({ x: child.at[0], z: child.at[1], r: child.r }))];
   // A place the floating terrain moved (L19, engine/terrain/float.mjs; the terrain site's `at`) stands where it was
   // moved, beside its parent (siblings then kept clear by its parent's growing); every other at its free spot.
-  if (place.fixed) { entry.at = [place.fixed[0], place.fixed[1]]; entry.fixed = true; }
-  else { const spot = placeBeside(occupied, entry.r, place.id, place.toward, GAP); entry.at = [spot.x, spot.z]; }
+  if (place.fixed) { entry.at = [place.fixed[0], place.fixed[1]]; entry.fixed = true; if (place.kept) entry.kept = true; }
+  else { const spot = placeBeside(occupied, entry.r, placeKey(place.id), place.toward, GAP); entry.at = [spot.x, spot.z]; }
   return parent ? grow(canvas, parent.id) : grow(canvas, place.id);
 }
 
@@ -127,7 +131,7 @@ const occupiedIn = (canvas: Canvas, placeId: string) => [...canvas.places[placeI
 export function addUnit(canvas: Canvas, placeId: string, unit: Omit<Unit, "at"> & { at?: Point }, near?: Point): Canvas {
   const place = canvas.places[placeId];
   if (place.units.some((entry) => entry.id === unit.id)) return canvas;
-  const at = unit.at ?? (() => { const spot = placeBeside(occupiedIn(canvas, placeId), unit.r, unit.id, near, place.pool ? POOL_SPACING[unit.kind] : 4); return [spot.x, spot.z] as Point; })();
+  const at = unit.at ?? (() => { const spot = placeBeside(occupiedIn(canvas, placeId), unit.r, placeKey(unit.id), near, place.pool ? POOL_SPACING[unit.kind] : 4); return [spot.x, spot.z] as Point; })();
   place.units.push({ ...unit, at });
   return grow(canvas, placeId);
 }
@@ -142,7 +146,7 @@ export function tiedSpot(canvas: Canvas, placeId: string, unit: Pick<Unit, "id" 
   const place = canvas.places[placeId], tied = (place?.units ?? []).filter((entry) => ties?.[entry.id]), weight = tied.reduce((sum, entry) => sum + ties![entry.id], 0);
   if (!weight) return undefined;
   const mean = [0, 1].map((axis) => tied.reduce((sum, entry) => sum + entry.at[axis] * ties![entry.id], 0) / weight) as Point;
-  const spot = placeBeside(occupiedIn(canvas, placeId), unit.r, unit.id, [-mean[0], -mean[1]], place.pool ? POOL_SPACING[unit.kind] : 4, mean);
+  const spot = placeBeside(occupiedIn(canvas, placeId), unit.r, placeKey(unit.id), [-mean[0], -mean[1]], place.pool ? POOL_SPACING[unit.kind] : 4, mean);
   return [spot.x, spot.z];
 }
 
@@ -188,7 +192,7 @@ export function dwellInGround(place: CanvasPlace, made: (Building & { use?: stri
 /** A new part of a place's ground where a scene drifted past its edge (landscape.ts); the circle grows to hold it. */
 export function addPart(canvas: Canvas, placeId: string, type: LandscapeType, toward: Point, born?: Patch["born"]): Canvas {
   const place = canvas.places[placeId];
-  place.landscape = place.landscape ? addPatch(place.landscape, type, toward, born) : firstLandscape(placeId, type, born);
+  place.landscape = place.landscape ? addPatch(place.landscape, type, toward, born) : firstLandscape(placeKey(placeId), type, born);
   return grow(canvas, placeId);
 }
 
@@ -239,11 +243,12 @@ export function adopt(canvas: Canvas, temporaryId: string, named: { id: string; 
 }
 
 /** An area of the central build (a place larger than a building), the place the ontology puts it in, if any, and else the one proposed for it (a pending review), if any. */
-export interface BuildArea { id: string; label: string; scale: string; parent: string | null; proposed?: string | null; landscape?: LandscapeType | null; ground?: Patch | null; pool?: string; at?: Point; embedded?: boolean; plane?: string }
+export interface BuildArea { id: string; label: string; scale: string; parent: string | null; proposed?: string | null; landscape?: LandscapeType | null; ground?: Patch | null; pool?: string; at?: Point; embedded?: boolean; fixed?: Point; kept?: boolean; plane?: string }
 /** One of several choices, picked by a seed (a place's id), so the same in every run; the choices' order does not matter. */
+// By the universe keys of the seed and the choices (src/universe/placeKeys.ts), so the same in every book of the universe.
 function pickBy(seed: string, choices: string[]): string {
-  const sorted = [...choices].sort(), hash = [...seed].reduce((sum, char) => (Math.imul(sum, 31) + char.charCodeAt(0)) >>> 0, 7);
-  return sorted[hash % sorted.length];
+  const keyed = new Map(choices.map((choice) => [placeKey(choice), choice])), sorted = [...keyed.keys()].sort(), hash = [...placeKey(seed)].reduce((sum, char) => (Math.imul(sum, 31) + char.charCodeAt(0)) >>> 0, 7);
+  return keyed.get(sorted[hash % sorted.length])!;
 }
 const isArea = (place: CanvasPlace) => !place.temporary && (RANK[place.scale] ?? 0) > RANK.building;
 
@@ -262,7 +267,9 @@ export function centralBuild(canvas: Canvas, areas: BuildArea[], toward?: (id: s
   const named = new Map(areas.map((area) => [area.id, area.parent && ids.has(area.parent) ? area.parent : area.proposed && ids.has(area.proposed) ? area.proposed : null]));
   const proposed = new Set(areas.filter((area) => !(area.parent && ids.has(area.parent)) && area.proposed && ids.has(area.proposed)).map((area) => area.id));
   for (const area of areas) { const seen = new Set([area.id]); for (let at = named.get(area.id); at; at = named.get(at)) { if (seen.has(at)) { named.set(area.id, null); break; } seen.add(at); } }
-  let left = [...areas].sort((a, b) => rank(b.scale) - rank(a.scale));
+  // A place standing where an earlier book's world put it (`fixed`) is born before the others of its rank, so this book's
+  // own places are packed round it, never it round them.
+  let left = [...areas].sort((a, b) => rank(b.scale) - rank(a.scale) || Number(!!b.fixed) - Number(!!a.fixed));
   while (left.length) {
     const waiting: BuildArea[] = [];
     for (const area of left) {

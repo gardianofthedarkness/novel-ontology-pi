@@ -112,7 +112,13 @@ export const STEPS = [
   { id: 'settei', paid: true, why: 'people\'s abilities (settei)', done: () => false, commands: async at => [node('engine/casts/run/settei.mjs', at.novel, at.data, '--universe', at.universe)] },
   { id: 'transport', paid: true, why: 'vehicles\' models and owners into the universe (a few Jev questions)',
     done: () => false, commands: async at => [node('engine/casts/run/transport.mjs', at.novel, at.data, '--universe', at.universe)] },
-  { id: 'terrain', paid: true, why: 'the places built, city to street (~150 Jev questions; 15–30 minutes)',
+  // Before the terrain: which of the book's places an earlier book has (engine/world/same-places.mjs; the user, 2026-11-14:
+  // "One universe key per place"), so the terrain stands on what that book kept and the world is seeded by the places' keys.
+  // The first book records that its keys are its ids. A person sees the matches (novel same-places show) and may override
+  // one (novel same-places set ... --why); the terrain step is then run again.
+  { id: 'same-places', paid: true, why: 'the places the book shares with earlier books, each given its universe key (a few work-model questions; none for the first book)',
+    done: at => !!readJson(join(at.universe, 'places.json'))?.books?.[at.book], commands: async at => [cli('same-places', 'match', at.novel, '--work')] },
+  { id: 'terrain', paid: true, why: 'the places built, city to street, a later book on what the earlier one kept (~150 Jev questions for a first book; 15–30 minutes)',
     done: at => existsSync(join(at.novel, 'stage', 'terrain.json')), commands: async at => [cli('sim', 'terrain', at.novel, '--spawn', '--from', 'city', '--run')] },
   { id: 'starts', paid: false, why: 'where each one stands as each unit begins',
     done: at => existsSync(join(at.novel, 'stage', 'world', 'spawn.json')), commands: async at => [node('engine/spawning/spawn.mjs', at.novel, '--reading', at.data)] },

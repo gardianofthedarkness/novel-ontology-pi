@@ -141,6 +141,12 @@ export async function terrainSpawn(novelDir, { jev: given = null, run = false, p
   // for every later book of the universe, so only the first pays; a rerun of the same book asks again.
   const universe = universeOf(novelDir), registryFile = join(universe.dir, 'terrain.json');
   const registry = JSON.parse(await readFile(registryFile, 'utf8').catch(() => 'null')) ?? { version: 1, places: {} };
+  // The universe's keys (src/universe/placeKeys.ts; the same-places step): the registry holds its slots under the places'
+  // keys, this run reads them in the book's own ids and writes them back in keys; every slot id made here is made from the
+  // parent's key. The first book's keys are its ids (nothing changes).
+  const K = await load('dist/src/universe/placeKeys.js'), { useKeysOf, keysOf } = await import('../world/universe-keys.mjs'), keys = await useKeysOf(novelDir);
+  if (registry.slots) registry.slots = K.slotsToBook(registry.slots);
+  const registryText = () => JSON.stringify({ ...registry, ...(registry.slots ? { slots: K.slotsToUniverse(registry.slots) } : {}) }, null, 1);
   // Borrowing and spawning by type (`spawn`): slots instead of pools, kept in the universe's registry (they outlive the book),
   // mirrored in the book's terrain for the export; the stage inputs read as the slot tree (src/world/terrain/tree.ts).
   const S = spawn ? { ...(await load('dist/src/world/terrain/config.js')), ...(await load('dist/src/world/terrain/slots.js')), ...(await load('dist/src/world/terrain/tree.js')), ...(await load('dist/src/world/terrain/topology.js')), ...(await load('dist/src/world/terrain/heights.js')) } : null;
@@ -181,13 +187,36 @@ export async function terrainSpawn(novelDir, { jev: given = null, run = false, p
       if (slot.book === bookId && !slot.topology && slot.layer !== 'form') { slot.toward = null; for (const key of ['size', 'turn', 'on', 'mapped', 'average', 'median']) delete slot[key]; }
     }
   }
+  // A later book stands on what the earlier book kept (§6.4: "What a book kept never moves in a later book"): the latest
+  // earlier book's sites come in under this book's ids (the same place's own id; an earlier place this book does not have as
+  // universe:<key>), marked `inherited`, with that book's settled level ends; the run places only this book's own places
+  // round them, and none of them moves. A rerun from a level takes them in again (they stand as that book left them).
+  let inherited = 0;
+  if (spawn && keys) {
+    const record = JSON.parse(await readFile(join(universe.dir, 'places.json'), 'utf8').catch(() => 'null')), earlier = record?.books?.[bookId]?.last ?? null;
+    const earlierNovel = earlier ? join(novelDir, '..', '..', earlier, 'novel') : null;
+    const before = earlierNovel ? JSON.parse(await readFile(join(earlierNovel, 'stage', 'terrain.json'), 'utf8').catch(() => 'null')) : null;
+    if (before?.sites) {
+      const earlierKeys = await keysOf(earlierNovel);
+      const keyThere = id => (id == null || id.startsWith('slot:') ? id : id.startsWith(K.FOREIGN) ? id.slice(K.FOREIGN.length) : earlierKeys ? earlierKeys[id] ?? `${earlier}:${id}` : id);
+      const here = id => (id == null ? id : K.placeOfKey(keyThere(id)));
+      const moved = site => ({ ...site, ...(site.parent ? { parent: here(site.parent) } : {}), ...(site.holder ? { holder: here(site.holder) } : {}), ...(Array.isArray(site.shares) ? { shares: site.shares.map(here) } : {}), inherited: earlier });
+      for (const [id, site] of Object.entries(before.sites)) { const at = here(id); if (!terrain.sites[at] || terrain.sites[at].inherited) { terrain.sites[at] = moved(site); inherited++; } }
+      for (const [id, shape] of Object.entries(before.shapes ?? {})) terrain.shapes[here(id)] ??= shape;
+      terrain.order = [...new Set([...(before.order ?? []).map(here), ...terrain.order])].filter(id => terrain.sites[id]);
+      for (const [level, end] of Object.entries(before.ends ?? {})) if (!terrain.ends?.[level]) (terrain.ends ??= {})[level] = { ...end, sites: end.sites.map(here), inherited: earlier };
+      if (before.highways) terrain.highways = { ...Object.fromEntries(Object.entries(before.highways).map(([id, highway]) => [here(id), highway])), ...(terrain.highways ?? {}) };
+      terrain.inherited = { from: earlier, sites: inherited, at: new Date().toISOString() };
+    }
+  }
+  const isInherited = id => !!terrain.sites[id]?.inherited;
   const lifted = new Map();
   const reshape = () => { if (!spawn) return; S.withSlots(inputs, Object.values(registry.slots), bookId, Object.fromEntries(Object.entries(terrain.sites).filter(([, site]) => site.by === 'tenant' && site.parent).map(([id, site]) => [id, site.parent]))); tree.clear(); for (const place of inputs.placeTree) tree.set(place.id, place); lifted.clear(); };
   reshape();
   // Saved before the first build: the world is built from the files, so it must see the levels dropped and the mode at once.
   if (spawn || fromLevel) {
     await replace(terrainFile, JSON.stringify(terrain, null, 1));
-    await mkdir(join(universe.dir, 'maps'), { recursive: true }); await replace(registryFile, JSON.stringify(registry, null, 1));
+    await mkdir(join(universe.dir, 'maps'), { recursive: true }); await replace(registryFile, registryText());
     if (mapLog) await replace(mapLogFile, JSON.stringify(mapLog, null, 1));
   }
   // How tightly continuity ties the places (§2.0.14): the pin's suggestion, and the places Jev is told it is tied to.
@@ -381,7 +410,9 @@ export async function terrainSpawn(novelDir, { jev: given = null, run = false, p
         // A building slot is a lot of its street's form (§6): no area of its own; what borrows it has its site.
         if (slot.level === 'building') continue;
         if (!slot.toward || slot.owner) { if (terrain.sites[slot.id]?.by === 'slot') delete terrain.sites[slot.id]; continue; }
-        const shares = S.sharersIn(slot, bookId), first = shares.map(share => terrain.sites[share.mention]).find(site => site?.kind);
+        // An earlier book's share counts where that book's place stands here (inherited with its strand): the slot keeps the
+        // terrain it had there (a street an unnamed place of that book shared keeps its height).
+        const shares = [...S.sharersIn(slot, bookId), ...(slot.sharers ?? []).filter(share => share.book !== bookId && terrain.sites[share.mention]?.inherited)], first = shares.map(share => terrain.sites[share.mention]).find(site => site?.kind);
         // A manifold of its parent's ground (§8) keeps its own unified height; any other slot its first sharer's terrain.
         // Unified by its parent's topology (a city's districts): its kind's ground at its unified height; else its first
         // sharer's terrain (Jev's answer); else, spare, its kind's minimum.
@@ -394,7 +425,7 @@ export async function terrainSpawn(novelDir, { jev: given = null, run = false, p
       terrain.slots = registry.slots;
     };
     const saveSlots = async () => {
-      syncSlots(); await replace(terrainFile, JSON.stringify(terrain, null, 1)); await mkdir(join(universe.dir, 'maps'), { recursive: true }); await replace(registryFile, JSON.stringify(registry, null, 1));
+      syncSlots(); await replace(terrainFile, JSON.stringify(terrain, null, 1)); await mkdir(join(universe.dir, 'maps'), { recursive: true }); await replace(registryFile, registryText());
       await replace(mapLogFile, JSON.stringify(mapLog, null, 1)); reshape();
     };
     // The building level's slots (docs/v3/design.html#borrow-and-spawn §6): every street's buildings as the world just built them (its
@@ -405,17 +436,18 @@ export async function terrainSpawn(novelDir, { jev: given = null, run = false, p
       const streets = new Set(Object.values(registry.slots).filter(slot => slot.level === 'street' && slot.toward).map(slot => slot.owner ?? slot.id));
       const isHeld = slot => slot.owner || S.sharersIn(slot, bookId).length;
       const held = new Set(Object.values(registry.slots).filter(slot => slot.level === 'building' && isHeld(slot)).map(slot => slot.lot ?? slot.id));
-      for (const [id, slot] of Object.entries(registry.slots)) if (slot.level === 'building' && slot.layer === 'form' && !isHeld(slot)) delete registry.slots[id];
+      // This book's spares are read again; an earlier book's stand as it kept them (a later book never deletes them, §6.4).
+      for (const [id, slot] of Object.entries(registry.slots)) if (slot.level === 'building' && slot.layer === 'form' && !isHeld(slot) && slot.book === bookId) delete registry.slots[id];
       let spares = 0;
       for (const entry of data?.landscapes ?? []) (entry.ids ?? []).forEach((id, n) => {
         // A lot of a street's form is `<place>:<street>:<lot>`; a lot of the city's fill on a street's ground (a street that took
         // the ground's own road or crossing, a station's surroundings) is that street's too (its owner); other fill lots are not slots.
-        const key = id.slice(entry.place.length + 1), owner = entry.owners?.[n], street = streets.has(owner) ? owner : key.slice(0, key.lastIndexOf(':')), node = nodeOf(street), use = entry.uses?.[n];
+        const key = id.slice(K.placeKey(entry.place).length + 1), owner = entry.owners?.[n], street = streets.has(owner) ? owner : key.slice(0, key.lastIndexOf(':')), node = nodeOf(street), use = entry.uses?.[n];
         if (!streets.has(street) || held.has(key) || !node || !use) return;
         const [x, z, w, d, angle] = entry.buildings[n];
         // A city lot's id names no street (and two cities' fills may share one): its street's id goes first.
         const slotId = key.startsWith(`${street}:`) ? key : `${street}:${key}`;
-        if (held.has(slotId)) return;
+        if (held.has(slotId) || registry.slots[slotId]) return;
         registry.slots[slotId] = { id: slotId, parent: street, level: 'building', kind: use, owner: null, sharers: [], damaged: [], layer: 'form', book: bookId, toward: [round(x - node.x), round(z - node.z)], size: [w, d], turn: angle };
         spares++;
       });
@@ -493,7 +525,7 @@ export async function terrainSpawn(novelDir, { jev: given = null, run = false, p
       // A born city's districts were a default, not yet seen: they move and change height freely at its first decision.
       const provisional = site.by === 'birth', free = slot => slot.average == null || slot.provisional;
       const radiusFor = slot => (slot.size ? Math.max(...slot.size) : Math.max(...sizeFor(child, S.defaultTerrain(child, slot.kind)?.ground, 0))) / 2;
-      const result = S.layOut(mine.filter(slot => slot.toward).map(slot => ({ id: slot.id, kind: slot.kind, at: slot.toward, r: radiusFor(slot), give: mine.some(free) ? 10 : give })), fresh.map(slot => ({ id: slot.id, kind: slot.kind, r: radiusFor(slot) })), topology, id);
+      const result = S.layOut(mine.filter(slot => slot.toward).map(slot => ({ id: slot.id, kind: slot.kind, at: slot.toward, r: radiusFor(slot), give: mine.some(free) ? 10 : give })), fresh.map(slot => ({ id: slot.id, kind: slot.kind, r: radiusFor(slot) })), topology, K.placeKey(id));
       for (const m of result.manifolds) {
         const slot = registry.slots[m.id], was = slot.toward;
         Object.assign(slot, { toward: m.at, size: [2 * m.r, 2 * m.r], mapped: true, topology: true });
@@ -552,8 +584,8 @@ export async function terrainSpawn(novelDir, { jev: given = null, run = false, p
       }
       for (const [kind, n] of Object.entries(counts))
         for (let k = kept.get(kind) ?? 0; k < n; k++) {
-          let index = 1; while (registry.slots[`slot:${id}:${kind}:${index}`]) index++;
-          const slotId = `slot:${id}:${kind}:${index}`;
+          let index = 1; while (registry.slots[`slot:${K.placeKey(id)}:${kind}:${index}`]) index++;
+          const slotId = `slot:${K.placeKey(id)}:${kind}:${index}`;
           registry.slots[slotId] = { id: slotId, parent: id, level: 'district', kind, toward: null, owner: null, sharers: [], damaged: [], layer, book: bookId };
         }
       return layOutChildren(id, 'city');
@@ -609,7 +641,8 @@ export async function terrainSpawn(novelDir, { jev: given = null, run = false, p
     const spawnEnd = async (level, planes = null, movable = null) => {
       if (!spawn) return;
       const ours = id => !planes || planes.has(planeOfPart(id, level));
-      const mine = terrain.order.filter(id => terrain.sites[id]?.scale === level && terrain.sites[id].slot && registry.slots[terrain.sites[id].slot] && ours(id));
+      // What an earlier book kept stands (§6.4): only this book's own places take part in the level's moves.
+      const mine = terrain.order.filter(id => terrain.sites[id]?.scale === level && terrain.sites[id].slot && registry.slots[terrain.sites[id].slot] && ours(id) && !isInherited(id));
       let moves = 0;
       if (mine.length) {
         const mentions = mine.map(id => ({ id, label: terrain.sites[id].label, named: !id.startsWith('unnamed:'), kind: terrain.sites[id].kind, holder: terrain.sites[id].holder ?? terrain.sites[id].parent, scene: world[id]?.scene ?? null, pin: terrain.sites[id].pin ?? null }));
@@ -698,7 +731,7 @@ export async function terrainSpawn(novelDir, { jev: given = null, run = false, p
       if (resettle || !before?.length) return { whole: true };
       const known = new Set(before), fresh = Object.keys(terrain.sites).filter(id => terrain.sites[id]?.scale === level && !known.has(id) && !id.startsWith('slot:'));
       const holders = new Set(fresh.map(id => terrain.sites[id].holder ?? terrain.sites[id].parent).filter(Boolean));
-      const movable = new Set([...fresh, ...Object.keys(terrain.sites).filter(id => terrain.sites[id]?.scale === level && holders.has(terrain.sites[id].holder ?? terrain.sites[id].parent))]);
+      const movable = new Set([...fresh, ...Object.keys(terrain.sites).filter(id => terrain.sites[id]?.scale === level && holders.has(terrain.sites[id].holder ?? terrain.sites[id].parent) && !isInherited(id))]);
       return { whole: false, fresh, movable };
     };
     // An `add` run (terrain-levels §3.3: adding a place to a built world moves nothing else): what was kept before it starts.
@@ -1258,7 +1291,7 @@ export async function terrainSpawn(novelDir, { jev: given = null, run = false, p
       if (terrain.sites[part.id].by === 'jev' && !sampled && !part.id.startsWith('unnamed:')) {
         const { kind: k, shape: sh, ground: g, median: m, manifold, top: t, bottom: b, thickness: th, size, toward: tw, parentLabel, turn: tn, on } = terrain.sites[part.id];
         registry.places[part.label] = { book: universe.book, id: part.id, scale: part.scale, kind: k, ...(sh ? { shape: sh } : { ground: g }), ...(m ? { median: m, manifold } : {}), ...(t ? { top: t } : {}), ...(b != null ? { bottom: b, thickness: th } : {}), ...(size ? { size, toward: tw, parentLabel } : {}), ...(typeof tn === 'number' ? { turn: tn, on } : {}), keptAt: new Date().toISOString() };
-        await mkdir(universe.dir, { recursive: true }); await replace(registryFile, JSON.stringify(registry, null, 1));
+        await mkdir(universe.dir, { recursive: true }); await replace(registryFile, registryText());
       }
       if (spawn && isCity) { const said = deformCity(part.id); if (said) await live.outcome({ subject: part.label, text: `deformed to Jev's answer: ${said}` }); }
       if (spawn && terrain.sites[part.id]?.mapped) { const said = reunify(terrain.sites[part.id].parent, part.id); if (said) await live.outcome({ subject: part.label, text: said }); }

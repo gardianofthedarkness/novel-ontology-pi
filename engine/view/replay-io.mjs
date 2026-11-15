@@ -27,7 +27,7 @@ const SENTENCE_MARK = /[\uff0c\u3002\uff01\uff1f\uff1b\uff1a\u300c\u300d\u300e\u
 const FREE = new Set(['text', 'question', 'reason', 'why', 'asked', 'instructions', 'note', 'phase', 'moment', 'document', 'task', 'summary', 'quote', 'evidence', 'said', 'scene', 'lines']);
 const NAME_MOST = 12;
 
-const refuse = (name, page) => {
+export const refuse = (name, page) => {
   const hit = page.match(SENTENCE);
   // Where, with the CJK masked (the error itself must not carry the text).
   if (hit) throw new Error(`${name}: something sentence-like would be published (\u2026${page.slice(Math.max(0, hit.index - 60), hit.index + 40).replace(/[\u3400-\u9fff]/g, 'X')}\u2026)`);

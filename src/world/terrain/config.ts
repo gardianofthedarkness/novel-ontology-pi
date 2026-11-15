@@ -7,6 +7,7 @@
  */
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
+import { placeKey } from "../../universe/placeKeys.js";
 
 /** The levels borrowing and spawning run through, largest first, and the level each spawns. */
 export type Level = "city" | "district" | "street" | "building";
@@ -104,7 +105,7 @@ export function pickCount(count: Count, seed: string): number {
 export function spawnsOf(parent: Parent, resolver: Resolver): { counts: Record<string, number>; layer: string } {
   const resolved = resolver(parent);
   if (!resolved) return { counts: {}, layer: "none" };
-  const counts = Object.fromEntries(Object.entries(resolved.spawns).map(([kind, count]) => [kind, pickCount(count, `${parent.id}|${kind}`)]).filter(([, n]) => (n as number) > 0));
+  const counts = Object.fromEntries(Object.entries(resolved.spawns).map(([kind, count]) => [kind, pickCount(count, `${placeKey(parent.id)}|${kind}`)]).filter(([, n]) => (n as number) > 0));
   return { counts, layer: resolved.layer };
 }
 

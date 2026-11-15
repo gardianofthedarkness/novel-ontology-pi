@@ -3,6 +3,7 @@
  * host as the host stands now, and the markers of the buildings and parts the terrain kept, on what stands. Plain data in,
  * plain data out: the export (export-strand-demo.mjs) calls these for each place and once for the page.
  */
+import { placeKey } from '../../dist/src/universe/placeKeys.js';
 
 /**
  * The parts of composite buildings standing in a place's `buildings` (each { id, x, z, w, d, angle, floors }, world
@@ -19,7 +20,7 @@ export function partsIn({ terrain, buildings, place, here, modelFor }) {
     const hostSite = terrain.sites?.[site.in], slot = terrain.slots?.[hostSite?.slot ?? site.in];
     if (!slot || !here(slot.parent)) continue;
     const key = slot.lot ?? slot.id, short = key.startsWith(`${slot.parent}:`) ? key.slice(slot.parent.length + 1) : key;
-    const host = buildings.find(b => b.id === `${place.id}:${key}` || b.id === `${place.id}:${short}`);
+    const host = buildings.find(b => b.id === `${placeKey(place.id)}:${key}` || b.id === `${placeKey(place.id)}:${short}`);
     if (!host) continue;
     const area = site.area ?? 100, w = Math.min(host.w * 0.9, Math.max(4, Math.sqrt(area))), d = Math.min(host.d * 0.9, Math.max(4, area / w)), height = 3 * (site.floors ?? 1);
     // An older run's floor said in words: at its foot, its upper floors, under it.
@@ -44,7 +45,7 @@ export function snapMarkers({ terrain, macro, landscapes }) {
     const site = terrain.sites?.[node.id];
     if (site?.scale !== 'building') continue;
     const slot = site.slot ? terrain.slots?.[site.slot] : null, key = slot ? slot.lot ?? slot.id : null, short = key && key.startsWith(`${slot.parent}:`) ? key.slice(slot.parent.length + 1) : key;
-    const b = key ? landscapes.map(entry => standingNow.get(`${entry.place}:${key}`) ?? standingNow.get(`${entry.place}:${short}`)).find(Boolean) : null, part = site.by === 'tenant' ? partNow.get(node.id) : null;
+    const b = key ? landscapes.map(entry => standingNow.get(`${placeKey(entry.place)}:${key}`) ?? standingNow.get(`${placeKey(entry.place)}:${short}`)).find(Boolean) : null, part = site.by === 'tenant' ? partNow.get(node.id) : null;
     const at = part ? [part[0], part[1]] : b ? [b.x, b.z] : null;
     if (!at) continue;
     const moved = node.spotX === node.x && node.spotZ === node.z;

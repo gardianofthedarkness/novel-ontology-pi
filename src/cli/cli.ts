@@ -30,7 +30,7 @@ import { SIM_USAGE, simPick, simRun, simShow, simStrands, simTerrain } from "./c
 import { sourceGrep, sourceSimilar } from "./commands/extract/sourceCommands.js";
 import { worldAnswer, worldBatch, worldPool } from "./commands/extract/worldCommands.js";
 import { castAsk, castMerge, castReview, castSheet, castShow, sky } from "./commands/extract/castCommands.js";
-import { strandsInherit, strandsKeep, strandsRegister, strandsSet, strandsShow } from "./commands/extract/strandCommands.js";
+import { samePlacesMatch, samePlacesSet, samePlacesShow, strandsInherit, strandsKeep, strandsRegister, strandsSet, strandsShow } from "./commands/extract/strandCommands.js";
 import { volumeDone, volumeLog, volumeRun, volumeStatus } from "./commands/extract/volumeCommands.js";
 import { folderCommand } from "./commands/v3/folderCommands.js";
 import { settingsDiff, settingsExplain, settingsProfileApply, settingsProfileList, settingsProfileSave, settingsSet, settingsShow, settingsUnset } from "./commands/extract/settingsCommands.js";
@@ -60,6 +60,7 @@ const COMMANDS: Record<string, string> = {
   "novel rooms rooms|room|stage|check <novel-dir> | kind|floor|part|opens|at <novel-dir> … --line id --why t": "The rooms by the agent, with evidence (docs/v3/design.html#room-plan): each room's kind, floor, part and openings, and where each person of each unit is in it, each with a line of the book; the director binds and stages the rooms from it.",
   "novel places tree|place|unit|units|moves|check|apply <novel-dir> | setting|mention|drop|hold|set|same|travel <novel-dir> … --why t [--line id]": "The place tree by the agent, with evidence (docs/v3/design.html#place-tree-agent): after the reading and before terrain, each city or district made a setting (a line that puts something there), a mention or dropped; an unnamed place held under its parent; a unit set at a place (a line in it or just before) or the same as an earlier unit; a change of city shown by a travel line. Every claim is checked against the text; refused claims come back with why. check lists what is left; apply rebuilds the world script from the reading's own (kept as script.reading.json)",
   "novel strands register|inherit|set|keep|show <novel-dir> …": "What a book carries into the next, per strand (docs/v3/design.html#borrow-and-spawn §4.5): the book's strands at its end into the universe's registry (register [--run <id>]); at the next book's reading each open strand of the last book inherited (its damage to buildings that are not nominated stays) or closed (they stand whole) (inherit [--work] [--dry]); the main agent's override (set <strand key> inherited|closed --why t [--into <key>]); a run's damage into the universe building by building (keep --run <id>); the registry and the damage in force (show)",
+  "novel same-places match|set|show <novel-dir> …": "The places a book shares with the earlier books of its universe (engine/world/same-places.mjs; before terrain): each named place beside the earlier books' places that share a name with it, the work model reading where each book names it (match [--work] [--dry]); a person's override, the same as an earlier book's place or new, with why (set <place id> <book>:<place id>|new --why t); each place's universe key and why (show). The terrain stands a later book on what the earlier one kept, every seed and id made from a place's key",
   "novel cast show|merge|sheet|ask|review <novel-dir> …": "The cast's review: the cast and their ability sheets (show [<char>]); two entries made one person in the reading, its views, the ontology and the universe's sheets (merge <keep> <merged> --reason t [--reading <data.json>]... [--dry]); one person's ability sheet (sheet <char> --sheet '<JSON>' | --none --reason t [--evidence <ids>]); two people raised as one for the agent (ask <a> <b> --why t); the cast's questions in batches in the world's review pool (review [--size N] [--least-cards N] [--send <console-dir>]), answered with novel world answer, done by novel world apply",
   "novel sky build|show <novel-dir> [--dry] [--cache <dir>]": "The story sky: each unit's time of day and weather into sky.json beside the reading the director plays (build: Jev, cents, cached; --dry counts only); show: what it holds",
   "novel settings show <novel-dir> [<prefix>] [--place <id>] [--changed]": "The world generator's settings (config/world.schema.json) as they resolve for a book: defaults < universe < book < place, each with where it came from",
@@ -303,6 +304,15 @@ async function main(): Promise<void> {
     if (sub === "log") { if (!positional[3]) throw new Error(usage); const lines = flag(positional, "--lines"); out(await volumeLog(novelDir, positional[3], lines === undefined ? undefined : Number(lines)), pretty); return; }
     const why = flag(positional, "--why"); if (!positional[3] || !why) throw new Error(usage);
     out(await volumeDone(novelDir, positional[3], why), pretty);
+    return;
+  }
+
+  if (cmd === "same-places") {
+    const novelDir = positional[2], usage = "Usage: novel same-places match <novel-dir> [--work] [--dry] | set <novel-dir> <place id> <book>:<place id>|new --why <text> | show <novel-dir>";
+    if (!["match", "set", "show"].includes(sub ?? "") || !novelDir || novelDir.startsWith("--")) throw new Error(usage);
+    if (sub === "match") { out(await samePlacesMatch(novelDir, { work: positional.includes("--work"), dry: positional.includes("--dry") }), pretty); return; }
+    if (sub === "set") { const why = flag(positional, "--why"); if (!positional[3] || !positional[4] || !why) throw new Error(usage); out(await samePlacesSet(novelDir, positional[3], positional[4], why), pretty); return; }
+    out(await samePlacesShow(novelDir), pretty);
     return;
   }
 

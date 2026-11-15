@@ -22,7 +22,8 @@ export function windowsOf(reading) {
     buildings: [...mentions(reading.places?.references ?? [], () => true), ...mentions(reading.spatial ?? [], () => true)] };
   // The reading's units (segments.mjs: each scene one segment, typed from its blocks) where it has them, else its blocks.
   const unit = reading.segments?.length ? 'segment' : 'block';
-  return [...(unit === 'segment' ? reading.segments : reading.blocks ?? [])].sort((a, b) => position.get(a.first) - position.get(b.first)).map(block => {
+  // A unit with no sentence (the reading may leave one empty: vol 2's scene_000251, 2026-11-14) has nothing to read: no window.
+  return [...(unit === 'segment' ? reading.segments : reading.blocks ?? [])].filter(block => block.sentences?.length).sort((a, b) => position.get(a.first) - position.get(b.first)).map(block => {
     const tally = new Map(); for (const id of block.sentences) tally.set(sceneOf.get(id), (tally.get(sceneOf.get(id)) ?? 0) + 1);
     return { unit, first: block.first, last: block.last, scene: [...tally].sort((a, b) => b[1] - a[1])[0][0], block: { distribution: block.distribution, confidence: block.confidence, type: block.type, ...(unit === 'segment' ? { change: block.change } : {}) },
       sentences: block.sentences.map(id => ({ distribution: reading.kinds?.[id]?.distribution ?? { [reading.kinds?.[id]?.kind ?? 'narration']: 1 }, confidence: reading.kinds?.[id]?.confidence ?? 0.5 })),

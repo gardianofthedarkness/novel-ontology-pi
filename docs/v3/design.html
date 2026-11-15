@@ -1550,6 +1550,31 @@ cleaning should be per strand, not per book ... what if the next book returned t
   with a why (<code>novel strands register|inherit|set|keep|show</code>).</li>
 <li><strong>What a book kept never moves in a later book</strong>: its slots stand where they are, and only the new book's slots
   settle.</li>
+<li><strong>One universe key per place</strong> (built 2026-11-14; the user: "A matched place takes the key of the book where it
+  first appeared; vol 1's places keep their own ids, so vol 1's world doesn't change. Every seed and id built from a place id
+  uses this key"). Each book numbers its places from one (one city is <code>loc_000001</code> in vol 1 and
+  <code>loc_000002</code> in vol 2), and the world is seeded and keyed by place ids, so before keys a later book built
+  another city and nothing an earlier book broke was found again. The volume step <code>same-places</code>
+  (<code>engine/world/same-places.mjs</code>, <code>universe/places.json</code>), before terrain, sets each named place of a
+  book beside the earlier books' places sharing a name with it; the work model reads where each book names it and says whether
+  it is the same place. A person sees every match and why (<code>novel same-places show</code>) and overrides one
+  (<code>novel same-places set &lt;id&gt; &lt;book&gt;:&lt;id&gt;|new --why</code>). A matched place takes the earlier key,
+  any other its id under its book (<code>vol-2:loc_000001</code>); <code>src/universe/placeKeys.ts</code> gives the key
+  wherever an id or a seed is made from a place (the canvas, the patches, the slots, the buildings). Then:
+  <ul>
+  <li>the universe's slot registry holds keys, and each book reads it in its own ids (an earlier place it does not have is
+    <code>universe:&lt;key&gt;</code>);</li>
+  <li>the terrain step takes the latest earlier book's sites in, marked <code>inherited</code>; none of them moves, and only
+    the book's own places are placed round them;</li>
+  <li>a shared or inherited place stands where the earlier book's world stood it, from the same parent (the
+    <code>canvas</code> record, made by building that world alone, no model asked), and the canvas packs the book's own
+    places round it;</li>
+  <li>carried damage applies to a lot with the same id and the same shape (frame, cells, floors, height, model), even when
+    a newer patch earlier in its place's claim order changed its fingerprint.</li>
+  </ul>
+  On the first two volumes, vol 1's world is unchanged (2,090 of 2,090 buildings identical), and of its 2,010 city buildings
+  1,863 stand the same in vol 2. The rest stand on the two streets vol 2's own places took. Vol 1's unnamed places that vol 2
+  never names (four streets with ground of their own, 80 buildings) are not built in vol 2: open.</li>
 <li>A strand does not end at a chapter's or book's end (2026-11-02): continuity holds to its last scene in whatever book
   that is.</li>
 </ul>
