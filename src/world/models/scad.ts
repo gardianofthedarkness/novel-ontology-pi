@@ -4,9 +4,22 @@
  * manifold-3d, and written for the player Y-up (OpenSCAD is Z-up: (x, y, z) → (x, z, -y); the front stays +x).
  */
 import { spawnSync } from "node:child_process";
-import { readFileSync } from "node:fs";
+import { existsSync, readdirSync, readFileSync } from "node:fs";
+import { homedir } from "node:os";
+import { join } from "node:path";
 
-export const OPENSCAD = process.env.OPENSCAD ?? "openscad";
+/**
+ * OpenSCAD: OPENSCAD when set; else, on Windows, an installed one (Program Files, the nightly's folder too) or a portable
+ * zip unpacked under ~/tools/openscad/<version>/; else `openscad` on the PATH.
+ */
+export const OPENSCAD = process.env.OPENSCAD ?? findOpenscad();
+function findOpenscad(): string {
+  if (process.platform !== "win32") return "openscad";
+  const programFiles = process.env.ProgramFiles ?? "C:\\Program Files", portable = join(homedir(), "tools", "openscad");
+  const candidates = [join(programFiles, "OpenSCAD (Nightly)", "openscad.exe"), join(programFiles, "OpenSCAD", "openscad.exe"),
+    ...(existsSync(portable) ? readdirSync(portable).sort().reverse().map((dir) => join(portable, dir, "openscad.exe")) : [])];
+  return candidates.find((file) => existsSync(file)) ?? "openscad";
+}
 
 export interface Mesh { verts: [number, number, number][]; tris: [number, number, number][]; colours: [number, number, number][] }
 export interface Measure { size: [number, number, number]; zMin: number; centre: [number, number]; triangles: number }

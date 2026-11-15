@@ -15,7 +15,7 @@ import { execFileSync } from 'node:child_process';
 import { existsSync } from 'node:fs';
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
-import { basename, join, resolve } from 'node:path';
+import { basename, join, resolve, sep } from 'node:path';
 import { createAgentSession, DefaultResourceLoader, ModelRuntime, SessionManager, SettingsManager } from '@earendil-works/pi-coding-agent';
 
 const say = value => process.stdout.write(`${JSON.stringify(value)}\n`);
@@ -25,7 +25,7 @@ if (!folderArg || !message) { say({ error: 'usage: review-agent.mjs <review fold
 if (!apiKey) { say({ error: 'The work model has no key (WORK_LLM_API_KEY).' }); process.exit(2); }
 const folder = resolve(folderArg), sessionDir = join(folder, 'sessions'), started = Date.now();
 const sessionFile = sessionArg ? resolve(sessionArg) : null;
-if (sessionFile && !sessionFile.startsWith(`${sessionDir}/`)) { say({ error: 'Only this review\'s sessions can be continued.' }); process.exit(2); }
+if (sessionFile && !sessionFile.startsWith(`${sessionDir}${sep}`)) { say({ error: 'Only this review\'s sessions can be continued.' }); process.exit(2); }
 
 /** A still as the model is sent it: a JPEG at most 960 px wide (macOS sips), the PNG itself when that fails. */
 async function imageOf(path) {

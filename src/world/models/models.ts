@@ -6,6 +6,7 @@
  * catalog.json (one record a thing: state, size, checks, tries, who wrote it, tokens). A model is a look, never canon.
  */
 import { existsSync } from "node:fs";
+import { homedir } from "node:os";
 import { mkdir, readFile, rename, writeFile } from "node:fs/promises";
 import { dirname, join, resolve } from "node:path";
 import { setting, universeFor } from "../settings.js";
@@ -121,7 +122,7 @@ export async function nominationsOf(novelDir: string): Promise<Nomination[]> { r
  * ~/claude-world-first/model-packs/gknextengine-scad, or NOVEL_SCAD_KITS) with their catalogue: every module's category,
  * footprint and height. A thing bound to a kit part (`kit:<module>`) is rendered from that module and checked like a model.
  */
-export const KITS = process.env.NOVEL_SCAD_KITS ?? join(process.env.HOME ?? "", "claude-world-first", "model-packs", "gknextengine-scad");
+export const KITS = process.env.NOVEL_SCAD_KITS ?? join(homedir(), "claude-world-first", "model-packs", "gknextengine-scad");
 export interface KitModule { name: string; kit: string; file: string; category: string; footprint: [number, number]; height: number; triangles: number }
 let kitCache: KitModule[] | null = null;
 export async function kitModules(): Promise<KitModule[]> {

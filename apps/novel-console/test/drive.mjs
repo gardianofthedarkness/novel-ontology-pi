@@ -21,7 +21,8 @@ if (!folders.length) { console.error("usage: node test/drive.mjs <folder>[,<fold
 const profile = mkdtempSync(join(tmpdir(), "novel-console-")), secrets = join(profile, "secrets");
 writeFileSync(join(profile, "libraries.json"), JSON.stringify({ folders }));
 const port = 9400 + Math.floor(Math.random() * 400);
-const binary = packaged ? join(resolve(packaged), "Contents", "MacOS", "Novel Console") : join(appDir, "node_modules", "electron", "dist", "Electron.app", "Contents", "MacOS", "Electron");
+// On Windows --app is the folder that holds Novel Console.exe (release/win-unpacked, or where the installer put it).
+const binary = process.platform === "win32" ? (packaged ? join(resolve(packaged), "Novel Console.exe") : join(appDir, "node_modules", "electron", "dist", "electron.exe")) : packaged ? join(resolve(packaged), "Contents", "MacOS", "Novel Console") : join(appDir, "node_modules", "electron", "dist", "Electron.app", "Contents", "MacOS", "Electron");
 // Stand-ins for the two agents the console starts, each speaking as the real one does (Claude Code's stream-json, the Pi
 // runner's JSON lines and a session file of its own): an arrangement makes one universe of the first two books not arranged,
 // each with the series its title gives, through the folder's own novel command; a continued session answers. No real
@@ -67,7 +68,8 @@ if (asUser) {
   if (added.length) { mkdirSync(own, { recursive: true }); writeFileSync(listFile, JSON.stringify({ ...list, folders: [...list.folders, ...added] })); }
 }
 const appBinary = packaged ? `${resolve(packaged)}/Contents/MacOS/Novel Console` : null;
-const child = asUser ? spawn("open", ["-n", "-a", resolve(packaged), "--args", `--remote-debugging-port=${port}`], { stdio: ["ignore", "ignore", "pipe"] }) : spawn(binary, [...(packaged ? [] : [appDir]), `--remote-debugging-port=${port}`], { stdio: ["ignore", "ignore", "pipe"], env: { ...process.env, NOVEL_CONSOLE_DATA: profile, NOVEL_SECRETS_DIR: secrets, ...(realAgent ? {} : { NOVEL_CONSOLE_AGENT_COMMAND: standIn, NOVEL_CONSOLE_PI_RUNNER: standIn, NOVEL_CONSOLE_PI_SESSIONS: piSessions }), TYPESAFE_API_KEY: "", WORK_LLM_API_KEY: realAgent ? process.env.WORK_LLM_API_KEY ?? "" : "stand-in", ELECTRON_RUN_AS_NODE: "" } });
+// ELECTRON_RUN_AS_NODE left out (undefined is not passed on): on Windows an empty one still counts, and the app would start as Node.
+const child = asUser ? spawn("open", ["-n", "-a", resolve(packaged), "--args", `--remote-debugging-port=${port}`], { stdio: ["ignore", "ignore", "pipe"] }) : spawn(binary, [...(packaged ? [] : [appDir]), `--remote-debugging-port=${port}`], { stdio: ["ignore", "ignore", "pipe"], env: { ...process.env, NOVEL_CONSOLE_DATA: profile, NOVEL_SECRETS_DIR: secrets, ...(realAgent ? {} : { NOVEL_CONSOLE_AGENT_COMMAND: standIn, NOVEL_CONSOLE_PI_RUNNER: standIn, NOVEL_CONSOLE_PI_SESSIONS: piSessions }), TYPESAFE_API_KEY: "", WORK_LLM_API_KEY: realAgent ? process.env.WORK_LLM_API_KEY ?? "" : "stand-in", ELECTRON_RUN_AS_NODE: undefined } });
 let errors = ""; child.stderr.on("data", (chunk) => { errors += chunk; });
 const wait = (ms) => new Promise((done) => setTimeout(done, ms));
 const until = async (probe, what, most = 30000) => { for (const start = Date.now(); ;) { const value = await probe().catch(() => null); if (value) return value; if (Date.now() - start > most) throw new Error(`Timed out waiting for ${what}`); await wait(250); } };

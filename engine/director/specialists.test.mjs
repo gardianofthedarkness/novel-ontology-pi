@@ -27,7 +27,7 @@ test('the gate: a dense stretch fires its cast with hysteresis and a margin; a f
 
 test('the docs are as the registry writes them', async () => {
   const { spawnSync } = await import('node:child_process');
-  const run = spawnSync(process.execPath, [new URL('./specialists-doc.mjs', import.meta.url).pathname, '--check'], { encoding: 'utf8' });
+  const run = spawnSync(process.execPath, [(await import('node:url')).fileURLToPath(new URL('./specialists-doc.mjs', import.meta.url)), '--check'], { encoding: 'utf8' });
   assert.equal(run.status, 0, `run node engine/director/specialists-doc.mjs: ${run.stdout}${run.stderr}`);
 });
 
@@ -81,7 +81,7 @@ test('a page per cast and per director: each cast says how it is asked, each dir
   }
   assert.ok(asked.mega[0].questions[0].options.includes('with:<another>'), 'a built question is the mode\'s own');
   const { spawnSync } = await import('node:child_process');
-  const run = spawnSync(process.execPath, [new URL('./directing-vault.mjs', import.meta.url).pathname, '--check'], { encoding: 'utf8' });
+  const run = spawnSync(process.execPath, [(await import('node:url')).fileURLToPath(new URL('./directing-vault.mjs', import.meta.url)), '--check'], { encoding: 'utf8' });
   assert.equal(run.status, 0, `run node engine/director/directing-vault.mjs: ${run.stdout}${run.stderr}`);
 });
 

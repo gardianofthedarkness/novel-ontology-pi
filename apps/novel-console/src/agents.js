@@ -26,7 +26,9 @@ function slice(file, size, fromEnd) {
 const lines = (text) => text.split("\n").flatMap((line) => { if (!line.trim()) return []; try { return [JSON.parse(line)]; } catch { return []; } });
 const blockText = (content) => (typeof content === "string" ? content : Array.isArray(content) ? content.filter((block) => block && (block.type === "text" || block.type === "input_text" || block.type === "output_text")).map((block) => block.text).join("\n") : "");
 const toolCount = (content) => (Array.isArray(content) ? content.filter((block) => block?.type === "tool_use" || block?.type === "function_call").length : 0);
-const which = (name) => (process.env.PATH ?? "").split(":").concat(["/opt/homebrew/bin", "/usr/local/bin", path.join(home, ".local", "bin")]).map((dir) => path.join(dir, name)).find((file) => exists(file)) ?? null;
+// On Windows only an .exe is taken (Claude Code's own installer gives one): an npm .cmd shim cannot be started without a
+// shell, which would split the prompt.
+const which = (name) => (process.env.PATH ?? "").split(path.delimiter).filter(Boolean).concat(process.platform === "win32" ? [path.join(home, ".local", "bin")] : ["/opt/homebrew/bin", "/usr/local/bin", path.join(home, ".local", "bin")]).map((dir) => path.join(dir, process.platform === "win32" ? `${name}.exe` : name)).find((file) => exists(file)) ?? null;
 
 // Each host: where its sessions are, how one is listed and read, whether it can be continued.
 const HOSTS = {
@@ -101,7 +103,7 @@ const HOSTS = {
   },
 };
 const NOTES = {
-  codex: "Read only: Codex's command is not installed on this Mac.",
+  codex: "Read only: Codex's command is not installed on this computer.",
   "gemini-cli": "Read only: Gemini resumes a session only by its number within its own project folder, which its files do not name.",
   pi: "Pi's sessions from the console hosts are read only here; the ones Novel Console starts (Arrange with an agent) can be continued.",
   "claude-code": "Read only: the claude command was not found.",
@@ -131,9 +133,9 @@ async function hosts(registry) {
   const ids = [...new Set([...registry.map((host) => host.id), ...Object.keys(HOSTS)])];
   return ids.map((id) => {
     const host = HOSTS[id];
-    if (!host) return { id, name: names.get(id) ?? id, sessions: [], read: false, continues: false, note: "No sessions of this host are kept on this Mac." };
+    if (!host) return { id, name: names.get(id) ?? id, sessions: [], read: false, continues: false, note: "No sessions of this host are kept on this computer." };
     const files = host.files().map((file) => ({ file, info: stat(file) })).filter((entry) => entry.info && entry.info.size > 0).sort((a, b) => b.info.mtimeMs - a.info.mtimeMs).slice(0, MOST);
-    const own = id === "pi" ? `${piConsoleSessions()}/` : null;
+    const own = id === "pi" ? `${piConsoleSessions()}${path.sep}` : null;
     const sessions = files.map(({ file, info }) => { try { return { ...host.summary(file), updated: info.mtime.toISOString(), size: info.size, key: `${id}|${file}`, ...(own && file.startsWith(own) ? { continues: true } : {}) }; } catch { return null; } }).filter(Boolean);
     const command = host.command();
     const continues = Boolean(command && host.send);
@@ -166,13 +168,13 @@ async function send(key, text) {
 }
 /** Claude Code's command here, for work the console hands to a new session (the stand-in's in tests). */
 const SIGNED_OUT = /authentication_error|Failed to authenticate|run \/login|auth login|token has expired/i;
-const SIGNED_OUT_HELP = "Claude Code is signed out on this Mac. Sign in once in Terminal (run `claude auth login`), or pick another agent in the chat, then press Ask again.";
+const SIGNED_OUT_HELP = "Claude Code is signed out on this computer. Sign in once in a terminal (run `claude auth login`), or pick another agent in the chat, then press Ask again.";
 const claudeCommand = () => process.env.NOVEL_CONSOLE_AGENT_COMMAND || which("claude");
 /** A Claude Code session in `cwd` (new, or `resume` continued) given `prompt`, its tools limited to `allowed`; the session's
  * id and each command it runs go to `onStep` as they come; resolves with its reply. */
 function startSession(prompt, cwd, allowed, env = {}, { resume = null, onStep = () => {} } = {}) {
   const command = claudeCommand();
-  if (!command) return Promise.reject(new Error("Claude Code's command (claude) was not found on this Mac. Pick Pi in the chat, or install Claude Code."));
+  if (!command) return Promise.reject(new Error("Claude Code's command (claude) was not found on this computer. Pick Pi in the chat, or install Claude Code."));
   return new Promise((resolve, reject) => {
     const child = spawn(command, ["-p", prompt, ...(resume ? ["--resume", resume] : []), "--output-format", "stream-json", "--verbose", "--allowedTools", ...allowed], { cwd, stdio: ["ignore", "pipe", "pipe"], env: { ...process.env, ELECTRON_RUN_AS_NODE: "", ...env } });
     let buffer = "", err = "", reply = null, sessionId = null;
@@ -201,6 +203,6 @@ const piConsoleSessions = () => process.env.NOVEL_CONSOLE_PI_SESSIONS || path.jo
 function sessionOf(key) {
   const [id, file] = [key.slice(0, key.indexOf("|")), key.slice(key.indexOf("|") + 1)], host = HOSTS[id];
   if (!host || !host.files().includes(file)) throw new Error("No such session.");
-  return { host: id, file, ...host.summary(file), continues: id === "pi" ? file.startsWith(`${piConsoleSessions()}/`) : Boolean(host.command() && host.send) };
+  return { host: id, file, ...host.summary(file), continues: id === "pi" ? file.startsWith(`${piConsoleSessions()}${path.sep}`) : Boolean(host.command() && host.send) };
 }
 module.exports = { hosts, transcript, send, startSession, claudeCommand, sessionOf, piConsoleSessions };

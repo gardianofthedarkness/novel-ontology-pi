@@ -13,6 +13,15 @@ const { pathToFileURL } = require("node:url");
 // The backend: the repository's built code beside the app in development, its copy in the app's resources when packaged.
 const backend = app.isPackaged ? path.join(process.resourcesPath, "backend") : path.resolve(__dirname, "..", "..", "..");
 const serverScript = path.join(backend, "dist", "src", "server", "server.js");
+// The Node the backend runs on. On Windows a native module built for Node (LadybugDB) links node.exe by name and cannot
+// load inside this app's own executable, so the Windows app carries the official node.exe (resources/backend/node; in
+// development the one on PATH); elsewhere this app's own Node (ELECTRON_RUN_AS_NODE).
+const runtime = (() => {
+  if (process.platform !== "win32") return process.execPath;
+  const carried = path.join(backend, "node", "node.exe");
+  if (fs.existsSync(carried)) return carried;
+  return (process.env.PATH ?? "").split(path.delimiter).filter(Boolean).map((dir) => path.join(dir, "node.exe")).find((file) => fs.existsSync(file)) ?? process.execPath;
+})();
 const readerTemplate = path.join(backend, "apps", "reader", "reader.html");
 const store = () => path.join(app.getPath("userData"), "libraries.json");
 const log = (...parts) => { try { fs.appendFileSync(path.join(app.getPath("userData"), "console.log"), `${new Date().toISOString()} ${parts.join(" ")}\n`); } catch {} };
@@ -26,7 +35,7 @@ protocol.registerSchemesAsPrivileged([{ scheme: "app", privileges: { standard: t
 class Server {
   constructor(folder) {
     this.folder = folder; this.next = 1; this.waiting = new Map(); this.pending = Buffer.alloc(0); this.closed = false;
-    this.child = fork(serverScript, [folder], { silent: true, cwd: backend, env: { ...process.env, ELECTRON_RUN_AS_NODE: "1" } });
+    this.child = fork(serverScript, [folder], { silent: true, cwd: backend, execPath: runtime, env: { ...process.env, ELECTRON_RUN_AS_NODE: "1" } });
     this.child.stdout.on("data", (chunk) => this.read(chunk));
     this.child.stderr.on("data", (chunk) => log(`[server ${path.basename(folder)}]`, String(chunk).trimEnd()));
     this.child.on("exit", (code) => { this.closed = true; log(`server for ${folder} stopped (${code})`); for (const entry of this.waiting.values()) entry.reject(new Error("The novel server stopped.")); this.waiting.clear(); });
@@ -140,7 +149,7 @@ ipcMain.handle("runVolume", async (event, wid, volume, options = {}) => {
   const key = process.env.WORK_LLM_API_KEY?.trim() || secrets.getStoredSecret("work-llm");
   if (!key) throw new Error("A volume asks the work model: enter its key with the key button first.");
   return new Promise((resolve, reject) => {
-    const child = spawn(process.execPath, [path.join(backend, "engine", "volume", "volume.mjs"), "run", book.workspace], { cwd: backend, stdio: ["ignore", "pipe", "pipe"], env: { ...process.env, ELECTRON_RUN_AS_NODE: "1", WORK_LLM_API_KEY: key, NOVEL_WORKFLOW_AGENT: agent } });
+    const child = spawn(runtime, [path.join(backend, "engine", "volume", "volume.mjs"), "run", book.workspace], { cwd: backend, stdio: ["ignore", "pipe", "pipe"], env: { ...process.env, ELECTRON_RUN_AS_NODE: "1", WORK_LLM_API_KEY: key, NOVEL_WORKFLOW_AGENT: agent } });
     let out = "", err = "";
     child.stdout.on("data", (chunk) => { out += chunk; }); child.stderr.on("data", (chunk) => { err += chunk; });
     child.on("error", reject);
@@ -170,7 +179,7 @@ ipcMain.handle("sendToSession", async (event, key, text) => {
     if (!String(text ?? "").trim()) throw new Error("The message is empty.");
     // A review session goes on answering that book's review (its task is kept beside it), only while that world takes changes.
     let task = null; try { task = JSON.parse(fs.readFileSync(`${session.file}.task.json`, "utf8")); } catch {}
-    const editable = task?.task === "review" && [...worlds.known.values()].some((world) => !world.readOnly && path.resolve(task.workspace).startsWith(`${world.root}/`));
+    const editable = task?.task === "review" && [...worlds.known.values()].some((world) => !world.readOnly && path.resolve(task.workspace).startsWith(`${world.root}${path.sep}`));
     if (!session.continues || !(editable || (task?.task !== "review" && libraries().includes(session.cwd)))) throw new Error("This Pi session can be read here but not continued.");
     const reply = await runPi({ folder: session.cwd, novel: folderNovel(session.cwd), skill: folderSkill(), prompt: String(text), sessionFile: session.file, env: editable ? { NOVEL_TASK: "review", NOVEL_WORKSPACE: task.workspace } : {} });
     if (reply.error) throw new Error(reply.error);
@@ -184,11 +193,17 @@ ipcMain.handle("sendToSession", async (event, key, text) => {
 // window using"), Claude Code or Pi; a session of it open there is continued, else a new one starts. Each command it runs
 // is sent to the window as it runs. The folder gets its own `novel` command in .novel/bin, run by this app's Node.
 const arranging = new Map();
+// On Windows a shell's paths are written with forward slashes (the agents' Bash there is Git Bash; Pi's tool runs the CLI
+// itself), and a novel.cmd beside the script serves cmd and PowerShell.
+const windows = process.platform === "win32";
+const slashed = (file) => (windows ? file.replaceAll("\\", "/") : file);
+const cmdText = (mark) => `@echo off\r\nrem ${mark}\r\nsetlocal\r\nset ELECTRON_RUN_AS_NODE=1\r\n"${runtime}" "${path.join(backend, "dist", "src", "cli", "cli.js")}" %*\r\n`;
 function folderNovel(folder) {
   const bin = path.join(folder, ".novel", "bin"), novel = path.join(bin, "novel");
   fs.mkdirSync(bin, { recursive: true });
-  fs.writeFileSync(novel, `#!/bin/sh\n# Novel Console's novel command for this folder (an agent's only tool when it arranges it).\nELECTRON_RUN_AS_NODE=1 exec "${process.execPath}" "${path.join(backend, "dist", "src", "cli", "cli.js")}" "$@"\n`, { mode: 0o755 });
-  return novel;
+  fs.writeFileSync(novel, `#!/bin/sh\n# Novel Console's novel command for this folder (an agent's only tool when it arranges it).\nELECTRON_RUN_AS_NODE=1 exec "${slashed(runtime)}" "${slashed(path.join(backend, "dist", "src", "cli", "cli.js"))}" "$@"\n`, { mode: 0o755 });
+  if (windows) fs.writeFileSync(`${novel}.cmd`, cmdText("Novel Console's novel command for this folder."));
+  return slashed(novel);
 }
 const folderSkill = () => path.join(backend, "skills", "novel-folder", "SKILL.md");
 ipcMain.handle("arrangeWithAgent", async (event, folder, options = {}) => {
@@ -252,7 +267,7 @@ async function runPi({ folder, novel, skill, prompt, sessionFile = null, onStep 
   if (!key) throw new Error("Pi works on the work model: enter its key with the key button, then press Ask again.");
   const script = process.env.NOVEL_CONSOLE_PI_RUNNER || path.join(backend, "tools", "pi-review", "folder-arrange.mjs");
   return new Promise((resolve, reject) => {
-    const child = spawn(process.execPath, [script, folder, novel, skill, agents.piConsoleSessions(), ...(sessionFile ? [sessionFile] : [])], { cwd: folder, stdio: ["ignore", "pipe", "pipe"], env: { ...process.env, ELECTRON_RUN_AS_NODE: "1", WORK_LLM_API_KEY: key, NOVEL_ARRANGE_PROMPT: prompt, ...env } });
+    const child = spawn(runtime, [script, folder, novel, skill, agents.piConsoleSessions(), ...(sessionFile ? [sessionFile] : [])], { cwd: folder, stdio: ["ignore", "pipe", "pipe"], env: { ...process.env, ELECTRON_RUN_AS_NODE: "1", WORK_LLM_API_KEY: key, NOVEL_ARRANGE_PROMPT: prompt, ...env } });
     let buffer = "", err = "", reply = null;
     const line = (text) => {
       let entry; try { entry = JSON.parse(text); } catch { return; }
@@ -276,7 +291,9 @@ async function runPi({ folder, novel, skill, prompt, sessionFile = null, onStep 
 // skill into each agent found on this Mac. The agent signs in by itself; the console never handles an agent's login.
 const SHIM_MARK = "# Novel Console's novel command";
 const userShim = () => path.join(os.homedir(), ".local", "bin", "novel");
-const shimText = () => `#!/bin/sh\n${SHIM_MARK} (installed by "Set up your agent"; rewritten when the app moves or updates).\nELECTRON_RUN_AS_NODE=1 exec "${process.execPath}" "${path.join(backend, "dist", "src", "cli", "cli.js")}" "$@"\n`;
+const shimText = () => `#!/bin/sh\n${SHIM_MARK} (installed by "Set up your agent"; rewritten when the app moves or updates).\nELECTRON_RUN_AS_NODE=1 exec "${slashed(runtime)}" "${slashed(path.join(backend, "dist", "src", "cli", "cli.js"))}" "$@"\n`;
+// Windows: novel.cmd beside it, for cmd and PowerShell (rewritten with it).
+const writeShim = (shim) => { fs.writeFileSync(shim, shimText(), { mode: 0o755 }); if (windows) fs.writeFileSync(`${shim}.cmd`, cmdText(SHIM_MARK.slice(2))); };
 const ours = (file) => { try { return fs.readFileSync(file, "utf8").includes(SHIM_MARK); } catch { return false; } };
 const AGENT_SKILLS = () => [
   { id: "claude-code", name: "Claude Code", home: path.join(os.homedir(), ".claude"), skills: path.join(os.homedir(), ".claude", "skills") },
@@ -285,7 +302,7 @@ const AGENT_SKILLS = () => [
 ];
 function agentSetup({ apply = false } = {}) {
   const shim = userShim(), shimFree = !fs.existsSync(shim) || ours(shim);
-  if (apply && shimFree) { fs.mkdirSync(path.dirname(shim), { recursive: true }); fs.writeFileSync(shim, shimText(), { mode: 0o755 }); }
+  if (apply && shimFree) { fs.mkdirSync(path.dirname(shim), { recursive: true }); writeShim(shim); }
   const skill = path.join(backend, "skills", "novel-folder");
   const agents = AGENT_SKILLS().map((agent) => {
     const found = fs.existsSync(agent.home), target = path.join(agent.skills, "novel-folder");
@@ -295,7 +312,7 @@ function agentSetup({ apply = false } = {}) {
   return { command: shim, commandInstalled: ours(shim), commandTaken: !shimFree, agents };
 }
 // A command installed earlier follows the app (a new version, or the app moved).
-app.whenReady().then(() => { try { const shim = userShim(); if (ours(shim) && fs.readFileSync(shim, "utf8") !== shimText()) fs.writeFileSync(shim, shimText(), { mode: 0o755 }); } catch {} });
+app.whenReady().then(() => { try { const shim = userShim(); if (ours(shim) && fs.readFileSync(shim, "utf8") !== shimText()) writeShim(shim); } catch {} });
 ipcMain.handle("agentSetup", (event, apply) => agentSetup({ apply: Boolean(apply) }));
 ipcMain.handle("reveal", (event, folder) => { if (libraries().includes(folder)) shell.showItemInFolder(folder); });
 ipcMain.handle("version", () => ({ app: app.getVersion(), electron: process.versions.electron, backend: app.isPackaged ? "bundled" : backend }));
@@ -325,7 +342,8 @@ function reader(url) {
 
 function open() {
   const window = new BrowserWindow({
-    width: 1440, height: 920, minWidth: 900, minHeight: 600, title: "Novel Console", titleBarStyle: "hiddenInset", backgroundColor: "#16171c",
+    // The Mac's inset title bar; elsewhere the system's own (a hidden one would take the window's buttons with it).
+    width: 1440, height: 920, minWidth: 900, minHeight: 600, title: "Novel Console", ...(process.platform === "darwin" ? { titleBarStyle: "hiddenInset" } : { autoHideMenuBar: true }), backgroundColor: "#16171c",
     webPreferences: { preload: path.join(__dirname, "preload.js"), contextIsolation: true, sandbox: true, nodeIntegration: false },
   });
   window.webContents.setWindowOpenHandler(({ url }) => { if (/^https:\/\//.test(url)) shell.openExternal(url); return { action: "deny" }; });

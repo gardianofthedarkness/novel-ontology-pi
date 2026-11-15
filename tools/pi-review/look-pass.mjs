@@ -8,10 +8,10 @@ import { readFile } from 'node:fs/promises';
 import { existsSync, readFileSync } from 'node:fs';
 import { createHash } from 'node:crypto';
 import { join, resolve } from 'node:path';
-import { pathToFileURL } from 'node:url';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 import { parseArgs } from 'node:util';
 
-const repo = resolve(new URL('../..', import.meta.url).pathname);
+const repo = resolve(fileURLToPath(new URL('../..', import.meta.url)));
 
 /** The workflow's message: the same for every book; it names the step and the commands, never what the book holds. */
 export const lookPassMessage = (novelDir, volume) => [
@@ -45,7 +45,7 @@ export async function waitForPass(library, { seconds = 900, since = Date.now() }
   }
 }
 
-if (process.argv[1] && resolve(process.argv[1]) === resolve(new URL(import.meta.url).pathname)) {
+if (process.argv[1] && resolve(process.argv[1]) === resolve(fileURLToPath(import.meta.url))) {
   const { values, positionals: [library, volume] } = parseArgs({ allowPositionals: true, options: { wait: { type: 'string' } } });
   if (!library || !volume) { console.error('usage: node tools/pi-review/look-pass.mjs <library> <volume n> [--wait <seconds>]'); process.exit(2); }
   const since = Date.now(), sent = await sendLookPass(library, volume);

@@ -51,11 +51,11 @@
   <div class="split" data-split="library" aria-hidden="true"></div>
   <main class="book">
     <section id="welcome" class="welcome">
-      <h1>Read any novel on this Mac</h1>
+      <h1>Read any novel on this computer</h1>
       <p>Add a folder (your Documents, say): every EPUB in it, and in the folders inside it, is found; a text file comes in when you import it (the folder's ⋯ menu). Each book gets its basic layer at once, with no model: chapters, lines, dialogue, its series and volume, names by pattern. Your files are never moved or changed; what the console learns is kept in a hidden <code>.novel</code> folder beside them.</p>
       <ol>
         <li><b>Add a folder</b> of books. Series found by their titles can be arranged with one click.</li>
-        <li><b>Keys</b>: Jev's and the work model's. They stay in this Mac's secure store.</li>
+        <li><b>Keys</b>: Jev's and the work model's. They stay in a store on this computer that only you can read.</li>
         <li>Press <b>▶</b> beside a book to read it (about $0.35 a volume). It runs on its own; you can close the window.</li>
         <li>Open the book. The icons on the left open its outline, characters, places and strands and the reading's details for a line; the chat on the right holds your agents' sessions.</li>
       </ol>
@@ -84,7 +84,7 @@
 <dialog id="keys-dialog">
   <form method="dialog" id="keys-form">
     <h2>Model keys</h2>
-    <p class="muted">A reading asks Jev and the work model. Their keys are kept in this Mac's secure store (<code>~/.config/novel-ontology</code>, readable only by you), never shown again. Leave a field empty to keep the key that is set.</p>
+    <p class="muted">A reading asks Jev and the work model. Their keys are kept on this computer (<code>~/.config/novel-ontology</code>, readable only by you), never shown again. Leave a field empty to keep the key that is set.</p>
     <label>Jev (TypeSafe) <span class="state" id="state-jev"></span><input type="password" id="key-jev" autocomplete="off" spellcheck="false"></label>
     <label>Work model (DeepSeek) <span class="state" id="state-work"></span><input type="password" id="key-work" autocomplete="off" spellcheck="false"></label>
     <div class="row"><button value="cancel" class="ghost">Cancel</button><button id="keys-save" class="primary" value="save">Save</button></div>

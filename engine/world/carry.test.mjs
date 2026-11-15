@@ -4,7 +4,7 @@ import assert from 'node:assert/strict';
 import { mkdir, mkdtemp, readFile, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { bookEntry, candidatesFor, damageInForce, damageOf, decide, inForce, keep, reaches, register, setDecision, slotOfSource } from './carry.mjs';
+import { bookEntry, candidatesFor, damageInForce, damageOf, decide, inForce, keep, reaches, register, sameShape, setDecision, shapeOf, slotOfSource } from './carry.mjs';
 
 const NAMES = { a: ['Ann', 'the girl'], b: ['Ben'], c: ['Cal'], x: ['Stranger'], d: ['Dee'] };
 const names = id => NAMES[id] ?? [];
@@ -107,4 +107,14 @@ test('the work model\'s check takes a plain client (generate) or a metered one (
   assert.deepEqual(await workCheck(metered, { lastLines: [], firstLines: [] }), { inherits: true, reason: 'the same two' });
   assert.equal(await workCheck({ async generate() { return 'not json'; } }, { lastLines: [], firstLines: [] }), null);
   assert.equal(await workCheck({ async generate() { throw new Error('down'); } }, { lastLines: [], firstLines: [] }), null);
+});
+
+test('a kept shape (the page\'s lot) matches the world\'s lot of the same structure, whatever its look', () => {
+  const page = { frame: [1495.7, 24.8, 3.222], nx: 48, nz: 47, floors: 40, height: 234, model: 'tower-a' };
+  const world = { frame: { x: 1495.70004, z: 24.79996, angle: 3.22201 }, nx: 48, nz: 47, floors: 40, height: 234 };
+  assert.ok(sameShape(shapeOf(page), world), 'the world\'s raw frame, rounded as the page keeps it');
+  assert.ok(sameShape({ ...page, model: 'office-c' }, world), 'the look is not the building');
+  assert.ok(!sameShape(page, { ...world, floors: 38 }), 'another height is another building');
+  assert.ok(!sameShape(page, { ...world, frame: { ...world.frame, x: 1496.1 } }), 'another place is another building');
+  assert.ok(!sameShape(null, world));
 });

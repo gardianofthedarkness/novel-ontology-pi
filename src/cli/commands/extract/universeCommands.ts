@@ -1,5 +1,5 @@
 import { resolve } from "node:path";
-import { pathToFileURL } from "node:url";
+import { fileURLToPath, pathToFileURL } from "node:url";
 import {
   BOOK, changesSince, exportSnapshot, importBundle, latestSnapshot, libraryOf, matchingSnapshot, libraryPaths, readIndex, readSnapshot,
   restoreSnapshot, takeSnapshot, type SnapshotKind,
@@ -108,7 +108,7 @@ export async function universeCommand(args: string[]): Promise<unknown> {
     const { values, flags } = options(rest, ["--why"]);
     const root = libraryRoot(values[0]);
     // The canon's undo lives with the world engine (engine/review/canon.mjs); dist/src/cli/commands/extract → repository.
-    const adoptModule = pathToFileURL(resolve(new URL(".", import.meta.url).pathname, "..", "..", "..", "..", "..", "engine", "library", "adopt.mjs")).href;
+    const adoptModule = pathToFileURL(resolve(fileURLToPath(new URL(".", import.meta.url)), "..", "..", "..", "..", "..", "engine", "library", "adopt.mjs")).href;
     const { adopt } = await import(adoptModule) as { adopt: (root: string, options: { why?: string }) => Promise<unknown> };
     return adopt(root, { why: flags.get("--why")?.[0] ?? "adopted" });
   }

@@ -46,6 +46,7 @@
   .strands.tree .axis { display: flex; justify-content: space-between; font-size: 10px; color: var(--dim); margin-top: 2px; }
   /* Folding the panel (a phone: folded at first): only its first lines stay. */
   .hud h1 { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+  .hud h1 a.fold { text-decoration: none; margin-left: auto; margin-right: 6px; }
   .hud h1 .fold { font: inherit; font-size: 11px; letter-spacing: 0; text-transform: none; color: var(--dim); background: none; border: 1px solid var(--line); border-radius: 99px; padding: 2px 9px; cursor: pointer; }
   .hud.folded .strands, .hud.folded .tline, .hud.folded .counts, .hud.folded #ground { display: none !important; }
   .strands button { font-size: 11px; padding: 2px 8px; border-radius: 99px; display: inline-flex; gap: 5px; align-items: center; }
@@ -218,7 +219,7 @@
 <body>
 <div class="empty" id="empty">Waiting for the engine to play a moment…</div>
 <section class="hud" aria-live="polite">
-  <h1><span>World · live</span><button class="fold" id="fold" type="button" aria-expanded="true" aria-controls="strands">Fold ▴</button></h1>
+  <h1><span>World · live</span><a class="fold" id="universe" hidden>‹ Universe</a><button class="fold" id="fold" type="button" aria-expanded="true" aria-controls="strands">Fold ▴</button></h1>
   <div class="row" id="where"></div>
   <div class="row sky" id="skyword" aria-label="The story's time of day and weather"></div>
   <div class="counts" id="ground"></div>
@@ -601,6 +602,12 @@
     if (auto) { unfollow(); showCard(n, false); setAuto(true); return; }
     playCard(n);
   };
+  // Opened at a unit (the universe view links a unit of this book: ?unit=scene_000040): played there once the cards are in
+  // and the world has its first frame. ?universe=<relative link> puts a way back to the universe view in the panel.
+  const opened = new URLSearchParams(location.search);
+  let startUnit = opened.get("unit");
+  const startAt = () => { if (startUnit && cards.length && shown) { const unit = startUnit; startUnit = null; jumpToUnit(unit); } };
+  { const back = opened.get("universe"); if (back && /^[.\/\w-]*$/.test(back)) { $("universe").href = back; $("universe").hidden = false; } }
   const jumpToUnit = (unit) => { let n = cards.findIndex((card) => card.scene === unit); if (n < 0) { const k = units.findIndex((entry) => entry.id === unit); n = cards.findIndex((card) => units.findIndex((entry) => entry.id === card.scene) > k); } if (n >= 0) jumpTo(n); };
   // Where the reader is in the story (the sentence read along, or the one in the middle of the book as it is scrolled):
   // the strand tree marks it beside the card the world shows.
@@ -728,7 +735,7 @@
     strandsUpdate(director);
     $("csum").textContent = cards.length ? `The whole text; ${cards.length} cards played, ${cards.reduce((sum, card) => sum + card.moves.filter((m) => m.moved).length, 0)} moves (➜). Tap an underlined sentence to play it here.` : "The whole text. No director's run yet.";
     for (const id of ["bgo", "bauto"]) $(id).hidden = !cards.length;
-    mark();
+    mark(); startAt();
   };
   // The book as published (the user, 2026-11-02): the volume's EPUB a document at a time (api/book-epub), its headings,
   // paragraphs and pictures kept, each sentence the records cite (b0003_s0012, from api/book-text) found in it in order and
@@ -875,7 +882,7 @@
   // every moment since the one shown before it, so none is skipped; a phone keeps the time between for drawing and for
   // the viewer's finger. While a finger is down, or just lifted, the swap waits: it would cut the gesture off.
   const GAP = 5000, SETTLE = 1500;
-  let shown = null, next = null, page = 0, shownPage = 0, wanted = 0, epoch = null, shownMoment = null, camera = null, touching = false, ready = false, lastLoad = 0, lastTouch = 0, swapTimer = 0, loadTimer = 0;
+  let shown = null, next = null, page = 0, shownPage = 0, wanted = 0, epoch = null, shownMoment = null, camera = null, touching = false, inRoom = false, ready = false, lastLoad = 0, lastTouch = 0, swapTimer = 0, loadTimer = 0;
   /** A frame goes: told first to let its WebGL context go (a phone allows only a few), then emptied and removed. */
   const retire = (frame) => { try { frame.contentWindow?.postMessage({ type: "dispose" }, origin); } catch {} setTimeout(() => { frame.src = "about:blank"; frame.remove(); }, 100); };
   /** A frame that could not start its 3D view (or never got ready): dropped, the shown one stays, and the moment is loaded again. */
@@ -923,18 +930,25 @@
   const swap = () => {
     clearTimeout(swapTimer);
     if (!next || !ready) return;
-    const wait = touching ? SETTLE : lastTouch + SETTLE - Date.now();
+    // A viewer inside a room (the frame's room view) keeps this frame: the next moment comes in once they leave.
+    const wait = touching || inRoom ? SETTLE : lastTouch + SETTLE - Date.now();
     if (wait > 0) { swapTimer = setTimeout(swap, wait); return; }
     ready = false;
     if (camera) next.contentWindow.postMessage({ ...camera, type: "camera" }, origin);
     next.contentWindow.postMessage({ type: "underground", on: $("under").getAttribute("aria-pressed") === "true" }, origin);
     next.contentWindow.postMessage({ type: "traces", on: tracesOn }, origin); next.contentWindow.postMessage({ type: "strand", fork: strandPick }, origin); next.contentWindow.postMessage({ type: "cuts", on: cutsOn }, origin); next.contentWindow.postMessage({ type: "reading", line: readingLine }, origin);
-    const old = shown; shown = next; next = null; shownMoment = shown.moment ?? shownMoment; shownPage = page;
+    const old = shown; shown = next; next = null; inRoom = false; sendInset(shown); shownMoment = shown.moment ?? shownMoment; shownPage = page;
     shown.classList.remove("waiting"); $("empty").hidden = true;
     if (old) setTimeout(() => retire(old), 450);
     if (cardAt >= 0) setTimeout(() => { sendClouds(); sendDev(); }, 300);
     queue();
   };
+  /** How much of the frame's foot the bar of buttons covers (it wraps on a narrow window): the frame's room view stands above it. */
+  function sendInset(frame) {
+    const bar = document.querySelector("nav.bar"); if (!frame || !bar) return;
+    frame.contentWindow?.postMessage({ type: "inset", bottom: Math.ceil(innerHeight - bar.getBoundingClientRect().top + 10) }, origin);
+  }
+  addEventListener("resize", () => sendInset(shown));
   /** Load the newest moment wanted, when none is loading and the last load was long enough ago. */
   const queue = () => {
     clearTimeout(loadTimer);
@@ -953,13 +967,14 @@
       if ($("skyword")) $("skyword").textContent = message.daypart ? `${message.daypart}${message.weather && !["clear", "unknown"].includes(message.weather) ? ` · ${skyName(message.weather, message.strength, message.wind)}` : ""}${{ breezy: " · windy", gale: message.weather === "snow" && message.strength === "heavy" ? "" : " · a gale" }[message.wind] ?? ""}${message.lying ? " · snow on the ground" : ""}` : "";
     }
     if (message?.type === "touch" && shown && event.source === shown.contentWindow) { touching = message.active; lastTouch = Date.now(); if (!touching) swap(); }
+    if (message?.type === "room" && shown && event.source === shown.contentWindow) { inRoom = !!message.inside; lastTouch = Date.now(); if (!inRoom) swap(); }
     if (message?.type === "interact" && shown && event.source === shown.contentWindow) lastTouch = Date.now();
     // A way tapped in the world: who, which card, and that card's Jev steps.
     if (message?.type === "way" && shown && event.source === shown.contentWindow) {
       $("way").hidden = false; $("way").innerHTML = `${esc(message.name)} · ${esc(message.how ?? "walk")} · unit ${Number(String(message.scene).slice(-6))} · card ${message.event + 1} · <a href="#">Jev steps ↗</a>`;
       $("way").querySelector("a").addEventListener("click", (e) => { e.preventDefault(); openDebug(message.scene, message.event); });
     }
-    if (message?.type === "ready" && next && event.source === next.contentWindow) { next.contentWindow.postMessage(portraitsMessage(), origin); if (sky) next.contentWindow.postMessage(skyMessage(), origin); if ($("daylight").getAttribute("aria-pressed") !== "true") next.contentWindow.postMessage({ type: "daylightMode", on: false }, origin); next.contentWindow.postMessage({ type: "smoothMode", on: $("smooth").getAttribute("aria-pressed") === "true" }, origin); next.moment = message.moment; if (lastPiece) next.contentWindow.postMessage({ ...lastPiece, type: "extend" }, origin); ready = true; swap(); }
+    if (message?.type === "ready" && next && event.source === next.contentWindow) { next.contentWindow.postMessage(portraitsMessage(), origin); if (sky) next.contentWindow.postMessage(skyMessage(), origin); if ($("daylight").getAttribute("aria-pressed") !== "true") next.contentWindow.postMessage({ type: "daylightMode", on: false }, origin); next.contentWindow.postMessage({ type: "smoothMode", on: $("smooth").getAttribute("aria-pressed") === "true" }, origin); next.moment = message.moment; if (lastPiece) next.contentWindow.postMessage({ ...lastPiece, type: "extend" }, origin); ready = true; swap(); startAt(); }
     if (message?.type === "failed" && next && event.source === next.contentWindow) drop(next);
   });
   const load = (run) => {
@@ -969,7 +984,7 @@
     // A frame that loaded but never says it is ready because this tab is hidden (nothing draws) takes over anyway after a few
     // seconds; in a tab being looked at, a slow one is waited for, and one not ready in 30 s is dropped and loaded again.
     const frame = next;
-    frame.addEventListener("load", () => setTimeout(() => { if (next === frame && document.hidden) { ready = true; swap(); } }, 4000));
+    frame.addEventListener("load", () => setTimeout(() => { if (next === frame && document.hidden) { ready = true; swap(); startAt(); } }, 4000));
     setTimeout(() => { if (next === frame && !ready) drop(frame); }, 30000);
     document.body.append(next);
   };

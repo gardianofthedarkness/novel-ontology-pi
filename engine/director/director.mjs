@@ -34,6 +34,7 @@ const MLM = await import('./miniloop.mjs'), WLOG = await import('../log/world-lo
 const OM = await import('./on-the-move.mjs'), RD = await import('../world/roads.mjs');
 const RM = await import('../casts/rooms.mjs');
 const TR = await import('../casts/transport.mjs');
+const IT = await import('../world/items.mjs'), IP = await import('../world/items-page.mjs');
 const WF = await import('./workflow.mjs'), AT = await import('../laws/attacks.mjs'), IU = await import('../casts/in-use.mjs'), MT = await import('../casts/mounts.mjs'), CF = await import('../crowd/field.mjs'), DG = await import('../casts/digest.mjs'), FA = await import('../casts/facts.mjs'), LY = await import('../world/layers.mjs'), AIR = await import('../world/air.mjs'), UN = await import('../casts/underground-note.mjs'), G = await import('./gate.mjs'), LW = await import('../laws/laws.mjs');
 import { copyFile } from 'node:fs/promises';
 import { overridesOf, setting } from '../../dist/src/world/settings.js';
@@ -350,6 +351,8 @@ export async function direct(novelDir, { reading, readingPath = null, prefilm = 
     // The things people carry, put down, throw and break (the digest's items, the user, 2026-11-03: v1's item placing
     // brought back): each one's placements over the line, drawn on the page as v1's things are (a gold shape with its name).
     const things = new Map();
+    // Kept items drawn as their routine shelf models, as the book's bindings name them (novel model shelf).
+    const itemModels = await IP.itemModelsOf(novelDir);
     // A thing's form (the user, 2026-11-05: "objects needs to be assigned with a shape and size"): its sheet's shape and
     // size where the settei cast has it (a "not a thing" not drawn), else a box of the size the notes give.
     const formOf = thing => { const prop = propOf(thing.name); if (prop?.shape === null) return null; if (prop?.size) return { shape: prop.shape, size: prop.size[0], height: prop.size[1], depth: prop.size[2], airborne: prop.airborne ?? 0, kind: prop.kind }; const w = Math.max(0.2, Math.min(6, thing.size)); return { shape: 'box', size: w, height: Math.max(0.2, w * 0.6), depth: w, airborne: 0, kind: null }; };
@@ -390,7 +393,7 @@ export async function direct(novelDir, { reading, readingPath = null, prefilm = 
       // Each unit's shot (the shot stage, docs/v3/design.html#shot-stage): the agent's (room-plan.json), set by default, for the
       // units set in a bound room; filled once the rooms are bound.
       const shotsPage = {};
-      const withLine = data => ({ ...data, ...(skyPage ? { sky: { units: skyPage } } : {}), ...(Object.keys(shotsPage).length ? { shots: shotsPage } : {}), people: Object.fromEntries(Object.entries(data.people ?? {}).map(([id, person]) => { const prop = slotProp(id); return [id, prop?.shape ? { ...person, prop: { kind: prop.kind, shape: prop.shape, size: scadSize(carModel(prop, propSheet?.ids?.[id] ?? person.name)) ?? prop.size, airborne: prop.airborne ?? 0, ...(prop.vehicle ? { vehicle: true } : {}), ...(carModel(prop, propSheet?.ids?.[id] ?? person.name) ? { model: carModel(prop, propSheet?.ids?.[id] ?? person.name) } : {}), ...(ownerOf(propSheet?.ids?.[id]) && ownerOf(propSheet?.ids?.[id]) !== 'not said' ? { owner: ownerOf(propSheet?.ids?.[id]) } : {}), ...(wrecks.has(id) ? { wreck: { model: wrecks.get(id).model, scene: wrecks.get(id).scene, event: wrecks.get(id).event, at: wrecks.get(id).at } } : {}) } } : person]; })), models: { ...(data.models ?? {}), ...vehiclesUsed(data), ...furnitureUsed() }, ...(scadMeshes.size || data.scadModels ? { scadModels: { ...(data.scadModels ?? {}), ...scadUsed(data) } } : {}), ...(E.rooms?.size ? { rooms: [...E.rooms.values()] } : {}), macro: (data.macro ?? []).map(node => (bornOf.has(node.id) ? { ...node, born: bornOf.get(node.id) } : node)), things: [...(data.things ?? []), ...thingsOnPage()], scenes: data.scenes.map(entry => { const piece = played.has(entry.id) ? pieceOf(played.get(entry.id)) : null; return piece ? { ...entry, starts: piece.starts, events: piece.events, cast: piece.cast, landed: true } : { ...entry, landed: false }; }) });
+      const withLine = data => ({ ...data, ...(skyPage ? { sky: { units: skyPage } } : {}), ...(Object.keys(shotsPage).length ? { shots: shotsPage } : {}), people: Object.fromEntries(Object.entries(data.people ?? {}).map(([id, person]) => { const prop = slotProp(id); return [id, prop?.shape ? { ...person, prop: { kind: prop.kind, shape: prop.shape, size: scadSize(carModel(prop, propSheet?.ids?.[id] ?? person.name)) ?? prop.size, airborne: prop.airborne ?? 0, ...(prop.vehicle ? { vehicle: true } : {}), ...(carModel(prop, propSheet?.ids?.[id] ?? person.name) ? { model: carModel(prop, propSheet?.ids?.[id] ?? person.name) } : {}), ...(ownerOf(propSheet?.ids?.[id]) && ownerOf(propSheet?.ids?.[id]) !== 'not said' ? { owner: ownerOf(propSheet?.ids?.[id]) } : {}), ...(wrecks.has(id) ? { wreck: { model: wrecks.get(id).model, scene: wrecks.get(id).scene, event: wrecks.get(id).event, at: wrecks.get(id).at } } : {}) } } : person]; })), models: { ...(data.models ?? {}), ...vehiclesUsed(data), ...furnitureUsed() }, ...(scadMeshes.size || data.scadModels || itemModels.size ? { scadModels: { ...(data.scadModels ?? {}), ...scadUsed(data), ...Object.fromEntries([...itemModels.values()].filter(model => model.mesh).map(model => [model.id, model.mesh])) } } : {}), ...(E.rooms?.size ? { rooms: [...E.rooms.values()] } : {}), macro: (data.macro ?? []).map(node => (bornOf.has(node.id) ? { ...node, born: bornOf.get(node.id) } : node)), things: IT.bindItemModels(IT.itemsOnPage([...(data.things ?? []), ...thingsOnPage()], [...things.values()], data.scenes ?? []).things, itemModels).things, scenes: data.scenes.map(entry => { const piece = played.has(entry.id) ? pieceOf(played.get(entry.id)) : null; return piece ? { ...entry, starts: piece.starts, events: piece.events, cast: piece.cast, landed: true } : { ...entry, landed: false }; }) });
       const dense = id => { const { i, j, k } = W.cellOf(world, id), g = page.world; return ((k + g.ok) * g.NZ + (j + g.oj)) * g.NX + (i + g.oi); };
       const at = id => { const p = W.nodePos(world, id); return [p.x, p.y, p.z]; };
       const changesFloor = path => { if (!path || path.length < 2 || path.drove || path.air) return false; const y0 = at(path[0])[1]; return path.some(id => Math.abs(at(id)[1] - y0) > 1); };
@@ -1080,6 +1083,15 @@ export async function direct(novelDir, { reading, readingPath = null, prefilm = 
           if (node !== null && node !== undefined) stagedTaken.add(node);
           return node ?? null;
         };
+        // Where a person the agent staged in this unit may go in it (moveTo): the room for a spot in the room; the room's
+        // floor of its building for `door` and `corridor` in a unit set in that building. Anyone it did not stage goes anywhere.
+        const stageLevel = stageAll?.size ? at([...stageAll][0])[1] : null;
+        const stagedKeeps = (who, node) => {
+          const entry = staging[who];
+          if (!entry || entry.at === 'elsewhere' || stageLevel === null || node === null || node === undefined) return true;
+          if (!boundRoom && (entry.at === 'door' || entry.at === 'corridor')) return stageAll.has(node) || (insideAt(node)?.lot === stageRoom.lot && Math.abs(at(node)[1] - stageLevel) < 1);
+          return stageAll.has(node);
+        };
         const positions = {}, travels = [];
         sceneRecord.spawned = []; sceneRecord.carried = []; sceneRecord.offPage = [];
         // Smoothed (§5a, W5b): someone whose start the least-action history moves stands where it has them.
@@ -1559,6 +1571,12 @@ export async function direct(novelDir, { reading, readingPath = null, prefilm = 
             // Reachable (L10): a move no walk reaches is held with why, and nobody moves. A quiet move (the background's
             // routine, a graded step) that finds no walk is left unplayed without a law.
             if (path && path.length < 2) { cardRecord.moves.push({ person, why: why ?? 'already there', moved: false }); return; }
+            // The agent's staging holds through the unit: someone it put in the room stays in it, someone it put at the room's
+            // door or in its corridor (a unit set in the room's building) stays on the room's floor of that building. A move
+            // that would end outside is not played (run d20261113210125, units 75 and 76: Kamijou staged in the corridor, then
+            // walked by a background routine to the fifth floor of another building). Leaving is the text's departure, played
+            // after the cards; a body thrown in a fight is not held.
+            if (path && !thrown && !stagedKeeps(person, path.at(-1))) { cardRecord.moves.push({ person, why, moved: false, held: `staged ${staging[person].at} by the agent` }); return; }
             if (!path && quiet) { cardRecord.moves.push({ person, why, moved: false, quiet: true, ...(walk.code ? { code: walk.code } : {}) }); return; }
             const pinKey = `${scene.id}|${card.id}|${person}`;
             if (!path && pins.arrive[pinKey] && walk.replay?.targets?.length) { positions[person] = [walk.replay.targets[0], positions[person][1]]; { const [x, y, z] = at(walk.replay.targets[0]); cardRecord.moves.push({ person, why: 'arrives (pinned by the review)', moved: true, arrived: true, pinned: true, to: said([x, y, z]), at: { x: round(x), y: round(y), z: round(z) } }); } (cardRecord.laws ??= []).push({ law: 'L10', who: person, verdict: 'pinned', why: 'no walk there, but they get there (the review)' }); return; }

@@ -4,6 +4,9 @@ import { resolve } from 'node:path';
 // The verbs that sort books or read what was found; a reading, the keys, an import, links and the server are not Pi's.
 export const VERBS = new Set(['basics', 'show', 'scan', 'universe', 'put', 'take', 'chapters', 'cast', 'who', 'refs', 'line', 'problems']);
 
+/** The novel command, by its name or its path (on Windows the agent may write the path with forward slashes). */
+const isNovel = (word, scope) => word === 'novel' || word === scope.novel || (typeof word === 'string' && resolve(word) === resolve(scope.novel));
+
 /** Shell words of one command; null when it holds a pipe, a join, a redirect, an expansion or an open quote. */
 export function words(command) {
   const out = []; let word = null, quote = null;
@@ -30,12 +33,12 @@ export function permit(command, scope) {
   const args = words(command.trim());
   const usage = `Run ONE command per call, no pipes or joins: ${scope.novel} folder <verb> "${scope.folder}" ... (verbs: ${[...VERBS].join(', ')}), or cat "${scope.skill}".`;
   if (!args?.length) throw new Error(`Not a plain command. ${usage}`);
-  if (args[0] === 'cat' && args.length === 2 && resolve(args[1]) === scope.skill) return { kind: 'read' };
-  if (args[0] === 'sed' && args.length === 4 && args[1] === '-n' && /^\d+,\d+p$/.test(args[2]) && resolve(args[3]) === scope.skill) return { kind: 'read', lines: args[2].slice(0, -1).split(',').map(Number) };
-  if (args[0] !== scope.novel && args[0] !== 'novel') throw new Error(`Only the novel command runs here. ${usage}`);
+  if (args[0] === 'cat' && args.length === 2 && resolve(args[1]) === resolve(scope.skill)) return { kind: 'read' };
+  if (args[0] === 'sed' && args.length === 4 && args[1] === '-n' && /^\d+,\d+p$/.test(args[2]) && resolve(args[3]) === resolve(scope.skill)) return { kind: 'read', lines: args[2].slice(0, -1).split(',').map(Number) };
+  if (!isNovel(args[0], scope)) throw new Error(`Only the novel command runs here. ${usage}`);
   if (args[1] !== 'folder') throw new Error(`Only "novel folder" commands run here. ${usage}`);
   if (!VERBS.has(args[2])) throw new Error(`"novel folder ${args[2] ?? ''}" is not for arranging (a reading, the keys or an import is the user's). ${usage}`);
-  if (resolve(args[3] ?? '') !== scope.folder) throw new Error(`Work on this folder only: "${scope.folder}". ${usage}`);
+  if (resolve(args[3] ?? '') !== resolve(scope.folder)) throw new Error(`Work on this folder only: "${scope.folder}". ${usage}`);
   return { kind: 'novel', args: args.slice(1) };
 }
 
@@ -48,11 +51,11 @@ export function permitReview(command, scope) {
   const args = words(command.trim());
   const usage = `Run ONE command per call, no pipes or joins: ${scope.novel} world pool|batch|answer|log "${scope.workspace}" ..., ${scope.novel} reading "${scope.workspace}" card|scene|line <id>, ${scope.novel} source grep|similar|epub "${scope.workspace}" ..., ${scope.novel} cast show "${scope.workspace}" [<char>].`;
   if (!args?.length) throw new Error(`Not a plain command. ${usage}`);
-  if (args[0] !== scope.novel && args[0] !== 'novel') throw new Error(`Only the novel command runs here. ${usage}`);
+  if (!isNovel(args[0], scope)) throw new Error(`Only the novel command runs here. ${usage}`);
   const group = args[1];
   if (!Object.hasOwn(REVIEW, group)) throw new Error(`"novel ${group ?? ''}" is not for answering a review. ${usage}`);
   const verbs = REVIEW[group], book = verbs ? args[3] : args[2];
   if (verbs && !verbs.has(args[2])) throw new Error(`"novel ${group} ${args[2] ?? ''}" is not for answering a review. ${usage}`);
-  if (resolve(book ?? '') !== scope.workspace) throw new Error(`Work on this book only: "${scope.workspace}". ${usage}`);
+  if (resolve(book ?? '') !== resolve(scope.workspace)) throw new Error(`Work on this book only: "${scope.workspace}". ${usage}`);
   return { kind: 'novel', args: args.slice(1) };
 }

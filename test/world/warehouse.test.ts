@@ -7,6 +7,7 @@ import { spawnSync } from "node:child_process";
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { OPENSCAD } from "../../src/world/models/scad.js";
 
 const root = mkdtempSync(join(tmpdir(), "warehouse-"));
 process.env.NOVEL_MODEL_PACKS = join(root, "packs"); process.env.NOVEL_WAREHOUSE = join(root, "packs", "warehouse.json");
@@ -15,7 +16,7 @@ const WH = await import("../../src/world/models/warehouse.js");
 const { checkPartMap, idOfRef, splitRef } = await import("../../src/world/models/partRefs.js");
 const { settingsDiff, settingsProfileApply, settingsProfileList, settingsProfileSave } = await import("../../src/cli/commands/extract/settingsCommands.js");
 const { forgetLayers, problemsOf } = await import("../../src/world/settings.js");
-const HAS_OPENSCAD = spawnSync(process.env.OPENSCAD ?? "openscad", ["--version"]).status === 0;
+const HAS_OPENSCAD = spawnSync(OPENSCAD, ["--version"]).status === 0;
 
 function library(name: string) {
   const lib = join(root, name), novel = join(lib, "vol-1", "novel");

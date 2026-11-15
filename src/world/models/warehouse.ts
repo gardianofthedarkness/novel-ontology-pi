@@ -9,18 +9,19 @@
  */
 import { existsSync, mkdtempSync, readdirSync, readFileSync, statSync } from "node:fs";
 import { mkdir, readFile, rename, writeFile } from "node:fs/promises";
-import { tmpdir } from "node:os";
-import { basename, dirname, extname, join, relative, resolve } from "node:path";
+import { homedir, tmpdir } from "node:os";
+import { basename, dirname, extname, isAbsolute, join, relative, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { spawnSync } from "node:child_process";
 import { evaluate, forPlayer, measure, readOff, solidOf } from "./scad.js";
 import { KIT_CATEGORIES, KITS, catalogOf, storeOf } from "./models.js";
 import { PART_REF, idOfRef, slugOf, splitRef } from "./partRefs.js";
 import { interactOf } from "./interact.js";
+import { ROUTINE, shelfDir } from "./shelf.js";
 import { assignFigure, figureStore, readFiguresSync } from "../../characters/figures.js";
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..", "..", "..", "..");
-export const PACKS_ROOT = process.env.NOVEL_MODEL_PACKS ?? join(process.env.HOME ?? "", "claude-world-first", "model-packs");
+export const PACKS_ROOT = process.env.NOVEL_MODEL_PACKS ?? join(homedir(), "claude-world-first", "model-packs");
 export const REGISTRY_FILE = process.env.NOVEL_WAREHOUSE ?? join(PACKS_ROOT, "warehouse.json");
 /** Licences a source may carry without asking (the user, 2026-11-01 CC0; 2026-11-09 MIT; permissive ones alike; CC-BY with its attribution kept). */
 export const ALLOWED_LICENCES = ["CC0-1.0", "MIT", "Apache-2.0", "BSD-2-Clause", "BSD-3-Clause", "CC-BY-4.0"];
@@ -36,13 +37,14 @@ interface GkCatalogue { kits?: { name: string; file: string; modules: { name: st
 
 const readJson = <T>(file: string, fallback: T): T => { try { return JSON.parse(readFileSync(file, "utf8")) as T; } catch { return fallback; } };
 async function writeJson(file: string, value: unknown) { await mkdir(dirname(file), { recursive: true }); const temporary = `${file}.${process.pid}.tmp`; await writeFile(temporary, `${JSON.stringify(value, null, 1)}\n`); await rename(temporary, file); }
-const absolute = (path: string) => (path.startsWith("/") ? path : join(PACKS_ROOT, path));
+const absolute = (path: string) => (isAbsolute(path) ? path : join(PACKS_ROOT, path));
 
 /** The built-in sources: gkNextEngine's kits, the baked CC0 packs and (per universe) our own models. */
 function builtIn(): Record<string, Source> {
   return {
     kit: { kind: "scad", path: KITS, licence: "MIT", url: "https://github.com/gameknife/gkNextEngine", note: "gkNextEngine's SCAD kits (assets/scad/lib)", unit: "m", builtIn: true },
     pack: { kind: "baked", path: BAKED_DIR, licence: "CC0-1.0", url: "https://kenney.nl, https://kaylousberg.itch.io, https://quaternius.com", note: "the baked CC0 packs (architectureModels.json, vehicleModels.json)", unit: "kit", builtIn: true },
+    [ROUTINE]: { kind: "own", path: shelfDir(PACKS_ROOT), licence: "MIT", url: null, note: "the routine shelf: ordinary objects any book can reuse, named in English at birth (src/world/models/shelf.ts)", unit: "m", builtIn: true },
   };
 }
 export function readRegistry(): Registry {
@@ -252,6 +254,7 @@ export async function refreshSource(name: string, options: { onPart?: (part: str
   const source = readRegistry().sources[name];
   if (!source) throw new Error(`No source ${name} (novel warehouse list).`);
   if (source.kind === "baked") throw new Error("The baked packs are rebuilt by apps/playground/tools/*-models.mjs.");
+  if (name === ROUTINE) throw new Error("The routine shelf is kept by its own puts (novel model shelf), not rebuilt.");
   const folder = absolute(source.path), made = source.kind === "scad" ? await catalogueScad(folder, source.categories, options.onPart) : await catalogueGltf(folder, source.categories, options.onPart);
   await writeJson(join(folder, "catalog.json"), made);
   return { name, parts: made.parts.length, ok: made.parts.filter((part) => part.ok).length, failed: made.parts.filter((part) => !part.ok).map((part) => `${part.name}: ${part.note ?? "failed"}`).slice(0, 20) };

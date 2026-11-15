@@ -12,7 +12,7 @@
 import { execFile } from 'node:child_process';
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
-import { dirname, join, resolve } from 'node:path';
+import { dirname, join, resolve, sep } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { authorize } from './guard.mjs';
 import { words } from './folder-scope.mjs';
@@ -29,7 +29,7 @@ const { WORKFLOWS } = await import(pathToFileURL(join(repository, 'engine', 'wor
 const workflow = WORKFLOWS[id]; if (!workflow) { say({ error: `no workflow ${id}` }); process.exit(2); }
 const novel = resolve(novelArg), sessionDir = join(dirname(novel), 'workflows', 'sessions');
 const sessionFile = sessionArg ? resolve(sessionArg) : null;
-if (sessionFile && !sessionFile.startsWith(`${sessionDir}/`)) { say({ error: 'Only this book\'s workflow sessions can be continued.' }); process.exit(2); }
+if (sessionFile && !sessionFile.startsWith(`${sessionDir}${sep}`)) { say({ error: 'Only this book\'s workflow sessions can be continued.' }); process.exit(2); }
 
 const LIMIT = { commands: 400, seconds: 2400, output: 40000 };
 const started = Date.now();

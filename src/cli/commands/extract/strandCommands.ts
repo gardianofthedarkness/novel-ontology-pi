@@ -58,3 +58,28 @@ export async function strandsShow(novelDir: string): Promise<Record<string, unkn
     decisions: registry?.decisions ?? {}, inForce: { book: forced.book, buildings: forced.entries.length, of: forced.kept },
   };
 }
+
+/**
+ * The places a book shares with the earlier books of its universe, each place's universe key (engine/world/same-places.mjs;
+ * src/universe/placeKeys.ts; the user, 2026-11-14: "One universe key per place"): the terrain step stands a later book on
+ * what the earlier one kept, and every seed and id made from a place is made from its key.
+ */
+interface SamePlacesModule {
+  match(novelDir: string, options: { work?: unknown; write?: boolean }): Promise<Record<string, unknown>>;
+  setPlace(novelDir: string, id: string, to: string, why: string): Promise<Record<string, unknown>>;
+  show(novelDir: string): Promise<Record<string, unknown>>;
+}
+const samePlaces = async () => import(pathToFileURL(join(await repository(), "engine", "world", "same-places.mjs")).href) as Promise<SamePlacesModule>;
+/** `novel same-places match <dir> [--work] [--dry]`: each named place beside the earlier books' namesakes, the work model reading both. */
+export async function samePlacesMatch(novelDir: string, options: { work?: boolean; dry?: boolean }): Promise<Record<string, unknown>> {
+  const work = options.work ? (await import("../../../ground/connectors/workModel.js")).workModelFromEnv(process.env) : null;
+  return (await samePlaces()).match(novelDir, { work, write: !options.dry });
+}
+/** `novel same-places set <dir> <place id> <book>:<place id>|new --why <text>`: a person's override. */
+export async function samePlacesSet(novelDir: string, id: string, to: string, why: string): Promise<Record<string, unknown>> {
+  return (await samePlaces()).setPlace(novelDir, id, to, why);
+}
+/** `novel same-places show <dir>`: the book's places with their keys and why. */
+export async function samePlacesShow(novelDir: string): Promise<Record<string, unknown>> {
+  return (await samePlaces()).show(novelDir);
+}

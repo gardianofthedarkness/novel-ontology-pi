@@ -13,6 +13,9 @@ import { fileURLToPath, pathToFileURL } from 'node:url';
 import { parseArgs, promisify } from 'node:util';
 import * as ST from '../stills.mjs';
 
+// What a child process needs on Windows besides PATH (its system folder, profile and temporary folders), when its environment is made anew.
+const windowsEnvironment = () => process.platform !== 'win32' ? {} : Object.fromEntries(['SystemRoot', 'SystemDrive', 'USERPROFILE', 'APPDATA', 'LOCALAPPDATA', 'TEMP', 'TMP', 'PATHEXT', 'ComSpec', 'PROGRAMFILES'].map(name => [name, process.env[name]]).filter(([, value]) => value !== undefined));
+
 const repository = resolve(dirname(fileURLToPath(import.meta.url)), '..', '..', '..'), load = path => import(pathToFileURL(join(repository, path)).href);
 const { values, positionals: [novelDir, readingPath] } = parseArgs({ allowPositionals: true, options: { dry: { type: 'boolean' }, pictures: { type: 'string' }, cache: { type: 'string' } } });
 if (!novelDir || !readingPath) { console.error('usage: node engine/casts/run/stills.mjs <novel-dir> <data.json> [--dry] [--pictures ill_0009,...] [--cache <dir>]'); process.exit(2); }
@@ -30,7 +33,7 @@ const prepare = async references => {
   const list = join(album, 'stills', 'references.json');
   await mkdir(join(album, 'stills'), { recursive: true });
   await writeFile(list, JSON.stringify(references));
-  const { stdout } = await promisify(execFile)(python, [join(repository, 'tools', 'album-portraits', 'stills.py'), album, '--sheets', join(album, 'stills'), '--references', list], { maxBuffer: 32 * 1024 * 1024, env: { PATH: process.env.PATH, HOME: process.env.HOME, PYTHONUTF8: '1' } });
+  const { stdout } = await promisify(execFile)(python, [join(repository, 'tools', 'album-portraits', 'stills.py'), album, '--sheets', join(album, 'stills'), '--references', list], { maxBuffer: 32 * 1024 * 1024, env: { PATH: process.env.PATH, HOME: process.env.HOME, ...windowsEnvironment(), PYTHONUTF8: '1' } });
   return JSON.parse(stdout);
 };
 

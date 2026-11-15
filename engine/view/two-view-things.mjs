@@ -32,6 +32,7 @@
  */
 import { spawn } from 'node:child_process';
 import { createHash } from 'node:crypto';
+import { existsSync } from 'node:fs';
 import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { createServer } from 'node:http';
 import { tmpdir } from 'node:os';
@@ -40,7 +41,9 @@ import { fileURLToPath, pathToFileURL } from 'node:url';
 import { parseArgs } from 'node:util';
 
 const repository = resolve(dirname(fileURLToPath(import.meta.url)), '..', '..');
-export const CHROME = process.env.NOVEL_CHROME ?? '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome';
+// Windows: Chrome where its installer puts it (for every user, else this user's own).
+const windowsChrome = () => [process.env.PROGRAMFILES, process.env['PROGRAMFILES(X86)'], process.env.LOCALAPPDATA].filter(Boolean).map(root => join(root, 'Google', 'Chrome', 'Application', 'chrome.exe')).find(file => existsSync(file)) ?? 'chrome.exe';
+export const CHROME = process.env.NOVEL_CHROME ?? (process.platform === 'win32' ? windowsChrome() : '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome');
 
 /** The page and its three.js files on a local port, for the headless browser. */
 export async function serve(page, vendor) {
@@ -61,8 +64,9 @@ export async function browser({ gpu = false } = {}) {
   // SwiftShader (the CPU) by default, the same picture every run; `gpu` (or STILLS_GL=metal) draws on a Mac's GPU through
   // Metal, as alike run to run and some fifty times faster for a whole city of shells (terrain spawning, §2.0.18).
   const metal = (gpu && process.platform === 'darwin' && process.env.STILLS_GL !== 'swiftshader') || process.env.STILLS_GL === 'metal';
-  // Elsewhere (a Linux machine with a GPU): STILLS_GL=vulkan or egl draws on it; else SwiftShader on the CPU.
-  const gl = metal ? ['--use-angle=metal', '--enable-gpu', '--ignore-gpu-blocklist'] : process.env.STILLS_GL === 'vulkan' ? ['--use-angle=vulkan', '--enable-features=Vulkan', '--enable-gpu', '--ignore-gpu-blocklist'] : process.env.STILLS_GL === 'egl' ? ['--use-gl=egl', '--enable-gpu', '--ignore-gpu-blocklist'] : ['--use-angle=swiftshader', '--enable-unsafe-swiftshader'];
+  // Elsewhere (a Linux machine with a GPU): STILLS_GL=vulkan or egl draws on it; on Windows STILLS_GL=d3d11 (Direct3D, Chrome's
+  // own way there); else SwiftShader on the CPU.
+  const gl = metal ? ['--use-angle=metal', '--enable-gpu', '--ignore-gpu-blocklist'] : process.env.STILLS_GL === 'd3d11' ? ['--use-angle=d3d11', '--enable-gpu', '--ignore-gpu-blocklist'] : process.env.STILLS_GL === 'vulkan' ? ['--use-angle=vulkan', '--enable-features=Vulkan', '--enable-gpu', '--ignore-gpu-blocklist'] : process.env.STILLS_GL === 'egl' ? ['--use-gl=egl', '--enable-gpu', '--ignore-gpu-blocklist'] : ['--use-angle=swiftshader', '--enable-unsafe-swiftshader'];
   const chrome = spawn(CHROME, ['--headless=new', '--remote-debugging-port=0', `--user-data-dir=${profile}`, '--window-size=800,600', '--hide-scrollbars', ...gl, '--no-first-run', '--no-default-browser-check', 'about:blank', ...(process.env.NOVEL_CHROME_LOG ? ['--enable-logging=stderr', '--v=0'] : [])], { stdio: process.env.NOVEL_CHROME_LOG ? ['ignore', 'ignore', 'pipe'] : 'ignore' });
   // NOVEL_CHROME_LOG=<file>: Chrome's own log kept there (a renderer or GPU process that dies says why).
   if (process.env.NOVEL_CHROME_LOG) { const { createWriteStream } = await import('node:fs'); chrome.stderr.pipe(createWriteStream(process.env.NOVEL_CHROME_LOG, { flags: 'a' })); }

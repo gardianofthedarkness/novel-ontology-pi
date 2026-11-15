@@ -83,6 +83,15 @@ export const damageDegree = text => DAMAGE_WORDS.find(([, pattern]) => pattern.t
 const POWER_WORDS = /飞行|飞向|飞过|飞起|飞翔|浮空|悬浮|瞬间移动|瞬移|空间移动|传送|弹射|磁力|喷射/;
 
 export async function strandDemo(novelDir, options) {
+  // The universe's keys (src/universe/placeKeys.ts; engine/world/same-places.mjs): every seed and id made from a place is
+  // made from its key, so a place an earlier book kept stands the same here. The first book's keys are its ids.
+  const K = await load('dist/src/universe/placeKeys.js');
+  const SAME = await import('./universe-keys.mjs');
+  await SAME.useKeysOf(novelDir);
+  // Where the earlier book's world stood each place (same-places canvas, by key): a place this book shares with it, or
+  // inherits, stands at the same spot when its parent is the same place; this book's own are packed round them.
+  const earlierSpots = await SAME.earlierCanvas(novelDir);
+  const earlierAt = (id, parent) => { const kept = earlierSpots?.[K.placeKey(id)]; return kept && kept.parent === (parent ? K.placeKey(parent) : null) ? { fixed: kept.at, kept: true } : {}; };
   const { stageInputs } = await load('dist/src/cli/commands/extract/stageCommands.js');
   const { storyStrands } = await load('dist/src/reading/v1/timeplace/strandQuestions.js');
   const { latestStrandAnswers } = await load('dist/src/reading/v1/timeplace/strandView.js');
@@ -674,9 +683,9 @@ export async function strandDemo(novelDir, options) {
       const own = terrainGround(id), site = own?.open ? { ...own, ...own.open } : own, made = site?.median && site.manifold ? { median: site.median, manifold: manifoldOfSite(site) } : null;
       if (!site) return null;
       // A pool's ground is its members' span in its own frame (the zoom engine's pool extent), never a sampled square.
-      if (site.pool) { const extent = poolExtentOf(id); return extent && made ? patchFromBox(site.ground, 'p0', id, { x0: extent[0], z0: extent[1], x1: extent[2], z1: extent[3] }, { by: 'pool' }, made) : null; }
-      if (!site.size) return made ? withManifold(samplePatch(site.ground, 'p0', id, [0, 0], { by: 'jev' }), made.median, made.manifold) : null;
-      const [w, d] = site.size; return turnedAs(site, patchFromBox(site.ground, 'p0', id, { x0: -w / 2, z0: -d / 2, x1: w / 2, z1: d / 2 }, { by: 'jev' }, made));
+      if (site.pool) { const extent = poolExtentOf(id); return extent && made ? patchFromBox(site.ground, 'p0', K.placeKey(id), { x0: extent[0], z0: extent[1], x1: extent[2], z1: extent[3] }, { by: 'pool' }, made) : null; }
+      if (!site.size) return made ? withManifold(samplePatch(site.ground, 'p0', K.placeKey(id), [0, 0], { by: 'jev' }), made.median, made.manifold) : null;
+      const [w, d] = site.size; return turnedAs(site, patchFromBox(site.ground, 'p0', K.placeKey(id), { x0: -w / 2, z0: -d / 2, x1: w / 2, z1: d / 2 }, { by: 'jev' }, made));
     };
     // A street laid on a form its ground made (a road, the water: §2.0.21, step 3) runs along it: its size is its own
     // (long side first), its box the bounds of it turned.
@@ -696,7 +705,7 @@ export async function strandDemo(novelDir, options) {
     const toward = (id, parent) => terrain?.sites?.[id]?.parent === parent ? terrain.sites[id].toward : Object.values(canvas.places).filter(place => place.parent === parent && place.id !== id && C.onSurface(place) === (planeOf(id) === 'surface')).map(place => [place, trips(id, place.id)]).filter(([, count]) => count).sort((x, y) => y[1] - x[1])[0]?.[0].at;
     const birth = (id, parent) => {
       if (canvas.places[id]) return;
-      C.bear(canvas, { id, label: name(id), scale: scaleOf(id) ?? (ownGrids.has(id) ? kindOf(id) : 'district'), parent, landscape: landscapeOf(id), toward: toward(id, parent), ground: groundPatch(id), plane: planeOf(id), ...(Array.isArray(terrain?.sites?.[id]?.at) ? { fixed: terrain.sites[id].at } : {}) });
+      C.bear(canvas, { id, label: name(id), scale: scaleOf(id) ?? (ownGrids.has(id) ? kindOf(id) : 'district'), parent, landscape: landscapeOf(id), toward: toward(id, parent), ground: groundPatch(id), plane: planeOf(id), ...(Array.isArray(terrain?.sites?.[id]?.at) ? { fixed: terrain.sites[id].at } : earlierAt(id, parent)) });
     };
     // An unnamed place (a v2 reading's EM² place) is never an area of the build: it is a marker in one, until Jev places it.
     const areaScale = id => { if (String(id).startsWith('unnamed:')) return null; const scale = scaleOf(id) ?? scaleOfName(name(id)); return OPEN.has(scale) ? scale : null; };
@@ -714,7 +723,7 @@ export async function strandDemo(novelDir, options) {
     // Where a place of another layer stands for the surface's layout: its holder (the area the script filed it in).
     const standIn = id => (planeOf(id) !== 'surface' ? terrain?.sites?.[id]?.holder ?? id : id);
     const embeddedOf = id => { const site = terrain?.sites?.[id]; return terrain?.mode === 'spawn' && site?.mapped && Array.isArray(site.toward) ? { embedded: true, at: site.toward, ground: null, landscape: null } : {}; };
-    const areas = placeTree.filter(place => areaScale(place.id)).map(place => ({ id: place.id, label: name(place.id), scale: areaScale(place.id), ground: groundPatch(place.id), parent: place.parentId ?? terrain?.sites?.[place.id]?.parent ?? null, proposed: place.proposedParentId ?? null, ...(poolArea(place.id) ? { pool: poolArea(place.id) } : {}), landscape: landscapeOf(place.id, areaScale(place.id)), plane: planeOf(place.id), ...embeddedOf(place.id) }));
+    const areas = placeTree.filter(place => areaScale(place.id)).map(place => ({ id: place.id, label: name(place.id), scale: areaScale(place.id), ground: groundPatch(place.id), ...earlierAt(place.id, place.parentId ?? terrain?.sites?.[place.id]?.parent ?? null), parent: place.parentId ?? terrain?.sites?.[place.id]?.parent ?? null, proposed: place.proposedParentId ?? null, ...(poolArea(place.id) ? { pool: poolArea(place.id) } : {}), landscape: landscapeOf(place.id, areaScale(place.id)), plane: planeOf(place.id), ...embeddedOf(place.id) }));
     const dwelling = C.centralBuild(canvas, areas, toward), dwellingUnits = {};
     // A pool's member (docs/v3/design.html#world-engine-v2 §2.0.14): one Jev kept stands where its box put it; any other is sampled
     // at the free spot nearest the members continuity ties it to (the characters going between their scenes), the more
@@ -841,7 +850,7 @@ export async function strandDemo(novelDir, options) {
         const name = baseName(unit.label), original = first.get(name), [w, depth] = Array.isArray(site.size) ? site.size : [GROUND[site.scale] ?? 120, GROUND[site.scale] ?? 120], half = Math.max(w, depth) / 2;
         // Below the street, the hall its name says it is (§2.0.17: 地下停车场 a car park), else by its shape.
         const hall = site.median < 0 ? undergroundKindOf(unit.label) : null;
-        const made = (at, turn = site.turn) => inLayer(unit.id, { ...turnedAs({ turn }, patchFromBox(site.ground, unit.id, unit.id, { x0: at[0] - w / 2, z0: at[1] - depth / 2, x1: at[0] + w / 2, z1: at[1] + depth / 2 }, { by: 'jev' }, { median: site.median, manifold: manifoldOfSite(site) })), borrowed: true, ...(hall ? { hall } : {}) });
+        const made = (at, turn = site.turn) => inLayer(unit.id, { ...turnedAs({ turn }, patchFromBox(site.ground, K.placeKey(unit.id), K.placeKey(unit.id), { x0: at[0] - w / 2, z0: at[1] - depth / 2, x1: at[0] + w / 2, z1: at[1] + depth / 2 }, { by: 'jev' }, { median: site.median, manifold: manifoldOfSite(site) })), borrowed: true, ...(hall ? { hall } : {}) });
         if (!original) {
           const road = relaid(unit, site, w, depth);
           if (road) { unit.at = road.at; notes.build.relaid = (notes.build.relaid ?? 0) + 1; }
@@ -855,11 +864,11 @@ export async function strandDemo(novelDir, options) {
         notes.build.merged = (notes.build.merged ?? 0) + 1;
       }
       if (!borrowed.length) continue;
-      pool.landscape = { version: pool.landscape?.version ?? 1, seed: pool.id, patches: [...(pool.landscape?.patches ?? []), ...borrowed] };
+      pool.landscape = { version: pool.landscape?.version ?? 1, seed: K.placeKey(pool.id), patches: [...(pool.landscape?.patches ?? []), ...borrowed] };
       C.grow(canvas, pool.id);
       // Street buildings (§2.0.15): a building of the pool tied to one of its streets dwells in that street's building of its
       // use (by the words of its name), Jev not asked; one of a use its streets do not have is left for Jev.
-      const filled = fillOf(pool.landscape, pool.id), streets = new Map(pool.units.filter(unit => unit.borrows === 'own' && planeOf(unit.id) === 'surface').map(unit => [unit.id, filled.landmarks.filter(b => String(b.lot).startsWith(`${unit.id}:`) && b.use)]));
+      const filled = fillOf(pool.landscape, pool.id), streets = new Map(pool.units.filter(unit => unit.borrows === 'own' && planeOf(unit.id) === 'surface').map(unit => [unit.id, filled.landmarks.filter(b => String(b.lot).startsWith(`${K.placeKey(unit.id)}:`) && b.use)]));
       const { dwells, forJev } = C.dwellInStreets(pool, streets, ties, unit => buildingUseOf(unit.label), dwelt.get(pool.id) ?? dwelt.set(pool.id, new Set()).get(pool.id));
       notes.build.dwells = (notes.build.dwells ?? 0) + Object.keys(dwells).length; notes.build.forJev = (notes.build.forJev ?? 0) + forJev.length;
     }
@@ -880,12 +889,12 @@ export async function strandDemo(novelDir, options) {
     for (const place of Object.values(canvas.places)) {
       const manifolds = mappedIn(place.id);
       if (!manifolds.length || !place.landscape) continue;
-      const patches = manifolds.map(([id, site]) => { const [w, d] = site.size, [x, z] = site.toward; return inLayer(id, { ...turnedAs(site, patchFromBox(site.ground, id, id, { x0: x - w / 2, z0: z - d / 2, x1: x + w / 2, z1: z + d / 2 }, { by: 'jev' }, site.median && site.manifold ? { median: site.median, manifold: manifoldOfSite(site) } : null)), borrowed: true, ...(takesOf(site) ? { takes: takesOf(site) } : {}) }); });
+      const patches = manifolds.map(([id, site]) => { const [w, d] = site.size, [x, z] = site.toward; return inLayer(id, { ...turnedAs(site, patchFromBox(site.ground, K.placeKey(id), K.placeKey(id), { x0: x - w / 2, z0: z - d / 2, x1: x + w / 2, z1: z + d / 2 }, { by: 'jev' }, site.median && site.manifold ? { median: site.median, manifold: manifoldOfSite(site) } : null)), borrowed: true, ...(takesOf(site) ? { takes: takesOf(site) } : {}) }); });
       // The manifolds before the open ground, the deepest first (a street claims its ground before its district), then the
       // tallest: a lot draws its height from older ground that reaches it, so a CBD's towers fade out into what is round it,
       // and the open ground never flattens a CBD.
-      const height = patch => patch.median ?? patch.H, depth = new Map(manifolds.map(([id, , n]) => [id, n]));
-      place.landscape = { ...place.landscape, patches: [...patches.sort((a, b) => (depth.get(b.id) ?? 0) - (depth.get(a.id) ?? 0) || height(b) - height(a)), ...place.landscape.patches.filter(patch => !manifolds.some(([id]) => id === patch.id))] };
+      const height = patch => patch.median ?? patch.H, depth = new Map(manifolds.map(([id, , n]) => [K.placeKey(id), n]));
+      place.landscape = { ...place.landscape, patches: [...patches.sort((a, b) => (depth.get(b.id) ?? 0) - (depth.get(a.id) ?? 0) || height(b) - height(a)), ...place.landscape.patches.filter(patch => !manifolds.some(([id]) => K.placeKey(id) === patch.id))] };
       C.grow(canvas, place.id);
       notes.build.manifolds = (notes.build.manifolds ?? 0) + patches.length;
     }
@@ -1028,7 +1037,7 @@ export async function strandDemo(novelDir, options) {
     const grown = terrain?.mode === 'spawn' ? tallAndWide(placed, localRoads, fixedOf, podium) : { buildings: placed, roads: localRoads };
     // Then none stands inside another (tall.ts clearOverlaps): the city drawn at true size shows every overlap.
     const apartNow = clearOverlaps(grown.buildings, fixedOf), shaped = { ...grown, buildings: apartNow.buildings, overlapped: apartNow.overlapped, movedAside: apartNow.moved };
-    const buildings = [...shaped.buildings, ...sunk].map(b => { const patch = patchOf(b), era = LANDSCAPES[patch.type]?.era ?? 'modern'; if (b.landmark) landmarksUsed.add(b.landmark); return { id: `${place.id}:${b.lot}`, x: b.x + wx, z: b.z + wz, w: b.w, d: b.d, angle: b.angle, floors: b.floors, kind: b.kind, model: b.landmark ? `scad:${b.landmark}` : asPage(UM.modelFor({ ...b, era }, `${place.id}:${b.lot}`, modelSizes, modelTable)), ...(b.use ? { use: b.use } : {}), ...(b.base ? { base: b.base } : {}), ...(sunken(b) ? { y0: b.y0 } : {}), ...(b.plane ? { plane: b.plane } : {}), manifold: manifoldOf(patch), era, patch: patch.id }; });
+    const buildings = [...shaped.buildings, ...sunk].map(b => { const patch = patchOf(b), era = LANDSCAPES[patch.type]?.era ?? 'modern'; if (b.landmark) landmarksUsed.add(b.landmark); return { id: `${K.placeKey(place.id)}:${b.lot}`, x: b.x + wx, z: b.z + wz, w: b.w, d: b.d, angle: b.angle, floors: b.floors, kind: b.kind, model: b.landmark ? `scad:${b.landmark}` : asPage(UM.modelFor({ ...b, era }, `${K.placeKey(place.id)}:${b.lot}`, modelSizes, modelTable)), ...(b.use ? { use: b.use } : {}), ...(b.base ? { base: b.base } : {}), ...(sunken(b) ? { y0: b.y0 } : {}), ...(b.plane ? { plane: b.plane } : {}), manifold: manifoldOf(patch), era, patch: patch.id }; });
     // A composite building's parts, each its use's model inside its host (composite.mjs).
     const parts = partsIn({ terrain, buildings, place, here, modelFor: (b, id) => asPage(UM.modelFor(b, id, modelSizes, modelTable)) });
     // What lies under it (hallsOf, src/world/built/underground.ts): malls, the storm water, deep facilities, in world metres.
@@ -1120,7 +1129,8 @@ export async function strandDemo(novelDir, options) {
   // inherit, we preserve the destructions. If not, we close the strand, and destruction is recovered for the new book"):
   // every nominated building's, and another's only when its strand reached this book through inherited strands. They
   // stand before the book's first scene. NOVEL_CARRY_AS shows another book's carry (a proof's view).
-  const carried = await (await import('./carry.mjs')).damageInForce(novelDir, { as: process.env.NOVEL_CARRY_AS || null }).catch(() => ({ entries: [] }));
+  const CARRY = await import('./carry.mjs');
+  const carried = await CARRY.damageInForce(novelDir, { as: process.env.NOVEL_CARRY_AS || null }).catch(() => ({ entries: [] }));
   const carriedEntries = carried.entries.map(entry => ({ ...entry, carried: true, label: `kept from ${entry.book}`, strand: { id: entry.strand, from: null, to: null, fork: entry.book }, story: -1e15 }));
   let pending = [...carriedEntries, ...(damageLog?.entries ?? []).filter(entry => !sameLine(entry) && Number.isFinite(entry.story))].sort((a, b) => a.story - b.story), story = -Infinity;
   const earlier = [];
@@ -1133,7 +1143,9 @@ export async function strandDemo(novelDir, options) {
       const index = world.lots.findIndex(lot => lot.source === entry.building);
       if (index < 0) return true;
       const lot = world.lots[index];
-      if (entry.manifold !== lot.manifold) { notes.earlier.stale++; return false; }
+      // The same building: the same fingerprint, or (an earlier book's, whose place's claim order a later book's newer ground
+      // changed) the same id standing in the same shape (engine/world/carry.mjs sameShape).
+      if (entry.manifold !== lot.manifold && !(entry.carried && CARRY.sameShape(entry.shape, lot))) { notes.earlier.stale++; return false; }
       const structure = (shared.structures[index] ??= structureOf(lot)), units = shared.units[index] ?? intact(structure), unitOf = new Map();
       for (let unit = 0; unit < structure.kind.length; unit++) unitOf.set(`${structure.kind[unit]}|${structure.i[unit]}|${structure.j[unit]}|${structure.k[unit]}`, unit);
       for (const [kind, i, j, k] of [...entry.blasted, ...entry.fallen]) { const unit = unitOf.get(`${kind}|${i}|${j}|${k}`); if (unit !== undefined) units[unit] = 0; }

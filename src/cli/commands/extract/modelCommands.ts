@@ -9,6 +9,56 @@ import { workModelFromEnv } from "../../../ground/connectors/workModel.js";
 import { bindKit, bindPart, logUsage, nominateBuildings, recheckModel, briefOf, catalogOf, checkModel, idOf, kitModules, KIT_CATEGORIES, nominate, nominationsOf, pickParts, propsOf, putModel, readingOf, saveNominations, storeOf, writeModel, type Nomination } from "../../../world/models/models.js";
 import { loadWorkspaceSentences } from "./timeplaceCommands.js";
 import { PART_REF } from "../../../world/models/partRefs.js";
+import { PACKS_ROOT } from "../../../world/models/warehouse.js";
+import { addName, recall, shelfDir, sortItems, writeRoutine } from "../../../world/models/shelf.js";
+import { existsSync } from "node:fs";
+import { mkdir, writeFile } from "node:fs/promises";
+import { dirname as dirOf } from "node:path";
+import { fileURLToPath, pathToFileURL } from "node:url";
+
+/** The items a book's run keeps on its page (engine/world/items.mjs, the strict rule), with their names, kinds and lines. */
+async function keptItems(novelDir: string) {
+  const run = JSON.parse(await readFile(join(resolve(novelDir), "stage", "director", "run.json"), "utf8")) as { items?: { id: string; name: string; events?: { line?: string | null }[] }[] };
+  const repository = resolve(dirOf(fileURLToPath(import.meta.url)), "..", "..", "..", "..", "..");
+  const { keepItem } = await import(pathToFileURL(join(repository, "engine", "world", "items.mjs")).href) as { keepItem: (item: unknown) => boolean };
+  const props = await propsOf(novelDir).catch(() => ({} as Record<string, { kind?: string }>)), sentences = (await loadWorkspaceSentences(novelDir)) as Map<string, { text: string }>;
+  return (run.items ?? []).filter(keepItem).map((item) => ({ id: item.id, name: item.name, kind: (props as Record<string, { kind?: string }>)[item.name]?.kind ?? null,
+    lines: [...new Set((item.events ?? []).map((event) => event.line).filter((line): line is string => !!line))].map((line) => sentences.get(line)?.text ?? "").filter(Boolean).map((text) => (text.length > 120 ? `${text.slice(0, 119)}…` : text)).slice(0, 2) }));
+}
+
+/**
+ * `novel model shelf <novel-dir> [--dry] [--limit N]`: the book's kept items onto the routine shelf. Each is first recalled
+ * by its own name (for nothing); the rest are sorted by the work model in one call (routine or this story's own, an English
+ * name); a routine one is recalled by its English name (its book name kept beside it) or written from the English name
+ * alone; this story's own are left to `novel model write`. The book's bindings go to stage/models/items.json.
+ * `--dry` makes no call: what is kept and what is recalled.
+ */
+export async function modelShelf(novelDir: string, options: { dry?: boolean; limit?: number } = {}) {
+  const dir = shelfDir(PACKS_ROOT), items = await keptItems(novelDir), bindingsFile = join(resolve(novelDir), "stage", "models", "items.json");
+  const bindings = existsSync(bindingsFile) ? JSON.parse(await readFile(bindingsFile, "utf8")) as { items: Record<string, { ref: string | null; english?: string; routine?: boolean; object?: boolean }> } : { items: {} };
+  const recalled = items.filter((item) => recall(dir, item.name)), rest = items.filter((item) => !recall(dir, item.name) && !(item.name in bindings.items));
+  for (const item of recalled) bindings.items[item.name] = { ref: recall(dir, item.name)!.ref, routine: true };
+  if (options.dry) return { kept: items.length, recalled: recalled.map((item) => ({ item: item.name, ref: recall(dir, item.name)!.ref })), toSort: rest.length, shelf: dir, calls: 0 };
+  const usage = { prompt: 0, completion: 0, requests: 0 }, add = (u: { prompt: number; completion: number; requests: number }) => { usage.prompt += u.prompt; usage.completion += u.completion; usage.requests += u.requests; };
+  const writer = workModelFromEnv(), out: { item: string; english: string; routine: boolean; ref: string | null; state: string; problems?: string[] }[] = [];
+  if (rest.length) {
+    const { sorted, usage: sortUsage } = await sortItems(rest, writer); add(sortUsage);
+    let written = 0;
+    for (const row of sorted) {
+      if (!row.object) { bindings.items[row.name] = { ref: null, english: row.english, routine: false, object: false }; out.push({ item: row.name, english: row.english, routine: false, ref: null, state: "not an object: not drawn" }); continue; }
+      if (!row.routine) { bindings.items[row.name] = { ref: null, english: row.english, routine: false }; out.push({ item: row.name, english: row.english, routine: false, ref: null, state: "this story's own: novel model write" }); continue; }
+      const found = recall(dir, row.english);
+      if (found) { await addName(dir, found.name, row.name); bindings.items[row.name] = { ref: found.ref, english: row.english, routine: true }; out.push({ item: row.name, english: row.english, routine: true, ref: found.ref, state: "recalled by its English name" }); continue; }
+      if (options.limit !== undefined && written >= options.limit) { out.push({ item: row.name, english: row.english, routine: true, ref: null, state: "not written (--limit)" }); continue; }
+      const made = await writeRoutine(dir, { english: row.english, kind: row.kind, size: row.size, names: [row.name] }, writer); add(made.usage); written++;
+      bindings.items[row.name] = { ref: made.ok ? `routine:${made.name}` : null, english: row.english, routine: true };
+      out.push({ item: row.name, english: row.english, routine: true, ref: made.ok ? `routine:${made.name}` : null, state: made.ok ? "written" : "failed", ...(made.ok ? {} : { problems: made.problems }) });
+    }
+  }
+  await mkdir(dirOf(bindingsFile), { recursive: true }); await writeFile(bindingsFile, `${JSON.stringify({ at: new Date().toISOString(), items: bindings.items }, null, 1)}\n`);
+  await logUsage(novelDir, { op: "shelf", ...usage, things: rest.length });
+  return { kept: items.length, recalled: recalled.length, sorted: out.length, routine: out.filter((row) => row.routine).length, own: out.filter((row) => !row.routine && !row.state.startsWith("not an object")).length, notObjects: out.filter((row) => row.state.startsWith("not an object")).length, written: out.filter((row) => row.state === "written").length, failed: out.filter((row) => row.state === "failed").length, model: writer.modelId, usage, rows: out, shelf: dir, bindings: bindingsFile };
+}
 
 async function sceneMap(novelDir: string, reading?: string) {
   const data = await readingOf(novelDir, reading), out = new Map<string, string>();

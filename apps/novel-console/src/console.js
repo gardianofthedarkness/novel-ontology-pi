@@ -40,8 +40,11 @@ for (const split of document.querySelectorAll(".split")) {
   });
 }
 $("t-daylight").addEventListener("click", () => daylight(document.documentElement.dataset.daylight === "day" ? "night" : "day"));
+// The shortcuts' key: Command on a Mac, Ctrl elsewhere; their labels say which (⌘ or Ctrl+).
+const mod = (event) => (host.platform === "darwin" ? event.metaKey : event.ctrlKey);
+if (host.platform !== "darwin") for (const node of document.querySelectorAll("[title*='⌘'], [placeholder*='⌘']")) for (const name of ["title", "placeholder"]) if (node.getAttribute(name)?.includes("⌘")) node.setAttribute(name, node.getAttribute(name).replaceAll("⌘↵", "Ctrl+Enter").replaceAll("⌘", "Ctrl+"));
 document.addEventListener("keydown", (event) => {
-  if (!event.metaKey || event.altKey || event.shiftKey) return;
+  if (!mod(event) || event.altKey || event.shiftKey) return;
   if (event.key === "b") { event.preventDefault(); if (leftOpen()) setLeft(false); else showLeft(leftView); }
   if (event.key === "i") { event.preventDefault(); setPanel(!panelOpen()); }
 });
@@ -155,7 +158,9 @@ async function load(folder) {
 async function refresh(scan = false) {
   // macOS asks a new app (and each new build) whether it may open folders like Documents, and nothing answers until the
   // user does; say so instead of showing an empty library.
-  const waiting = setTimeout(() => { say("Waiting for macOS: if it asks whether Novel Console may open files in your folders, press Allow (the prompt may be behind this window).", true); if (!trees.size) $("tree").innerHTML = `<p class="empty">Waiting for macOS to let Novel Console open your folders. Look for its prompt and press Allow.</p>`; }, 6000);
+  // Elsewhere there is no such prompt: a slow folder is only being read.
+  const mac = host.platform === "darwin";
+  const waiting = setTimeout(() => { say(mac ? "Waiting for macOS: if it asks whether Novel Console may open files in your folders, press Allow (the prompt may be behind this window)." : "Still reading your folders…", true); if (!trees.size) $("tree").innerHTML = mac ? `<p class="empty">Waiting for macOS to let Novel Console open your folders. Look for its prompt and press Allow.</p>` : `<p class="empty">Reading your folders…</p>`; }, 6000);
   libs = await host.libraries();
   // Each folder on its own (a folder macOS still holds at its prompt does not hold the others), drawn as it comes.
   await Promise.all(libs.filter((lib) => lib.exists).map(async (lib) => { if (scan) await ask(lib.path, "novel/scan").catch(() => {}); await load(lib.path); if (!expanded.has(lib.path) && !expanded.has(`closed:${lib.path}`)) expanded.add(lib.path); render();
@@ -299,7 +304,7 @@ async function runAgentTask(spec) {
   const agent = AGENT_NAMES[chosenHost] ? chosenHost : null, entry = hostList.find((item) => item.id === agent);
   if (!agent || !entry?.starts) {
     renderSessions();
-    $("chat-body").insertAdjacentHTML("afterbegin", `<p class="note pick">${agent ? esc(entry?.note ?? `${AGENT_NAMES[agent]} cannot be started on this Mac.`) : "Pick Claude Code or Pi above, then press Ask again: the console can start those two (Codex and Gemini not yet)."}</p>`);
+    $("chat-body").insertAdjacentHTML("afterbegin", `<p class="note pick">${agent ? esc(entry?.note ?? `${AGENT_NAMES[agent]} cannot be started on this computer.`) : "Pick Claude Code or Pi above, then press Ask again: the console can start those two (Codex and Gemini not yet)."}</p>`);
     return;
   }
   const base = { folder: spec.key, path: spec.path, name: spec.name, label: spec.label, request: spec.request, scope: spec.scope, agent };
@@ -815,7 +820,7 @@ $("compose").addEventListener("submit", async (event) => {
   catch (error) { const pending = $("pending"); if (pending) pending.textContent = `Not sent: ${error.message}`; }
   finally { $("compose-send").disabled = false; }
 });
-$("compose-text").addEventListener("keydown", (event) => { if (event.key === "Enter" && event.metaKey) { event.preventDefault(); $("compose").requestSubmit(); } });
+$("compose-text").addEventListener("keydown", (event) => { if (event.key === "Enter" && mod(event)) { event.preventDefault(); $("compose").requestSubmit(); } });
 
 // ---------- Keys and readings. ----------
 async function keyDots() { const keys = await host.keys().catch(() => ({})); $("dot-jev").classList.toggle("on", Boolean(keys.jev)); $("dot-work").classList.toggle("on", Boolean(keys.work)); return keys; }

@@ -76,6 +76,12 @@ export const STEPS = [
       const settings = join(at.source, 'stage', 'settings.json');
       if (existsSync(settings) && !existsSync(join(at.novel, 'stage', 'settings.json'))) await cp(settings, join(at.novel, 'stage', 'settings.json'));
     } },
+  // The sky before the agent's steps: the rooms pass chooses each unit's shot by its time of day and weather (rain an eye
+  // level shot, a new time of day an outside one), which only the reading's sky.json gives; the sky reads the reading alone.
+  { id: 'sky', paid: true, why: 'time of day and weather by unit (12 or so Jev questions)',
+    done: at => existsSync(join(at.reading, 'sky.json')), commands: async at => [cli('sky', 'build', at.novel)],
+    // novel sky build writes beside the reading the workspace's manifest names (the reading's run); the director plays the book's.
+    after: async at => { const made = join(at.readingRun, 'v2', 'sky.json'); if (existsSync(made)) await cp(made, join(at.reading, 'sky.json')); } },
   // The agent's steps are workflows (engine/workflows/workflows.mjs): the runner starts the agent with the workflow's fixed
   // prompt and keeps at it until the workflow's check passes; NOVEL_VOLUME_AGENT=hand stops here for an agent to do it.
   { id: 'places', paid: true, who: 'agent', workflow: 'places', why: 'the agent\'s place tree with evidence: every city, building, room and unit\'s place shown by a sentence (workflow places; the work model)',
@@ -99,10 +105,6 @@ export const STEPS = [
     } },
   { id: 'look', paid: true, who: 'agent', workflow: 'look', why: 'the agent\'s look pass (workflow look, novel-models skill): settings for how the book\'s places look, from the text',
     done: () => false },
-  { id: 'sky', paid: true, why: 'time of day and weather by unit (12 or so Jev questions)',
-    done: at => existsSync(join(at.reading, 'sky.json')), commands: async at => [cli('sky', 'build', at.novel)],
-    // novel sky build writes beside the reading the workspace's manifest names (the reading's run); the director plays the book's.
-    after: async at => { const made = join(at.readingRun, 'v2', 'sky.json'); if (existsSync(made)) await cp(made, join(at.reading, 'sky.json')); } },
   // The pre-film notes, then settei, then transport (2026-11-12, library 17): settei asks about the things the notes name,
   // and transport reads the prop sheet settei writes; a fresh universe has none before.
   { id: 'prefilm', paid: true, why: 'the pre-film casts\' notes (the work model; ~$0.8 a volume)',
@@ -110,7 +112,13 @@ export const STEPS = [
   { id: 'settei', paid: true, why: 'people\'s abilities (settei)', done: () => false, commands: async at => [node('engine/casts/run/settei.mjs', at.novel, at.data, '--universe', at.universe)] },
   { id: 'transport', paid: true, why: 'vehicles\' models and owners into the universe (a few Jev questions)',
     done: () => false, commands: async at => [node('engine/casts/run/transport.mjs', at.novel, at.data, '--universe', at.universe)] },
-  { id: 'terrain', paid: true, why: 'the places built, city to street (~150 Jev questions; 15–30 minutes)',
+  // Before the terrain: which of the book's places an earlier book has (engine/world/same-places.mjs; the user, 2026-11-14:
+  // "One universe key per place"), so the terrain stands on what that book kept and the world is seeded by the places' keys.
+  // The first book records that its keys are its ids. A person sees the matches (novel same-places show) and may override
+  // one (novel same-places set ... --why); the terrain step is then run again.
+  { id: 'same-places', paid: true, why: 'the places the book shares with earlier books, each given its universe key (a few work-model questions; none for the first book)',
+    done: at => !!readJson(join(at.universe, 'places.json'))?.books?.[at.book], commands: async at => [cli('same-places', 'match', at.novel, '--work')] },
+  { id: 'terrain', paid: true, why: 'the places built, city to street, a later book on what the earlier one kept (~150 Jev questions for a first book; 15–30 minutes)',
     done: at => existsSync(join(at.novel, 'stage', 'terrain.json')), commands: async at => [cli('sim', 'terrain', at.novel, '--spawn', '--from', 'city', '--run')] },
   { id: 'starts', paid: false, why: 'where each one stands as each unit begins',
     done: at => existsSync(join(at.novel, 'stage', 'world', 'spawn.json')), commands: async at => [node('engine/spawning/spawn.mjs', at.novel, '--reading', at.data)] },
@@ -129,6 +137,12 @@ export const STEPS = [
       const died = !!readJson(at.state)?.steps?.direct?.failedBefore;
       return [node('engine/director/director.mjs', at.novel, '--reading', at.data, '--from', first, '--to', last, '--live', ...(died ? ['--discard-edits'] : []))];
     } },
+  // The run's items (the user, 2026-11-15: "put it in the automated director pipeline"): the items the run keeps sorted by
+  // the work model and each routine one taken from the warehouse's routine shelf, or written there in OpenSCAD for any book
+  // after (novel model shelf); then the run's page redrawn with them, a thing that is not an object left off.
+  { id: 'items', paid: true, why: 'the run\'s kept items onto the routine shelf and drawn as their models (one work-model sort, a model for each routine thing not yet on the shelf; under a cent a volume)',
+    done: at => existsSync(join(at.novel, 'stage', 'models', 'items.json')),
+    commands: async at => [cli('model', 'shelf', at.novel), node('engine/world/items-page.mjs', at.novel)] },
   { id: 'kept', paid: false, why: 'the run re-stranded, this book registered and its damage kept for the next book',
     done: () => false, commands: async at => {
       const run = await lastRun(at.novel);
