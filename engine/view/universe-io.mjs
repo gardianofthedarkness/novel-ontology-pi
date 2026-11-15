@@ -7,14 +7,15 @@
 // (and review.json for the run's id) and from the universe's strand registry (keys and decisions, never the reasons' words); refused like a replay if anything
 // sentence-like would be published.
 //
-//   node engine/view/universe-io.mjs <library> <site-dir> [--title "…"]
+//   node engine/view/universe-io.mjs <library> <site-dir> [--title "…"] [--keep-text]
+//     --keep-text: over private replays (replay-io --keep-text), not checked for text; refused inside a git checkout.
 //     <site-dir>/<book>/ for each book: node engine/view/replay-io.mjs <library>/<book>/novel <metadata-dir> <site-dir>/<book>
 import { readFile, writeFile } from 'node:fs/promises';
 import { existsSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { parseArgs } from 'node:util';
-import { refuse } from './replay-io.mjs';
+import { inCheckout, refuse } from './replay-io.mjs';
 
 const repository = resolve(dirname(fileURLToPath(import.meta.url)), '..', '..');
 const json = path => readFile(path, 'utf8').then(JSON.parse);
@@ -56,7 +57,8 @@ export function universeData({ title, books, registry }) {
 }
 
 /** The universe page written to <site-dir>/index.html over the books whose replays are there, in the registry's order. */
-export async function universeIo(library, siteDir, { title = 'Universe' } = {}) {
+export async function universeIo(library, siteDir, { title = 'Universe', keepText = false } = {}) {
+  if (keepText && inCheckout(siteDir)) throw new Error(`${siteDir} is in a git checkout: a private universe page never goes there`);
   const universe = join(resolve(library), 'universe');
   const registry = await json(join(universe, 'strands.json')).catch(() => null);
   const places = await json(join(universe, 'places.json')).catch(() => null);
@@ -74,15 +76,17 @@ export async function universeIo(library, siteDir, { title = 'Universe' } = {}) 
   const DATA_LINE = 'const DATA = __DATA__;';
   if (template.split(DATA_LINE).length !== 2) throw new Error('universe-strands.html: no one data line to fill');
   const page = template.split('__TITLE__').join(titleText).replace(DATA_LINE, () => `const DATA = ${JSON.stringify(data).replace(/</g, '\\u003c')};`);
-  refuse('index.html', page);
-  const long = (page.match(CJK_RUN) ?? []).find(run => run.length > NAME_MOST && run !== titleText);
-  if (long) throw new Error(`index.html: a run of ${long.length} CJK characters would be published`);
+  if (!keepText) {
+    refuse('index.html', page);
+    const long = (page.match(CJK_RUN) ?? []).find(run => run.length > NAME_MOST && run !== titleText);
+    if (long) throw new Error(`index.html: a run of ${long.length} CJK characters would be published`);
+  }
   await writeFile(join(resolve(siteDir), 'index.html'), page);
   return { books: data.books.map(book => ({ book: book.book, run: book.run, units: book.units.length })), carried: Object.values(data.decisions).flat().filter(d => d.inherited).length, kilobytes: Math.round(page.length / 1024) };
 }
 
 if (process.argv[1] === fileURLToPath(import.meta.url)) {
-  const { values, positionals: [library, siteDir] } = parseArgs({ allowPositionals: true, options: { title: { type: 'string' } } });
+  const { values, positionals: [library, siteDir] } = parseArgs({ allowPositionals: true, options: { title: { type: 'string' }, 'keep-text': { type: 'boolean' } } });
   if (!library || !siteDir) { console.error('usage: node engine/view/universe-io.mjs <library> <site-dir> [--title "..."]'); process.exit(2); }
-  console.log(JSON.stringify(await universeIo(library, siteDir, { title: values.title ?? 'Universe' })));
+  console.log(JSON.stringify(await universeIo(library, siteDir, { title: values.title ?? 'Universe', keepText: !!values['keep-text'] })));
 }

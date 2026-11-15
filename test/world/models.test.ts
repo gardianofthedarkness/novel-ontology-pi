@@ -7,10 +7,10 @@ import { mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { check, floatingPieces } from "../../src/world/models/contract.js";
-import { evaluate, measure, readOff, solidOf } from "../../src/world/models/scad.js";
+import { OPENSCAD, evaluate, measure, readOff, solidOf } from "../../src/world/models/scad.js";
 import { nominate } from "../../src/world/models/models.js";
 
-const HAS_OPENSCAD = spawnSync(process.env.OPENSCAD ?? "openscad", ["--version"]).status === 0;
+const HAS_OPENSCAD = spawnSync(OPENSCAD, ["--version"]).status === 0;
 async function made(code: string, expected: { kind?: string; size?: number[] | null } = {}) {
   const dir = mkdtempSync(join(tmpdir(), "model-")), scad = join(dir, "t.scad"), off = join(dir, "t.off");
   writeFileSync(scad, code);

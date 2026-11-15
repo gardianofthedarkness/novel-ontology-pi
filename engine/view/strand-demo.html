@@ -2164,16 +2164,23 @@ let mapHalf = null;
 let posed = null;
 // See-through while playing (and while recording a scene), never on Jev's stills, which mask what they need themselves.
 let seeing = !capture;
+// Each scene's end on the timeline: an item held or lying in a scene (engine/world/items.mjs) is gone when it ends.
+const sceneEnd = new Map();
+for (const segment of segments) if (segment.scene?.id) sceneEnd.set(segment.scene.id, Math.max(sceneEnd.get(segment.scene.id) ?? 0, segment.end));
+const spanOf = (span) => ({ from: eventStart.get(`${span.scene}|${span.from}`) ?? Infinity, to: span.to == null ? sceneEnd.get(span.scene) ?? Infinity : eventStart.get(`${span.scene}|${span.to}`) ?? Infinity });
 const things = (data.things ?? []).map((thing) => {
   const piece = new THREE.Group(), frame = new THREE.Group(), depth = thing.depth ?? (thing.shape === "box" ? Math.max(1.2, thing.size * 0.35) : thing.size);
   const forms = { flat: (VEHICLE_DIMS[thing.kind] || thing.vehicleModel ? vehicleForm(thing.kind, thing.vehicleModel, thingMaterial, thingEdges) : null) ?? hologram(thing.model, thing.shape), standing: thing.shape === "donut" && !thing.model ? hologram(null, "donut", true) : null };
   piece.add(forms.flat, frame); if (forms.standing) piece.add(forms.standing);
   const tag = label(thing.name.slice(0, 12), "#ffd36e", 24); tag.position.y = thing.height + 1.6; piece.add(tag);
   piece.visible = false; world.add(piece);
-  const placed = thing.placed.map((spot) => ({ ...spot, time: eventStart.get(`${spot.scene}|${spot.event}`) ?? Infinity })).sort((a, b) => a.time - b.time);
+  // An item with holds: its loose spots each for its span (spot.from…spot.to), its holds on their holder; else a thing's placements, each until the next.
+  const placed = thing.holds ? thing.placed.map((spot) => { const span = spanOf(spot); return { ...spot, time: span.from, until: span.to }; }).sort((a, b) => a.time - b.time)
+    : thing.placed.map((spot) => ({ ...spot, time: eventStart.get(`${spot.scene}|${spot.event}`) ?? Infinity })).sort((a, b) => a.time - b.time);
+  const holds = thing.holds ? thing.holds.map((hold) => ({ who: hold.who, ...spanOf(hold) })) : null;
   const losses = [];
   for (const segment of segments) if (segment.kind === "event") for (const hit of segment.event.hitThings ?? []) if (hit.id === thing.id && hit.destroyed.length) losses.push({ time: segment.start, cells: hit.destroyed });
-  return { thing, piece, forms, frame, tag, placed, losses, depth, shownLosses: -1, structure: null };
+  return { thing, piece, forms, frame, tag, placed, holds, losses, depth, shownLosses: -1, structure: null };
 });
 /** Where a placement stands: its base, in the world. */
 const worldOf = (spot) => { const entry = built.get(spot.place); return new THREE.Vector3(spot.x - entry.cx, spot.y, spot.z - entry.cz); };
@@ -3151,7 +3158,8 @@ function frame(now) {
   // Things sit still where they were last put, fitted to their box; new ones grow in, moved ones glide; structure loses what hits break.
   for (const item of things) {
     const index = item.placed.findLastIndex((spot) => spot.time <= time);
-    item.piece.visible = index >= 0 && !hiddenThings.has(item.thing.id);
+    item.piece.visible = index >= 0 && !hiddenThings.has(item.thing.id) && !(item.holds && time >= item.placed[index].until);
+    if (item.holds) { item.tag.visible = true; if (item.piece.visible) { fitTo(item, item.placed[index]); item.piece.position.copy(worldOf(item.placed[index])); item.piece.scale.setScalar(1); } continue; }
     if (index < 0) continue;
     const spot = item.placed[index], since = time - spot.time, to = worldOf(spot);
     fitTo(item, spot);
@@ -3212,6 +3220,15 @@ function frame(now) {
     // Under the street, a pawn shows through the ground above it.
     if (!body.userData.shared) { body.material.depthTest = p.y > -1; body.material.opacity = held ? 0.4 : p.fade ?? 1; }
     if (move) { movers.push(pawn.position); for (const line of pathLines) if (line.move === move && !line.ensemble && !line.tube) line.object.geometry.setDrawRange(0, Math.max(1, p.k)); }
+  }
+  // A held item goes with its holder, this frame: a small one in the hand, a big one beside them; no tag while held.
+  for (const item of things) {
+    if (!item.holds || hiddenThings.has(item.thing.id)) continue;
+    const hold = item.holds.find((entry) => entry.from <= time && time < entry.to), pawn = hold ? pawns.get(hold.who)?.pawn : null;
+    if (!pawn?.parent) continue;
+    const small = item.thing.size <= 1.5;
+    fitTo(item, { fit: null }); item.piece.scale.setScalar(1); item.tag.visible = false; item.piece.visible = true;
+    item.piece.position.copy(pawn.position).add(new THREE.Vector3(small ? 0.35 : item.thing.size / 2 + 0.5, small ? 0.85 : 0, small ? 0.1 : 0));
   }
   playBlows(segment, elapsed);
   for (const line of pathLines) if (line.ensemble) line.object.material.opacity = 0.22 * Math.min(1, elapsed / 0.5);
@@ -3520,6 +3537,7 @@ window.__gallery = (entries) => {
   return Math.round(x);
 };
 window.__fx = () => ({ segment: blowSegment?.scene?.id ?? null, quiet, kind: blowSegment?.kind, eventBlows: blowSegment?.event?.blows?.length ?? null, inWorld: !!blowFx.parent, parts: blowList.map((fx) => ({ kind: fx.blow.kind, attacker: !!pawns.get(fx.blow.attacker)?.pawn?.parent, target: !!pawns.get(fx.blow.target)?.pawn?.parent, shown: Object.entries(fx).filter(([key, part]) => part?.isMesh && part.visible).map(([key, part]) => `${key}@${part.position.toArray().map(Math.round)}×${part.scale.toArray().map((v) => v.toFixed(2))}`) })) });
+window.__itemsShown = () => things.filter((item) => item.piece.visible).map((item) => ({ id: item.thing.id, at: item.piece.position.toArray(), held: !!item.holds && !item.tag.visible }));
 window.__pawnAt = (id) => { const pawn = pawns.get(id)?.pawn; return pawn?.parent ? pawn.position.toArray() : null; };
 // A recorded run unit by unit (engine/director/review-run.mjs): each unit's span on the timeline and who is in it at its end.
 window.__units = () => { const out = new Map(); for (const segment of segments) { if (segment.kind === "macro") continue; const id = segment.scene.id, entry = out.get(id) ?? { id, place: segment.scene.place, start: segment.start, end: segment.end, people: [], events: segment.scene.events?.length ?? 0 }; entry.start = Math.min(entry.start, segment.start); entry.end = Math.max(entry.end, segment.end); entry.people = Object.keys(segment.positions ?? {}).filter((who) => !who.startsWith("crowd:") && !data.people?.[who]?.crowd); out.set(id, entry); } return [...out.values()]; };

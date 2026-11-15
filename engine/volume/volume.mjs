@@ -137,6 +137,12 @@ export const STEPS = [
       const died = !!readJson(at.state)?.steps?.direct?.failedBefore;
       return [node('engine/director/director.mjs', at.novel, '--reading', at.data, '--from', first, '--to', last, '--live', ...(died ? ['--discard-edits'] : []))];
     } },
+  // The run's items (the user, 2026-11-15: "put it in the automated director pipeline"): the items the run keeps sorted by
+  // the work model and each routine one taken from the warehouse's routine shelf, or written there in OpenSCAD for any book
+  // after (novel model shelf); then the run's page redrawn with them, a thing that is not an object left off.
+  { id: 'items', paid: true, why: 'the run\'s kept items onto the routine shelf and drawn as their models (one work-model sort, a model for each routine thing not yet on the shelf; under a cent a volume)',
+    done: at => existsSync(join(at.novel, 'stage', 'models', 'items.json')),
+    commands: async at => [cli('model', 'shelf', at.novel), node('engine/world/items-page.mjs', at.novel)] },
   { id: 'kept', paid: false, why: 'the run re-stranded, this book registered and its damage kept for the next book',
     done: () => false, commands: async at => {
       const run = await lastRun(at.novel);

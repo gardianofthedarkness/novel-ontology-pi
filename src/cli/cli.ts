@@ -39,7 +39,7 @@ import { addFigure, assignFigure, figureTasksOf, listFigures } from "../characte
 import { lookContext } from "./commands/extract/lookCommands.js";
 import { PLACES_COMMANDS, placesCommand } from "./commands/extract/placesCommands.js";
 import { ROOMS_COMMANDS, roomsCommand } from "./commands/extract/roomsCommands.js";
-import { modelBind, modelBrief, modelCheck, modelList, modelNominate, modelParts, modelPut, modelShow, modelUse, modelWrite } from "./commands/extract/modelCommands.js";
+import { modelBind, modelBrief, modelCheck, modelList, modelNominate, modelParts, modelPut, modelShelf, modelShow, modelUse, modelWrite } from "./commands/extract/modelCommands.js";
 import { readingShow, sourceEpub, worldApply, worldCanon, worldHeld, worldLogShow, worldUndo } from "./commands/extract/worldReviewCommands.js";
 
 const COMMANDS: Record<string, string> = {
@@ -353,6 +353,7 @@ async function main(): Promise<void> {
   if (cmd === "model") {
     const novelDir = positional[2], usage = "Usage: novel model nominate|list|brief|write|put|check|use|show <novel-dir> ... (novel help)";
     if (sub === "parts") { if (!novelDir) throw new Error("novel model parts '<kind>' (e.g. 'a small weapon')"); out(await modelParts(novelDir), pretty); return; }
+    if (sub === "shelf") { if (!novelDir) throw new Error("novel model shelf <novel-dir> [--dry] [--limit N]"); const limit = flag(positional, "--limit"); out(await modelShelf(novelDir, { dry: positional.includes("--dry"), limit: limit === undefined ? undefined : Number(limit) }), pretty); return; }
     if (!["nominate", "list", "brief", "write", "put", "check", "use", "show", "bind"].includes(sub ?? "") || !novelDir) throw new Error(usage);
     if (sub === "bind") { out(await modelBind(novelDir, { limit: flag(positional, "--limit") === undefined ? undefined : Number(flag(positional, "--limit")) }), pretty); return; }
     const thing = positional[3] && !positional[3].startsWith("--") ? positional[3] : undefined, number = (name: string) => { const value = flag(positional, name); return value === undefined ? undefined : Number(value); };
