@@ -1,5 +1,9 @@
 # Raw-stage merge: head bust onto body before any rig
 
+The pipeline is what `make_figure.py` runs now (see "In production" and the sections after it). The version history below
+is kept as the record; the scripts of versions 1 to 4 (`cut_raw.py`, `neck_raw.py`, `neck3_raw.py`, `blend_raw.py`) were
+removed on 2026-11-16 and are at tag `figures-raw-steady-1`.
+
 Steady version 1 (2026-11-15). Body from TRELLIS.2 (T-pose front picture), head bust from Hunyuan3D-2.1 (portrait).
 Not yet a `make_figure.py` step; run by hand in this order. No rig or bone weights are used anywhere.
 

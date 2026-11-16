@@ -20,16 +20,19 @@ One command runs the whole pipeline (`VERSIONS.md` lists the steps) for any char
 python pipeline/make_figure.py <setting.png> <out-dir> --name=<Name> [--portrait=<head.png>] [--remove="the cat"]
 ```
 
-Seven image edits with MiniMax H3-Image (`--editor=h3`, the default; `--editor=qwen` for Qwen-Image-Edit): a T-pose, its
-back, its left and right profiles (each view drawn from the T-pose with the original picture as a second reference), the
-same T-pose and back in a plain base layer, and a close head-and-shoulders portrait (checked for invented hands, redrawn
-with the next seed if any); the prompts are `pipeline/prompts/*.txt`, with nothing about any one character. Then three
-shapes: the body from its four views on Hunyuan3D-2mv, the base body and the head's bust from one picture each on
-Hunyuan3D-2.1 (whose Space ignores extra views: found 2026-11-14, every figure before was shaped from its front alone);
-then the Blender steps. About 20 minutes and ten GPU calls on the user's Hugging Face account. Started from a Python
-without the pipeline's packages, it re-runs itself in the pipeline's own (`--python=`). Every step is skipped when its output exists (`--from=<step>`
-reruns from a step). The result is `<out-dir>/figure.vrm`, its checks (`check.json`) and `figure.txt` for the viewer
-(`viewer/index.html?figure=figure.txt`, or the Character switch).
+Four image edits with MiniMax H3-Image (`--editor=h3`, the default; `--editor=qwen` for Qwen-Image-Edit): a T-pose, its
+back, the same T-pose in a plain base layer, and a close head-and-shoulders portrait (checked for invented hands, redrawn
+with the next seed if any); the prompts are `pipeline/prompts/*.txt`, with nothing about any one character. Then the
+shapes: the head's bust from the portrait on Hunyuan3D-2.1, and the dressed body and the base body together in one paid
+TRELLIS.2 job on Hugging Face (`rawmerge/trellis_body.py`). The bust is merged onto the body before any rig, the figure
+reduced, the base body laid inside it, and the skeleton and soft-cloth layer added (`rawmerge/README.md` has every step
+and its measurements). Started from a Python without the pipeline's packages, it re-runs itself in the pipeline's own
+(`--python=`). Every step is skipped when its output exists (`--from=<step>` reruns from a step). The result is
+`<out-dir>/layers_m.vrm` and `figure_m.txt` for the viewer (`viewer/index.html?figure=figure_m.txt`).
+
+Not on this pipeline yet: the head lock and jaw, hair springs, face organs, joint smoothing and the checks. Their scripts
+are still in `pipeline/` and ran on the earlier path (the bust grafted after the rig, on a Hunyuan body), which is at tag
+`figures-raw-steady-1` and before.
 
 With many pictures (a series' colour plates), `pipeline/find_refs.py` finds the character's pictures for you: run the
 album portrait tool (`tools/album-portraits/portraits.py`, caption OCR) on each volume's album first; `find_refs.py` checks

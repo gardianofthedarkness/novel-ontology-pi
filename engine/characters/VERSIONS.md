@@ -168,6 +168,22 @@ on a filled solid, soft cloth with a measured split. `make_figure.py` ends at `f
 removes that path's replaced steps. Not yet on the merged figure: head lock and jaw, hair springs, face organs, joint
 smoothing. Details and measurements: `rawmerge/README.md`.
 
+## After steady 1: the replaced path removed (2026-11-16)
+
+`make_figure.py` went from 47 steps to 22 and is the raw-merge pipeline only. Removed steps: `left`, `right`, `base_back`
+(views drawn only for the Hunyuan shapes), `shape`, `base_shape`, `rig`, `holo`, `marks_body`, `head`, `joints`,
+`base_rig`, `base_holo`, `mannequin`, `layers`, the diagnostic `raw_layers` and `holo_page`, and the steps that only ran on
+that path's output: `lock`, `face_rig`, `hair`, `crop_read`, `eyes_read`, `eyes`, `check`, `judge`, `page`.
+Removed scripts: `layer_pack.py`, `mannequin.py`, `head_swap.py`; the template and quad heads (`fit_template.py`,
+`template_head.py`, `head_from_fit.py`, `export_head.py`, `quad_head.py`, `draw_quads.py`); early trials (`qwen_apose.py`,
+`qwen_try.py`, `anypose.py`, `stdgen_run.py`, `find_spaces.py`, `space_api.py`, `inspect_blend.py`); the side-view
+prompts; in `rawmerge/` the earlier merge versions (`cut_raw.py`, `neck_raw.py`, `neck3_raw.py`, `blend_raw.py`), the
+failed `volume_weights.py`, `shot_head.py`, `layers_raw.py`, and `skin.py`'s unused modes.
+Kept, waiting to be moved onto the merged figure: `head_lock.py`, `face_rig.py`, `hair_rig.py`, `eye_shapes.py`,
+`eye_parts.py`, `face28.py`, `smooth_joints.py`, `check_head.py`, `judge.py`, `pose_shots.py`. Kept as they are: the
+clothing-system and text-to-motion experiments, `find_refs.py` and the render tools. The sections below describe the
+earlier path as it was.
+
 ## After v0.9: the raw merge (2026-11-15, not yet a version)
 
 The head bust is merged onto the body before any rig (`rawmerge/README.md`): the body from TRELLIS.2 (the T-pose front

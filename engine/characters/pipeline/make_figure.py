@@ -1,19 +1,24 @@
-"""Make a character's figure from one setting picture: the whole pipeline (VERSIONS.md, v0.8), in order, resumable.
+"""Make a character's figure from one setting picture: the raw-merge pipeline (rawmerge/README.md), in order, resumable.
 usage: python make_figure.py <setting.png> <out-dir> --name=<Name> [--portrait=<head.png>] [--full=<full-length.png>]
         [--remove="<what to leave out>"]
         [--seed=11] [--editor=h3|qwen] [--blender=<blender.exe>] [--python=<python.exe>] [--from=<step>] [--only=<step>]
   <setting.png>: one picture of the character, any pose (a full body is best). --portrait: a separate, sharper picture of
   the head (else the head is cut from the T-pose redraw, above its arms). --remove: things in the picture that are not the character
   ("the bag and its strap", "the cat"). --full: a second picture of the character at full length, for an outfit the
-  setting picture cuts off (the T-pose takes its length, hems and shoes from it). With many pictures of a character (a
-  book's colour plates), pick the sharpest front view as the setting picture, a calm front close-up as --portrait and a
-  standing full-length one as --full. Every step writes into <out-dir> and is skipped when its output is there, so a run
-  can be resumed; --from reruns from a step on, --only runs one step. The Hugging Face token comes from the system's
-  credential store (vault.py), never from a file. --editor: the image model for the five redraws: h3 (MiniMax H3-Image,
-  edit_h3.py, the default since 2026-11-14: truer to the character's colours, clothes and accessories, fingers kept
-  together; its licence excludes the US, the EU, the UK and South Korea) or qwen (Qwen-Image-Edit, edit.py, before). Seven GPU calls in all (four image edits, three shapes).
-  The result: <out-dir>/organs.vrm (+ .blend; figure.vrm is the same without the face's organs), check.json (check_head.py),
-  figure.txt (gzip+base64, for the viewer). --portrait-py: the Python with anime-face-detector (for the face's organs)."""
+  setting picture cuts off. Every step writes into <out-dir> and is skipped when its output is there, so a run can be
+  resumed; --from reruns from a step on, --only runs one step. Tokens come from the system's credential store (vault.py),
+  never from a file. --editor: the image model for the redraws: h3 (MiniMax H3-Image, edit_h3.py, the default; its licence
+  excludes the US, the EU, the UK and South Korea) or qwen (Qwen-Image-Edit, edit.py).
+  Remote calls: four image edits (T-pose, its back, the base layer, the portrait), one Hunyuan3D-2.1 shape (the head bust)
+  and one paid TRELLIS.2 job on Hugging Face (the dressed body and the base body together).
+  In order: redraws -> bust -> TRELLIS.2 bodies -> the bust merged onto the body raw, the neck as one tube -> reduced, the
+  head finer -> the base body laid inside by elastic bone matching -> a filled solid, the skeleton and weights on it ->
+  weights onto the reduced figure -> the base body packed as the hidden layer for soft cloth.
+  The result: <out-dir>/layers_m.vrm (+ .blend) and figure_m.txt (gzip+base64, for the viewer).
+  Not in this pipeline yet (their scripts wait in this folder to be moved onto the merged figure): the head lock and jaw
+  (head_lock.py, face_rig.py), hair springs (hair_rig.py), face organs (eye_shapes.py, eye_parts.py, face28.py), joint
+  smoothing (smooth_joints.py), the checks (check_head.py, judge.py). The path that had them (the bust grafted after the
+  rig, on a Hunyuan body) is at tag figures-raw-steady-1 and before."""
 import base64, gzip, json, os, shutil, subprocess, sys, time
 HERE = os.path.dirname(os.path.abspath(__file__))
 # the pipeline's own Python (OpenCV, gradio_client, rtmlib): started from another one, the build re-runs itself there
@@ -32,8 +37,6 @@ if len(args) < 2 or not flags.get('name'): raise SystemExit(__doc__)
 SRC, OUT = os.path.abspath(args[0]), os.path.abspath(args[1]); NAME = flags['name']
 BLENDER = flags.get('blender') or os.environ.get('BLENDER') or r'C:\Program Files\Blender Foundation\Blender 5.3\blender.exe'
 PY = sys.executable; SEED = flags.get('seed', '11'); EDITOR = flags.get('editor', 'h3')
-# the Python with anime-face-detector (the album portrait tool's, tools/album-portraits): --portrait-py or FIG_PORTRAIT_PY
-PORTRAIT_PY = flags.get('portrait-py') or os.environ.get('FIG_PORTRAIT_PY') or os.path.join('E:' + os.sep, 'figures', 'portrait-venv', 'Scripts', 'python.exe')
 REMOVE = flags.get('remove', '').strip()
 FULL = os.path.abspath(flags['full']) if flags.get('full') else None   # a second picture showing the whole length of the outfit
 os.makedirs(OUT, exist_ok=True)
@@ -130,31 +133,16 @@ STEPS = [
     ('square', P('in', 'setting_sq.png'), lambda: (os.makedirs(P('in'), exist_ok=True), pad_square())),
     ('tpose', P('tpose.png'), lambda: edit(P('tpose.png'), P('in', 'setting_sq.png'), 'tpose', FULL)),
     ('back', P('tback.png'), lambda: edit(P('tback.png'), P('tpose.png'), 'back')),
-    # the body's two side views (profiles facing the picture's left and right edges), drawn from the T-pose with the original
-    # design as a second reference: the shape is built from all four views (Hunyuan3D-2mv; the 2.1 Space ignores views)
-    ('left', P('tleft.png'), lambda: edit(P('tleft.png'), P('tpose.png'), 'side_left', img2=P('in', 'setting_sq.png'))),
-    ('right', P('tright.png'), lambda: edit(P('tright.png'), P('tpose.png'), 'side_right', img2=P('in', 'setting_sq.png'))),
+    # the same T-pose in a plain base layer: the base body under the clothes is shaped from it
     ('base', P('base.png'), lambda: edit(P('base.png'), P('tpose.png'), 'base')),
-    ('base_back', P('base_back.png'), lambda: edit(P('base_back.png'), P('base.png'), 'back')),
-    # the head from the T-pose redraw, cut off above the shoulders (its arms, at shoulder height, read as hands at the neck):
-    # the same colours and costume as the body by construction (a portrait from another picture can disagree: a green-tinted
-    # cover gave Index green hair and no hood); --portrait gives a sharper picture instead, at that risk
     ('head_crop', P('head_crop.png'), lambda: run([PY, os.path.join(HERE, 'crop_head.py'), flags['portrait'], P('head_crop.png')]) if flags.get('portrait')
                                        else run([PY, os.path.join(HERE, 'crop_head.py'), P('tpose.png'), P('head_crop.png'), '--above-shoulders'])),
     ('portrait', P('portrait.png'), portrait),
-    ('shape', P('shape.glb'), lambda: shape(P('shape.glb'), P('tpose.png'), P('tback.png'), P('tleft.png'), P('tright.png'), model='2mv')),
-    ('base_shape', P('base.glb'), lambda: shape(P('base.glb'), P('base.png'), P('base_back.png'))),
-    # the bust from the portrait laid on a white margin (a portrait whose hair reaches the picture's edges gave a flat card:
-    # the shape model could not tell the head from the background), and checked to be a head, not a card
     ('bust', P('bust.glb'), lambda: (pad_white(P('portrait.png'), P('portrait_pad.png')), shape(P('bust.glb'), P('portrait_pad.png'), octree=512), check_bust(P('bust.glb')))),
-    ('prep', P('prep', 'view.json'), lambda: (prep(P('tpose.png'), P('prep')), prep(P('tback.png'), P('prep_back')), prep(P('base.png'), P('prep_base')),
-                                               prep(P('base_back.png'), P('prep_base_back')), prep(P('portrait.png'), P('prep_portrait')))),
-    ('rig', P('rig', NAME + '.blend'), lambda: blender('dress_rig.py', P('shape.glb'), P('prep'), P('rig'), '--back=' + P('prep_back'), '--name=' + NAME)),
-    ('holo', P('holo.blend'), lambda: blender('holo_detail.py', P('rig', NAME + '.blend'), P('shape.glb'), P('holo.blend'))),
+    ('prep', P('prep', 'view.json'), lambda: (prep(P('tpose.png'), P('prep')), prep(P('tback.png'), P('prep_back')), prep(P('portrait.png'), P('prep_portrait')))),
     ('marks_bust', P('marks', 'bust.json'), lambda: run([sys.executable, os.path.join(os.path.dirname(HERE), 'marks', 'landmarks.py'), P('marks', 'bust.json'), '--mode=bust', '--bust=' + P('bust.glb')])),
     # the raw merge (rawmerge/README.md): a second body from the T-pose front alone on TRELLIS.2 (a paid job on the account's
     # credit), the Hunyuan bust merged onto it before any rig with the neck as one tube, then reduced for the hologram.
-    # The rig steps below still take the Hunyuan body and graft the bust after the rig; they move onto merged.glb next.
     ('body_cut', P('base_rgba.png'), lambda: (run([PY, RAW('cutout.py'), P('tpose.png'), P('body_rgba.png')]), run([PY, RAW('cutout.py'), P('base.png'), P('base_rgba.png')]))),
     # the dressed body and its base body (the same T-pose in a plain base layer) in one job: the model loads once
     ('body_t2', P('base_t2.glb'), lambda: run([PY, RAW('trellis_body.py'), P('body_rgba.png'), P('body_t2.glb'), P('base_rgba.png'), P('base_t2.glb')])),
@@ -169,37 +157,12 @@ STEPS = [
     ('base_raw', P('raw_base', 'thick.npy'), lambda: run([PY, RAW('base_raw.py'), P('merged.glb'), P('raw', 'whole.json'), P('raw', 'tube.json'), P('raw_base', 'base_outer.glb'), P('raw_base', 'whole.json'), P('raw_base')])),
     ('base_reduce', P('base_reduced.glb'), lambda: run([BLENDER, '-b', '-P', RAW('reduce.py'), '--', P('raw_base', 'base_fit.glb'), P('base_reduced.glb'), P('base_reduced.json'),
                                                          '--tol=%r' % (json.load(open(P('reduced.json')))['body']['tolerance_mm'] / 1000)])),
-    ('raw_layers', P('reduced_layers.glb'), lambda: run([PY, RAW('layers_raw.py'), P('merged.glb'), P('raw_base', 'thick.npy'), P('reduced.glb'), P('reduced_layers.glb'), P('reduced_layers.json')])),
-    # the skeleton on the merged figure: the figure is layered (a jacket's walls with the body inside), so the rig is measured and
-    # weighted on a filled solid of it (never drawn); the weights then go onto the reduced figure as it is
     ('solid', P('merged_solid.glb'), lambda: run([PY, RAW('solid.py'), P('merged.glb'), P('merged_solid.glb')])),
-    ('rig_m', P('rig_m', NAME + '.blend'), lambda: (prep(P('tpose.png'), P('prep')) if not os.path.exists(P('prep', 'view.json')) else None, prep(P('tback.png'), P('prep_back')) if not os.path.exists(P('prep_back', 'view.json')) else None,
-                                                    blender('dress_rig.py', P('merged_solid.glb'), P('prep'), P('rig_m'), '--back=' + P('prep_back'), '--name=' + NAME, '--marks=' + P('raw', 'whole.json')))),
+    ('rig_m', P('rig_m', NAME + '.blend'), lambda: blender('dress_rig.py', P('merged_solid.glb'), P('prep'), P('rig_m'), '--back=' + P('prep_back'), '--name=' + NAME, '--marks=' + P('raw', 'whole.json'))),
     ('holo_m', P('holo_m.vrm'), lambda: blender('holo_detail.py', P('rig_m', NAME + '.blend'), P('reduced.glb'), P('holo_m.blend'), '--asis=1', '--vrm=1')),
     # the base body (laid inside the figure raw, reduced) packed as the hidden layer, the head split off as its own rigid mesh
     ('layers_m', P('layers_m.vrm'), lambda: blender(os.path.join('..', 'rawmerge', 'layer_raw.py'), P('base_reduced.glb'), P('rig_m', NAME + '.blend'), P('raw', 'head_region.glb'), P('layers_m.blend'), blend=P('holo_m.blend'))),
     ('page_m', P('figure_m.txt'), lambda: open(P('figure_m.txt'), 'w').write(base64.b64encode(gzip.compress(open(P('layers_m.vrm'), 'rb').read(), 9)).decode())),
-    ('holo_page', P('reduced.txt'), lambda: open(P('reduced.txt'), 'w').write(base64.b64encode(gzip.compress(open(P('reduced.glb'), 'rb').read(), 9)).decode())),
-    ('marks_body', P('marks', 'body.json'), lambda: run([sys.executable, os.path.join(os.path.dirname(HERE), 'marks', 'landmarks.py'), P('marks', 'body.json'), '--mode=body', '--blend=' + P('holo.blend'), '--bust-marks=' + P('marks', 'bust.json')])),
-    ('eyes_read', P('eyes', 'eyes.json'), lambda: run([PORTRAIT_PY, os.path.join(HERE, 'eye_shapes.py'), P('portrait.png'), P('eyes')])),   # before the graft: the face's mirror pairs centre the bust
-    ('head', P('headswap.blend'), lambda: blender('head_swap.py', P('holo.blend'), P('bust.glb'), P('prep_portrait'), P('headswap.blend'), '--marks-body=' + P('marks', 'body.json'), '--marks-bust=' + P('marks', 'bust.json'))),
-    ('joints', P('smooth.blend'), lambda: blender('smooth_joints.py', P('headswap.blend'), P('smooth.blend'), 'Outfit_main=%s=%s' % (P('prep'), P('prep_back')))),
-    ('base_rig', P('base_rig', 'Base.blend'), lambda: blender('dress_rig.py', P('base.glb'), P('prep_base'), P('base_rig'), '--back=' + P('prep_base_back'), '--name=Base')),
-    ('base_holo', P('base_detail.blend'), lambda: blender('holo_detail.py', P('base_rig', 'Base.blend'), P('base.glb'), P('base_detail.blend'))),
-    ('mannequin', P('base_smooth.blend'), lambda: blender('mannequin.py', P('base_detail.blend'), P('base_smooth.blend'))),
-    ('layers', P('layers.blend'), lambda: blender('layer_pack.py', P('smooth.blend'), P('base_smooth.blend'), P('layers.blend'))),
-    ('lock', P('lock.blend'), lambda: blender('head_lock.py', P('lock.blend'), '--marks-bust=' + P('marks', 'bust.json'), blend=P('layers.blend'))),
-    ('face_rig', P('face.blend'), lambda: blender('face_rig.py', P('marks', 'bust.json'), P('face.blend'), blend=P('lock.blend'))),
-    ('hair', P('figure.blend'), lambda: blender('hair_rig.py', P('prep_portrait'), P('face'), P('figure.blend'), blend=P('face.blend'))),
-    # the face's organs, all automatic: read from the portrait with an anime face detector (in the portrait tool's
-    # Python), then built on the head as structure aligned to it: the eyes carved (a socket cut for them), the brows as
-    # ridges, the nose rebuilt in the face as the cheek planes meeting in a bridge, the mouth as the drawing's line
-    # front mapping: the head crop's own face points tie the portrait to the T-pose drawing the shape was made from
-    ('crop_read', P('eyes', 'crop28.json'), lambda: run([PORTRAIT_PY, os.path.join(HERE, 'face28.py'), P('head_crop.png'), P('eyes', 'crop28.json')])),
-    ('eyes', P('organs.blend'), lambda: blender('eye_parts.py', P('eyes', 'eyes.json'), P('face'), P('organs.blend'), '--organs=eyes,brows,nose,mouth', '--front=' + OUT, blend=P('figure.blend'))),
-    ('check', P('check.json'), lambda: blender('check_head.py', '--json=' + P('check.json'), blend=P('organs.blend'))),
-    ('judge', P('judge', 'judge.json'), lambda: run([sys.executable, os.path.join(HERE, 'judge.py'), OUT])),   # Jev looks at the posed figure
-    ('page', P('figure.txt'), lambda: open(P('figure.txt'), 'w').write(base64.b64encode(gzip.compress(open(P('organs.vrm'), 'rb').read(), 9)).decode())),
 ]
 
 names = [s[0] for s in STEPS]
@@ -215,4 +178,4 @@ for i, (name, done, do) in enumerate(STEPS):
     if not os.path.exists(done):     # Blender exits 0 even when its script fails: the step's output is the proof
         log('FAILED: %s wrote no %s (its messages are above)' % (name, done)); raise SystemExit(1)
     log('%-12s %4d s' % (name, round(time.time() - t)))
-log('== done: %s' % P('organs.vrm'))
+log('== done: %s' % P('layers_m.vrm'))
