@@ -22,7 +22,7 @@ if F:
     zp = F['chin_underside_z'] + F['tilt'] * back
     rx, ry = F.get('neck_half', [r, r])
     incol = np.hypot((H[:, 0] - cx) / rx, (H[:, 1] - cy) / ry) < F['column'] + 0.3
-    skull = ~incol | (H[:, 2] > zp)
+    skull = H[:, 2] > zp           # above the jaw plane (the lock's own boundary: from the chin's height); below it is neck or collar
 else:
     skull = H[:, 2] > B['head'].head_local.z + 0.06
 jaw_ids = set()

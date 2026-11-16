@@ -33,8 +33,9 @@ for v in body.data.vertices:
     p = Vector((0, 0, 0))
     for M, w in ws: p += (M @ v.co) * (w / tot)
     v.co = p
+# every face that reaches above the seam goes (the body stays wholly under the head's seam, with no margin to choose)
 bm = bmesh.new(); bm.from_mesh(body.data)
-bmesh.ops.delete(bm, geom=[f for f in bm.faces if sum(v.co.z for v in f.verts) / len(f.verts) > cut - 0.01], context='FACES')
+bmesh.ops.delete(bm, geom=[f for f in bm.faces if max(v.co.z for v in f.verts) > cut], context='FACES')
 bmesh.ops.delete(bm, geom=[v for v in bm.verts if not v.link_faces], context='VERTS'); bm.to_mesh(body.data); bm.free()
 body.parent = rig; am = body.modifiers.new('Armature', 'ARMATURE'); am.object = rig
 body.data.materials.clear(); body.data.materials.append(bpy.data.objects['Head'].data.materials[0])

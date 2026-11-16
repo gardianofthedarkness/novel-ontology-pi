@@ -159,6 +159,153 @@ Tokens live in Windows Credential Manager (`vault.py`), never in files.
 - No eye bones (the eyes are part of the head mesh; gaze would not show on the wireframe).
 - RTMW found all 68 face points on this grey head; a head where it fails has no geometric fallback yet.
 
+## Raw merge, steady 1 (2026-11-16, tag `figures-raw-steady-1`)
+
+Marked steady on Akane: TRELLIS.2 body and base body from one job, Hunyuan head bust merged raw with the neck as one tube,
+reduced with a finer head, the base body laid inside by elastic bone matching, a skeleton from the model's own 3D landmarks
+on a filled solid, soft cloth with a measured split. `make_figure.py` ends at `figure_m.txt`. At this tag the old graft path
+(Hunyuan body, bust grafted after the rig, face organs, hair springs) is still in the file beside it; the commit after it
+removes that path's replaced steps. Not yet on the merged figure: head lock and jaw, hair springs, face organs, joint
+smoothing. Details and measurements: `rawmerge/README.md`.
+
+## After v0.9: the raw merge (2026-11-15, not yet a version)
+
+The head bust is merged onto the body before any rig (`rawmerge/README.md`): the body from TRELLIS.2 (the T-pose front
+alone, a paid Hugging Face Job), the head from the Hunyuan3D-2.1 bust, the neck one continuous tube carried along the
+body's neck bone into the head. `make_figure.py` steps `body_cut`, `body_t2`, `raw_merge`, `reduce`, `holo_page`. The
+merged figure is reduced to about 12,000 triangles (Akane: 12,136), on average within the merge's own surface noise.
+The rig, face and hair steps still run on the Hunyuan body with the bust grafted after the rig; moving them onto the
+merged figure is the next step. Tested on Akane only.
+
+## After v0.9: staging and views (2026-11-14, not yet a version)
+
+Found by running the whole pipeline, untouched, on two new characters (Akane and Rikka of SSSS.Gridman, one picture each):
+
+- **The Hunyuan3D-2.1 Space ignores extra views.** A body made from the front alone and one made from front, back, left and
+  right were the same to the last point. Every figure until now (Misaka, Index) was shaped from its front picture alone;
+  the back views were drawn and never used. Views shape the result only on the Hunyuan3D-2mv Space (`hunyuan_shape.py
+  --model=2mv`; its left view is the profile facing the picture's left edge). The body is now made from four views (new
+  steps `left`, `right`); on Akane it recovered the closed hoodie, drawstrings and hood that the front-only shape had read
+  as an open jacket. The base body and the head's bust still come from one picture each.
+- **MiniMax H3-Image redraws** (`edit_h3.py`, the default): truer to the character than Qwen-Image-Edit (hair colour, vest,
+  emblem, scrunchie kept; fingers together, where Qwen's spread fingers became claw- and blade-like hands). Its risks: feet
+  close together, a smaller figure in the frame. Licence: not in the US, the EU, the UK or South Korea.
+- **The portrait stage**: the redraw added hands at the shoulders on every character (Misaka's and Index's included), which
+  became lumps on the bust. The prompt now ends the picture at the shoulders; `hands_check.py` (RTMW's 21 hand points, 19
+  needed; real hands gave 21, hair at a cut neck up to 17) redraws with the next seed. The original picture goes in as a
+  second reference (`{design}`), and the portrait must fill the picture: with two references and no size given, H3 copied
+  the crop's small head, the bust came out at the wrong size (eye-chin and ear scales 0.11 against 0.18) and the skull lock
+  found no chin.
+- **Fixes**: a see-through input (WebP, PNG) is laid on white (its hidden colour came out as a noisy green background); a
+  bust starting at a forward collar no longer hides the chin (`head_lock.py` falls back to the furthest-back slice so far,
+  only when its first rule finds nothing: Misaka's and Index's chins unchanged); the face cut for the nose takes only the
+  front skin (it could reach triangles behind the face seen from the front); `make_figure.py` re-runs itself in the
+  pipeline's own Python.
+
+| Character, builder | Organ points under the skin | Head edges past 1.25×: turn / jaw open | Hands |
+|---|---|---|---|
+| Akane, Qwen, front-only shape | 0 | 293 / 61 | claws |
+| Akane, H3, front-only shape | 1 (2.5 mm) | 273 / 98 | natural |
+| Rikka, Qwen, front-only shape | 79 (up to 71 mm; bangs over the eyes) | 45 / 35 | blades |
+| Rikka, H3, front-only shape | 11 (4 mm) | 145 / 138 | one blade, one spike |
+
+Found next, checking each stage's own output (2026-11-14, afternoon):
+
+- **The face's organs sat beside the face** on the new characters (Akane 27 mm, Rikka 23 mm). `face_rig.py` made the 68
+  face points symmetric about the head bone's plane; a grafted bust can sit a little to one side of the bone, and the
+  averaging pulled the whole face toward it. Now symmetric about the face's own middle (the median of its mirror pairs);
+  the pivot and the jaw hinge stay on the bone. Akane's asymmetry 54.8 → 6.6 mm; Index's middle is 2.4 mm from its bone.
+- **A rerun could hide a failure.** `make_figure.py` takes a step's output file as proof it ran; a rerun into a folder that
+  already held an earlier run's file went on with that file when the step failed (Rikka's later builds silently reused an
+  earlier face, so her numbers did not move). A step now removes its old output before it runs.
+- **Rikka's bust came back as a flat card** (21% as deep as wide) once the portrait filled the picture: her hair reached
+  the edges and the shape model took the whole picture for the object. The portrait now gets an 18% white margin before
+  the bust is shaped, and a bust under 35% as deep as wide stops the build (Akane 73%, Index 97%, Rikka now 79%).
+- **The base body for the clothes' layers** (the hidden `LayerBody`; the soft layers measure every clothes point against
+  it) carried a floor plate on Akane and Rikka: a ground shadow drawn under the feet came back as a plate joined to the
+  soles, 1.3 m deep. `mannequin.py` now cuts everything at floor level outside the legs' footprint after the remesh, closes
+  the soles, smooths 30 times instead of 12 (no fabric wrinkles left), and stops the build if the body is deeper than 0.6 m.
+
+- **The head is now the body model's own** (`make_figure.py --head=native`, the default; `--head=bust` keeps the grafted
+  bust). The bust shaped from the portrait looked stuck on, its back was a guess, and the graft sat it 20–27 mm to one side
+  of the head bone. Head edges stretched past 1.25× in a head turn: Akane 216 → 3, Rikka 276 → 26; looking up 94 → 2 and
+  198 → 9; the face's middle is now 0.4 and 2.9 mm from the bone. The head is cut above the neck line *and* within a head's
+  width of the face's middle (0.8 × the ear distance): in a T-pose the arms are level with the neck line, and a cut by height
+  alone gave the head the arms' tops (a flat bar left standing out when the arms came down; the bust version had cut them off
+  the body). The native face is coarser than the bust's, and a long lock can be cut at the head's width (Rikka's cheek).
+  The portrait is still drawn: the eyes, face points and hair are read from it.
+
+- **The bust is the head again, mapped automatically** (`--head=bust`, the default again the same day; the user: "we
+  still need the head bust step"). Three models, one job each: the four-view body for proportions, the smoothed base body
+  for the layers and needles, the bust for the face. The bust is placed by the face points, then fitted in 3D onto the
+  body's own head (`head_swap.py --fit=icp`, the default; `--fit=landmarks` the old placement): one scale, turn and move,
+  fitted both ways, trimmed to the nearest 85% of pairs. On Akane the landmark placement left the bust too big and to one
+  side (eye-to-chin said ×0.226, ear width ×0.185); the fit scaled it a further ×0.93 and the head surfaces' gap fell from
+  13.5 to 9.3 mm. The organs are placed from the portrait's own 28 points straight onto the bust (`bust_map` on the
+  armature: the portrait's figure box, the bust's bounds at import, the graft's placement), not through the T-pose's head
+  crop. The native head's finer variant (the raw shape at 12,000 triangles) stretched 444 face edges in a head turn: its
+  head-to-neck weight ramp ran about 7× steeper (0.3 of the weight across one 4 mm edge).
+  Akane rebuilt from the graft on (`build_fit`, against the landmark-placed `build_mv`): the head is now the body's
+  size, and the neck seam opens far less (turn 110 → 14 mm, nod 73 → 13, look up 83 → 11); jaw-open stretch 119 → 83.
+  Head edges past 1.25× rose (turn 216 → 312, nod 100 → 231): the worst are slivers 1–5 mm long on the cut rim
+  (neck size ×1.25–1.3) with the head-to-neck weight changing 0.15–0.3 across them, in both builds; the ramp and the cut
+  rim are the next fix, not the fit. Open: the hood-edge spike on the body beside the chin (the bigger bust hid it), a
+  hole in the bust's hair on the right side, the face 8.5 mm off the bone.
+
+- **Machine judgement in the loop, first try** (the user: "The numbers are hard-coded. We need a ml in the loop"; "try
+  jev and neck unified skeleton centralizing"). `judge.py` renders the finished figure in its test poses (`pose_shots.py`)
+  and asks Jev (TypeSafe's decision model, key from the vault) fixed questions about each pose: a spike, a tear, the
+  neck's quality, the face's parts, the head's size; one score per build (`judge` step). Jev's score levels must be sent
+  as a list (the console's client sends a map; the API refused it). `marks3d.py` renders the body's head and shoulders
+  and the bust from seven angles, finds RTMW's 133 points in each and triangulates them (no surface hits needed);
+  `head_swap.py --fit=both` fits the bust to the body's surface and to those landmarks together, each kind weighted by its
+  own typical miss (no set share). The face's mirror pairs set a middle; the neck and head bones go onto the body's own
+  mirror plane. Akane, head edges past 1.25x and seam opening (mm) in nod / look up / turn; face middle to head bone:
+
+  | build | placement | nod | look up | turn | face to bone | Jev |
+  |---|---|---|---|---|---|---|
+  | build_mv | face points | 100 / 73 | 94 / 83 | 216 / 110 | (27 before the face rig) | 0.020 |
+  | build_fit | + surface fit | 231 / 13 | 264 / 11 | 312 / 14 | 8.5 mm | 0.008 |
+  | build_fit2 | + face centred | 236 / 28 | 264 / 47 | 360 / 79 | 0.4 mm | 0.007 |
+  | build_fit3 | surface + 3D landmarks | 102 / 14 | 192 / 20 | 219 / 19 | 9.9 mm | 0.007 |
+
+  A rigid placement cannot have both: the bust's face and its neck do not line up with the body's the same way, so
+  centring the face opens the seam and closing the seam moves the face. Landmarks alone (no surface) tilted the bust 12
+  degrees and made it 11% too big: the body's coarse face misleads the detector. Jev ranks the builds but barely tells
+  them apart (its tear answer is 0.6-0.9 on all), so it is not yet a judge an optimiser can trust. The "arms down" test
+  pose turns the arms about their own length instead of lowering them (also in check_head.py).
+
+- **No tuned numbers or hand rules** (the user: "No hardcoding or rules for anywhere in the pipeline"; "Solve all 10").
+  An audit of the steps make_figure.py runs found about 160 tuned numbers and 91 hand rules. All of them were replaced
+  by measurements on the character's own meshes, rig weights and detector output, by robust statistics (Cauchy weights by
+  the median miss instead of trims and cut-offs), by solved fields (harmonic weights, the heat equation), or by searches
+  against measured stretch. What stays is listed in each script as STRUCTURAL (render sizes, view angles, VRM bone names,
+  detectors' point layouts, test poses) or NUMERIC (tolerances, caps). By area:
+  - picture to mesh: `view_register.py`, the picture's figure outline fitted onto the mesh's front outline (one scale, a
+    turn, a move), replacing the figure box stretched onto the bounding box (rig, joints, hair, organs);
+  - neck seam, skeleton, arms, skirt (`dress_rig.py`, `holo_detail.py`): cross-sections of the mesh; the seam between the
+    collar's step back and the chin's step forward; bone heat solved in numpy where Blender's finds no solution;
+  - the bust onto the body: the `marks` stage (`engine/characters/marks/`), both heads' 3D landmarks (RTMW from seven
+    angles, triangulated) and both surfaces; cut by the rig's own weights; the bust reduced to the body's triangle size;
+  - head and jaw weights (`head_lock.py`, `face_rig.py`): harmonic between where a bone surely owns the skin (above the
+    chin, the face inside its outline; below the lower lip) and where it surely does not; the pivot by a stretch search;
+    the face points from the marks stage (the face_render and face_marks steps are gone);
+  - limb bends, base body (`smooth_joints.py`, `mannequin.py`): each joint's measured radius times a searched ratio;
+    Taubin smoothing with the pass count at the least crease; the floor plate found by slab areas;
+  - hair (`hair_rig.py`): hair by colour odds inside and outside the detected face, free hair by the air under it, one
+    chain per lock found from the hair itself, springs from a pendulum under real gravity;
+  - colours and crop (`prep_view.py`, `crop_head.py`, `hands_check.py`): a colour mixture sized by BIC and merged where
+    it has no dip; hair and skin located by the face points; the head crop from the silhouette;
+  - organs (`eye_shapes.py`, `eye_parts.py`): Otsu thresholds, depths in the bust's own relief unit, the nose measured
+    on the bust;
+  - the runner: the setting picture squared without extra margin (a T-pose's arm span equals the height); the portrait's
+    margin so it fills the frame as the T-pose does; the least-sure portrait kept when every seed has hands.
+  Still a choice, named in the code: the hair's motion targets (walk, run, shake, droop), the organs' depth law and the
+  bust check's flatness bound. Slower: prep (colour mixtures) and the rig step take minutes instead of seconds.
+
+Known open: Rikka's hands; her face stretches more with H3; white shards at the eye corners; the four-view builds of both
+are being measured (this table gets their rows).
+
 ## Known issues at v0.9
 
 - The mouth is a line on the head: it does not open with the jaw (the jaw still moves the chin and the face under the

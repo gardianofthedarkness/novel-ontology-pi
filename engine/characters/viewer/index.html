@@ -363,6 +363,8 @@ async function load() {
   for (const s of soft.items) scene.remove(s.group); soft.items = [];
   const file = FIGURE_PARAM || (state.who !== 'misaka' ? `${state.who}_v07.txt`
     : { v07: 'misaka_v07.txt', quad: 'misaka_quad.txt', eyes: 'misaka_eyes.txt', organs: 'misaka_organs.txt', final: 'misaka_final.txt', skirt: 'misaka_skirt.txt', body: 'misaka_body.txt', layers: 'misaka_layers.txt' }[state.rig]);
+  // a figure whose base body was laid inside it raw (rawmerge) brings its own skin-or-cloth split: measured, not the benchmark's numbers
+  soft.dataSplit = /merged|_m\./.test(file) || new URLSearchParams(location.search).get('layers') === 'data';
   const b64 = await (await fetch(file)).text();
   const raw = Uint8Array.from(atob(b64.trim()), ch => ch.charCodeAt(0));
   const gzipped = raw[0] === 0x1f && raw[1] === 0x8b;
@@ -471,6 +473,20 @@ function buildSoft() {
     const L = Math.hypot(inner.bn[u * 3], inner.bn[u * 3 + 1], inner.bn[u * 3 + 2]) || 1; inner.bn[u * 3] /= L; inner.bn[u * 3 + 1] /= L; inner.bn[u * 3 + 2] /= L;
     for (let k = 0; k < 4; k++) { inner.si[u * 4 + k] = lsi.getComponent(r, k); inner.sw[u * 4 + k] = lsw.getComponent(r, k); } }
   soft.inner = inner;
+  // the capsules' radii from the base body itself: around each capsule's line, the median distance of the base points that
+  // follow its bones most
+  soft.capR = null;
+  if (soft.dataSplit) {
+    const bones = layer.skeleton.bones, raw = (n) => vrm.humanoid.getRawBoneNode(n), W = (n) => raw(n).getWorldPosition(new THREE.Vector3());
+    const topBone = (u) => { let b = 0, w = -1; for (let k = 0; k < 4; k++) if (inner.sw[u * 4 + k] > w) { w = inner.sw[u * 4 + k]; b = inner.si[u * 4 + k]; } return bones[b]; };
+    const radius = (own, A, B) => { const ds = [], ab = new THREE.Vector3().subVectors(B, A), p = new THREE.Vector3(), q = new THREE.Vector3();
+      for (let u = 0; u < LU; u++) { if (!own.includes(topBone(u))) continue; p.set(inner.bp[u * 3], inner.bp[u * 3 + 1], inner.bp[u * 3 + 2]).applyMatrix4(layer.matrixWorld);
+        const t = Math.max(0, Math.min(1, q.subVectors(p, A).dot(ab) / ab.lengthSq())); ds.push(p.distanceTo(q.copy(A).addScaledVector(ab, t))); }
+      ds.sort((x, y) => x - y); return ds.length ? ds[ds.length >> 1] : null; };
+    vrm.scene.updateMatrixWorld(true);
+    soft.capR = { upper: {}, lower: {}, torso: radius(['hips', 'spine', 'chest'].map(raw).filter(Boolean), W('hips'), W('chest')) };
+    for (const sd of ['left', 'right']) { soft.capR.upper[sd] = radius([raw(sd + 'UpperLeg')], W(sd + 'UpperLeg'), W(sd + 'LowerLeg')); soft.capR.lower[sd] = radius([raw(sd + 'LowerLeg')], W(sd + 'LowerLeg'), W(sd + 'Foot')); }
+  }
   for (const p of parts) {
     if (p.soft || p.key === 'head' || !p.mesh.isSkinnedMesh) continue;
     const m = p.mesh, g = m.geometry, pos = g.attributes.position, n = pos.count;
@@ -488,7 +504,16 @@ function buildSoft() {
     const nb = Array.from({ length: U }, () => []); const idx = g.index;
     for (let t = 0; t < idx.count; t += 3) { const a = uid[idx.getX(t)], b = uid[idx.getX(t + 1)], c = uid[idx.getX(t + 2)]; nb[a].push(b, c); nb[b].push(a, c); nb[c].push(a, b); }
     for (let it = 0; it < 2; it++) { const nt = new Float32Array(U); for (let u = 0; u < U; u++) { let s = thick[u], c = 1; for (const w of nb[u]) { s += thick[w]; c++; } nt[u] = s / c; } thick.set(nt); }
-    const sft = new Float32Array(U); for (let u = 0; u < U; u++) sft[u] = Math.min(1, Math.max(0, (thick[u] - 0.008) / 0.045));
+    const sft = new Float32Array(U);
+    if (soft.dataSplit) {
+      // the split is the figure's own: its thicknesses fall into two groups, on the body and off it; the level that parts
+      // them best (Otsu: the largest variance between the two groups) is where softness starts, and the figure's largest
+      // thickness is fully soft
+      const srt = Float32Array.from(thick).sort(), pre = new Float64Array(U + 1); for (let i = 0; i < U; i++) pre[i + 1] = pre[i] + srt[i];
+      let bestV = -1, t0 = srt[0]; for (let i = 1; i < U; i++) { const m0 = pre[i] / i, m1 = (pre[U] - pre[i]) / (U - i), vb = i * (U - i) * (m0 - m1) * (m0 - m1); if (vb > bestV) { bestV = vb; t0 = (srt[i - 1] + srt[i]) / 2; } }
+      const t1 = srt[U - 1]; soft.split = [t0, t1];
+      for (let u = 0; u < U; u++) sft[u] = Math.min(1, Math.max(0, (thick[u] - t0) / Math.max(1e-9, t1 - t0)));
+    } else for (let u = 0; u < U; u++) sft[u] = Math.min(1, Math.max(0, (thick[u] - 0.008) / 0.045));
     // what is drawn: a plain mesh in world space whose points the springs move
     const dg = new THREE.BufferGeometry(); dg.setIndex(g.index); dg.setAttribute('position', new THREE.BufferAttribute(new Float32Array(n * 3), 3).setUsage(THREE.DynamicDrawUsage));
     if (g.attributes.normal) dg.setAttribute('normal', g.attributes.normal);
@@ -513,8 +538,9 @@ const _v = new THREE.Vector3(), _a = new THREE.Vector3(), _b = new THREE.Vector3
 function capsules() {
   const W = (n) => vrm.humanoid.getRawBoneNode(n).getWorldPosition(new THREE.Vector3());
   const caps = [];
-  for (const s of ['left', 'right']) { caps.push([W(s + 'UpperLeg'), W(s + 'LowerLeg'), 0.062], [W(s + 'LowerLeg'), W(s + 'Foot'), 0.048]); }
-  caps.push([W('hips'), W('chest'), 0.095]);
+  const R = soft.capR;   // measured on the base body when the figure brings its own split (else the benchmark's)
+  for (const s of ['left', 'right']) { caps.push([W(s + 'UpperLeg'), W(s + 'LowerLeg'), (R && R.upper[s]) || 0.062], [W(s + 'LowerLeg'), W(s + 'Foot'), (R && R.lower[s]) || 0.048]); }
+  caps.push([W('hips'), W('chest'), (R && R.torso) || 0.095]);
   return caps;
 }
 // ── the needles: the base body moved by dual quaternions. Each bone's motion as a unit dual quaternion (rotation R and

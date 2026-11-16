@@ -7,6 +7,7 @@ figures are made from copyrighted material and stay in the user's library, never
 | Path | What it holds |
 | --- | --- |
 | `pipeline/` | the steps from pictures to a figure, run in order by `make_figure.py`: Hugging Face Space clients (`edit.py`, `hunyuan_shape.py`, `t2m_*.py`), Blender scripts run headless (`dress_rig.py`, `holo_detail.py`, `compose_outfits.py`, `head_swap.py`, `smooth_joints.py`, `mannequin.py`, `layer_pack.py`, ...), the face and hair of v0.7 (`head_lock.py`, `face_render.py`, `face_marks.py`, `face_rig.py`, `hair_rig.py`), checks (`proportions.py`, `head_compare.py`, `check_head.py`) and `vault.py` (tokens in the system's credential store, never in files) |
+| `rawmerge/` | the head bust merged onto a TRELLIS.2 body before any rig, the neck as one tube, and the merged figure reduced for the hologram (`rawmerge/README.md`); steps of `make_figure.py` |
 | `viewer/index.html` | the figure page: three.js + three-vrm, the triangle hologram, motions on the VRM humanoid bones, the soft layers and the rigid needles |
 | `VERSIONS.md` | which pipeline structure is stable (v0.7, the face and hair), its steps in order, measurements and known issues |
 | `../../src/characters/figures.ts` | the store beside the universe's cast and EM's assignment ([§8.6, figures in the warehouse](../../docs/v3/design.html#figure-warehouse)) |
@@ -19,9 +20,14 @@ One command runs the whole pipeline (`VERSIONS.md` lists the steps) for any char
 python pipeline/make_figure.py <setting.png> <out-dir> --name=<Name> [--portrait=<head.png>] [--remove="the cat"]
 ```
 
-Four image edits (a T-pose, its back, the same in a plain base layer, a head-and-shoulders portrait; the prompts are
-`pipeline/prompts/*.txt`, with nothing about any one character), three shapes, then the Blender steps; about 15 minutes
-and seven GPU calls on the user's Hugging Face account. Every step is skipped when its output exists (`--from=<step>`
+Seven image edits with MiniMax H3-Image (`--editor=h3`, the default; `--editor=qwen` for Qwen-Image-Edit): a T-pose, its
+back, its left and right profiles (each view drawn from the T-pose with the original picture as a second reference), the
+same T-pose and back in a plain base layer, and a close head-and-shoulders portrait (checked for invented hands, redrawn
+with the next seed if any); the prompts are `pipeline/prompts/*.txt`, with nothing about any one character. Then three
+shapes: the body from its four views on Hunyuan3D-2mv, the base body and the head's bust from one picture each on
+Hunyuan3D-2.1 (whose Space ignores extra views: found 2026-11-14, every figure before was shaped from its front alone);
+then the Blender steps. About 20 minutes and ten GPU calls on the user's Hugging Face account. Started from a Python
+without the pipeline's packages, it re-runs itself in the pipeline's own (`--python=`). Every step is skipped when its output exists (`--from=<step>`
 reruns from a step). The result is `<out-dir>/figure.vrm`, its checks (`check.json`) and `figure.txt` for the viewer
 (`viewer/index.html?figure=figure.txt`, or the Character switch).
 
