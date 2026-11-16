@@ -1,5 +1,7 @@
 """The rigged merged figure packed with its base body as the hidden layer, for the viewer's soft cloth.
-usage: blender -b <holo_m.blend> -P layer_raw.py -- <base_reduced.glb> <rig.blend from dress_rig> <head_region.glb> <out.blend>
+usage: blender -b <holo_m.blend> -P layer_raw.py -- <base_reduced.glb> <rig.blend from dress_rig> <head_region.glb> <out.blend> [<raw/place.json> [<raw/tube.glb>]]
+  With place.json the bust's landmark mapping is written to the armature (bust_map), for the skull lock and the face rig;
+  with tube.glb (tube.json beside it) the neck's own section level by level (neck_tube).
   head     the figure's triangles inside the solid the merge kept the bust in become their own mesh, Head: the viewer keeps the
            head on the skeleton and measures no layer for it (the base body has no head)
   layer    the base body (already laid inside the figure raw, by rawmerge/base_raw.py, and reduced) takes its bone weights
@@ -41,6 +43,22 @@ body.name = body.data.name = 'Outfit_main'        # STRUCTURAL: the viewer's nam
 with bpy.data.libraries.load(RIGB) as (src, dst): dst.objects = [n for n in src.objects if n == 'Body']
 solid = dst.objects[0]; sc.collection.objects.link(solid); solid.name = 'weights_source'
 layer = imp(BASE); layer.name = layer.data.name = 'LayerBody'
+# the base body and the bust's landmarks were placed in the raw figure's frame; the rig stands the figure in its own
+# (holo_detail.py's raw_frame): both follow by it
+import json
+from mathutils import Matrix
+N = Matrix(json.loads(rig['raw_frame'])); layer.data.transform(N)
+if len(argv) > 4:
+    T = Matrix(json.load(open(argv[4]))['T']); rig['bust_map'] = json.dumps({'M': [list(r) for r in (N @ T)]})
+    print('FIG bust landmarks carried onto the figure by the raw placement (place.json) and the rig frame')
+if len(argv) > 5:
+    # the neck itself: the merge's tube (raw/tube.glb), level by level in the rig's frame: each level's centre and half
+    # widths (for points on an ellipse the variance along an axis is half the semi-axis squared), for the skull lock
+    tb = imp(argv[5]); tb.data.transform(N); P = np.array([v.co[:] for v in tb.data.vertices]); bpy.data.objects.remove(tb, do_unlink=True)
+    tj = json.load(open(os.path.join(os.path.dirname(argv[5]), 'tube.json'))); per = len(P) // max(1, int(round((P[:, 2].max() - P[:, 2].min()) / tj['step'])) + 1)
+    P = P[np.argsort(P[:, 2])]; rings = [P[i:i + per] for i in range(0, len(P) - per + 1, per)]
+    rig['neck_tube'] = json.dumps([[float(r[:, 2].mean()), float(r[:, 0].mean()), float(r[:, 1].mean()), float(np.sqrt(2 * r[:, 0].var())), float(np.sqrt(2 * r[:, 1].var()))] for r in rings])
+    print('FIG neck tube carried: %d levels from z %.3f to %.3f' % (len(rings), rings[0][:, 2].mean(), rings[-1][:, 2].mean()))
 for g in solid.vertex_groups: layer.vertex_groups.new(name=g.name)
 dt = layer.modifiers.new('dt', 'DATA_TRANSFER'); dt.object = solid; dt.use_vert_data = True; dt.data_types_verts = {'VGROUP_WEIGHTS'}; dt.vert_mapping = 'POLYINTERP_NEAREST'
 dt.layers_vgroup_select_src = 'ALL'; dt.layers_vgroup_select_dst = 'NAME'

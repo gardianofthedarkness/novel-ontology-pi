@@ -1,7 +1,7 @@
 """Make a character's figure from one setting picture: the raw-merge pipeline (rawmerge/README.md), in order, resumable.
 usage: python make_figure.py <setting.png> <out-dir> --name=<Name> [--portrait=<head.png>] [--full=<full-length.png>]
         [--remove="<what to leave out>"]
-        [--seed=11] [--editor=h3|qwen] [--blender=<blender.exe>] [--python=<python.exe>] [--from=<step>] [--only=<step>]
+        [--seed=11] [--editor=h3|qwen] [--blender=<blender.exe>] [--python=<python.exe>] [--from=<step>] [--only=<step>] [--body-detail=<share>]
   <setting.png>: one picture of the character, any pose (a full body is best). --portrait: a separate, sharper picture of
   the head (else the head is cut from the T-pose redraw, above its arms). --remove: things in the picture that are not the character
   ("the bag and its strap", "the cat"). --full: a second picture of the character at full length, for an outfit the
@@ -13,10 +13,11 @@ usage: python make_figure.py <setting.png> <out-dir> --name=<Name> [--portrait=<
   and one paid TRELLIS.2 job on Hugging Face (the dressed body and the base body together).
   In order: redraws -> bust -> TRELLIS.2 bodies -> the bust merged onto the body raw, the neck as one tube -> reduced, the
   head finer -> the base body laid inside by elastic bone matching -> a filled solid, the skeleton and weights on it ->
-  weights onto the reduced figure -> the base body packed as the hidden layer for soft cloth.
-  The result: <out-dir>/layers_m.vrm (+ .blend) and figure_m.txt (gzip+base64, for the viewer).
-  Not in this pipeline yet (their scripts wait in this folder to be moved onto the merged figure): the head lock and jaw
-  (head_lock.py, face_rig.py), hair springs (hair_rig.py), face organs (eye_shapes.py, eye_parts.py, face28.py), joint
+  weights onto the reduced figure -> the base body packed as the hidden layer for soft cloth -> the skull lock, the face's
+  points and jaw -> hair on spring chains.
+  The result: <out-dir>/m/figure.vrm (+ .blend) and figure_m.txt (gzip+base64, for the viewer).
+  Not in this pipeline yet (their scripts wait in this folder to be moved onto the merged figure): face organs
+  (eye_shapes.py, eye_parts.py, face28.py), joint
   smoothing (smooth_joints.py), the checks (check_head.py, judge.py). The path that had them (the bust grafted after the
   rig, on a Hunyuan body) is at tag figures-raw-steady-1 and before."""
 import base64, gzip, json, os, shutil, subprocess, sys, time
@@ -41,6 +42,10 @@ REMOVE = flags.get('remove', '').strip()
 FULL = os.path.abspath(flags['full']) if flags.get('full') else None   # a second picture showing the whole length of the outfit
 os.makedirs(OUT, exist_ok=True)
 P = lambda *p: os.path.join(OUT, *p)
+# A LOOK CHOICE, not measured: the body's triangles are held to this share of the tolerance measured on the merge (1 = the
+# measured one, about 14,000 body triangles on Akane; 0.5 about 31,000). Finer reads better in the hologram and costs the
+# viewer's cloth and skinning time in proportion. --body-detail=<share> sets it.
+BODY_DETAIL = flags.get('body-detail', '0.5')
 RAW = lambda name: os.path.join(os.path.dirname(HERE), 'rawmerge', name)   # the raw merge's scripts
 LOG = open(P('build.log'), 'a', encoding='utf-8')
 def log(msg):
@@ -147,7 +152,8 @@ STEPS = [
     # the dressed body and its base body (the same T-pose in a plain base layer) in one job: the model loads once
     ('body_t2', P('base_t2.glb'), lambda: run([PY, RAW('trellis_body.py'), P('body_rgba.png'), P('body_t2.glb'), P('base_rgba.png'), P('base_t2.glb')])),
     ('raw_merge', P('merged.glb'), lambda: run([PY, RAW('merge_raw.py'), P('body_t2.glb'), P('bust.glb'), P('marks', 'bust.json'), P('raw'), P('merged.glb'), '--blender=' + BLENDER])),
-    ('reduce', P('reduced.glb'), lambda: run([BLENDER, '-b', '-P', RAW('reduce.py'), '--', P('merged.glb'), P('reduced.glb'), P('reduced.json'), '--head=' + P('raw', 'head_region.glb')])),
+    ('reduce', P('reduced.glb'), lambda: run([BLENDER, '-b', '-P', RAW('reduce.py'), '--', P('merged.glb'), P('reduced.glb'), P('reduced.json'), '--head=' + P('raw', 'head_region.glb'),
+                                               '--body=' + BODY_DETAIL, '--pass1=' + P('raw', 'pass1.glb')])),
     # the base body under the clothes, raw first (rawmerge/README.md): its joints found, its closed outer skin taken, then laid
     # inside the merged figure with no head by elastic bone matching (the dressed figure is the reference); the figure's layer
     # thickness is its distance to that body. Then reduced: the base to the figure's body tolerance, the thickness carried over.
@@ -156,13 +162,19 @@ STEPS = [
                                                              run([PY, RAW('outer.py'), P('raw_base', 'base_skin.glb'), P('raw_base', 'base_outer.glb')]))),
     ('base_raw', P('raw_base', 'thick.npy'), lambda: run([PY, RAW('base_raw.py'), P('merged.glb'), P('raw', 'whole.json'), P('raw', 'tube.json'), P('raw_base', 'base_outer.glb'), P('raw_base', 'whole.json'), P('raw_base')])),
     ('base_reduce', P('base_reduced.glb'), lambda: run([BLENDER, '-b', '-P', RAW('reduce.py'), '--', P('raw_base', 'base_fit.glb'), P('base_reduced.glb'), P('base_reduced.json'),
-                                                         '--tol=%r' % (json.load(open(P('reduced.json')))['body']['tolerance_mm'] / 1000)])),
+                                                         '--tol=%r' % (json.load(open(P('reduced.json')))['staircase_mm'] / 1000)])),
     ('solid', P('merged_solid.glb'), lambda: run([PY, RAW('solid.py'), P('merged.glb'), P('merged_solid.glb')])),
-    ('rig_m', P('rig_m', NAME + '.blend'), lambda: blender('dress_rig.py', P('merged_solid.glb'), P('prep'), P('rig_m'), '--back=' + P('prep_back'), '--name=' + NAME, '--marks=' + P('raw', 'whole.json'))),
-    ('holo_m', P('holo_m.vrm'), lambda: blender('holo_detail.py', P('rig_m', NAME + '.blend'), P('reduced.glb'), P('holo_m.blend'), '--asis=1', '--vrm=1')),
+    ('rig_m', P('rig_m', NAME + '.blend'), lambda: blender('dress_rig.py', P('merged_solid.glb'), P('prep'), P('rig_m'), '--back=' + P('prep_back'), '--name=' + NAME, '--marks=' + P('raw', 'whole.json'), '--strip=0')),
+    ('holo_m', P('holo_m.vrm'), lambda: blender('holo_detail.py', P('rig_m', NAME + '.blend'), P('reduced.glb'), P('holo_m.blend'), '--asis=1', '--vrm=1', '--cut=0')),   # no arm-to-body cut: a T-pose figure has no hand on a hip, and the cut tore the armpit
     # the base body (laid inside the figure raw, reduced) packed as the hidden layer, the head split off as its own rigid mesh
-    ('layers_m', P('layers_m.vrm'), lambda: blender(os.path.join('..', 'rawmerge', 'layer_raw.py'), P('base_reduced.glb'), P('rig_m', NAME + '.blend'), P('raw', 'head_region.glb'), P('layers_m.blend'), blend=P('holo_m.blend'))),
-    ('page_m', P('figure_m.txt'), lambda: open(P('figure_m.txt'), 'w').write(base64.b64encode(gzip.compress(open(P('layers_m.vrm'), 'rb').read(), 9)).decode())),
+    ('layers_m', P('layers_m.vrm'), lambda: blender(os.path.join('..', 'rawmerge', 'layer_raw.py'), P('base_reduced.glb'), P('rig_m', NAME + '.blend'), P('raw', 'head_region.glb'), P('layers_m.blend'), P('raw', 'place.json'), P('raw', 'tube.glb'), blend=P('holo_m.blend'))),
+    # the head on the merged figure: the skull lock (the neck is the merge's own tube), the face's points, pivot and jaw, then
+    # the hair found on the head, hung on spring chains
+    ('lock_m', P('m', 'lock.blend'), lambda: blender('head_lock.py', P('m', 'lock.blend'), '--marks-bust=' + P('marks', 'bust.json'), blend=P('layers_m.blend'))),
+    ('face_m', P('m', 'face.blend'), lambda: blender('face_rig.py', P('marks', 'bust.json'), P('m', 'face.blend'), blend=P('m', 'lock.blend'))),
+    ('portrait_marks', P('face', 'marks.json'), lambda: run([PY, os.path.join(HERE, 'portrait_marks.py'), P('portrait.png'), P('face')])),
+    ('hair_m', P('m', 'figure.blend'), lambda: blender('hair_rig.py', P('prep_portrait'), P('face'), P('m', 'figure.blend'), blend=P('m', 'face.blend'))),
+    ('page_m', P('figure_m.txt'), lambda: open(P('figure_m.txt'), 'w').write(base64.b64encode(gzip.compress(open(P('m', 'figure.vrm'), 'rb').read(), 9)).decode())),
 ]
 
 names = [s[0] for s in STEPS]
@@ -178,4 +190,4 @@ for i, (name, done, do) in enumerate(STEPS):
     if not os.path.exists(done):     # Blender exits 0 even when its script fails: the step's output is the proof
         log('FAILED: %s wrote no %s (its messages are above)' % (name, done)); raise SystemExit(1)
     log('%-12s %4d s' % (name, round(time.time() - t)))
-log('== done: %s' % P('layers_m.vrm'))
+log('== done: %s' % P('m', 'figure.vrm'))

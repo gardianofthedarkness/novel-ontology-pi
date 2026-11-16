@@ -1,6 +1,8 @@
 """Replace a rigged figure's smoothed mesh with the generator's own (detailed) mesh, reduced to a readable triangle count,
 keeping the skeleton: bone weights are copied from the smoothed mesh (nearest surface). For the triangle hologram look.
 usage: blender -b -P holo_detail.py -- <rig.blend from dress_rig> <raw-mesh.glb> <out.blend> [--tris=N] [--smooth=N] [--asis=1] [--vrm=1] [--cut=0]
+  --cut=0: a figure made in a T-pose: no arm-to-body triangles are cut and no arm weights are taken off surface outside the
+  arm's connected region (both were for an A-pose, where the arm lies against the ribs and the hand on the hip).
   --asis=1: the mesh is already reduced (rawmerge/reduce.py) and is taken as it is. --vrm=1: also export <out>.vrm.
   The speckle smoothing runs as many passes as the speckle needs (the knee of the Laplacian's fall) and measures the
   speckle's size; the mesh is then decimated as far as its surface stays within that size of the smoothed surface.
@@ -69,7 +71,9 @@ def decimate_within(ob, tol, iters=8, sample=20000):
     return 2 ** hi_
 # the same placement dress_rig.py gave the smoothed mesh: 1.6 m tall, feet at 0, centred
 co = mesh_co(ob.data); lo, hi = co.min(0), co.max(0); s = H / (hi[2] - lo[2])
-ob.data.transform(Matrix.Translation((-(lo[0] + hi[0]) / 2 * s, -(lo[1] + hi[1]) / 2 * s, -lo[2] * s)) @ Matrix.Scale(s, 4))
+PLACE = Matrix.Translation((-(lo[0] + hi[0]) / 2 * s, -(lo[1] + hi[1]) / 2 * s, -lo[2] * s)) @ Matrix.Scale(s, 4)
+ob.data.transform(PLACE)
+rig['raw_frame'] = json.dumps([list(r) for r in PLACE])   # from the raw mesh's own frame to the rig's: what was placed in the raw frame (a bust, a base body) follows by it
 # the smoothing removes the generator's speckle but keeps the folds, hair strands and face relief. dress_rig.py measured
 # the pass count and the speckle's size on this same mesh (the size over the points on the picture's figure only, so a
 # generated floor plate doesn't count); those are used when present
@@ -187,7 +191,7 @@ for s, (region, past, chain, sh, ax) in regions.items():
                 d = {n: float(segd(co[i], *segs[n])) for n in chain}; keepw = {min(d, key=d.get): 1.0}
             tot = sum(keepw.values())
             for n, w in keepw.items(): ob.vertex_groups[n].add([i], w / tot, 'REPLACE')
-        elif past[i] and co[i, 0] * side > 0 and any(n in chain for n in vg):
+        elif flags.get('cut') != '0' and past[i] and co[i, 0] * side > 0 and any(n in chain for n in vg):   # (not with --cut=0: on a T-pose figure this took the arm weights off a few sleeve points, which then stayed with the spine as spikes)
             for n in chain:
                 if n in vg: ob.vertex_groups[n].remove([i])
             rest = {n: w for n, w in vg.items() if n not in chain and w > 0}

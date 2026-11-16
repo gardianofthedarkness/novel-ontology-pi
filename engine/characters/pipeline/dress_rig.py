@@ -1,5 +1,5 @@
 ﻿"""Turn a generated character mesh into a rigged, flat-coloured VRM, using the clean front view it was made from.
-usage: blender -b -P dress_rig.py -- <mesh.glb> <view-dir (view.json, labels.npy, mask.npy)> <out-dir> [--back=<back-view-dir>] [--name=X] [--marks=<whole.json>]
+usage: blender -b -P dress_rig.py -- <mesh.glb> <view-dir (view.json, labels.npy, mask.npy)> <out-dir> [--back=<back-view-dir>] [--name=X] [--marks=<whole.json>] [--strip=0]
   1. clean: the generator's speckle smoothed away, voxel remesh at the generator's own spacing, decimated as far as the
      surface stays within the generator's own noise; stood at 1.6 m facing -Y
   2. colour: each vertex takes the flat colour block the front (or back) view shows at its place where that camera sees
@@ -469,6 +469,7 @@ for side, A_ in ARMS.items():
             if not hand_ok[st]: hand_ok |= flood(ED, len(co), bey, int(st))
         ok |= hand_ok
     ok |= (sv < A_['s_root']) & (co[:, 2] >= A_['armpit_z'])
+    if flags.get('strip') == '0': ok[:] = True      # a T-pose figure: bone heat's own arm weights stand (the strip is for an A-pose's arm against the ribs; here it left shoulder points with the spine)
     may_follow[side] = ok
 gidx = {n: ob.vertex_groups[n].index for n in BONES}
 stripped = 0

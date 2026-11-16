@@ -2170,6 +2170,25 @@ Two retakes on the way: hands cut off at the frame's edge (fixed by padding the 
 the prompt). The first try with an A-pose was dropped (above). A swimsuit outfit was left out: the character is fourteen.
 Correction (2026-11-14): this run's back views did not shape anything; the shape came from the front pictures alone (above).
 The pipeline now sends four views to Hunyuan3D-2mv.</p>
+<p id="figure-raw-merge"><strong>The raw-merge pipeline</strong> (2026-11-16, steady 1, tag <code>figures-raw-steady-1</code>; Akane only;
+<code>engine/characters/rawmerge/README.md</code> has every step and measurement). What <code>make_figure.py</code> runs now:</p>
+<ul>
+<li><strong>Shapes</strong>: the head bust from the portrait on Hunyuan3D-2.1; the dressed body and the base body (the same T-pose in a
+  plain base layer) on TRELLIS.2, both in one paid Hugging Face job.</li>
+<li><strong>Merge before any rig</strong>: the bust placed on the body's own head by 3D landmarks and surfaces, the neck one continuous tube
+  carried along the body's neck bone into the head, the bust's own collar taken off; one closed surface.</li>
+<li><strong>Reduce</strong>: smoothed until the merge grid's staircase is gone, then collapsed as far as the surface stays, on average,
+  within that staircase; the head held finer (the tolerance times the head's share of the figure's height).</li>
+<li><strong>The base body</strong>: laid inside the figure with no head by elastic bone matching (the dressed figure is the reference,
+  each base bone turned and stretched onto the figure's); the figure's distance to it is its layer thickness.</li>
+<li><strong>Skeleton</strong>: the figure is layered (a jacket's walls with the body inside), so bones and weights are measured on a
+  filled solid of it, with joints from the model's own 3D landmarks, and the weights copied to the reduced figure.</li>
+<li><strong>Soft cloth</strong>: the base body packed as the hidden layer; the viewer splits skin from cloth at the level that best parts
+  the figure's own thicknesses and sizes its leg and torso colliders from the base body.</li>
+<li><strong>Not on it yet</strong>: the skull lock and jaw, the face's organs and the hair springs of v0.7 to v0.9 (their scripts are kept;
+  the path they ran on, the bust grafted after the rig on a Hunyuan body, is at the tag and before). Known fault: cloth at
+  the shoulders crosses itself when an arm swings far from the T-pose, at any triangle density.</li>
+</ul>
 <h3 id="model-factory">The model factory: a page per character</h3>
 <p><span class="st designed">Designed</span> 2026-11-14 (the user: "After read, user can select a character and enter a model factory
 page. There he can configure using cloud gpu or his own card").</p>
@@ -2304,6 +2323,44 @@ figure's state per frame:</p>
 <li>no limb through a wall, a piece of furniture or another person;</li>
 <li>a clip begins in the state the last one ended in, at the place and facing it ended;</li>
 <li>a contact (a handshake, a blow, an embrace) meets the other person's body at the same frame.</li>
+</ul>
+<p id="motion-generators"><strong>Generators looked at since</strong> (2026-11-16; none has produced a clip for a figure yet):</p>
+<table>
+<thead><tr><th>Generator</th><th>What it gives</th><th>What it costs</th><th>State</th></tr></thead>
+<tbody>
+<tr><td><strong>ARDY</strong> (NVIDIA, <code>nv-tlabs/ardy</code>; code Apache-2.0, checkpoints under the NVIDIA Open Model Agreement, commercial use allowed)</td>
+  <td>motion that continues from up to 8 s of its own history, so a prompt can change mid-stream with no join; root paths, waypoints,
+  full-body keyframes and single-joint targets as constraints; a 27-joint skeleton close to the VRM humanoid</td>
+  <td>its text encoder is built on the gated <code>meta-llama/Meta-Llama-3-8B-Instruct</code> (about 16 GB at half precision, a 30 GB
+  download); Linux and a large NVIDIA GPU; one character, no scene objects, realistic motion only</td>
+  <td>a Hugging Face job is written (<code>engine/characters/motion/ardy_job.py</code>, <code>ardy_run.py</code>), not run: the account
+  has no Llama-3 access yet</td></tr>
+<tr><td><strong>Kimodo</strong> (NVIDIA, <code>nv-tlabs/kimodo</code>; the same licences)</td>
+  <td>ARDY's offline sibling: a whole clip from a timeline of prompts, the same constraints, foot-sliding clean-up; follows text
+  slightly better than ARDY on NVIDIA's benchmark, ARDY hits constraints better</td>
+  <td>the same text encoder and gate, about 17 GB of GPU memory (under 3 GB with the encoder on the CPU); a 77-joint skeleton</td>
+  <td>read only. Not a smaller replacement for ARDY</td></tr>
+<tr><td><strong>Light-T2M</strong> (AAAI 2025, <code>qinghuannn/light-t2m</code>; code MIT, trained on HumanML3D, which is research data)</td>
+  <td>one short clip per prompt as positions of 22 joints at 20 frames a second; no joins, no constraints</td>
+  <td>4.5 million parameters with a CLIP text encoder: 0.27 GB of GPU memory and 4 s for a 5 s clip on the laptop's GTX 1650</td>
+  <td>installed on the laptop (<code>E:/figures/tools/light-t2m</code>, its own Python) with its compiled Mamba extension replaced by the
+  plain-PyTorch path; runs with random weights only: the authors' checkpoint (OneDrive) could not be fetched by script</td></tr>
+<tr><td><strong>MotionBricks</strong> (NVIDIA, preview code)</td>
+  <td>real-time walking and in-betweening from keyframes, velocity and style; no text prompt</td>
+  <td>ONNX models (a third-party figure: about 200 million parameters)</td><td>found by search only</td></tr>
+</tbody>
+</table>
+<ul>
+<li><strong>What this changes in the design above</strong>: the join and the scene problems of the first test are what ARDY and Kimodo
+  are built for (history, waypoints, keyframes), so "the generator" for a beat with a path, a target or a join is one of them;
+  a small model such as Light-T2M can only fill a free-standing beat. Proportions and other people stay code's work
+  (retargeting, grounding, hand IK), whichever generator is used.</li>
+<li><strong>On a Mac</strong> (not tried): ARDY and Kimodo pick CUDA or the CPU and nothing else, so they would run on the CPU and need
+  32 GB or more of memory for the text encoder; ARDY's real-time demo (TensorRT) would not run. Light-T2M needs the same
+  Mamba patch as on the laptop. MotionBricks' ONNX files are the most portable.</li>
+<li><strong>Into World · Live</strong> (<a href="#world-live">§12.2</a>): clips are still made when a run is made, never while reading, so
+  the live page only plays and blends them on the figures; a generator that streams (ARDY) would matter there only if a
+  figure were ever steered live, which nothing here does yet.</li>
 </ul>
 <h2 id="actor-cast">8.7 The actor cast: what each one sees</h2>
 <p><span class="st designed">Designed</span> (the user, 2026-11-12, of a first-person view: "Yes both three make sense. This is

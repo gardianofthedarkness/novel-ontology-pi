@@ -193,3 +193,45 @@ Measure: triangles that cross a triangle they do not touch, at rest and in test 
 - The volume field as first written is worse and is NOT adopted: it bypasses the arm repairs `holo_detail.py` makes (the
   fingertips stayed behind), and its grid came out at 8 mm. Not a fair test of the idea yet.
 `make_figure.py` is unchanged by this trial.
+
+## Skull lock, jaw and hair on the merged figure (2026-11-16)
+
+`make_figure.py` steps `lock_m`, `face_m`, `portrait_marks`, `hair_m`; result `m/figure.vrm` / `figure_m.txt`. The v0.7
+scripts run as they are, given what the raw merge already knows:
+
+- `holo_detail.py` records the placement it gives the reduced figure (`raw_frame`); `layer_raw.py` places the base body by
+  it and writes the bust's landmark mapping (`bust_map` = that frame times the merge's `place.json`) and the neck tube's
+  section level by level (`neck_tube`, from `raw/tube.glb`).
+- `head_lock.py`: on a figure that carries `neck_tube`, the neck's cross-section is the tube's at the Head's rim. The base
+  body's slice it used before has 3 points there now (the base ends at that height) and gave a 0.5 mm neck; the tube gives
+  27.0 by 28.3 mm.
+- `face_rig.py`: unchanged. 68 of 68 face points on the Head; pivot and jaw found by its searches.
+- `portrait_marks.py` (new, small): the portrait's 68 face points, which `hair_rig.py` reads; the step that wrote them
+  before was removed with the old path. It reproduces the earlier file exactly.
+- `hair_rig.py`: unchanged. On the 13,000-triangle head: 4,882 of 6,632 points hair, 2,849 free, 51 locks, 21 chains,
+  31 spring joints, 4,046 points weighted to chains.
+
+Akane, `check_head.py`: skull drift 0 mm in every head pose; jaw opens 30 mm. The seam between the Head and the body opens
+11 mm in a nod, 14 looking up, 17 tilting and 36 mm in a head turn (the old path: 15, 16, 25, 40): the Head's rim follows
+the neck bone alone while the body's edge keeps the solid's weights. Opening the jaw stretches 274 head edges past 1.25
+times (the finer head has more of them near the mouth). In the viewer: hair tips travel up to 36 mm walking and 155 mm in
+a head shake (six sampled instants each; the build's own target for a shake is 105 mm), the cloth stays finite.
+Not done: the face's organs, joint smoothing, the judge. Tested on Akane only.
+
+## Spikes on the clothes with the arms down, and a denser body (2026-11-16)
+
+Seen in the viewer's idle pose: long spikes at both upper arms. Three causes, all rules made for A-pose figures or for
+skin that hugs the body, none of them triangle density:
+
+- `dress_rig.py` took the arm weights off points outside the arm's measured tube (358 on the solid), leaving a few
+  shoulder points with the spine. `--strip=0` (a T-pose figure) keeps bone heat's own weights: 0 stripped.
+- `holo_detail.py` did the same to surface outside the arm's connected region, and cut arm-to-body triangles. Both are off
+  with `--cut=0`.
+- The viewer's thin skin rode the base body's points ("needles"); a sleeve point whose nearest base point follows another
+  bone was pulled after it. For a figure with its own split (`soft.dataSplit`) the skin follows its own bones.
+
+Akane, viewer, idle: edges grown by more than 4 cm went from 78 to 3 (the worst, 63 mm, is at the armpit); none in a
+wave. The body is also finer now, by choice: `make_figure.py`'s `BODY_DETAIL` (`--body-detail`, default 0.5) holds the body
+to half the measured tolerance: 31,500 body triangles beside 13,200 on the head. This is a look choice, named as one in the
+code. With the skin on its own bones a frame of walk takes 24 ms on the laptop (it was 56 ms at this density before).
+The reduce step keeps its first pass (`raw/pass1.glb`), so changing the detail takes about two minutes.

@@ -1,5 +1,6 @@
 """Lock the skull: the head bone owns the head, the neck bone only the neck; the blend between them solved, not set.
 usage: blender -b <layers.blend> -P head_lock.py -- <out.blend> --marks-bust=<marks/bust.json>
+  On a merged figure (the armature carries neck_tube) the neck's cross-section is the merge's own tube at the Head's rim.
   The neck: its cross-section is the hairless base body (LayerBody) sliced at the neck seam (the narrowest section the
   rig step measured), one of its own median edges thick, only the points its rig weights mostly to the neck or head (the
   T-pose's arms lie at that height); an ellipse from the slice's spread (for points on an ellipse the variance along an
@@ -71,6 +72,12 @@ for (a, b), c in edge_faces.items():
 face_front = inside(H[:, 0], H[:, 2]) & ((H[:, 1] - cy) * FRONT > 0) & (H[:, 2] >= z_chin)
 head_sure = (H[:, 2] > z_chin) | face_front             # the skull, front and back, down to the chin's height
 neck_sure = rim & (H[:, 2] < z_chin) & ~head_sure
+if 'neck_tube' in rig:
+    # a merged figure (rawmerge): its neck is the merge's own tube, whose section at every level layer_raw.py carried here;
+    # the neck's cross-section is the tube's at the height where the Head meets the body (the Head's cut rim under the chin)
+    NT = np.array(json.loads(rig['neck_tube'])); z_rim = float(np.median(H[neck_sure][:, 2])); k = int(np.argmin(np.abs(NT[:, 0] - z_rim)))
+    _, cx, cy, rx, ry = (float(x) for x in NT[k]); r = ry; y_front = cy + FRONT * ry
+    print('FIG neck from the merge tube at the Head rim (z %.3f): centre (%.3f, %.3f), half-width %.1f mm, half-depth %.1f mm' % (z_rim, cx, cy, rx * 1000, ry * 1000))
 idx = np.concatenate([np.nonzero(head_sure)[0], np.nonzero(neck_sure)[0]])
 val = np.concatenate([np.ones(head_sure.sum()), np.zeros(neck_sure.sum())])
 hs = harmonic(H, T, idx, val)

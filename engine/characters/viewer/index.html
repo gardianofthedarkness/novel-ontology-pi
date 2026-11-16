@@ -365,6 +365,9 @@ async function load() {
     : { v07: 'misaka_v07.txt', quad: 'misaka_quad.txt', eyes: 'misaka_eyes.txt', organs: 'misaka_organs.txt', final: 'misaka_final.txt', skirt: 'misaka_skirt.txt', body: 'misaka_body.txt', layers: 'misaka_layers.txt' }[state.rig]);
   // a figure whose base body was laid inside it raw (rawmerge) brings its own skin-or-cloth split: measured, not the benchmark's numbers
   soft.dataSplit = /merged|_m\./.test(file) || new URLSearchParams(location.search).get('layers') === 'data';
+  // such a figure's skin follows its own bones (weights solved on its filled solid); riding the base body's points, as the
+  // benchmark's skin does, pulled sleeve points after base points that follow another bone (spikes with the arms down)
+  soft.needles = !soft.dataSplit;
   const b64 = await (await fetch(file)).text();
   const raw = Uint8Array.from(atob(b64.trim()), ch => ch.charCodeAt(0));
   const gzipped = raw[0] === 0x1f && raw[1] === 0x8b;
