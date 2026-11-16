@@ -58,7 +58,8 @@ export async function worldOf(root: string): Promise<World> {
     books.push({ book: name, volume: Number(match[1]), workspace, runs, accepted: index?.strands?.director?.accepted ?? null, title: titles.get(name) ?? (typeof meta?.title === "string" ? meta.title : null) });
   }
   books.sort((a, b) => a.volume - b.volume);
-  return { root: dir, name: basename(dir), books, readOnly: !dir.split("/").includes(".novel") };
+  // Editable when it is the console's own (under a folder's .novel); either separator, so Windows paths are read too.
+  return { root: dir, name: basename(dir), books, readOnly: !dir.split(/[\\/]/).includes(".novel") };
 }
 
 /** The worlds in a folder: the folder itself if it is one, else those in it, up to two levels down. */

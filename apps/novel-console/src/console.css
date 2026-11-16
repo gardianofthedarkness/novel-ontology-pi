@@ -276,3 +276,23 @@ dialog .row { display: flex; justify-content: flex-end; gap: 8px; margin-top: 14
 .batch { margin: 6px 0 10px; }
 h4.mini { margin: 12px 0 4px; text-transform: uppercase; letter-spacing: .05em; font-size: 11px; color: var(--dim); }
 .chip.primary-chip { border-color: var(--accent); color: var(--accent); }
+
+/* The Run view: the world book's steps, each with its state, cost and buttons; the shown step's log. */
+.run-pick { display: block; width: 100%; text-align: left; margin: 4px 0; }
+.run-steps { display: flex; flex-direction: column; gap: 2px; margin: 8px 0; }
+.run-step { display: grid; grid-template-columns: 18px minmax(0, 1fr); gap: 6px; padding: 6px 6px; border-radius: 6px; cursor: pointer; border: 1px solid transparent; }
+.run-step:hover { background: var(--raised); }
+.run-step.shown { border-color: var(--line); background: var(--raised); }
+.run-step .run-st { text-align: center; color: var(--dim); line-height: 18px; }
+.run-step.done .run-st { color: var(--ok); }
+.run-step.failed .run-st, .run-step.stopped .run-st { color: var(--bad); }
+.run-step.running .run-st { color: var(--accent); }
+.run-step .run-main { display: flex; flex-direction: column; gap: 1px; min-width: 0; }
+.run-step .run-main small { font-size: 11px; line-height: 1.35; color: var(--dim); overflow-wrap: anywhere; }
+.run-step .run-main small.bad { color: var(--bad); }
+.run-step .run-acts { grid-column: 2; display: flex; gap: 4px; margin-top: 3px; }
+.run-step .tag { font-size: 10px; padding: 0 5px; border-radius: 99px; border: 1px solid var(--line); color: var(--dim); font-weight: 400; }
+.run-step .tag.paid { border-color: var(--jev); color: var(--jev); }
+.chip.bad-chip { color: var(--bad); border: 1px solid var(--bad); }
+pre.run-log { max-height: 320px; overflow: auto; font: 11px/1.4 ui-monospace, Consolas, monospace; background: var(--field); border: 1px solid var(--line); border-radius: 6px; padding: 6px 8px; white-space: pre-wrap; overflow-wrap: anywhere; margin: 4px 0 12px; }
+.run-step .run-title { display: flex; align-items: center; gap: 5px; flex-wrap: wrap; }

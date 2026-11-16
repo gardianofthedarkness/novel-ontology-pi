@@ -24,6 +24,8 @@ contextBridge.exposeInMainWorld("novelHost", {
   answerReviewWithAgent: (wid, volume, options) => ipcRenderer.invoke("answerReviewWithAgent", wid, volume, options),
   volumeStatus: (wid, volume) => ipcRenderer.invoke("volumeStatus", wid, volume),
   runVolume: (wid, volume, options) => ipcRenderer.invoke("runVolume", wid, volume, options),
+  stopVolume: (wid, volume) => ipcRenderer.invoke("stopVolume", wid, volume),
+  volumeLog: (wid, volume, step, lines) => ipcRenderer.invoke("volumeLog", wid, volume, step, lines),
   transcript: (key) => ipcRenderer.invoke("transcript", key),
   sendToSession: (key, text) => ipcRenderer.invoke("sendToSession", key, text),
 });

@@ -51,8 +51,8 @@ document.addEventListener("keydown", (event) => {
 
 
 // ---------- The left strip (as VS Code's): Library, Outline, Search, Readings; the active icon folds the left panel. ----------
-const LEFT_TITLES = { library: "Library", outline: "Outline", search: "Search", characters: "Characters", places: "Places", strands: "Strands", record: "Record", problems: "Problems", debug: "Reading details", readings: "Readings", review: "Review" };
-const OWN_LEFT = new Set(["library", "outline", "search", "readings", "review"]);
+const LEFT_TITLES = { library: "Library", outline: "Outline", search: "Search", characters: "Characters", places: "Places", strands: "Strands", record: "Record", problems: "Problems", debug: "Reading details", readings: "Readings", review: "Review", run: "Run" };
+const OWN_LEFT = new Set(["library", "outline", "search", "readings", "review", "run"]);
 let leftView = remember.get("left", "library"), searchTimer = null, lastSearch = null;
 const leftOpen = () => !$("work").classList.contains("no-left");
 function setLeft(open) { $("work").classList.toggle("no-left", !open); remember.set("leftOpen", open); markLeft(); }
@@ -73,6 +73,7 @@ function renderLeft(view = leftView) {
   if (view === "search") renderSearch();
   if (view === "readings") renderReadings();
   if (view === "review") renderReview();
+  if (view === "run") renderRun();
   if (!OWN_LEFT.has(view)) renderView(view);
 }
 for (const button of document.querySelectorAll("#leftbar [data-left]")) button.addEventListener("click", () => showLeft(button.dataset.left, true));
@@ -182,7 +183,7 @@ function openWorld(lib, world, book) {
   $("worldframe").src = `app://console/world/${world.wid}/play/world?volume=${book.volume}`;
   $("crumb").textContent = `${world.name} \u00b7 ${book.title ?? `volume ${book.volume}`}${world.readOnly ? " \u00b7 read only" : ""}`;
   say(`${world.name}, volume ${book.volume}: World \u00b7 Live${world.readOnly ? " (read only: a library the console did not make)" : ""}.`);
-  render(); if (leftView === "review") renderReview();
+  render(); if (leftView === "review") renderReview(); if (leftView === "run") { runLogStep = null; renderRun(); }
 }
 const copyingNow = new Set();
 // A whole volume with one button (docs/v3/design.html#agent-workflows): each world book's steps, the next one, and while
@@ -196,16 +197,78 @@ async function loadVolume(wid, volume) {
   try { volumeState.set(key, await host.volumeStatus(wid, volume)); render(); } catch { volumeState.set(key, null); } finally { volumeLoading.delete(key); }
 }
 setInterval(() => { for (const [key, state] of volumeState) if (volumeRunning(state)) { const [wid, volume] = key.split("|"); volumeState.delete(key); void loadVolume(wid, volume); } }, 15000);
-async function runVolume(world, book) {
-  const agent = chosenHost, name = AGENT_NAMES[agent] ?? "an agent", state = volumeState.get(`${world.wid}|${book.volume}`);
-  // The runner goes on from the first step not done to the end, every step after it again: say which of those are paid.
-  const from = Math.max(0, state?.steps.findIndex((step) => step.id === state?.next?.id) ?? 0), paid = state?.steps.slice(from).filter((step) => step.paid).map((step) => step.id) ?? [];
-  const choice = await chooser(`Run ${book.title ?? `volume ${book.volume}`}?`, `Every step from ${state?.next?.id ?? "the start"} to the end, in the background; the agent's steps (the place tree, the look pass) with ${name}. Paid steps: ${paid.join(", ") || "none"}.`, [["Run it", "run"], ["Not now", "no"]]);
-  if (choice !== "run") return;
-  try { const started = await host.runVolume(world.wid, book.volume, { agent }); say(`${book.title ?? `Volume ${book.volume}`}: started ${(started.started ?? []).join(", ") || started.note || "nothing"}.`); }
-  catch (error) { say(plainError(error), true); }
-  volumeState.delete(`${world.wid}|${book.volume}`); void loadVolume(world.wid, book.volume);
+/**
+ * The Run view (the user, 2026-11-15: "make the app able to click bottoms to trigger world run process instead of just
+ * asking you or agent"): the shown world book's steps (engine/volume/volume.mjs), each with its state, what it costs and
+ * when it ran; a step run alone or again, a run from a step to the end, the running one stopped; a step's log. Paid steps
+ * are confirmed first. Read again every 3 seconds while a step runs.
+ */
+let runLogStep = null, runTimer = null;
+const RUN_MARK = { done: "✓", running: "", failed: "✕", stopped: "■", waiting: "○" };
+const bookName = (book) => book.title ?? `Volume ${book.volume}`;
+const since = (from, to) => { if (!from) return ""; const s = Math.max(0, Math.round(((to ? Date.parse(to) : Date.now()) - Date.parse(from)) / 1000)); return s < 90 ? `${s}s` : s < 5400 ? `${Math.round(s / 60)} min` : `${(s / 3600).toFixed(1)} h`; };
+const whenText = (iso) => (iso ? new Date(iso).toLocaleString([], { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" }) : "");
+async function renderRun() {
+  const body = $("l-run");
+  clearTimeout(runTimer); runTimer = null;
+  if (!shownWorld) {
+    const rows = libs.flatMap((lib) => (worldsOf.get(lib.path) ?? []).flatMap((world) => world.books.map((book) => ({ lib, world, book }))));
+    body.innerHTML = rows.length ? `<p class="empty">Pick a world's book to run.</p>${rows.map((row, n) => `<button class="run-pick" data-n="${n}">${esc(row.world.name)} · ${esc(bookName(row.book))}${row.world.readOnly ? " · read only" : ""}</button>`).join("")}`
+      : `<p class="empty">No world here yet: a world is a library with terrain and the director's runs (Library, Worlds).</p>`;
+    body.onclick = (event) => { const n = event.target.closest("[data-n]")?.dataset.n; if (n === undefined) return; const row = rows[Number(n)]; openWorld(row.lib, row.world, row.book); showLeft("run"); };
+    return;
+  }
+  const { world, book } = shownWorld, key = shownWorld.key;
+  const state = await host.volumeStatus(world.wid, book.volume).catch((error) => ({ error: plainError(error) }));
+  if (shownWorld?.key !== key || leftView !== "run") return;
+  if (state.error) { body.innerHTML = `<p class="empty">${esc(state.error)}</p>`; return; }
+  volumeState.set(key, state);
+  const running = state.steps.find((step) => step.status === "running"), readOnly = state.readOnly;
+  const logStep = runLogStep && state.steps.some((step) => step.id === runLogStep) ? runLogStep : running?.id ?? [...state.steps].filter((step) => step.ended).sort((a, b) => Date.parse(b.ended) - Date.parse(a.ended))[0]?.id ?? null;
+  $("badge-run").hidden = !running; $("badge-run").textContent = running ? "▶" : "";
+  setCount("run", running ? `running ${running.id}` : state.next ? `next ${state.next.id}` : "all done");
+  const actions = (step) => readOnly || running ? "" : `<span class="run-acts"><button class="chip" data-run="${esc(step.id)}" title="Run this step alone${step.paid ? " (paid)" : ""}">${step.status === "done" ? "Run again" : "Run"}</button><button class="chip" data-from="${esc(step.id)}" title="Run this step and every one after it">From here</button></span>`;
+  const row = (step) => `<div class="run-step ${step.status}${step.id === logStep ? " shown" : ""}" data-log="${esc(step.id)}">
+      <span class="run-st">${step.status === "running" ? `<span class="spin"></span>` : RUN_MARK[step.status] ?? ""}</span>
+      <span class="run-main"><span class="run-title"><b>${esc(step.id)}</b>${step.paid ? ` <span class="tag paid">paid</span>` : ""}${step.who === "agent" ? ` <span class="tag">agent</span>` : ""}</span>
+        <small>${esc(step.why ?? "")}</small>
+        ${step.started ? `<small class="muted">${esc(whenText(step.started))}${step.status === "running" ? ` · running ${since(step.started)}` : step.ended ? ` · took ${since(step.started, step.ended)}` : ""}</small>` : ""}
+        ${step.error ? `<small class="bad">${esc(step.error)}</small>` : ""}</span>${actions(step)}</div>`;
+  const top = readOnly ? `<p class="empty">Read only: a library the console did not make. Use <b>Copy to edit</b> on the world to run it.</p>`
+    : `<div class="chips">${running ? `<button class="chip bad-chip" data-stop="1" title="Stop ${esc(running.id)} and everything it started">Stop ${esc(running.id)}</button>` : state.next ? `<button class="chip primary-chip" data-next="1" title="Every step not done, from ${esc(state.next.id)} to the end">Run from ${esc(state.next.id)}</button>` : `<span class="muted">Every step is done.</span>`}<button class="chip" data-reload="1" title="Load the book's World · Live again (after a run)">Reload the world</button></div>`;
+  const log = logStep ? await host.volumeLog(world.wid, book.volume, logStep, 80).catch(() => null) : null;
+  if (shownWorld?.key !== key || leftView !== "run") return;
+  const logText = log ? [log.out, log.err ? `— errors —\n${log.err}` : ""].filter((part) => part && part.trim()).join("\n") : "";
+  const keep = body.querySelector("pre.run-log"), atEnd = !keep || keep.scrollTop + keep.clientHeight >= keep.scrollHeight - 8;
+  // The log under the buttons while a step runs (in sight as it goes), else under the steps.
+  const logBlock = logStep ? `<h4 class="mini">Log · ${esc(logStep)}</h4><pre class="run-log">${esc(logText || "Nothing written yet.")}</pre>` : "";
+  body.innerHTML = `<p class="note">${esc(world.name)} · ${esc(bookName(book))}</p>${top}${running ? logBlock : ""}<div class="run-steps">${state.steps.map(row).join("")}</div>${running ? "" : logBlock}`;
+  const pre = body.querySelector("pre.run-log"); if (pre && atEnd) pre.scrollTop = pre.scrollHeight;
+  if (running) runTimer = setTimeout(() => { if (leftView === "run" && leftOpen()) renderRun(); }, 3000);
 }
+$("l-run").addEventListener("click", async (event) => {
+  if (!shownWorld) return;
+  const { world, book } = shownWorld, state = volumeState.get(shownWorld.key), target = event.target.closest("button");
+  if (!target) { const id = event.target.closest("[data-log]")?.dataset.log; if (id) { runLogStep = id; renderRun(); } return; }
+  if (target.dataset.reload) { $("worldframe").src = `app://console/world/${world.wid}/play/world?volume=${book.volume}&t=${Date.now()}`; say(`${bookName(book)}: World · Live loaded again.`); return; }
+  if (target.dataset.stop) {
+    const choice = await chooser(`Stop ${state?.steps.find((step) => step.status === "running")?.id ?? "the run"}?`, "It and everything it started end now; the step is marked stopped (what it paid for so far is cached, so running it again pays only for the rest).", [["Stop it", "stop"]]);
+    if (choice !== "stop") return;
+    try { const done = await host.stopVolume(world.wid, book.volume); say(done.stopped ? `${bookName(book)}: stopped ${done.stopped}.` : done.note); } catch (error) { say(plainError(error), true); }
+    renderRun(); return;
+  }
+  const step = target.dataset.run ?? null, from = target.dataset.from ?? (target.dataset.next ? state?.next?.id : null);
+  if (!step && !from) return;
+  const order = state?.steps ?? [], start = order.findIndex((entry) => entry.id === (step ?? from));
+  const range = step ? order.filter((entry) => entry.id === step) : order.slice(Math.max(0, start));
+  const paid = range.filter((entry) => entry.paid), agentSteps = range.filter((entry) => entry.who === "agent" && entry.status !== "done");
+  const title = step ? `Run ${step}${order.find((entry) => entry.id === step)?.status === "done" ? " again" : ""}?` : `Run from ${from} to the end?`;
+  const detail = [`${range.length} ${range.length === 1 ? "step" : "steps"}, in the background: ${range.map((entry) => entry.id).join(", ")}.`, paid.length ? `Paid (spends the keys; each row says what it costs): ${paid.map((entry) => entry.id).join(", ")}.` : "Nothing in it is paid.", agentSteps.length ? `The agent's steps (${agentSteps.map((entry) => entry.id).join(", ")}) run with ${AGENT_NAMES[chosenHost] ?? "the agent in the chat"}.` : ""].filter(Boolean).join(" ");
+  if ((await chooser(title, detail, [["Run it", "run"]])) !== "run") return;
+  try { const started = await host.runVolume(world.wid, book.volume, { agent: chosenHost, ...(step ? { step } : { from }) }); runLogStep = null; say(`${bookName(book)}: started ${(started.started ?? []).join(", ") || started.note || "nothing"}.`); }
+  catch (error) { say(plainError(error), true); }
+  setTimeout(renderRun, 800);
+});
 async function copyWorld(lib, world) {
   copyingNow.add(world.root); render();
   say(`Copying ${world.name} to edit (its latest finished run; the world itself is only read)\u2026`);
@@ -459,7 +522,7 @@ function render() {
           tree.append(node({ depth: 3, icon: "\u25b8", name: book.title ?? `Volume ${book.volume}`, desc: `${book.runs.length} ${book.runs.length === 1 ? "run" : "runs"}${book.accepted ? ` \u00b7 plays ${book.accepted}` : ""}${volumeLine(state)}`, cls: `world-book${shownWorld?.key === vkey ? " active" : ""}`,
             title: `${book.workspace}\nOpen World \u00b7 Live for this book${volumeTitle(state)}`, onClick: () => openWorld(lib, world, book),
             action: world.readOnly || !state ? null : volumeRunning(state) ? actionButton(`<span class="spin"></span>`, "", `Running: ${state.steps.find((step) => step.status === "running")?.id}`, () => {})
-              : state.next ? actionButton("Run volume", "", `Run every step not done, from ${state.next.id}; the agent's steps with ${AGENT_NAMES[chosenHost] ?? "the agent in the chat"} (spends the keys' tokens)`, () => runVolume(world, book)) : null }));
+              : actionButton("Run…", "", `The book's steps, each with a button (next: ${state.next?.id ?? "every step done"})`, () => { openWorld(lib, world, book); showLeft("run"); }) }));
         }
       }
     }

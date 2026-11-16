@@ -136,32 +136,65 @@ ipcMain.handle("worldReviewStep", async (event, wid, volume, step) => {
 // initiated with one botton to run a volume"): engine/volume/volume.mjs runs every step not done in the background, the
 // agent's steps (the place tree, the look pass) as workflows with the agent open in the chat. Paid steps spend the keys.
 const volumeModule = () => import(pathToFileURL(path.join(backend, "engine", "volume", "volume.mjs")).href);
+// The keys a run spends (never shown): the environment's, then the console's own store, then the Windows Credential
+// Manager's novel-ontology/<name> (engine/volume/credentials.mjs; the user, 2026-11-15: keys kept in Windows' store).
+const credentialsModule = () => import(pathToFileURL(path.join(backend, "engine", "volume", "credentials.mjs")).href);
+async function modelKeys() {
+  const secrets = await import(pathToFileURL(path.join(backend, "dist", "src", "ground", "connectors", "secrets.js")).href);
+  const stored = await credentialsModule().then((module) => module.storedKeys({})).catch(() => ({}));
+  return { work: process.env.WORK_LLM_API_KEY?.trim() || secrets.getStoredSecret("work-llm") || stored.WORK_LLM_API_KEY || null,
+    jev: process.env.TYPESAFE_API_KEY?.trim() || secrets.getStoredSecret("typesafe") || stored.TYPESAFE_API_KEY || null };
+}
 ipcMain.handle("volumeStatus", async (event, wid, volume) => {
   const book = worlds.bookOf(wid, volume), now = await (await volumeModule()).status(book.workspace);
-  return { readOnly: book.readOnly, next: now.next, steps: now.steps.map((step) => ({ id: step.id, who: step.who, paid: step.paid, status: step.status, error: step.error ? String(step.error).slice(0, 300) : undefined })) };
+  return { readOnly: book.readOnly, next: now.next, steps: now.steps.map((step) => ({ id: step.id, who: step.who, paid: step.paid, status: step.status, why: step.why, started: step.started, ended: step.ended, error: step.error ? String(step.error).slice(0, 300) : undefined })) };
 });
+// The run panel (the user, 2026-11-15: "make the app able to click bottoms to trigger world run process instead of just
+// asking you or agent"): a step alone (run, or run again), from a step to the end, or from the first step not done; the
+// agent is asked for only when an agent step not done is in what runs.
 ipcMain.handle("runVolume", async (event, wid, volume, options = {}) => {
   const book = worlds.bookOf(wid, volume);
   if (book.readOnly) throw new Error("This world is read only (a library the console did not make): copy it to edit first.");
-  const agent = options.agent;
-  if (agent !== "claude-code" && agent !== "pi") throw new Error("Pick Claude Code or Pi in the chat: the volume's agent steps run with the agent open there.");
-  const secrets = await import(pathToFileURL(path.join(backend, "dist", "src", "ground", "connectors", "secrets.js")).href);
-  const key = process.env.WORK_LLM_API_KEY?.trim() || secrets.getStoredSecret("work-llm");
-  if (!key) throw new Error("A volume asks the work model: enter its key with the key button first.");
+  const module = await volumeModule(), now = await module.status(book.workspace);
+  const step = typeof options.step === "string" ? options.step : null, from = typeof options.from === "string" ? options.from : null;
+  const ids = module.stepsToRun(now, { step, from });
+  if (!ids.length) return { started: [], note: "every step is done" };
+  const agent = options.agent, needsAgent = ids.some((id) => { const entry = now.steps.find((s) => s.id === id); return entry?.who === "agent" && entry.status !== "done"; });
+  if (needsAgent && agent !== "claude-code" && agent !== "pi") throw new Error("An agent's step (the place tree, the rooms or the look pass) is in this run: pick Claude Code or Pi in the chat first.");
+  const keys = await modelKeys();
+  if (!keys.work && ids.some((id) => now.steps.find((s) => s.id === id)?.paid)) throw new Error("This run asks the work model: enter its key with the key button first (or keep it in Windows' Credential Manager as novel-ontology/deepseek).");
+  const args = [path.join(backend, "engine", "volume", "volume.mjs"), "run", book.workspace, ...(step ? ["--step", step] : from ? ["--from", from] : [])];
   return new Promise((resolve, reject) => {
-    const child = spawn(runtime, [path.join(backend, "engine", "volume", "volume.mjs"), "run", book.workspace], { cwd: backend, stdio: ["ignore", "pipe", "pipe"], env: { ...process.env, ELECTRON_RUN_AS_NODE: "1", WORK_LLM_API_KEY: key, NOVEL_WORKFLOW_AGENT: agent } });
+    const child = spawn(runtime, args, { cwd: backend, windowsHide: true, stdio: ["ignore", "pipe", "pipe"], env: { ...process.env, ELECTRON_RUN_AS_NODE: "1", ...(keys.work ? { WORK_LLM_API_KEY: keys.work } : {}), ...(keys.jev ? { TYPESAFE_API_KEY: keys.jev } : {}), ...(agent === "claude-code" || agent === "pi" ? { NOVEL_WORKFLOW_AGENT: agent } : {}) } });
     let out = "", err = "";
     child.stdout.on("data", (chunk) => { out += chunk; }); child.stderr.on("data", (chunk) => { err += chunk; });
     child.on("error", reject);
     child.on("close", (code) => { if (code === 0) { try { resolve(JSON.parse(out)); } catch { resolve({ note: out.trim() }); } } else reject(new Error((err || out).trim().split("\n").at(-1)?.slice(0, 400) || `the runner exited ${code}`)); });
   });
 });
+ipcMain.handle("stopVolume", async (event, wid, volume) => {
+  const book = worlds.bookOf(wid, volume);
+  if (book.readOnly) throw new Error("This world is read only.");
+  return (await volumeModule()).stop(book.workspace);
+});
+// A step's log: its last lines (out and err), for the run panel.
+ipcMain.handle("volumeLog", async (event, wid, volume, step, lines = 60) => {
+  const book = worlds.bookOf(wid, volume), module = await volumeModule();
+  if (!module.STEPS.some((entry) => entry.id === step)) throw new Error("No such step.");
+  return module.logOf(book.workspace, step, Math.min(400, Math.max(5, Number(lines) || 60)));
+});
 ipcMain.handle("ask", async (event, folder, method, params) => {
   if (!ALLOWED.has(method)) throw new Error(`The console does not ask ${method}.`);
   const server = serverOf(folder); await server.ready;
   return server.request(method, params || {});
 });
-ipcMain.handle("keys", async () => (await reading()).keyStatus());
+// Each key's source, never a value; a key kept only in Windows' Credential Manager shows as "windows".
+ipcMain.handle("keys", async () => {
+  const status = (await reading()).keyStatus();
+  if (status.work && status.jev) return status;
+  const stored = await credentialsModule().then((module) => module.storedKeys({})).catch(() => ({}));
+  return { jev: status.jev ?? (stored.TYPESAFE_API_KEY ? "windows" : null), work: status.work ?? (stored.WORK_LLM_API_KEY ? "windows" : null) };
+});
 ipcMain.handle("setKeys", async (event, keys) => {
   const module = await reading();
   for (const which of ["jev", "work"]) if (typeof keys?.[which] === "string" && keys[which].trim()) module.setKey(which, keys[which]);

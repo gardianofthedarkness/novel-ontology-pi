@@ -9,15 +9,17 @@
 // what they asked, so a rerun pays only for what changed).
 //
 //   node engine/volume/volume.mjs status <novel-dir>
-//   node engine/volume/volume.mjs run <novel-dir> [--step <id> | --until <id>]   (from the first step not done)
+//   node engine/volume/volume.mjs run <novel-dir> [--step <id> | --from <id>] [--until <id>]   (else from the first step not done)
+//   node engine/volume/volume.mjs stop <novel-dir>                                 (the running step and all it started)
 //   node engine/volume/volume.mjs log <novel-dir> <step> [--lines N]
 //   node engine/volume/volume.mjs done <novel-dir> look --why <text>              (Pi's look pass, marked done)
-import { spawn } from 'node:child_process';
+import { spawn, spawnSync } from 'node:child_process';
 import { existsSync, readFileSync } from 'node:fs';
 import { cp, mkdir, open, readFile, readdir, rename, writeFile } from 'node:fs/promises';
 import { basename, dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { parseArgs } from 'node:util';
+import { storedKeys } from './credentials.mjs';
 
 const repository = resolve(dirname(fileURLToPath(import.meta.url)), '..', '..');
 const json = file => readFile(file, 'utf8').then(JSON.parse).catch(() => null);
@@ -47,7 +49,9 @@ export async function lastRun(novelDir) {
 /** A step's environment: the caller's (the keys come from the host), the models volume 1 was made with, the portrait venv. */
 export function stepEnvironment(env = process.env) {
   const venv = join(env.HOME ?? '', 'claude-world-first', 'portrait-venv', 'bin', 'python');
-  const out = { ...env, JEV_MODEL: 'jev-1.14.0', WORK_LLM_PROVIDER: 'deepseek', WORK_LLM_MODEL: 'deepseek-chat', ...(!env.NOVEL_PORTRAIT_PYTHON && existsSync(venv) ? { NOVEL_PORTRAIT_PYTHON: venv } : {}) };
+  // The keys the caller has none of, from the Windows Credential Manager (engine/volume/credentials.mjs), for this process's own environment only.
+  const stored = env === process.env ? storedKeys(env) : {};
+  const out = { ...env, ...stored, JEV_MODEL: 'jev-1.14.0', WORK_LLM_PROVIDER: 'deepseek', WORK_LLM_MODEL: 'deepseek-chat', ...(!env.NOVEL_PORTRAIT_PYTHON && existsSync(venv) ? { NOVEL_PORTRAIT_PYTHON: venv } : {}) };
   // The host's model observer (a local proxy for Pi's own commands, its live view) refuses requests over 4 MB (terrain's
   // pictures) and ends with the host: a step asks Jev and the work model directly.
   for (const key of ['JEV_ENDPOINT', 'WORK_LLM_BASE_URL']) if (/^http:\/\/(127\.0\.0\.1|localhost)[:/]/.test(out[key] ?? '')) delete out[key];
@@ -193,7 +197,7 @@ export async function execute(novelDir, ids, { log = () => {} } = {}) {
         const out = await open(join(at.logs, `${id}.out`), n ? 'a' : 'w'), err = await open(join(at.logs, `${id}.err`), n ? 'a' : 'w');
         await out.write(`== ${new Date().toISOString()} ${basename(command.args[0])} ${command.args.slice(1).map(arg => (arg.startsWith('/') ? basename(arg) : arg)).join(' ')}\n`);
         const code = await new Promise(done => {
-          const child = spawn(command.program, command.args, { cwd: repository, env: stepEnvironment(), stdio: ['ignore', out.fd, err.fd] });
+          const child = spawn(command.program, command.args, { cwd: repository, env: stepEnvironment(), windowsHide: true, stdio: ['ignore', out.fd, err.fd] });
           child.on('exit', code => done(code ?? 1)); child.on('error', () => done(1));
         });
         await out.close(); await err.close();
@@ -213,13 +217,25 @@ export async function execute(novelDir, ids, { log = () => {} } = {}) {
   return true;
 }
 
-/** Starts steps in the background: `step` alone, or from the first step not done up to `until` (or up to Pi's look pass). */
-export async function run(novelDir, { step = null, until = null } = {}) {
+/** The steps a run would start: `step` alone; or from `from` (else the first step not done) up to `until` (else the end). */
+export function stepsToRun(now, { step = null, from = null, until = null } = {}) {
+  const order = STEPS.map(entry => entry.id);
+  if (step) { if (!order.includes(step)) throw new Error(`no step ${step}; steps: ${order.join(', ')}`); return [step]; }
+  if (from && !order.includes(from)) throw new Error(`no step ${from}; steps: ${order.join(', ')}`);
+  const start = from ? order.indexOf(from) : now.steps.findIndex(entry => entry.status !== 'done');
+  if (start < 0) return [];
+  const to = until ? order.indexOf(until) : order.length - 1;
+  if (until && to < 0) throw new Error(`no step ${until}`);
+  return order.slice(start, to + 1);
+}
+
+/** Starts steps in the background: `step` alone, or from `from` (else the first step not done) up to `until`. */
+export async function run(novelDir, { step = null, from = null, until = null } = {}) {
   const at = placesOf(novelDir), now = await status(novelDir);
   if (now.steps.some(entry => entry.status === 'running')) throw new Error(`a step is running: ${now.steps.find(entry => entry.status === 'running').id}`);
   const order = STEPS.map(entry => entry.id);
   let ids;
-  if (step) { if (!order.includes(step)) throw new Error(`no step ${step}; steps: ${order.join(', ')}`); ids = [step]; }
+  if (step || from) ids = stepsToRun(now, { step, from, until });
   else {
     const from = now.steps.findIndex(entry => entry.status !== 'done');
     if (from < 0) return { started: [], note: 'every step is done' };
@@ -234,9 +250,28 @@ export async function run(novelDir, { step = null, until = null } = {}) {
   }
   await mkdir(at.logs, { recursive: true });
   const runnerLog = await open(join(at.logs, 'runner.log'), 'a');
-  const child = spawn(process.execPath, [fileURLToPath(import.meta.url), 'exec', at.novel, ...ids], { cwd: repository, env: process.env, detached: true, stdio: ['ignore', runnerLog.fd, runnerLog.fd] });
+  const child = spawn(process.execPath, [fileURLToPath(import.meta.url), 'exec', at.novel, ...ids], { cwd: repository, env: process.env, detached: true, windowsHide: true, stdio: ['ignore', runnerLog.fd, runnerLog.fd] });
   child.unref(); await runnerLog.close();
   return { started: ids, pid: child.pid, logs: at.logs, note: 'running in the background: check with novel volume status' };
+}
+
+/**
+ * Stops the running step (the user, 2026-11-15: buttons in the app instead of asking an agent): the runner and every
+ * process it started, then the step recorded as failed, stopped by hand. A stopped director run is like one that died:
+ * its next attempt sets the library's edits aside (failedBefore).
+ */
+export async function stop(novelDir) {
+  const at = placesOf(novelDir), now = await status(novelDir), running = now.steps.find(entry => entry.status === 'running');
+  if (!running) return { stopped: null, note: 'no step is running' };
+  const state = await stateOf(at), pid = state.steps[running.id]?.pid;
+  if (pid) {
+    if (process.platform === 'win32') spawnSync('taskkill', ['/PID', String(pid), '/T', '/F'], { windowsHide: true });
+    else { try { process.kill(-pid, 'SIGTERM'); } catch { try { process.kill(pid, 'SIGTERM'); } catch {} } }
+  }
+  const after = await stateOf(at);
+  after.steps[running.id] = { ...after.steps[running.id], status: 'failed', ended: new Date().toISOString(), error: 'stopped by hand', failedBefore: true };
+  await save(at, after);
+  return { stopped: running.id, pid };
 }
 
 /** The last lines of a step's log (out and err). */
@@ -257,9 +292,9 @@ export async function markDone(novelDir, step, why) {
 }
 
 if (process.argv[1] === fileURLToPath(import.meta.url)) {
-  const { values, positionals: [command, novelDir, ...rest] } = parseArgs({ allowPositionals: true, options: { step: { type: 'string' }, until: { type: 'string' }, lines: { type: 'string' }, why: { type: 'string' } } });
-  if (!novelDir || !['status', 'run', 'exec', 'log', 'done'].includes(command)) { console.error('usage: node engine/volume/volume.mjs status|run|log|done <novel-dir> ... (see the header)'); process.exit(2); }
+  const { values, positionals: [command, novelDir, ...rest] } = parseArgs({ allowPositionals: true, options: { step: { type: 'string' }, from: { type: 'string' }, until: { type: 'string' }, lines: { type: 'string' }, why: { type: 'string' } } });
+  if (!novelDir || !['status', 'run', 'exec', 'log', 'done', 'stop'].includes(command)) { console.error('usage: node engine/volume/volume.mjs status|run|stop|log|done <novel-dir> ... (see the header)'); process.exit(2); }
   if (command === 'exec') { const ok = await execute(novelDir, rest, { log: line => console.log(`${new Date().toISOString()} ${line}`) }); process.exit(ok ? 0 : 1); }
-  const out = command === 'status' ? await status(novelDir) : command === 'run' ? await run(novelDir, { step: values.step ?? null, until: values.until ?? null }) : command === 'log' ? await logOf(novelDir, rest[0], Number(values.lines ?? 40)) : await markDone(novelDir, rest[0], values.why);
+  const out = command === 'status' ? await status(novelDir) : command === 'run' ? await run(novelDir, { step: values.step ?? null, from: values.from ?? null, until: values.until ?? null }) : command === 'stop' ? await stop(novelDir) : command === 'log' ? await logOf(novelDir, rest[0], Number(values.lines ?? 40)) : await markDone(novelDir, rest[0], values.why);
   console.log(JSON.stringify(out, null, 1));
 }

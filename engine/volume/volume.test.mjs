@@ -82,3 +82,14 @@ test('a step run again after it failed knows it (the director then sets the dead
   await writeFile(at.state, JSON.stringify({ book: 'vol-2', steps: { direct: { status: 'running' } } }));
   assert.ok(!(await direct.commands(at))[0].args.includes('--discard-edits'));
 });
+
+test('the steps a run starts: one alone, from one to the end, or from the first not done; a name not a step is refused', async () => {
+  const { STEPS, stepsToRun } = await import('./volume.mjs');
+  const order = STEPS.map(step => step.id), now = { steps: order.map((id, n) => ({ id, status: n < 3 ? 'done' : 'waiting' })) };
+  assert.deepEqual(stepsToRun(now, { step: 'direct' }), ['direct']);
+  assert.deepEqual(stepsToRun(now, { from: 'direct' }), order.slice(order.indexOf('direct')));
+  assert.deepEqual(stepsToRun(now, {}), order.slice(3));
+  assert.deepEqual(stepsToRun({ steps: order.map(id => ({ id, status: 'done' })) }, {}), []);
+  assert.throws(() => stepsToRun(now, { step: 'nope' }), /no step nope/);
+  assert.ok(order.indexOf('items') === order.indexOf('direct') + 1, 'the items step follows the director\'s run');
+});
