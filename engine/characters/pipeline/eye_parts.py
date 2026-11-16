@@ -67,7 +67,7 @@ if flags.get('front') and 'bust_map' in rig:
     # one scale, a turn, a move, Cauchy-weighted both ways; not the figure box stretched onto the bust's bounds, which
     # gave x and z two scales), then head_swap's placement of the bust (bust_map's M)
     sys.path.insert(0, os.path.dirname(os.path.abspath(__file__))); from view_register import register
-    FD = flags['front']; bmap = json.loads(rig['bust_map']); Mb = np.array(bmap['M']); lo, hi = np.array(bmap['lo']), np.array(bmap['hi'])
+    FD = flags['front']; bmap = json.loads(rig['bust_map']); Mb = np.array(bmap['M'])
     before = set(bpy.data.objects); bpy.ops.import_scene.gltf(filepath=os.path.join(FD, 'bust.glb'))
     BP = []
     for o in [o for o in bpy.data.objects if o not in before]:
@@ -76,16 +76,20 @@ if flags.get('front') and 'bust_map' in rig:
             BP.append(a.reshape(-1, 3) @ Mw_[:3, :3].T + Mw_[:3, 3])
         bpy.data.objects.remove(o, do_unlink=True)
     BP = np.concatenate(BP)
+    # the bust's bounds as imported: head_swap.py's record on a grafted bust, measured here on a merged figure (rawmerge)
+    lo, hi = (np.array(bmap['lo']), np.array(bmap['hi'])) if 'lo' in bmap else (BP.min(0), BP.max(0))
     BP = BP[np.linspace(0, len(BP) - 1, min(len(BP), 20000)).astype(int)]     # an even stride through the points (speed only)
     mask = np.load(os.path.join(FD, 'prep_portrait', 'mask.npy'))
     reg = register(mask, BP); pp = np.array(eyes['points28'], float)[:, :2]
     X, Z = reg.to_mesh(pp[:, 0], pp[:, 1])
     Q = np.stack([X, np.full(len(X), (lo[1] + hi[1]) / 2), Z, np.ones(len(X))], 1) @ Mb.T
     mp = Q[:, [0, 2]]
-    bx0, by0, bx1, by1 = bmap['bbox']                                      # the old figure-box mapping, for the report only
-    Xb = lo[0] + (pp[:, 0] - bx0) / (bx1 - bx0) * (hi[0] - lo[0]); Zb = lo[2] + (by1 - pp[:, 1]) / (by1 - by0) * (hi[2] - lo[2])
-    Qb = np.stack([Xb, np.full(len(Xb), (lo[1] + hi[1]) / 2), Zb, np.ones(len(Xb))], 1) @ Mb.T
-    _mv = 1000 * np.linalg.norm(Q[:, [0, 2]] - Qb[:, [0, 2]], axis=1)
+    _mv = np.zeros(1)
+    if 'bbox' in bmap:
+        bx0, by0, bx1, by1 = bmap['bbox']                                      # the old figure-box mapping, for the report only
+        Xb = lo[0] + (pp[:, 0] - bx0) / (bx1 - bx0) * (hi[0] - lo[0]); Zb = lo[2] + (by1 - pp[:, 1]) / (by1 - by0) * (hi[2] - lo[2])
+        Qb = np.stack([Xb, np.full(len(Xb), (lo[1] + hi[1]) / 2), Zb, np.ones(len(Xb))], 1) @ Mb.T
+        _mv = 1000 * np.linalg.norm(Q[:, [0, 2]] - Qb[:, [0, 2]], axis=1)
     SCALE_REPORT = {'registration': {k: (np.round(v, 3).tolist() if isinstance(v, list) else round(float(v), 6)) for k, v in reg.report.items()},
                     'bust bounds vs import mm': np.round(1000 * (np.r_[BP.min(0), BP.max(0)] - np.r_[lo, hi]), 1).tolist(),
                     'moved from the figure-box mapping mm (median, max)': [round(float(np.median(_mv)), 2), round(float(_mv.max()), 2)]}

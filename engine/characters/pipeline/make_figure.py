@@ -14,10 +14,10 @@ usage: python make_figure.py <setting.png> <out-dir> --name=<Name> [--portrait=<
   In order: redraws -> bust -> TRELLIS.2 bodies -> the bust merged onto the body raw, the neck as one tube -> reduced, the
   head finer -> the base body laid inside by elastic bone matching -> a filled solid, the skeleton and weights on it ->
   weights onto the reduced figure -> the base body packed as the hidden layer for soft cloth -> the skull lock, the face's
-  points and jaw -> hair on spring chains.
-  The result: <out-dir>/m/figure.vrm (+ .blend) and figure_m.txt (gzip+base64, for the viewer).
-  Not in this pipeline yet (their scripts wait in this folder to be moved onto the merged figure): face organs
-  (eye_shapes.py, eye_parts.py, face28.py), joint
+  points and jaw -> hair on spring chains -> the face's organs.
+  The result: <out-dir>/m/organs.vrm (+ .blend; m/figure.vrm is the same without the organs) and figure_m.txt (gzip+base64,
+  for the viewer). --portrait-py: the Python with anime-face-detector (for the face's organs).
+  Not in this pipeline yet (their scripts wait in this folder to be moved onto the merged figure): joint
   smoothing (smooth_joints.py), the checks (check_head.py, judge.py). The path that had them (the bust grafted after the
   rig, on a Hunyuan body) is at tag figures-raw-steady-1 and before."""
 import base64, gzip, json, os, shutil, subprocess, sys, time
@@ -38,6 +38,8 @@ if len(args) < 2 or not flags.get('name'): raise SystemExit(__doc__)
 SRC, OUT = os.path.abspath(args[0]), os.path.abspath(args[1]); NAME = flags['name']
 BLENDER = flags.get('blender') or os.environ.get('BLENDER') or r'C:\Program Files\Blender Foundation\Blender 5.3\blender.exe'
 PY = sys.executable; SEED = flags.get('seed', '11'); EDITOR = flags.get('editor', 'h3')
+# the Python with anime-face-detector (the album portrait tool's, tools/album-portraits): --portrait-py or FIG_PORTRAIT_PY
+PORTRAIT_PY = flags.get('portrait-py') or os.environ.get('FIG_PORTRAIT_PY') or os.path.join('E:' + os.sep, 'figures', 'portrait-venv', 'Scripts', 'python.exe')
 REMOVE = flags.get('remove', '').strip()
 FULL = os.path.abspath(flags['full']) if flags.get('full') else None   # a second picture showing the whole length of the outfit
 os.makedirs(OUT, exist_ok=True)
@@ -174,7 +176,12 @@ STEPS = [
     ('face_m', P('m', 'face.blend'), lambda: blender('face_rig.py', P('marks', 'bust.json'), P('m', 'face.blend'), blend=P('m', 'lock.blend'))),
     ('portrait_marks', P('face', 'marks.json'), lambda: run([PY, os.path.join(HERE, 'portrait_marks.py'), P('portrait.png'), P('face')])),
     ('hair_m', P('m', 'figure.blend'), lambda: blender('hair_rig.py', P('prep_portrait'), P('face'), P('m', 'figure.blend'), blend=P('m', 'face.blend'))),
-    ('page_m', P('figure_m.txt'), lambda: open(P('figure_m.txt'), 'w').write(base64.b64encode(gzip.compress(open(P('m', 'figure.vrm'), 'rb').read(), 9)).decode())),
+    # the face's organs (v0.8, v0.9), as they were: read from the portrait with an anime face detector (in the portrait tool's
+    # Python), then built on the head: the eyes carved into cut sockets, brows, the nose rebuilt in the face, the mouth's line.
+    # The portrait's points go onto the head through the bust's own outline and the raw merge's placement of the bust.
+    ('eyes_read', P('eyes', 'eyes.json'), lambda: run([PORTRAIT_PY, os.path.join(HERE, 'eye_shapes.py'), P('portrait.png'), P('eyes')])),
+    ('eyes_m', P('m', 'organs.blend'), lambda: blender('eye_parts.py', P('eyes', 'eyes.json'), P('face'), P('m', 'organs.blend'), '--organs=eyes,brows,nose,mouth', '--front=' + OUT, blend=P('m', 'figure.blend'))),
+    ('page_m', P('figure_m.txt'), lambda: open(P('figure_m.txt'), 'w').write(base64.b64encode(gzip.compress(open(P('m', 'organs.vrm'), 'rb').read(), 9)).decode())),
 ]
 
 names = [s[0] for s in STEPS]
@@ -190,4 +197,4 @@ for i, (name, done, do) in enumerate(STEPS):
     if not os.path.exists(done):     # Blender exits 0 even when its script fails: the step's output is the proof
         log('FAILED: %s wrote no %s (its messages are above)' % (name, done)); raise SystemExit(1)
     log('%-12s %4d s' % (name, round(time.time() - t)))
-log('== done: %s' % P('m', 'figure.vrm'))
+log('== done: %s' % P('m', 'organs.vrm'))

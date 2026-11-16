@@ -235,3 +235,57 @@ wave. The body is also finer now, by choice: `make_figure.py`'s `BODY_DETAIL` (`
 to half the measured tolerance: 31,500 body triangles beside 13,200 on the head. This is a look choice, named as one in the
 code. With the skin on its own bones a frame of walk takes 24 ms on the laptop (it was 56 ms at this density before).
 The reduce step keeps its first pass (`raw/pass1.glb`), so changing the detail takes about two minutes.
+
+## Face organs on the merged figure (2026-11-16)
+
+`make_figure.py` steps `eyes_read`, `eyes_m`; result `m/organs.vrm` (the page file is made from it). The v0.8 and v0.9
+scripts run unchanged but for one read: `eye_parts.py` took the bust's bounds from `head_swap.py`'s record and now
+measures them on the bust it imports when the record has none (a merged figure). The portrait's 28 points go onto the head
+through the bust's outline registration and the raw merge's placement of the bust (`bust_map`).
+
+Akane: both eyes fitted to the skin within 1.0 and 1.4 mm (median), 0 of 1,735 eye points behind the skin after the
+sockets were cut (285 head faces split); the nose rebuilt from 43 face triangles; brows and mouth built. `eyes_read`
+reproduces the earlier reading exactly; the two steps take 48 s and 51 s. `check_head.py` with the organs on: skull drift
+0 mm; the Head-to-body seam opens 21 mm in a nod and 31 mm in a turn; 167 head edges past 1.25 times in a nod, 279 with
+the jaw open.
+
+Not judged here: whether the organs read well in the hologram at the head's finer triangle count (the eyes show as rings
+in the viewer; the mouth is faint in the grey render), and the organs' design itself, which was not settled at v0.9.
+Tested on Akane only.
+
+Iris reading corrected (2026-11-16, `eye_shapes.py`): the iris was fitted to the not-white inside the opening, and the
+opening is the detector's six points joined up, which clips the iris; the ellipse came out too wide and tilted (Akane's
+right iris 88 by 107 px at 33 degrees; the drawn one is a tall upright oval), and the carved iris ring followed it. Now the
+pupil is found first, and from its centre a ray in every direction runs to the iris's own drawn outline (the first pixel
+as dark as the pupil, by the pupil's own darkness split; or the first white-like pixel that is not an enclosed
+highlight). One ellipse is fitted to the ray ends as a weighted conic with Cauchy weights, so rays that stop in the lid's
+shadow, run up through the lash or hit a highlight on the rim hardly count. A first version that stopped at white alone
+failed on the right eye, whose white is shaded grey under the lid. Akane now: 87 by 122 px and 89 by 123 px, upright,
+0.3 px slack. Checked on Akane's portrait only.
+
+## Audit: measured, solved, structural, or chosen (2026-11-16)
+
+Everything the raw-merge path decides, by kind. The first two kinds are what the pipeline is meant to be; the last two are
+named here so they are not mistaken for them.
+
+- **Measured on the figure or solved**: the bust's placement and per-axis size (landmarks and surfaces, Cauchy weights);
+  the merge grid (geometric mean of the two models' edges); the neck's levels, radius and move; the bust collar's reach; the
+  reduction tolerance (the merge's staircase) and the head's (times the head's share of the height); the base body's
+  scale, turn, move, each bone's turn and stretch; the layer thickness; the skeleton's joints (the model's own 3D
+  landmarks) and weights (bone heat on the filled solid); the skull's share (harmonic), the head pivot and jaw width (golden
+  searches); hair by odds and air, locks, chains, spring values from a pendulum; the iris (rays to its outline, a weighted
+  conic), pupil, highlights (most stable region, Otsu splits); the viewer's skin-or-cloth split (Otsu, the largest
+  thickness) and collider radii (from the base body).
+- **Structural** (named in the code): the 1.6 m height; RTMW's and the 28-point layouts and which joints make a body part;
+  grids of two point spacings; four bone influences; smoothsteps; the generators' own defaults (TRELLIS.2 resolution and
+  faces, Hunyuan steps); test poses.
+- **Numeric** (named): iteration caps, stopping precisions, sample strides, one ray a degree.
+- **Chosen, not derived**:
+  - `BODY_DETAIL = 0.5` in `make_figure.py`: the body's share of the measured tolerance, picked by eye for the look.
+  - `base_raw.py`'s blend of neighbouring parts at a joint: "counts while less than twice as far as the nearest", eased.
+  - `hair_rig.py`'s motion targets (tip travel walking, running, shaking; droop), from v0.7.
+  - the viewer's cloth springs (stiffness, damping, gravity, stretch and edge limits), from v0.6, and its 8 and 53 mm split
+    for figures that do not bring their own.
+- **Removed in this pass**: the viewer chose the measured split by the figure's file name; the figure now says so itself
+  (its VRM meta's version, written by `layer_raw.py`). Path switches (`--cut=0`, `--strip=0`, `--marks`) are passed by the
+  pipeline because every figure it makes is a T-pose merge, not per character.

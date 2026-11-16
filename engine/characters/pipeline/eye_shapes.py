@@ -116,10 +116,6 @@ for name, ids in (('eye_r', (11, 12, 13, 16, 15, 14)), ('eye_l', (19, 18, 17, 20
         iou = float((el & (notwhite > 0)).sum()) / max(1, (el | (notwhite > 0)).sum())
         if best is None or iou > best[0]: best = (iou, k, comp, c_, e_)
     _, k_open, iris, ic, ie = best
-    # how far the iris's own outline strays from its ellipse (median, px): the slack of everything placed on that ellipse
-    (ecx, ecy), (ea, eb), eang = ie; ca, sa = np.cos(np.radians(eang)), np.sin(np.radians(eang))
-    d_ = ic[:, 0, :] - [ecx, ecy]; lx = d_[:, 0] * ca + d_[:, 1] * sa; ly = -d_[:, 0] * sa + d_[:, 1] * ca
-    rn = np.hypot(lx / (ea / 2), ly / (eb / 2)); fit_px = float(np.median(np.abs(rn - 1) * np.hypot(lx, ly) / np.maximum(rn, 1e-6)))
     inside = np.zeros_like(iris); cv2.ellipse(inside, ie, 1, -1); IN = (inside > 0) & M
     # the iris's brightness split in two (Otsu): the highlights are the brighter class of the brighter half (and white).
     # The pupil sits at the iris's middle (the iris's own outline is dark too, at its rim) and is drawn in one flat tone:
@@ -138,6 +134,59 @@ for name, ids in (('eye_r', (11, 12, 13, 16, 15, 14)), ('eye_l', (19, 18, 17, 20
     cand = [(b[0] > 0, b[0], abs(n_[1] - b[1]) / b[1], b) for b, n_ in zip(blobs, blobs[1:]) if b is not None and n_ is not None]
     pc, t_dark = (None, None) if not cand else (lambda b: (b[2] + [x0_, y0_], b[3]))(min(cand, key=lambda c: c[:3])[3])
     pe = cv2.fitEllipse(pc) if pc is not None and len(pc) >= 5 else None
+    # The opening above is the detector's six points joined up, and it clips the iris: the ellipse fitted to the clipped region
+    # came out too wide and tilted. The iris's real edge is its own drawn outline: from the pupil's centre a ray in every
+    # direction, starting past the pupil, runs to the first pixel as dark as the pupil (the outline's ink, by the pupil's own
+    # darkness split), or else the first white-like pixel (unsaturated and bright by the opening's two splits; the white of
+    # the eye or the skin where the outline is not drawn) that is not a highlight (a white-like patch enclosed by the iris).
+    # One ellipse is fitted to those ray ends (a weighted conic, each end weighted by the Cauchy weight of its miss over the
+    # median miss, repeated until it settles): rays that stopped early in the lid's shadow, ran up through the lash, or
+    # stopped at a highlight on the rim miss by far and hardly count.
+    ie0 = ie; (ecx, ecy) = pe[0] if pe is not None else ie0[0]; Hh, Ww = S.shape; r_start = int(np.ceil(max(pe[1]) / 2)) + 1 if pe is not None else 1
+    wl = (S < t_s) & (V > t_v); nlab, lab_ = cv2.connectedComponents(wl.astype(np.uint8)); reach = float(np.hypot(*(outline.max(0) - outline.min(0))))
+    win = (slice(max(0, int(ecy - reach)), min(Hh, int(ecy + reach))), slice(max(0, int(ecx - reach)), min(Ww, int(ecx + reach))))
+    sub = lab_[win]; edge_ids = np.unique(np.concatenate([sub[0], sub[-1], sub[:, 0], sub[:, -1]]))     # white-like patches that leave the eye's surroundings: the white of the eye and the skin
+    open_wl = np.isin(lab_, edge_ids[edge_ids > 0])
+    NRAY = 360                                                  # NUMERIC: one ray a degree
+    ends = []
+    for th in np.linspace(0, 2 * np.pi, NRAY, endpoint=False):
+        dx, dy = np.cos(th), np.sin(th)
+        for r_ in range(r_start, int(reach)):
+            x_, y_ = int(round(ecx + r_ * dx)), int(round(ecy + r_ * dy))
+            if not (0 <= x_ < Ww and 0 <= y_ < Hh): break
+            if open_wl[y_, x_] or (t_dark is not None and V[y_, x_] < t_dark): ends.append((ecx + (r_ - 0.5) * dx, ecy + (r_ - 0.5) * dy)); break
+    PE = np.array(ends, float)
+    def conic(P, w):
+        """the ellipse of a weighted least-squares conic through P: ((cx, cy), (full axes), angle of the first axis in degrees), or None"""
+        mu = (w @ P) / w.sum(); sc_ = float(np.sqrt((w @ ((P - mu) ** 2).sum(1)) / w.sum())); Q = (P - mu) / sc_; x, y = Q[:, 0], Q[:, 1]
+        D = np.stack([x * x, x * y, y * y, x, y, np.ones(len(x))], 1) * np.sqrt(w)[:, None]
+        a_, b_, c_, d_, e_, f_ = np.linalg.svd(D, full_matrices=False)[2][-1]
+        Mq = np.array([[a_, b_ / 2], [b_ / 2, c_]])
+        if np.linalg.det(Mq) <= 0: return None
+        c0 = np.linalg.solve(2 * Mq, [-d_, -e_]); F0 = c0 @ Mq @ c0 + d_ * c0[0] + e_ * c0[1] + f_; lam, vec = np.linalg.eigh(Mq)
+        if np.any(-F0 / lam <= 0): return None
+        semi = np.sqrt(-F0 / lam) * sc_; cen_ = c0 * sc_ + mu
+        return (float(cen_[0]), float(cen_[1])), (float(2 * semi[0]), float(2 * semi[1])), float(np.degrees(np.arctan2(vec[1, 0], vec[0, 0])))
+    def miss(P, el):
+        (cx_, cy_), (A_, B_), ang_ = el; ca_, sa_ = np.cos(np.radians(ang_)), np.sin(np.radians(ang_)); d2 = P - [cx_, cy_]
+        lx_ = d2[:, 0] * ca_ + d2[:, 1] * sa_; ly_ = -d2[:, 0] * sa_ + d2[:, 1] * ca_; rn_ = np.hypot(lx_ / (A_ / 2), ly_ / (B_ / 2))
+        return np.abs(rn_ - 1) * np.hypot(lx_, ly_) / np.maximum(rn_, 1e-9)                  # how far out or in along its own ray from the centre
+    fit_px = None
+    if len(PE) >= 6:
+        rr = np.linalg.norm(PE - [ecx, ecy], axis=1); w_ = 1 / (1 + ((rr - np.median(rr)) / max(1e-9, np.median(np.abs(rr - np.median(rr))))) ** 2); el = None
+        for _ in range(100):                                       # NUMERIC: a cap; it settles in a few passes
+            e2 = conic(PE, w_)
+            if e2 is None: break
+            m_ = miss(PE, e2); med_ = max(float(np.median(m_)), 1e-9); w2 = 1 / (1 + (m_ / med_) ** 2); moved = float(np.abs(w2 - w_).max()); el, w_ = e2, w2
+            if moved < 1e-6: break
+        if el is not None:
+            ie = el; fit_px = float(np.median(miss(PE, ie)[w_ >= np.median(w_)]))             # the slack: the median miss of the better half (the half the fit rests on)
+    if fit_px is None:      # no ellipse from the rays: the first ellipse and its own outline's slack, as before
+        (ecx, ecy), (ea, eb), eang = ie; ca, sa = np.cos(np.radians(eang)), np.sin(np.radians(eang))
+        d_ = ic[:, 0, :] - [ecx, ecy]; lx = d_[:, 0] * ca + d_[:, 1] * sa; ly = -d_[:, 0] * sa + d_[:, 1] * ca
+        rn = np.hypot(lx / (ea / 2), ly / (eb / 2)); fit_px = float(np.median(np.abs(rn - 1) * np.hypot(lx, ly) / np.maximum(rn, 1e-6)))
+    (ecx, ecy), (ea, eb), eang = ie; ca, sa = np.cos(np.radians(eang)), np.sin(np.radians(eang))    # the iris ellipse the rest reads
+    inside = np.zeros_like(iris); cv2.ellipse(inside, ie, 1, -1); IN = (inside > 0) & M
     # highlights: white blobs on the iris, searched over the iris ellipse widened by its own outline's slack (they sit on
     # its edge); the white touching the iris's sides is not a highlight: keep blobs mostly (a majority) inside the iris
     big = np.zeros_like(iris); cv2.ellipse(big, (ie[0], (ie[1][0] + 2 * fit_px, ie[1][1] + 2 * fit_px), ie[2]), 1, -1)

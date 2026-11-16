@@ -67,7 +67,8 @@ def seg_d(X, a, b):
     ab = b - a; u = np.clip(((X - a) @ ab) / (ab @ ab), 0, 1); return np.linalg.norm(a + u[:, None] * ab - X, axis=1)
 def shares(X):
     """each point's share in every part: a part counts while it is less than twice as far as the nearest part (equal at a joint,
-    nothing once another part is twice as near), eased (STRUCTURAL: the relative distance and a smoothstep)"""
+    nothing once another part is twice as near), eased. A HAND RULE, not measured or solved: the factor two and the smoothstep
+    are chosen. It only shapes how neighbouring parts' moves blend at a joint; to replace with weights solved on the solid."""
     D = np.stack([seg_d(X, *PARTS[n]) for n in names], 1); x = np.clip(2 - D / np.maximum(D.min(1, keepdims=True), 1e-12), 0, 1); w = x * x * (3 - 2 * x)
     return w / w.sum(1, keepdims=True), D.argmin(1)
 def kabsch(A, B, w):

@@ -76,5 +76,6 @@ weighted = sum(1 for v in layer.data.vertices if any(g.weight > 0 for g in v.gro
 print('FIG meshes', sorted((o.name, len(o.data.vertices)) for o in sc.objects if o.type == 'MESH'), '; layer points weighted', weighted)
 for o in sc.objects: o.select_set(False)
 rig.select_set(True); bpy.context.view_layer.objects.active = rig
+rig.data.vrm_addon_extension.vrm1.meta.version = 'rawmerge'      # the viewer reads this: the figure brings its own layer split (measured), its skin on its own bones
 bpy.ops.wm.save_as_mainfile(filepath=OUT)
 vrm = OUT.replace('.blend', '.vrm'); print('FIG export', bpy.ops.export_scene.vrm(filepath=vrm), os.path.getsize(vrm)); print('FIG saved', OUT)
