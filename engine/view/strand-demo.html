@@ -1905,6 +1905,74 @@ function focusOn(id) {
 for (const { pin } of sampledSpots) pin.fade(0.95);
 const blinkSampled = (now) => { if (capture) return; const u = 0.5 + 0.5 * Math.sin(now / 260); for (const { pin, tag } of sampledSpots) { pin.fade(0.25 + 0.7 * u); tag.material.opacity = 0.5 + 0.5 * u; } };
 let decor = () => {};
+/**
+ * The terrain as it was made, for debugging (the user, 2026-11-17: "I never get to see those vectors and manifolds"),
+ * shown with the world view's Buildings button: every place's vector from its parent's centre (white a city's, orange a
+ * district's, cyan a street's, grey below), each manifold's vector from its place's centre and its outline in its own
+ * colour, its fade band dashed (where it is between 10% and 90% its own), its kind and height by its centre, and the
+ * fill: each building's roof capped in the colour of the manifold that made it. Built the first time it is shown.
+ */
+const terrainDebug = (() => {
+  let group = null;
+  const hue = (id) => { let h = 0; for (const c of String(id)) h = (h * 31 + c.charCodeAt(0)) >>> 0; return new THREE.Color().setHSL((h % 360) / 360, 0.75, 0.6); };
+  const LEVEL = { region: 0xffffff, city: 0xffffff, district: 0xffa040, street: 0x40e0ff };
+  const build = () => {
+    const g = new THREE.Group(); g.name = "terrain-debug";
+    const lineSet = (points, colors, material) => { const geometry = new THREE.BufferGeometry(); geometry.setAttribute("position", new THREE.Float32BufferAttribute(points, 3)); geometry.setAttribute("color", new THREE.Float32BufferAttribute(colors, 3)); const lines = new THREE.LineSegments(geometry, material); if (material.isLineDashedMaterial) lines.computeLineDistances(); lines.renderOrder = 9; lines.frustumCulled = false; return lines; };
+    const solid = new THREE.LineBasicMaterial({ vertexColors: true, transparent: true, opacity: 0.95, depthTest: false, fog: false });
+    const dashed = new THREE.LineDashedMaterial({ vertexColors: true, transparent: true, opacity: 0.7, dashSize: 6, gapSize: 5, depthTest: false, fog: false });
+    const arrows = { points: [], colors: [] }, outlines = { points: [], colors: [] }, fades = { points: [], colors: [] };
+    const push = (set, color, ...xyz) => { set.points.push(...xyz); for (let n = 0; n < xyz.length / 3; n++) set.colors.push(color.r, color.g, color.b); };
+    const arrow = (ax, az, bx, bz, y, color) => {
+      const len = Math.hypot(bx - ax, bz - az); if (len < 1) return;
+      push(arrows, color, ax, y, az, bx, y, bz);
+      const head = Math.min(30, Math.max(3, 0.12 * len)), back = Math.atan2(az - bz, ax - bx);
+      for (const turn of [0.42, -0.42]) push(arrows, color, bx, y, bz, bx + Math.cos(back + turn) * head, y, bz + Math.sin(back + turn) * head);
+    };
+    // Places down the tree: each from its parent's centre.
+    const nodes = new Map((data.macro ?? []).map((node) => [node.id, node]));
+    for (const node of nodes.values()) { const up = node.parent ? nodes.get(node.parent) : null; if (up) arrow(up.x, up.z, node.x, node.z, 3, new THREE.Color(LEVEL[node.scale] ?? 0x9aa3ad)); }
+    // Manifolds: each patch's vector from its place's centre, its outline, its fade band, its label.
+    const colorOf = new Map(), counts = new Map();
+    for (const entry of data.landscapes ?? []) for (const id of entry.owners ?? []) if (id) counts.set(`${entry.place}|${id}`, (counts.get(`${entry.place}|${id}`) ?? 0) + 1);
+    let patches = 0;
+    for (const entry of data.landscapes ?? []) {
+      const place = nodes.get(entry.place), [ox, oz] = entry.origin ?? (place ? [place.x, place.z] : [0, 0]);
+      for (const patch of entry.patches ?? []) {
+        patches++;
+        const color = hue(`${entry.place}|${patch.id}`); colorOf.set(`${entry.place}|${patch.id}`, color);
+        const [cx, cz] = patch.centre;
+        arrow(ox, oz, cx, cz, 2, color);
+        const ring = patch.outline ?? [];
+        ring.forEach(([x, z], n) => { const [nx, nz] = ring[(n + 1) % ring.length]; push(outlines, color, x, 1, z, nx, 1, nz); });
+        // Membership σ(d / soft) runs from 10% to 90% within ±soft·ln 9 of the outline.
+        if (patch.soft) for (const k of [-1, 1]) {
+          const band = k * patch.soft * Math.log(9), at = ([x, z]) => { const d = Math.hypot(x - cx, z - cz) || 1; return [x + ((x - cx) / d) * band, z + ((z - cz) / d) * band]; };
+          ring.forEach((point, n) => { const [ax, az] = at(point), [bx, bz] = at(ring[(n + 1) % ring.length]); push(fades, color, ax, 1, az, bx, 1, bz); });
+        }
+        const filled = counts.get(`${entry.place}|${patch.id}`) ?? 0, high = patch.median != null ? `median ${Math.round(patch.median)} m${patch.average != null ? `, mean ${Math.round(patch.average)} m` : ""}` : `${Math.round(patch.height)} m`;
+        const tag = label(`${patch.type} · ${high} · ${filled} built`, `#${color.getHexString()}`, 22);
+        tag.material.sizeAttenuation = false; tag.material.fog = false; tag.scale.multiplyScalar(0.01); tag.position.set(cx, 8, cz); g.add(tag);
+      }
+    }
+    g.add(lineSet(arrows.points, arrows.colors, solid), lineSet(outlines.points, outlines.colors, solid), lineSet(fades.points, fades.colors, dashed));
+    // The fill: each building's roof in the colour of the manifold it was filled from.
+    const roofs = (data.landscapes ?? []).flatMap((entry) => entry.buildings.map((b, i) => ({ b, color: colorOf.get(`${entry.place}|${entry.owners?.[i]}`) }))).filter((roof) => roof.color);
+    if (roofs.length) {
+      const cap = new THREE.PlaneGeometry(1, 1).rotateX(-Math.PI / 2), mesh = new THREE.InstancedMesh(cap, new THREE.MeshBasicMaterial({ transparent: true, opacity: 0.5, depthWrite: false, side: THREE.DoubleSide, fog: false }), roofs.length);
+      const m = new THREE.Matrix4(), q = new THREE.Quaternion(), up = new THREE.Vector3(0, 1, 0);
+      roofs.forEach(({ b: [x, z, w, d, angle, floors], color }, i) => { q.setFromAxisAngle(up, -(angle ?? 0)); m.compose(new THREE.Vector3(x, (floors ?? 1) * FLOOR + 0.4, z), q, new THREE.Vector3(w, 1, d)); mesh.setMatrixAt(i, m); mesh.setColorAt(i, color); });
+      mesh.instanceMatrix.needsUpdate = true; if (mesh.instanceColor) mesh.instanceColor.needsUpdate = true; mesh.frustumCulled = false; mesh.renderOrder = 8; g.add(mesh);
+    }
+    g.userData.counts = { places: nodes.size, manifolds: patches, roofs: roofs.length };
+    return g;
+  };
+  return (on) => {
+    if (on && !group) { group = build(); world.add(group); }
+    if (group) group.visible = !!on;
+    return group?.userData.counts ?? null;
+  };
+})();
 // Each open place's landscape around the staged grids (src/world/built/landscape.ts): faint hologram blocks and roads,
 // generated from the place's landscape, never on a staged grid; only the buildings the story names are canon. Kept
 // faint so it never hides the people.
@@ -3385,6 +3453,7 @@ if (liveMode) {
     // Back to live (Follow Jev turned on, or Now): the newest card landed, from its start, followed.
     if (event.data?.type === "live") { replaying = null; stopAt = null; playing = true; speed = 2; time = Math.max(0, (segments.at(-1)?.start ?? total) - 0.001); cameraSegment = null; if (event.data.follow !== undefined) follow = !!event.data.follow; return; }
     if (event.data?.type === "underground") { xray = !!event.data.on; return; }
+    if (event.data?.type === "terrainDebug") { const counts = terrainDebug(!!event.data.on); parent.postMessage({ type: "terrainDebug", on: !!event.data.on, counts }, origin); return; }
     if (event.data?.type === "traces") { tracesOn = !!event.data.on; return; }
     if (event.data?.type === "strand") { strandFocus = event.data.fork ?? null; return; }
     if (event.data?.type === "clouds") { showClouds(event.data.clouds); return; }

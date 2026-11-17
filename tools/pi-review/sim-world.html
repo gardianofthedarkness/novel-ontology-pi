@@ -231,7 +231,7 @@
   <div class="way" id="way" hidden></div>
 </section>
 <div class="legend">The engine's own player, at each moment it plays: drawn round <b>where Jev looks</b> and <b>where the people are</b> (within 112 m, gone beyond 160 m), never round the camera.</div>
-<section class="blist" id="blist" hidden aria-label="The buildings"><header><b>Buildings</b><span id="bsum">No building level yet.</span></header><ol id="brows"></ol></section>
+<section class="blist" id="blist" hidden aria-label="The buildings"><header><b>Buildings</b><span id="bsum">No building level yet.</span><span id="bmap"></span></header><ol id="brows"></ol></section>
 <section class="blist reader" id="clist" hidden aria-label="The novel, read along"><header><b>Read</b><span id="csum">The whole text; underlined sentences were played (➜: someone moved). Tap one to play it here.</span></header><div class="keys" aria-label="Sentence kinds"><span class="k-spoken">dialogue</span><span class="k-action">action</span><span class="k-environment">environment</span><span class="k-thought">thought</span><span class="k-fact">fact</span><span class="k-narration">narration</span><span class="m-person">person</span><span class="m-place">place</span><span class="m-thing">thing</span><span class="m-time">time</span></div><div class="now"><div class="meta" id="cmeta">Nothing playing.</div><div class="ctl"><button id="rgo">Continue ▶</button><button id="rauto" aria-pressed="false">Auto</button><button data-cps="5" aria-pressed="false">Read slow</button><button data-cps="8" aria-pressed="true">normal</button><button data-cps="14" aria-pressed="false">fast</button><button id="cagain">↺ Replay</button><button data-rspeed="1" aria-pressed="false">1×</button><button data-rspeed="2" aria-pressed="true">2×</button><button data-rspeed="4" aria-pressed="false">4×</button><button id="cnow">Back to now</button></div><details class="why" id="cwhy"><summary>Why · Jev's questions, the laws, the review and our notes <span id="cnotecount"></span></summary><div id="claws" class="qa"></div><div id="cqa" class="qa"></div><div class="notes"><ol id="cnotes"></ol><textarea id="cnote" rows="2" placeholder="What looks wrong in this card? (where, who, what the text says)"></textarea><div class="ctl"><button id="csend">Add note</button><button id="call">All notes</button><a id="creportgo" class="btn" target="_blank" rel="noopener" href="report">Run report</a></div><ol id="callnotes" hidden></ol></div></details></div><div class="book" id="book"><div class="more" id="bmore">Opening the book…</div></div></section>
 <section class="blist" id="mlist" hidden aria-label="Story menu"><header><b>Story</b><span id="msum">Every unit played so far: tap one to go there.</span></header><div class="mbody"><input id="mfind" type="search" placeholder="Find a word, a name, or a unit number" aria-label="Find in the story"><ol id="mrows"></ol></div></section>
 <section class="blist dev" id="dlist" hidden aria-label="Developer mode"><header><b>Dev · what the data were and what was smoothed</b><span id="dsum">Pick a played sentence in Read: its card's records show here.</span></header><div class="devbody" id="dbody"></div></section>
@@ -248,17 +248,20 @@
   $("play").href = `./${query}`; $("asksFull").href = `live${query}`;
   // Jev's questions fold out over the world (the live page, loaded the first time they are opened) and fold away again.
   const fold = (button, panel, on) => { $(button).setAttribute("aria-pressed", String(on)); $(panel).hidden = !on; };
+  // The terrain drawing follows the Buildings button: to the frames shown, or to one just ready.
+  const sendTerrain = (frames = [shown, next]) => { const on = $("bopen").getAttribute("aria-pressed") === "true"; for (const frame of frames) frame?.contentWindow?.postMessage({ type: "terrainDebug", on }, origin); };
   $("live").addEventListener("click", () => {
     const on = $("live").getAttribute("aria-pressed") !== "true";
-    fold("live", "asks", on); if (on) { fold("bopen", "blist", false); fold("sopen", "slist", false); fold("copen", "clist", false); }
+    fold("live", "asks", on); if (on) { fold("bopen", "blist", false); sendTerrain(); fold("sopen", "slist", false); fold("copen", "clist", false); }
     if (on && !$("asksFrame").getAttribute("src")) $("asksFrame").src = `live${query}`;
   });
   // The building level (terrain spawning's, live.json's world notes): a building's type and who typed it (the search, or
   // Jev and how sure), its height against its type's minimum and how sure Jev was of it; a composite building's parts
   // under their host, at its foot, on its upper floors or under it. A row tapped shows that building in the world.
   let buildings = "";
-  $("bopen").addEventListener("click", () => { const on = $("bopen").getAttribute("aria-pressed") !== "true"; fold("bopen", "blist", on); if (on) { fold("live", "asks", false); fold("sopen", "slist", false); fold("copen", "clist", false); } });
-  $("sopen").addEventListener("click", () => { const on = $("sopen").getAttribute("aria-pressed") !== "true"; fold("sopen", "slist", on); if (on) { fold("live", "asks", false); fold("bopen", "blist", false); fold("copen", "clist", false); } });
+  // With the list, the terrain as it was made is drawn over the world (vectors, manifolds, the fill): strand-demo.html terrainDebug.
+  $("bopen").addEventListener("click", () => { const on = $("bopen").getAttribute("aria-pressed") !== "true"; fold("bopen", "blist", on); sendTerrain(); if (on) { fold("live", "asks", false); fold("sopen", "slist", false); fold("copen", "clist", false); } });
+  $("sopen").addEventListener("click", () => { const on = $("sopen").getAttribute("aria-pressed") !== "true"; fold("sopen", "slist", on); if (on) { fold("live", "asks", false); fold("bopen", "blist", false); sendTerrain(); fold("copen", "clist", false); } });
   // Spawning (engine/spawning/spawn.mjs, live.json's world notes): each scene's start positions, how each was decided,
   // and, where the rules left someone open, what Jev is given to say where: the scene's own text, who, the place's spots.
   let spawnKey = "";
@@ -279,7 +282,7 @@
       return li;
     }));
   };
-  $("copen").addEventListener("click", () => { const on = $("copen").getAttribute("aria-pressed") !== "true"; fold("copen", "clist", on); if (on) { fold("live", "asks", false); fold("bopen", "blist", false); fold("sopen", "slist", false); if (innerWidth < 960 && $("dopen").getAttribute("aria-pressed") === "true") fold("dopen", "dlist", false); } });
+  $("copen").addEventListener("click", () => { const on = $("copen").getAttribute("aria-pressed") !== "true"; fold("copen", "clist", on); if (on) { fold("live", "asks", false); fold("bopen", "blist", false); sendTerrain(); fold("sopen", "slist", false); if (innerWidth < 960 && $("dopen").getAttribute("aria-pressed") === "true") fold("dopen", "dlist", false); } });
   // Reading (engine/director/director.mjs's cards in live.json's world notes; the text from api/book-text, a block at a
   // time as the reader scrolls): every sentence as written; those of a card played are underlined (green where someone moved)
   // and tapped play it in this world, the camera free; Continue plays on to the next move and stops there.
@@ -668,7 +671,7 @@
   $("traces").addEventListener("click", () => { tracesOn = !tracesOn; $("traces").setAttribute("aria-pressed", String(tracesOn)); sendAll({ type: "traces", on: tracesOn }); });
   // The Jev debugger (the questions page) opened at one card's Jev steps.
   const debugLink = (scene, event) => `live${query}${query ? "&" : "?"}card=${encodeURIComponent(`${scene}|${event}`)}`;
-  const openDebug = (scene, event) => { fold("live", "asks", true); fold("bopen", "blist", false); fold("sopen", "slist", false); fold("copen", "clist", false); $("asksFrame").src = debugLink(scene, event); $("asksFull").href = debugLink(scene, event); };
+  const openDebug = (scene, event) => { fold("live", "asks", true); fold("bopen", "blist", false); sendTerrain(); fold("sopen", "slist", false); fold("copen", "clist", false); $("asksFrame").src = debugLink(scene, event); $("asksFull").href = debugLink(scene, event); };
   // A replay or Continue keeps Follow as it is (the user, 2026-11-03: in World · Live the camera stayed put while people
   // walked off, where the Player follows them): the frame glides to the card's view, then follows its people if Follow is on.
   const send = (message) => { const on = $("follow").getAttribute("aria-pressed") === "true"; for (const frame of [shown, next]) frame?.contentWindow.postMessage({ ...message, follow: on }, origin); };
@@ -974,8 +977,9 @@
       $("way").hidden = false; $("way").innerHTML = `${esc(message.name)} · ${esc(message.how ?? "walk")} · unit ${Number(String(message.scene).slice(-6))} · card ${message.event + 1} · <a href="#">Jev steps ↗</a>`;
       $("way").querySelector("a").addEventListener("click", (e) => { e.preventDefault(); openDebug(message.scene, message.event); });
     }
-    if (message?.type === "ready" && next && event.source === next.contentWindow) { next.contentWindow.postMessage(portraitsMessage(), origin); if (sky) next.contentWindow.postMessage(skyMessage(), origin); if ($("daylight").getAttribute("aria-pressed") !== "true") next.contentWindow.postMessage({ type: "daylightMode", on: false }, origin); next.contentWindow.postMessage({ type: "smoothMode", on: $("smooth").getAttribute("aria-pressed") === "true" }, origin); next.moment = message.moment; if (lastPiece) next.contentWindow.postMessage({ ...lastPiece, type: "extend" }, origin); ready = true; swap(); startAt(); }
+    if (message?.type === "ready" && next && event.source === next.contentWindow) { next.contentWindow.postMessage(portraitsMessage(), origin); if (sky) next.contentWindow.postMessage(skyMessage(), origin); if ($("daylight").getAttribute("aria-pressed") !== "true") next.contentWindow.postMessage({ type: "daylightMode", on: false }, origin); next.contentWindow.postMessage({ type: "smoothMode", on: $("smooth").getAttribute("aria-pressed") === "true" }, origin); sendTerrain([next]); next.moment = message.moment; if (lastPiece) next.contentWindow.postMessage({ ...lastPiece, type: "extend" }, origin); ready = true; swap(); startAt(); }
     if (message?.type === "failed" && next && event.source === next.contentWindow) drop(next);
+    if (message?.type === "terrainDebug" && message.on) { const c = message.counts; $("bmap").textContent = c ? `On the map: ${c.places} places, each an arrow from its parent's centre (white a city, orange a district, cyan a street); ${c.manifolds} manifolds, each an arrow from its place's centre and an outline in its own colour, its fade band dashed; ${c.roofs} roofs in the colour of the manifold that filled them.` : "No terrain in this view."; }
   });
   const load = (run) => {
     lastLoad = Date.now(); ready = false;
