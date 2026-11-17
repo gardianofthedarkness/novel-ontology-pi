@@ -22,6 +22,8 @@ for (const name of readdirSync(join(repository, "dist")).filter((name) => name !
 // The engine's scripts (the reading's runner engine/reading/read.mjs and what it loads), without their tests.
 cpSync(join(repository, "engine"), join(out, "engine"), { recursive: true, dereference: true, filter: (from) => !from.endsWith(".test.mjs") });
 copy("config");
+// The native world client (clients/godot; engine/render/server.mjs launches it with Godot): its project, never Godot's cache.
+cpSync(join(repository, "clients", "godot"), join(out, "clients", "godot"), { recursive: true, filter: (from) => !/[\\/]\.godot([\\/]|$)/.test(from) });
 // World · Live inside the console (src/world.js): v1's page and its helpers (the engine they load is copied above), and
 // the three.js files the engine's player imports, where engine/live/sim-jev.mjs VENDOR_FILES says they are.
 for (const name of ["sim-play.mjs", "sim-settings.mjs", "sim-world.html", "sim-live.html", "config.mjs", "album.mjs", "book-epub.mjs"]) copy(`tools/pi-review/${name}`);

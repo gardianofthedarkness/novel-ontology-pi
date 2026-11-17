@@ -19,6 +19,19 @@ function createWorlds(backend) {
   const text = (body, type = "text/plain; charset=utf-8") => new Response(body, { headers: { "content-type": type, "cache-control": "no-store" } });
   const missing = () => new Response("Not found", { status: 404 });
 
+  // One render server per book (engine/render/server.mjs), started the first time its world is opened natively; each
+  // press of World · Live's Godot button opens one more client window on it.
+  const renderers = new Map();
+  async function openNative(workspace) {
+    const render = await load("engine/render/server.mjs"), godot = render.findGodot();
+    if (!godot) return { error: "No Godot found. Put Godot 4 (Godot_v4.x-stable_win64.exe) in the folder tools\godot in your user folder, or set NOVEL_GODOT to it." };
+    if (!renderers.has(workspace)) renderers.set(workspace, render.startRenderServer({ workspace }));
+    const server = await renderers.get(workspace);
+    const child = render.launchClient({ godot, port: server.port, token: server.token });
+    child.on("error", () => {});
+    return { opened: true, port: server.port };
+  }
+
   /** The worlds a folder's server found, each given the id its page is served under. */
   function register(worlds) {
     return (worlds ?? []).map((world) => {
@@ -40,6 +53,8 @@ function createWorlds(backend) {
     const page = (made) => (made ? new Response(made.html, { headers: { "content-type": "text/html; charset=utf-8", "content-security-policy": play.pagePolicy(made.html, { framed: true }), "cache-control": "no-store" } }) : missing());
 
     if (request.method === "POST") {
+      // The world in the native client (docs/v3/design.html §12.1): only draws, so a read-only world may open it too.
+      if (route === "/play/native") return json(await openNative(workspace), 200);
       if (world.readOnly) return json({ error: READ_ONLY }, 403);
       const body = await request.json().catch(() => null);
       if (!body || typeof body !== "object") return json({ error: "a bad request" }, 400);

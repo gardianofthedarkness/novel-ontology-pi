@@ -2856,6 +2856,27 @@ a proprietary engine (the cache folder never committed).</p>
 <p><strong>The first step is a proof with a way out</strong>: the render protocol for one unit, and a Unity client drawing volume 1's city
 from it with its people moving, measured in frames a second against the web page on the same data. If it does not
 clearly win, the protocol stands and the client can be Godot or the web page with workers.</p>
+<p><strong>Godot, not Unity (decided 2026-11-17)</strong>: "Let's try godot" — the user, 2026-11-17. Godot 4.7.2 needs no
+account or licence step, and an agent drives it whole from the command line. Built for the proof:</p>
+<ul>
+<li><strong>The render protocol, version 1</strong> (engine/render/protocol.mjs): a page (stage/simulation/live/page.json) as five
+messages: <code>hello</code>, <code>models</code> (each building model stood on its base, with its crease edges), <code>ground</code>
+(the chunks' cells as one 8-bit grid), <code>buildings</code> (every lot, shell and loose building as a transform per model, a line
+round each floor, the clutter) and <code>people</code> (each person's keys [t, x, y, z, mode] over the whole line: the web view's
+own timeline and move timing, played on the server). About 5 MB for volume 2's test copy, made in 1.5 s.</li>
+<li><strong>The world server</strong> (engine/render/server.mjs): a local socket (127.0.0.1, a token on the client's command line),
+frames of a 4-byte length and one JSON message; the whole world again whenever the page changes.</li>
+<li><strong>The client</strong> (clients/godot, GDScript, the Mobile renderer): one draw per building model (MultiMesh), the ground
+as one sheet coloured by a shader, the people walking their keys with their names; it never reads the page.</li>
+<li><strong>From the console</strong>: World · Live's Godot button opens it in a window of its own (Godot found in
+<code>tools\godot</code> in the user's folder, or <code>NOVEL_GODOT</code>).</li>
+</ul>
+<p><strong>Measured</strong> (2026-11-17, volume 2's test copy, its newest moment, a GTX 1650 for both, the same camera at
+1112 × 886, no frame cap): the web page in the console 25.5 frames a second, its slowest 1 % of frames at 1.4; Godot 101.6, its slowest
+1 % at 86.7. Godot draws all 3,258 buildings; the web page's live view only those near Jev's look. The whole city from
+high up in Godot: 59.9. Godot's Forward+ renderer costs about 12 ms a frame even empty on this computer; the Mobile one does
+not. Not carried yet (the web page still has them): the sky and weather, damage, rooms, speech, smoothed ways, lift rides
+and the map's legs between places; a line in the reader does not move the Godot window yet.</p>
 <h2 id="visual-context">12.2 World · Live: debugging by display</h2>
 <p><span id="world-live"></span></p>
 <p><span class="st legacy">Legacy</span> (<code>tools/pi-review/sim-world.html</code>, <code>engine/view/</code>). The user's page beside a
