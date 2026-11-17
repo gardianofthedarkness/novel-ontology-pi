@@ -174,6 +174,13 @@ export async function directorSky(workspace) {
   const sky = (at?.path ? await read(resolve(at.path, '..', 'sky.json')) : null) ?? await read(resolve(workspace, '..', 'reading', 'sky.json'));
   return skyView(sky);
 }
+/** The book's area tree with its buildings (engine/view/building-list.mjs areaTree), from its terrain; null before any terrain. */
+export async function buildingTree(workspace) {
+  const terrain = await readFile(resolve(workspace, 'stage', 'terrain.json'), 'utf8').then(JSON.parse, () => null);
+  if (!terrain?.sites) return null;
+  const [{ areaTree }, { loadHeights }] = await Promise.all([import(pathToFileURL(`${repo}/engine/view/building-list.mjs`).href), import(pathToFileURL(`${repo}/dist/src/world/terrain/config.js`).href)]);
+  return areaTree(terrain, loadHeights());
+}
 /** A sky.json as World · Live reads it (also the replay io's, engine/view/replay-io.mjs), or null. */
 export function skyView(sky) {
   return sky ? { units: Object.fromEntries(Object.entries(sky.units ?? {}).map(([id, unit]) => [id, { daypart: unit.daypart?.value ?? null, hour: unit.hour ?? null, weather: unit.weather?.value ?? null, strength: unit.weather?.strength ?? null, wind: unit.weather?.wind ?? null, sure: unit.weather?.sure ?? 0, lying: !!unit.lying, ...(unit.cloudCut ? { cloudCut: unit.cloudCut } : {}) }])) } : null;

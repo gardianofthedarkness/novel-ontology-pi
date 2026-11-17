@@ -63,6 +63,7 @@ function createWorlds(backend) {
       case "/play/notes.json": return json(await play.directorNotes(workspace));
       case "/play/album.json": return json(await play.directorAlbum(workspace));
       case "/play/sky.json": { const view = await play.directorSky(workspace); return view ? json(view) : missing(); }
+      case "/play/buildings.json": { const view = await play.buildingTree(workspace); return view ? json(view) : missing(); }
       case "/play/dev.json": {
         const scene = url.searchParams.get("scene") ?? "", card = url.searchParams.get("card") ?? "";
         if (!SCENE.test(scene) || card.length > 120) return json({ error: "a bad card" }, 400);

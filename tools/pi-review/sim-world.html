@@ -106,6 +106,8 @@
   .blist .what { color: var(--dim); font-size: 11px; font-variant-numeric: tabular-nums; }
   .blist .by { color: var(--accent); } .blist .by.jev { color: var(--jev); }
   .blist .low { color: #ff9d7a; }
+  .blist li.area .name { font-weight: 600; }
+  .blist li.area.city .name, .blist li.area.region .name { color: var(--accent); }
   .blist .bbar { display: grid; grid-template-columns: auto 1fr auto; gap: 2px 8px; align-items: center; padding-top: 4px; }
   .blist .bbar[hidden] { display: none; }
   .blist .bbar i { grid-column: 1 / -1; height: 8px; border-radius: 4px; background: linear-gradient(90deg, rgb(89,5,5), rgb(204,31,5) 35%, rgb(255,140,13) 70%, rgb(255,255,64)); }
@@ -264,7 +266,7 @@
   // under their host, at its foot, on its upper floors or under it. A row tapped shows that building in the world.
   let buildings = "";
   // With the list, the terrain as it was made is drawn over the world (vectors, manifolds, the fill): strand-demo.html terrainDebug.
-  $("bopen").addEventListener("click", () => { const on = $("bopen").getAttribute("aria-pressed") !== "true"; fold("bopen", "blist", on); sendTerrain(); if (on) { fold("live", "asks", false); fold("sopen", "slist", false); fold("copen", "clist", false); } });
+  $("bopen").addEventListener("click", () => { const on = $("bopen").getAttribute("aria-pressed") !== "true"; fold("bopen", "blist", on); sendTerrain(); if (on) loadTree(); if (on) { fold("live", "asks", false); fold("sopen", "slist", false); fold("copen", "clist", false); } });
   $("sopen").addEventListener("click", () => { const on = $("sopen").getAttribute("aria-pressed") !== "true"; fold("sopen", "slist", on); if (on) { fold("live", "asks", false); fold("bopen", "blist", false); sendTerrain(); fold("copen", "clist", false); } });
   // Spawning (engine/spawning/spawn.mjs, live.json's world notes): each scene's start positions, how each was decided,
   // and, where the rules left someone open, what Jev is given to say where: the scene's own text, who, the place's spots.
@@ -859,30 +861,67 @@
   const FLOOR = { foot: "at its foot", upper: "on its upper floors", under: "under it, below the street" };
   const floorOf = (f) => (typeof f === "number" ? (f < 0 ? `${-f} floor${f === -1 ? "" : "s"} under the street` : `floor ${f}`) : FLOOR[f] ?? f);
   const partOf = (b) => `part of ${esc(b.inLabel)}, ${floorOf(b.floor)}${typeof b.area === "number" ? `, about ${b.area} m²` : ""}, ${b.partBy === "jev" ? `<span class="by jev">Jev</span> <span class="${(b.partSure?.floor ?? 1) < 0.3 ? "low" : ""}">${pct(b.partSure?.floor)}</span>/${pct(b.partSure?.size)} sure` : b.partBy === "fixed" ? "as its type always is" : "asked nothing"}`;
-  const row = (b, part) => {
-    const li = document.createElement("li"); li.tabIndex = 0; if (part) li.className = "part";
+  // A row tapped: the world shows that place.
+  const focusPlace = (id) => { for (const frame of [shown, next]) frame?.contentWindow.postMessage({ type: "focus", id }, origin); if (camera) camera.follow = false; showFollow(false); };
+  const row = (b, part, depth = 0) => {
+    const li = document.createElement("li"); li.tabIndex = 0; if (part) li.className = "part"; if (depth) li.style.paddingLeft = `${10 + depth * 16 + (part ? 16 : 0)}px`;
     const typed = b.typeBy === "jev" ? `<span class="by jev">Jev ${pct(b.sure.kind)}</span>` : b.typeBy === "search" ? `<span class="by">search</span>` : "";
     const sure = typeof b.sure.height === "number" ? ` · Jev <span class="${b.sure.height < 0.3 ? "low" : ""}">${pct(b.sure.height)} sure</span>` : "";
     const least = typeof b.least === "number" && typeof b.top === "number" && b.top >= 0 ? ` · min ${Math.round(b.least / 3)} fl${b.top === b.least ? " (at it)" : ""}` : "";
-    li.innerHTML = `<span class="name">${part ? "↳ " : ""}${esc(b.label)}</span><span class="what">${esc(b.type ?? "—")} ${typed}</span><span class="what">${part ? partOf(b) : `${b.by === "shape" ? "a shape · " : ""}${height(b)}${least}${sure}${b.alone ? " · no host near: a lot of its own" : ""}${b.street ? ` · ${esc(b.street)}` : ""}`}</span>`;
-    const focus = () => { for (const frame of [shown, next]) frame?.contentWindow.postMessage({ type: "focus", id: b.id }, origin); if (camera) camera.follow = false; showFollow(false); };
-    li.addEventListener("click", focus); li.addEventListener("keydown", (event) => { if (event.key === "Enter") focus(); });
+    li.innerHTML = `<span class="name">${part ? "↳ " : ""}${esc(b.label)}</span><span class="what">${esc(b.type ?? "—")} ${typed}</span><span class="what">${part ? partOf(b) : `${b.by === "shape" ? "a shape · " : ""}${height(b)}${least}${sure}${b.alone ? " · no host near: a lot of its own" : ""}${b.street && !depth ? ` · ${esc(b.street)}` : ""}`}</span>`;
+    li.addEventListener("click", () => focusPlace(b.id)); li.addEventListener("keydown", (event) => { if (event.key === "Enter") focusPlace(b.id); });
     return li;
   };
-  const listBuildings = (list) => {
-    const key = JSON.stringify(list ?? null);
+  // An area of the tree (a city, a district, a street): its kind, its ground and mean height, what is in it, its lots.
+  const CHILD = { region: "cities", city: "districts", district: "streets", street: "streets" }, ONE = { region: "city", city: "district", district: "street", street: "street" };
+  const areaRow = (a, depth, children, built) => {
+    const li = document.createElement("li"); li.tabIndex = 0; li.className = `area ${a.scale}`; li.style.paddingLeft = `${10 + depth * 16}px`;
+    const bits = [a.scale, a.kind && a.kind !== a.scale ? a.kind : null, a.ground ? `${a.ground} ground` : null, typeof a.average === "number" ? `mean ${a.average} m` : null,
+      children ? `${children} ${(children === 1 ? ONE : CHILD)[a.scale] ?? "areas"}` : null, built ? `${built} building${built === 1 ? "" : "s"} of the text` : null, a.lots ? `${a.lots} lot${a.lots === 1 ? "" : "s"}` : null, a.spare && !built ? "a spare slot, no place of the text" : null].filter(Boolean);
+    li.innerHTML = `<span class="name">${esc(a.label)}</span><span class="what">${esc(bits.join(" · "))}</span>`;
+    li.addEventListener("click", () => focusPlace(a.id)); li.addEventListener("keydown", (event) => { if (event.key === "Enter") focusPlace(a.id); });
+    return li;
+  };
+  // The list: a running terrain step's own (a plain list, as it grows), else the book's area tree from its terrain
+  // (buildings.json: every city, district and street with the buildings of the text under the street each stands in).
+  const listBuildings = (source) => {
+    const key = JSON.stringify(source ?? null);
     if (key === buildings) return; buildings = key;
-    if (!list?.length) { $("bsum").textContent = "No building level yet."; $("brows").replaceChildren(); return; }
+    const list = Array.isArray(source) ? source : source?.buildings ?? [], areas = Array.isArray(source) ? [] : source?.areas ?? [];
+    if (!list.length && !areas.length) { $("bsum").textContent = "No building level yet."; $("brows").replaceChildren(); return; }
     const parts = list.filter((b) => b.by === "tenant"), own = list.filter((b) => b.by !== "tenant"), byJev = list.filter((b) => b.typeBy === "jev").length;
     const atLeast = own.filter((b) => typeof b.least === "number" && b.top === b.least).length, unsure = own.filter((b) => typeof b.sure.height === "number" && b.sure.height < 0.3).length;
-    $("bsum").textContent = `${list.length} buildings · typed by the search ${list.length - byJev}, by Jev ${byJev} · ${parts.length} parts of composite buildings · ${atLeast} at their minimum · ${unsure} heights Jev was under 30% sure of`;
+    const counted = ["city", "district", "street"].map((scale) => [scale, areas.filter((a) => a.scale === scale).length]).filter(([, n]) => n).map(([scale, n]) => `${n} ${n === 1 ? scale : CHILD[{ city: "region", district: "city", street: "district" }[scale]]}`);
+    $("bsum").textContent = `${counted.length ? `${counted.join(", ")} · ` : ""}${list.length} buildings · typed by the search ${list.length - byJev}, by Jev ${byJev} · ${parts.length} parts of composite buildings · ${atLeast} at their minimum · ${unsure} heights Jev was under 30% sure of`;
     const rows = [], hosts = new Map();
     for (const b of parts) { if (!hosts.has(b.in)) hosts.set(b.in, []); hosts.get(b.in).push(b); }
-    for (const b of own) { rows.push(row(b, false)); for (const p of hosts.get(b.id) ?? []) rows.push(row(p, true)); hosts.delete(b.id); }
+    const withParts = (b, depth) => { rows.push(row(b, false, depth)); for (const p of hosts.get(b.id) ?? []) rows.push(row(p, true, depth)); hosts.delete(b.id); };
+    if (!areas.length) for (const b of own) withParts(b, 0);
+    else {
+      // Down the tree: each area, the buildings standing in it, then its own areas.
+      const ids = new Set(areas.map((a) => a.id)), kids = new Map(), stand = new Map(), ORDER = { region: 0, city: 1, district: 2, street: 3 };
+      for (const a of areas) { const up = ids.has(a.parent) ? a.parent : null; if (!kids.has(up)) kids.set(up, []); kids.get(up).push(a); }
+      for (const b of own) { const at = ids.has(b.parent) ? b.parent : null; if (!stand.has(at)) stand.set(at, []); stand.get(at).push(b); }
+      const builtUnder = (id) => (stand.get(id)?.length ?? 0) + (kids.get(id) ?? []).reduce((sum, a) => sum + builtUnder(a.id), 0);
+      const walk = (up, depth) => {
+        for (const a of [...(kids.get(up) ?? [])].sort((x, y) => (ORDER[x.scale] ?? 9) - (ORDER[y.scale] ?? 9) || builtUnder(y.id) - builtUnder(x.id) || String(x.label).localeCompare(String(y.label)))) {
+          rows.push(areaRow(a, depth, kids.get(a.id)?.length ?? 0, builtUnder(a.id)));
+          for (const b of stand.get(a.id) ?? []) withParts(b, depth + 1);
+          walk(a.id, depth + 1);
+        }
+      };
+      walk(null, 0);
+      const loose = stand.get(null) ?? [];
+      if (loose.length) { const head = document.createElement("li"); head.className = "area"; head.innerHTML = `<span class="name">Elsewhere</span><span class="what">buildings of the text in no area terrain keeps</span>`; rows.push(head); for (const b of loose) withParts(b, 1); }
+    }
     // Parts whose host is a spare lot of the fill (no building of the text): under that lot.
     for (const [, group] of hosts) { const lot = document.createElement("li"); lot.innerHTML = `<span class="name">${esc(group[0].inLabel)}</span><span class="what">a lot of the fill, no building of the text</span>`; rows.push(lot); for (const p of group) rows.push(row(p, true)); }
     $("brows").replaceChildren(...rows);
   };
+  // Which list shows: a terrain step's while it runs, else the tree (loaded when the panel opens, again every 30 s open).
+  let liveBuildings = null, buildingTree = null, treeAt = 0;
+  const showBuildings = () => listBuildings(liveBuildings ?? buildingTree);
+  const loadTree = async () => { treeAt = Date.now(); buildingTree = await fetch(`buildings.json${query}`, { cache: "no-store" }).then((r) => (r.ok ? r.json() : null)).catch(() => null); showBuildings(); };
   // Two frames at most: the one shown, and the next one loading over it, unseen and untouchable, until it says it is
   // ready; then it fades in on top and the old one goes, so a finger never lands on a frame about to go. Building a frame
   // is heavy (the whole world so far), so one loads at most every few seconds, only for a newer moment, and it plays
@@ -1013,7 +1052,7 @@
         $("next").hidden = !terrain; $("runOn").hidden = !terrain; $("next").disabled = !waiting;
         if (terrain && state.lines?.[0]?.mode) $("runOn").setAttribute("aria-pressed", String(state.lines[0].mode === "run"));
         const world = state.world;
-        listBuildings(world?.notes?.buildings); listSpawn(world?.notes?.spawn); listCards(world?.notes?.director);
+        { const live = world?.notes?.buildings; liveBuildings = Array.isArray(live) && live.length ? live : null; if ($("bopen").getAttribute("aria-pressed") === "true" && Date.now() - treeAt > 30000) loadTree(); else showBuildings(); } listSpawn(world?.notes?.spawn); listCards(world?.notes?.director);
         // The director's line, grown piece by piece (its live notes' extend): each new piece goes to the frame, which plays it on
         // from where it is; a frame loaded later takes the latest when it is ready.
         const piece = world?.notes?.extend;
