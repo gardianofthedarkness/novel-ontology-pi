@@ -965,22 +965,23 @@ export async function strandDemo(novelDir, options) {
     // changes an older one's buildings (damage kept for them in world.json stays theirs). `era`: that patch's.
     // A form's building's lot is `<patch>:<lot>`, and a slot's patch id has colons of its own: the longest patch id it starts with.
     const patchOf = b => (b.plane ? place.landscape.patches.filter(patch => patch.plane === b.plane).sort((x, y) => Number(String(b.lot).startsWith(`${y.id}:`)) - Number(String(b.lot).startsWith(`${x.id}:`)))[0] : null) ?? place.landscape.patches.find(patch => patch.id === filled.owner[b.lot]) ?? [...place.landscape.patches].filter(patch => String(b.lot).startsWith(`${patch.id}:`)).sort((x, y) => y.id.length - x.id.length)[0] ?? place.landscape.patches[0];
-    // The place's surface for the terrain debug view (its hologram tiles): a grid over its ground, each cell
-    // [x, z, height, chance, patch]: the patch most likely to own the ground there as the fill draws it (claimOrder: each in
-    // turn takes a lot with its membership's probability, so patch k owns with m_k · Π_{j<k} (1 − m_j)), that chance, and the
-    // median height its buildings are drawn round there (meanHeight at its depth). Cells no patch is likely to own (< 5%)
-    // are open ground, left out. About 90 cells across the place, never finer than 8 m.
+    // The place's surface for the terrain debug view (a surface plot of its ground): a square grid over its circle, about
+    // 90 points across (never finer than 8 m), each point's height the median its buildings are expected to be drawn round
+    // there: Σ_k P_k · h_k, h_k a patch's meanHeight at its depth and P_k the chance the fill gives it the ground (claimOrder:
+    // each in turn takes it with its membership's probability, so P_k = m_k · Π_{j<k} (1 − m_j)); what no patch takes is
+    // open ground, at the street (0). Continuous, so a fade between two manifolds is a slope, not a step. Row by row
+    // (z outer, x inner) from the corner `from`, `n` points a side; `sure` is Σ_k P_k at each point, in hundredths.
     const surfaceOf = () => {
-      const order = claimOrder(place.landscape), reach = circleOf(place.landscape), cell = Math.max(8, (2 * reach) / 90), cells = [];
+      const order = claimOrder(place.landscape), reach = circleOf(place.landscape), n = Math.max(2, Math.min(91, Math.ceil((2 * reach) / 8) + 1)), step = (2 * reach) / (n - 1);
       if (!order.length) return null;
-      const index = new Map(place.landscape.patches.map((patch, n) => [patch, n]));
-      for (let x = -reach + cell / 2; x < reach; x += cell) for (let z = -reach + cell / 2; z < reach; z += cell) {
-        let left = 1, best = null, chance = 0;
-        for (const patch of order) { const take = left * membership(patch, [x, z]); if (take > chance) { chance = take; best = patch; } left -= take; if (left < 0.01) break; }
-        if (!best || chance < 0.05) continue;
-        cells.push(Math.round(x + wx), Math.round(z + wz), Math.round(meanHeight(best, depthOf(best, [x, z])) * 10) / 10, Math.round(chance * 100) / 100, index.get(best));
+      const heights = [], sure = [];
+      for (let j = 0; j < n; j++) for (let i = 0; i < n; i++) {
+        const p = [-reach + i * step, -reach + j * step];
+        let left = 1, height = 0;
+        for (const patch of order) { const take = left * membership(patch, p); height += take * meanHeight(patch, depthOf(patch, p)); left -= take; if (left < 0.001) break; }
+        heights.push(Math.round(height * 10) / 10); sure.push(Math.round((1 - left) * 100));
       }
-      return { cell: Math.round(cell * 10) / 10, cells };
+      return { from: [round(wx - reach), round(wz - reach)], step: Math.round(step * 100) / 100, n, heights, sure };
     };
     const manifoldOf = patch => createHash('sha256').update(JSON.stringify({ recipe: 1, patch, older: place.landscape.patches.slice(0, place.landscape.patches.indexOf(patch)) })).digest('hex').slice(0, 12);
     if (process.env.DEBUG_CLEAR) { const lost = {}, by = {}; for (const b of [...filled.fabric.buildings, ...filled.landmarks]) { const t = patchOf(b).type, hit = keep.find(({ at, r }) => Math.hypot(b.x - at[0], b.z - at[1]) <= r + Math.max(b.w, b.d) / 2); (lost[t] ??= [0, 0])[1]++; if (hit) { lost[t][0]++; const who = Object.values(canvas.places).find(c => c.parent === place.id && c.at === hit.at); by[`${t} by ${who?.id} r${Math.round(hit.r)}`] = (by[`${t} by ${who?.id} r${Math.round(hit.r)}`] ?? 0) + 1; } } console.error('DEBUG_CLEAR', place.id, JSON.stringify(lost), JSON.stringify(Object.entries(by).sort((x, y) => y[1] - x[1]).slice(0, 8))); }
