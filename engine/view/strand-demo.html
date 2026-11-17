@@ -1964,7 +1964,45 @@ const terrainDebug = (() => {
       roofs.forEach(({ b: [x, z, w, d, angle, floors], color }, i) => { q.setFromAxisAngle(up, -(angle ?? 0)); m.compose(new THREE.Vector3(x, (floors ?? 1) * FLOOR + 0.4, z), q, new THREE.Vector3(w, 1, d)); mesh.setMatrixAt(i, m); mesh.setColorAt(i, color); });
       mesh.instanceMatrix.needsUpdate = true; if (mesh.instanceColor) mesh.instanceColor.needsUpdate = true; mesh.frustumCulled = false; mesh.renderOrder = 8; g.add(mesh);
     }
-    g.userData.counts = { places: nodes.size, manifolds: patches, roofs: roofs.length };
+    // The surfaces (the user, 2026-11-17: "model those surfaces with hologram tiles"): each place's ground as the fill sees
+    // it, a tile a cell, at the median height its buildings are drawn round there, from the manifold most likely to own
+    // that cell (entry.surface, export-strand-demo.mjs), coloured by that height (blue the street, through green and
+    // yellow, to red the tallest here; by the log, so a low quarter's steps show beside a core's), dimmer where the owner is
+    // less sure (a fade band, a seam). Where the surface steps from one height to another, or drops to the street at its
+    // edge, a see-through wall in the higher tile's colour, so each shape stands as a block. Drawn over the buildings, so a
+    // surface is never lost in the city. Pages exported before the surface was sampled have none.
+    const surfaces = (data.landscapes ?? []).filter((entry) => entry.surface?.cells?.length);
+    let tileCount = 0, top = 1;
+    if (surfaces.length) {
+      for (const { surface } of surfaces) for (let n = 2; n < surface.cells.length; n += 5) top = Math.max(top, surface.cells[n]);
+      const shade = new THREE.Color(), heightColor = (h, sure) => shade.setHSL(0.66 * (1 - Math.min(1, Math.log1p(Math.max(0, h)) / Math.log1p(top))), 0.9, 0.55).multiplyScalar(0.35 + 0.65 * sure);
+      const canvas = document.createElement("canvas"); canvas.width = canvas.height = 64;
+      const ctx = canvas.getContext("2d"); ctx.fillStyle = "rgba(255,255,255,0.4)"; ctx.fillRect(0, 0, 64, 64); ctx.strokeStyle = "rgba(255,255,255,1)"; ctx.lineWidth = 5; ctx.strokeRect(2.5, 2.5, 59, 59);
+      const texture = new THREE.CanvasTexture(canvas); texture.colorSpace = THREE.SRGBColorSpace;
+      const material = (opacity) => new THREE.MeshBasicMaterial({ map: texture, transparent: true, opacity, depthWrite: false, depthTest: false, side: THREE.DoubleSide, fog: false });
+      const tiles = [], walls = [];
+      for (const { surface } of surfaces) {
+        const { cell, cells } = surface, at = new Map(), x0 = cells[0], z0 = cells[1], key = (i, j) => `${i},${j}`;
+        for (let n = 0; n < cells.length; n += 5) at.set(key(Math.round((cells[n] - x0) / cell), Math.round((cells[n + 1] - z0) / cell)), n);
+        for (let n = 0; n < cells.length; n += 5) {
+          const [x, z, h, sure] = [cells[n], cells[n + 1], cells[n + 2], cells[n + 3]], i = Math.round((x - x0) / cell), j = Math.round((z - z0) / cell);
+          tiles.push({ x, z, h, size: cell, color: heightColor(h, sure).clone() });
+          // Its four sides: to the street where nothing is next to it; up to a taller neighbour's own wall (drawn from there).
+          for (const [di, dj] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
+            const other = at.get(key(i + di, j + dj)), low = other === undefined ? 0 : cells[other + 2];
+            if (h - low > 1.5) walls.push({ x: x + (di * cell) / 2, z: z + (dj * cell) / 2, low, high: h, across: di !== 0, size: cell, color: heightColor(h, sure).clone() });
+          }
+        }
+      }
+      const flat = new THREE.InstancedMesh(new THREE.PlaneGeometry(1, 1).rotateX(-Math.PI / 2), material(0.75), tiles.length), m = new THREE.Matrix4(), q = new THREE.Quaternion(), turn = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), Math.PI / 2);
+      tiles.forEach((tile, n) => { m.compose(new THREE.Vector3(tile.x, tile.h, tile.z), q, new THREE.Vector3(tile.size * 0.94, 1, tile.size * 0.94)); flat.setMatrixAt(n, m); flat.setColorAt(n, tile.color); });
+      const upright = new THREE.InstancedMesh(new THREE.PlaneGeometry(1, 1).translate(0, 0.5, 0), material(0.35), Math.max(1, walls.length));
+      walls.forEach((wall, n) => { m.compose(new THREE.Vector3(wall.x, wall.low, wall.z), wall.across ? turn : q, new THREE.Vector3(wall.size * 0.94, wall.high - wall.low, 1)); upright.setMatrixAt(n, m); upright.setColorAt(n, wall.color); });
+      upright.count = walls.length;
+      for (const mesh of [flat, upright]) { mesh.instanceMatrix.needsUpdate = true; if (mesh.instanceColor) mesh.instanceColor.needsUpdate = true; mesh.frustumCulled = false; mesh.renderOrder = 11; g.add(mesh); }
+      tileCount = tiles.length;
+    }
+    g.userData.counts = { places: nodes.size, manifolds: patches, roofs: roofs.length, tiles: tileCount, surfaces: surfaces.length, top: surfaces.length ? Math.round(top) : null };
     return g;
   };
   return (on) => {
