@@ -2883,7 +2883,8 @@ on a book yet. Why: v1's rated arousal moved with relevance (r 0.76) and central
 moment's); models rate arousal less reliably than valence (r 0.59–0.81 against human norms).</p>
 <ul>
 <li><strong>Read, per holder and beat</strong> (a stretch in which their situation holds): the stakes on a tenfold ladder (0 nothing to 6 a
-  life), what they expected for it and what came or looms, signed, with its probability, and the sentences that show it.
+  life), what came or looms, signed, with its probability, and the sentences that show it. What they expected is carried
+  from their previous beat, not read (below).
   The model does not judge how stirred anyone is.</li>
 <li><strong>Arousal</strong> A = ln(1 + |PE| / B) / ln(1 + V₆): logarithmic in the prediction error PE = actual − expected (values
   sign·(10<sup>|L|</sup> − 1)), relative to the holder's context B (Fechner's S = k log((I + c) / c), c the internal state).
@@ -2895,7 +2896,16 @@ moment's); models rate arousal less reliably than valence (r 0.59–0.81 against
 <li><strong>Relevance</strong> is the stakes alone; <strong>centrality</strong> stays per memory; every memory of a beat shares its
   arousal and valence, so the trade-off now acts on details at the edge of an arousing moment.</li>
 </ul>
-<p>Constants (adaptation 0.2 a beat, mood decay 0.6 a beat) are general and set by hand. Open: beats are counted, not timed,
+<p><strong>Tested</strong> (2026-11-18, volume 1's scenes 1–30, two independent runs, 44 calls). Two changes came from it.
+The context first rose to the arithmetic mean of magnitudes, so one life-or-death beat lifted it to about 200,000 and nothing
+after stirred (mean arousal 0.03); it is now the geometric mean, as Helson's adaptation level is. And "what they expected",
+read from the text, was unstable (one run had the railgun shot expected, the other not), so the two runs' arousal disagreed
+(r −0.09); expectation is now carried from the holder's previous beat (the same readings, recomputed without new calls).
+After both, per scene and person, the two runs agree on peak arousal r 0.74 and mean arousal 0.80, valence only 0.44; v2
+agrees with v1's rated peaks r 0.63–0.76; centrality no longer moves with arousal (r 0.15–0.20, v1 0.71). Not yet known:
+v1's own run-to-run agreement (not measured, so v2 is not shown more reliable than v1); the model never gave a probability
+below 1, so threats that only loom are not read; 21 scene-person pairs, nearly all the narrator.</p>
+<p>Constants (adaptation 0.2 a beat, mood decay 0.6 a beat, half of an expectation carried across scenes) are general and set by hand. Open: beats are counted, not timed,
 until story time is honest (<a href="#story-time">§5.4</a>); a range run starts its context fresh.</p>
 <p>Sources: <a href="https://www.annualreviews.org/doi/10.1146/annurev.neuro.27.070203.144157">McGaugh 2004</a>; <a href="https://pmc.ncbi.nlm.nih.gov/articles/PMC4143018">Rutledge et al. 2014</a>; <a href="https://fac.ppw.kuleuven.be/okp/_pdf/Kuppens2013TRBVA.pdf">Kuppens et al. 2013</a>; <a href="https://arxiv.org/abs/2508.14214">LLM ratings of emotional stimuli</a>;
 <a href="https://pmc.ncbi.nlm.nih.gov/articles/PMC2443097">LaBar and Cabeza 2006</a>;
