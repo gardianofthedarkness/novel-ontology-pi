@@ -2875,7 +2875,29 @@ it becomes story time once time is honest (<a href="#story-time">§5.4</a>). The
 any book; they are to be checked against how a character's talk reads, not fitted to a measure.</p>
 <p><strong>Forking:</strong> a branch adds only its own memories (<code>branch_id</code>), never edits canon's. A branch of a
 branch is a longer lineage. Deleting a branch deletes only its memories.</p>
-<p>Sources: <a href="https://www.annualreviews.org/doi/10.1146/annurev.neuro.27.070203.144157">McGaugh 2004</a>;
+<p><strong>Arousal, v2: computed, not rated</strong> ("The arousal needs to be logarithmically build as physiology pointed,
+satisfaction/scare come from comparison to context." — the user, 2026-11-18). <span class="st built">Built</span>, the arithmetic
+with its tests (<code>engine/memory/affect.mjs</code>) and the pass's <code>--affect v2</code>; <span class="st designed">not run</span>
+on a book yet. Why: v1's rated arousal moved with relevance (r 0.76) and centrality (0.68) on volume 1, so it was a general
+"this matters", and the peripheral trade-off could not act (a detail at the edge got its own low arousal instead of its
+moment's); models rate arousal less reliably than valence (r 0.59–0.81 against human norms).</p>
+<ul>
+<li><strong>Read, per holder and beat</strong> (a stretch in which their situation holds): the stakes on a tenfold ladder (0 nothing to 6 a
+  life), what they expected for it and what came or looms, signed, with its probability, and the sentences that show it.
+  The model does not judge how stirred anyone is.</li>
+<li><strong>Arousal</strong> A = ln(1 + |PE| / B) / ln(1 + V₆): logarithmic in the prediction error PE = actual − expected (values
+  sign·(10<sup>|L|</sup> − 1)), relative to the holder's context B (Fechner's S = k log((I + c) / c), c the internal state).
+  B is the holder's adaptation level, a running average of the magnitudes they have met (Helson): the same blow stirs less
+  among blows. What was fully expected does not stir, whatever the stakes.</li>
+<li><strong>Valence</strong>, satisfaction or scare, by comparison: tanh of a decaying sum of the recent signed surprises, current
+  included (Rutledge et al. 2014: momentary happiness follows expectations and prediction errors, not rewards). A small loss
+  after expecting a large one is a relief.</li>
+<li><strong>Relevance</strong> is the stakes alone; <strong>centrality</strong> stays per memory; every memory of a beat shares its
+  arousal and valence, so the trade-off now acts on details at the edge of an arousing moment.</li>
+</ul>
+<p>Constants (adaptation 0.2 a beat, mood decay 0.6 a beat) are general and set by hand. Open: beats are counted, not timed,
+until story time is honest (<a href="#story-time">§5.4</a>); a range run starts its context fresh.</p>
+<p>Sources: <a href="https://www.annualreviews.org/doi/10.1146/annurev.neuro.27.070203.144157">McGaugh 2004</a>; <a href="https://pmc.ncbi.nlm.nih.gov/articles/PMC4143018">Rutledge et al. 2014</a>; <a href="https://fac.ppw.kuleuven.be/okp/_pdf/Kuppens2013TRBVA.pdf">Kuppens et al. 2013</a>; <a href="https://arxiv.org/abs/2508.14214">LLM ratings of emotional stimuli</a>;
 <a href="https://pmc.ncbi.nlm.nih.gov/articles/PMC2443097">LaBar and Cabeza 2006</a>;
 <a href="https://www.nature.com/articles/nature14106">Dunsmoor et al. 2015</a>;
 <a href="https://krendlab.sitehost.iu.edu/upload/Kensinger_2005.pdf">Kensinger et al. 2005</a>;
