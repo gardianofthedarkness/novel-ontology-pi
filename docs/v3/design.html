@@ -2827,8 +2827,15 @@ conversation is played in the world.</p>
 Then, version an indexing of memory system in the world ontology" — the user, 2026-11-18.</p>
 <p><span class="st built">Built</span> (2026-11-18): the index and its query (<code>src/ground/ontology/memory.ts</code>, its tables
 in schema v1's DDL, tested on made-up memories in <code>test/ground/memory.test.ts</code>). <span class="st designed">Designed</span>,
-not built: writing the memories from a reading (a paid pass of the work model over each scene, only when asked), the
-bundle file they live in (<code>memories.jsonl</code>, the graph rebuilt from it like the rest), and talk at a point.</p>
+not built: talk at a point, and memory loss (a record that erases a holder's memories from an order on).</p>
+<p><span class="st built">Built</span> (2026-11-18): the memory pass (<code>engine/memory/memories.mjs</code>): one work-model
+call per scene (at most 60 sentences), writing the book's <code>novel/ontology/memories.jsonl</code>; and
+<code>engine/memory/recall.mjs</code>, which builds the memory graph from it and runs recall. The pass asks only what each
+person there could perceive, on scales over the holder's whole life (arousal 0.9 only for a threat to life or a turning
+point). It finds who is really in the scene from the text and the whole cast, not from the reading's presence guess: on
+volume 1 that guess put one person in a scene that was another's, and memories followed the wrong id until the guess was
+taken out of the prompt. Volume 1 (2026-11-18): 278 scenes, 280 calls, 381,537 prompt and 191,312 completion tokens; 1,383
+memories for 9 people; indexing 85 s (row by row); a recall about 0.7 s.</p>
 <p><strong>What the amygdala does to memory</strong>, as far as it shapes this design (sources below):</p>
 <ul>
 <li><strong>It modulates consolidation, not storage.</strong> Arousal releases adrenaline and stress hormones; noradrenaline in the
