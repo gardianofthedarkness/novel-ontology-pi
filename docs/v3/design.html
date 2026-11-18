@@ -192,7 +192,9 @@ which script writes it; the tests fail when one is stale (<code>npm test</code> 
 <li><a href="#review-cli">9.5 The main agent's high-privilege CLI</a></li>
 </ul>
 </li>
-<li><a href="#forking">10. Timelines, forking and simulation</a></li>
+<li><a href="#forking">10. Timelines, forking and simulation</a><ul>
+<li><a href="#memory">10.1 Character memory: index v1</a></li>
+</ul></li>
 <li><a href="#writing">11. Writing</a></li>
 <li><a href="#world-client">12. The world client and the live view</a><ul>
 <li><a href="#render-protocol">12.1 A native engine behind a render protocol</a></li>
@@ -2820,6 +2822,58 @@ and the deterministic fold (<code>foldStateAt</code>, <code>novel state</code>).
 <p><strong>For v3</strong>, open: forking at a moment of a strand (the console's Strands view as the fork-point browser); whether a
 branch replays the world from the fork's world state (strands and the carry make that possible); how a simulated
 conversation is played in the world.</p>
+<h2 id="memory">10.1 Character memory: index v1</h2>
+<p>"all those should be achieved by a time/importance weighted cypher query. Research how amygdala works in neural science.
+Then, version an indexing of memory system in the world ontology" — the user, 2026-11-18.</p>
+<p><span class="st built">Built</span> (2026-11-18): the index and its query (<code>src/ground/ontology/memory.ts</code>, its tables
+in schema v1's DDL, tested on made-up memories in <code>test/ground/memory.test.ts</code>). <span class="st designed">Designed</span>,
+not built: writing the memories from a reading (a paid pass of the work model over each scene, only when asked), the
+bundle file they live in (<code>memories.jsonl</code>, the graph rebuilt from it like the rest), and talk at a point.</p>
+<p><strong>What the amygdala does to memory</strong>, as far as it shapes this design (sources below):</p>
+<ul>
+<li><strong>It modulates consolidation, not storage.</strong> Arousal releases adrenaline and stress hormones; noradrenaline in the
+  basolateral amygdala strengthens the hippocampus's consolidation of what just happened (McGaugh 2004, 2018). Arousing memories
+  are forgotten more slowly: the advantage grows over the hours after, and patients with amygdala damage lose it (LaBar and
+  Phelps 1998). Arousal, more than whether it was good or bad, drives it.</li>
+<li><strong>It narrows.</strong> What was central to an arousing moment is kept better; peripheral details are kept worse (the
+  trade-off, Kensinger; gone with amygdala damage), unless the detail mattered to the person's goals (Mather and colleagues).</li>
+<li><strong>It reaches back.</strong> A strong emotional event strengthens earlier, weakly kept memories that are related to it
+  (behavioural tagging, Dunsmoor et al. 2015), seen only after a delay for consolidation.</li>
+<li><strong>It weighs relevance.</strong> The amygdala answers to what matters to the person, not only to fear; recall leans to
+  memories that match the present mood (mood-congruent recall).</li>
+<li>Not used in v1: sleep's preference for emotional memories (real but small and conditional, Payne and Kensinger 2018;
+  Cunningham et al. 2022), and reconsolidation, a recalled memory turning editable (Nader et al. 2000; disputed in people).</li>
+</ul>
+<p><strong>A memory</strong> is a record (<code>Memory</code>), held by one character (<code>REMEMBERS</code>): what happened, when
+(<code>at_order</code>, the event's story order), when they came to know it (<code>learned_order</code>: later when they were told),
+how (did, saw, heard, told, inferred; <code>HEARD_FROM</code> the teller), what it recalls (<code>RECALLS</code> an event or a
+dialogue card), its cues (<code>CUES</code>: the people, places, things and concepts it is about), the sentences that show it, and
+the amygdala's tags: <code>arousal</code>, <code>valence</code>, <code>relevance</code> to their goals, <code>central</code> or at the
+edge, <code>confidence</code> (a belief can be false: a lie they were told stays the teller's claim). Kinds: an episode, a belief,
+a gist (<code>CONSOLIDATES</code> episodes). Every row carries <code>index_version</code>; a change of fields or of scoring is a
+new version, with its weights beside it.</p>
+<p><strong>Recall is one Cypher query</strong> (graph-first, no vectors, as decided for retrieval): for a holder, a point and the
+present's cues, best first. The wall first: a memory is seen only if it is on the point's lineage (canon up to the fork, then
+the branch up to now) and learned by then. Then each memory's score:</p>
+<table>
+<tr><th>Term</th><th>v1</th><th>From</th></tr>
+<tr><td>retention</td><td>(1 + age / τ)<sup>−d</sup>, τ = τ₀ (1 + k·arousal); times 1 − k′·arousal·(1 − central)</td><td>power-law forgetting; arousal slows it; the peripheral trade-off</td></tr>
+<tr><td>importance</td><td>arousal, relevance, and the tag: the strongest later arousing memory sharing a cue, within a window, after a delay, times (1 − arousal)</td><td>consolidation; relevance; behavioural tagging</td></tr>
+<tr><td>cue</td><td>the summed weights of the memory's cues present now</td><td>retrieval by cues</td></tr>
+<tr><td>mood</td><td>1 + k·valence·mood</td><td>mood-congruent recall</td></tr>
+<tr><td>score</td><td>(base + cue) · retention · (1 + importance) · mood · confidence</td><td></td></tr>
+</table>
+<p>The tag obeys the wall too: an attack that has not happened yet cannot strengthen anything. Age is in story order for v1;
+it becomes story time once time is honest (<a href="#story-time">§5.4</a>). The weights are general, set by hand, and not tuned on
+any book; they are to be checked against how a character's talk reads, not fitted to a measure.</p>
+<p><strong>Forking:</strong> a branch adds only its own memories (<code>branch_id</code>), never edits canon's. A branch of a
+branch is a longer lineage. Deleting a branch deletes only its memories.</p>
+<p>Sources: <a href="https://www.annualreviews.org/doi/10.1146/annurev.neuro.27.070203.144157">McGaugh 2004</a>;
+<a href="https://pmc.ncbi.nlm.nih.gov/articles/PMC2443097">LaBar and Cabeza 2006</a>;
+<a href="https://www.nature.com/articles/nature14106">Dunsmoor et al. 2015</a>;
+<a href="https://krendlab.sitehost.iu.edu/upload/Kensinger_2005.pdf">Kensinger et al. 2005</a>;
+<a href="https://samlab.nd.edu/assets/288068/payne_kensinger_2018.pdf">Payne and Kensinger 2018</a>;
+<a href="https://www.frontiersin.org/journals/behavioral-neuroscience/articles/10.3389/fnbeh.2022.910317/pdf">Cunningham et al. 2022</a>.</p>
 <h1 id="writing">11. Writing</h1>
 <p><span class="st designed">Designed</span>, later (v3 plan §1.2): for a writer, the same checks become continuity warnings
 while typing: someone in two places at one time, a thing used before it is given, a credit the scene does not back. The

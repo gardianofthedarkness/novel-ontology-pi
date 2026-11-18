@@ -9,6 +9,8 @@
  * the hot query engine rebuilt from it (`novel graph build`).
  */
 
+import { MEMORY_DDL } from "./memory.js";
+
 export const SCHEMA_VERSION = 1;
 
 export const LADYBUG_DDL: string[] = [
@@ -60,6 +62,8 @@ export const LADYBUG_DDL: string[] = [
   `CREATE REL TABLE IF NOT EXISTS STATE_AFTER(FROM Character TO Event)`,
   `CREATE REL TABLE IF NOT EXISTS FORKS_FROM(FROM Branch TO Event)`,
   `CREATE REL TABLE IF NOT EXISTS PRECEDES(FROM Event TO Event)`,
+  // Character memory, index v1 (memory.ts, design §10.1). Additive: existing stores gain it on the next init or rebuild.
+  ...MEMORY_DDL,
 ];
 
 /**
