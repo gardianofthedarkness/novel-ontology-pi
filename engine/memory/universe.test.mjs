@@ -3,7 +3,20 @@ import assert from 'node:assert/strict';
 import { mkdtemp, mkdir, writeFile, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { universeMemories, storyPoint, findPerson } from './universe.mjs';
+import { universeMemories, storyPoint, findPerson, sceneMinutes, fillTimes } from './universe.mjs';
+
+test('story time per scene from the reading\'s time file: a gap or a flashback keeps the time before; never back', () => {
+  const yaml = ['words: []', 'scenes:', '  - scene: s1', '    periods: []', '    flashback: false',
+    '  - scene: s2', '    periods: [t_a]', '    flashback: false', '  - scene: s3', '    periods: [t_old]', '    flashback: true',
+    '  - scene: s4', '    periods: [t_b, t_a]', '    flashback: false', 'tree:', '  x: 1', 'calendar:', '  entries:',
+    '    - ref: book::t_a', '      timeId: t_a', '      span:', '        start: 1440', '        end: 2880',
+    '    - ref: book::t_b', '      timeId: t_b', '      span:', '        start: 4320', '        end: 5760',
+    '    - ref: book::t_old', '      timeId: t_old', '      span:', '        start: 10', '        end: 20'].join('\n');
+  const raw = sceneMinutes(yaml, ['s1', 's2', 's3', 's4']);
+  assert.deepEqual(raw, [null, 1440, null, 1440], 'the earliest of a scene\'s periods; a flashback has none of its own');
+  assert.deepEqual(fillTimes(raw), [1440, 1440, 1440, 1440]);
+  assert.deepEqual(fillTimes([null, 100, 50, 300], 200), [200, 200, 200, 300], 'not before the book before; never back');
+});
 
 // A made-up world of two books: a in both (char_1 in book 1, char_2 in book 2), b only in book 1; a place in each book
 // with the same local id; an afterword scene in book 2.

@@ -19,7 +19,7 @@
  */
 
 /** The memory index's version: on every Memory row, and in the weights. A change of fields or scoring is a new version. */
-export const MEMORY_INDEX_VERSION = 1;
+export const MEMORY_INDEX_VERSION = 2;
 
 /** How the holder knows it. */
 export type MemorySource = "did" | "saw" | "heard" | "told" | "inferred";
@@ -37,6 +37,11 @@ export interface MemoryRecord {
   atOrder: number;
   /** Story order at which the holder came to know it (>= atOrder; later when told). */
   learnedOrder: number;
+  /**
+   * Story time at which it was learned, in the caller's unit (a world's memories: story days, engine/memory/universe.mjs).
+   * Age is measured on it; the wall stays on story order. Absent: learnedOrder (age counted in scenes, index v1).
+   */
+  learnedTime?: number;
   summaryEn: string;
   /** 0..1: how arousing for the holder. */
   arousal: number;
@@ -61,7 +66,7 @@ export interface MemoryRecord {
 export const MEMORY_DDL: string[] = [
   `CREATE NODE TABLE IF NOT EXISTS Memory(
      id STRING, branch_id STRING, kind STRING, source STRING,
-     at_order INT64, learned_order INT64, summary_en STRING,
+     at_order INT64, learned_order INT64, learned_time DOUBLE, summary_en STRING,
      arousal DOUBLE, valence DOUBLE, relevance DOUBLE, central DOUBLE, confidence DOUBLE,
      evidence_json STRING, index_version INT64, PRIMARY KEY(id))`,
   `CREATE REL TABLE IF NOT EXISTS REMEMBERS(FROM Character TO Memory)`,
@@ -74,7 +79,11 @@ export const MEMORY_DDL: string[] = [
 
 export interface RecallWeights {
   version: number;
-  /** Forgetting: retention = (1 + age / tau)^-decay, tau = tau0 * (1 + kArousal * arousal); age in story order. */
+  /**
+   * Forgetting: retention = (1 + age / tau)^-decay, tau = tau0 * (1 + kArousal * arousal); age in the unit of learned_time
+   * (story order in index v1; story days for a world's memories). The arousal is the one stored: consolidation is set when
+   * the memory forms (McGaugh).
+   */
   tau0: number;
   kArousal: number;
   decay: number;
@@ -84,6 +93,12 @@ export interface RecallWeights {
   tagArousal: number;
   tagWindow: number;
   tagDelay: number;
+  /**
+   * The felt arousal fades slowly with age (the fading affect bias: the charge of a memory weakens over weeks and months
+   * though the memory stays): felt = arousal * (1 + age / tauFelt)^-dFelt, used for importance.
+   */
+  tauFelt: number;
+  dFelt: number;
   wArousal: number;
   wRelevance: number;
   wTag: number;
@@ -96,6 +111,7 @@ export const DEFAULT_RECALL_WEIGHTS: RecallWeights = {
   version: MEMORY_INDEX_VERSION,
   tau0: 10, kArousal: 3, decay: 0.6, kPeripheral: 0.6,
   tagArousal: 0.7, tagWindow: 15, tagDelay: 3,
+  tauFelt: 300, dFelt: 0.3,
   wArousal: 1, wRelevance: 0.8, wTag: 0.6,
   base: 0.3, kMood: 0.3,
 };
@@ -114,7 +130,7 @@ export type Lineage = Array<[branchId: string, until: number]>;
 export const RECALL_CYPHER = `
 MATCH (h:Character {id: $holder})-[:REMEMBERS]->(m:Memory)
 WHERE m.learned_order <= list_extract($until, list_position($lineage, m.branch_id) + 1)
-WITH m, $now - m.learned_order AS age
+WITH m, $nowTime - m.learned_time AS age
 WITH m, age, $tau0 * (1.0 + $kArousal * m.arousal) AS tau
 WITH m, age, pow(1.0 + age / tau, -$decay) * (1.0 - $kPeripheral * m.arousal * (1.0 - m.central)) AS retention
 OPTIONAL MATCH (m)-[k:CUES]->(x) WHERE x.id IN $cues
@@ -123,10 +139,11 @@ OPTIONAL MATCH (m)-[:CUES]->(y)<-[:CUES]-(e:Memory)<-[:REMEMBERS]-(:Character {i
   WHERE e.arousal >= $tagArousal AND e.learned_order > m.learned_order
     AND e.learned_order - m.learned_order <= $tagWindow AND age >= $tagDelay
     AND e.learned_order <= list_extract($until, list_position($lineage, e.branch_id) + 1)
-WITH m, retention, cue, coalesce(max(e.arousal), 0.0) * (1.0 - m.arousal) AS tag
-WITH m, retention, cue, tag, $wArousal * m.arousal + $wRelevance * m.relevance + $wTag * tag AS importance
+WITH m, age, retention, cue, coalesce(max(e.arousal), 0.0) * (1.0 - m.arousal) AS tag
+WITH m, retention, cue, tag, m.arousal * pow(1.0 + age / $tauFelt, -$dFelt) AS felt
+WITH m, retention, cue, tag, felt, $wArousal * felt + $wRelevance * m.relevance + $wTag * tag AS importance
 RETURN m.id AS id, m.kind AS kind, m.source AS source, m.at_order AS at, m.learned_order AS learned,
-       m.summary_en AS summary, m.evidence_json AS evidence, retention, importance, cue, tag,
+       m.summary_en AS summary, m.evidence_json AS evidence, retention, importance, cue, tag, felt,
        (($base + cue) * retention * (1.0 + importance) * (1.0 + $kMood * m.valence * $mood) * m.confidence) AS score
 ORDER BY score DESC LIMIT $k`;
 
@@ -135,6 +152,8 @@ export interface RecallQuery {
   lineage: Lineage;
   /** The present's cue ids (people present or named, the place, things in hand or in the talk). */
   cues: string[];
+  /** The present in the unit of learned_time (a world's memories: story days). Absent: the lineage's last order. */
+  nowTime?: number;
   /** The holder's present mood, -1..1. */
   mood?: number;
   k?: number;
@@ -144,6 +163,8 @@ export interface RecallQuery {
 export interface Recalled {
   id: string; kind: MemoryKind; source: MemorySource; at: number; learned: number; summary: string; evidence: string[];
   retention: number; importance: number; cue: number; tag: number; score: number;
+  /** The arousal as felt now (faded with age). */
+  felt: number;
 }
 
 type Run = (cypher: string, params?: Record<string, unknown>) => Promise<Record<string, unknown>[]>;
@@ -157,7 +178,7 @@ export function recallParams(q: RecallQuery): Record<string, unknown> {
     holder: q.holderId,
     lineage: q.lineage.map(([branch]) => branch),
     until: [-1, ...q.lineage.map(([, until]) => until)],
-    now: q.lineage[q.lineage.length - 1][1],
+    nowTime: q.nowTime ?? q.lineage[q.lineage.length - 1][1],
     cues: q.cues,
     mood: q.mood ?? 0,
     k: q.k ?? 12,
@@ -171,7 +192,7 @@ export async function recall(run: Run, q: RecallQuery): Promise<Recalled[]> {
     id: String(r.id), kind: r.kind as MemoryKind, source: r.source as MemorySource,
     at: Number(r.at), learned: Number(r.learned), summary: String(r.summary),
     evidence: JSON.parse(String(r.evidence ?? "[]")) as string[],
-    retention: Number(r.retention), importance: Number(r.importance), cue: Number(r.cue), tag: Number(r.tag), score: Number(r.score),
+    retention: Number(r.retention), importance: Number(r.importance), cue: Number(r.cue), tag: Number(r.tag), score: Number(r.score), felt: Number(r.felt),
   }));
 }
 
@@ -182,11 +203,11 @@ export async function indexMemories(run: Run, memories: MemoryRecord[]): Promise
     await run(
       `MATCH (h:Character {id: $holder})
        CREATE (h)-[:REMEMBERS]->(:Memory {id: $id, branch_id: $branch, kind: $kind, source: $source, at_order: $at,
-         learned_order: $learned, summary_en: $summary, arousal: $arousal, valence: $valence, relevance: $relevance,
+         learned_order: $learned, learned_time: $learnedTime, summary_en: $summary, arousal: $arousal, valence: $valence, relevance: $relevance,
          central: $central, confidence: $confidence, evidence_json: $evidence, index_version: $version})`,
       {
         holder: m.holderId, id: m.id, branch: m.branchId, kind: m.kind, source: m.source, at: m.atOrder,
-        learned: m.learnedOrder, summary: m.summaryEn, arousal: m.arousal, valence: m.valence, relevance: m.relevance,
+        learned: m.learnedOrder, learnedTime: m.learnedTime ?? m.learnedOrder, summary: m.summaryEn, arousal: m.arousal, valence: m.valence, relevance: m.relevance,
         central: m.central, confidence: m.confidence, evidence: JSON.stringify(m.evidence), version: MEMORY_INDEX_VERSION,
       },
     );

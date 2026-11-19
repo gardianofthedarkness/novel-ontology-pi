@@ -7,7 +7,7 @@ import { appendFile, mkdir } from 'node:fs/promises';
 import { join, resolve, dirname } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { storedKeys } from '../volume/credentials.mjs';
-import { universeGraph, storyPoint, findPerson } from '../memory/universe.mjs';
+import { universeGraph, storyPoint, storyDay, findPerson, TIME_WEIGHTS } from '../memory/universe.mjs';
 import { createMind } from './mind.mjs';
 
 const repo = resolve(dirname(fileURLToPath(import.meta.url)), '..', '..');
@@ -25,13 +25,16 @@ export function phoneArgs(argv) {
 export async function openPhone({ library, person, at: point, mock }) {
   const { recall, indexMemories } = await load('dist/src/ground/ontology/memory.js');
   const u = await universeGraph(library), run = u.run;
-  const who = findPerson(u, person), holderId = who.id, at = storyPoint(u.books, point);
+  const who = findPerson(u, person), holderId = who.id, at = storyPoint(u.books, point), day = storyDay(u.books, at);
+  const { DEFAULT_RECALL_WEIGHTS } = await load('dist/src/ground/ontology/memory.js'), weights = { ...DEFAULT_RECALL_WEIGHTS, ...TIME_WEIGHTS };
+  // A call's turns are a minute apart in story time.
+  const time = () => day + now / 1440;
 
   // Who they are: their name, and what weighs most in their memories by this point (recalled with no cue).
   const branch = `phone-${new Date().toISOString().replace(/\D/g, '').slice(0, 14)}`;
   let now = 0;
   const lineage = () => [['canon', at], [branch, at + now]];
-  const core = await recall(run, { holderId, lineage: [['canon', at]], cues: [], k: 6 });
+  const core = await recall(run, { holderId, lineage: [['canon', at]], cues: [], k: 6, weights, nowTime: day });
   const self = { id: holderId, name: who.name, about: `What weighs most in your life so far: ${core.map((r) => r.summary).join('; ') || 'nothing you can name'}.` };
 
   const spend = { jev: 0, text: 0 };
@@ -51,7 +54,7 @@ export async function openPhone({ library, person, at: point, mock }) {
   const mind = createMind(self, {
     decide, speak, cuesOf: u.cuesOf, nameOf: u.nameOf,
     // Every part of the score comes along, for the trace: when, how known, retention, importance, cue, tag, the book.
-    recall: async ({ cues, mood }) => (await recall(run, { holderId, lineage: lineage(), cues, mood, k: 8 })).map((r) => ({ ...r, book: bookAt(r.at) })),
+    recall: async ({ cues, mood }) => (await recall(run, { holderId, lineage: lineage(), cues, mood, k: 8, weights, nowTime: time() })).map((r) => ({ ...r, book: bookAt(r.at) })),
   });
   const bookAt = (order) => u.books.findLast((b) => order > b.offset)?.book ?? null;
 
@@ -68,7 +71,7 @@ export async function openPhone({ library, person, at: point, mock }) {
     await appendFile(log, JSON.stringify({ person: holderId, at: point, input, ...result }) + '\n');
     if (input || out.said) {
       await indexMemories(run, [{
-        id: `${branch}-${out.turn}`, holderId, branchId: branch, kind: 'episode', source: 'did', atOrder: at + now, learnedOrder: at + now,
+        id: `${branch}-${out.turn}`, holderId, branchId: branch, kind: 'episode', source: 'did', atOrder: at + now, learnedOrder: at + now, learnedTime: time(),
         summaryEn: `On the phone: ${input ? `the stranger said "${input.text}"` : 'a silence'}${out.said ? `; I said "${out.said}"` : '; I said nothing'}`,
         arousal: out.mood.arousal, valence: out.mood.valence, relevance: 0.3, central: 1, confidence: 1, cues: input ? u.cuesOf(input.text) : [], evidence: [],
       }]);

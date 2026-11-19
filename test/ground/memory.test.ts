@@ -70,5 +70,9 @@ test("recall ranks by arousal, cues, the peripheral trade-off and retroactive ta
     assert.ok(at(byStation, "m4").score > at(byB, "m4").score, "a cue brings the detail back");
     const angry = await recall(run, { holderId: "a", lineage: [["canon", 40]], cues: ["b"], mood: -1 });
     assert.ok(at(angry, "m6").score > at(byB, "m6").score, "mood-congruent recall");
+    // The felt arousal fades slowly with age; the stored one keeps setting how fast the memory itself fades.
+    assert.ok(at(byB, "m3").felt < 0.95 && at(byB, "m3").felt > 0.9);
+    const later = await recall(run, { holderId: "a", lineage: [["canon", 40]], cues: ["b"], nowTime: 400 });
+    assert.ok(at(later, "m3").felt < at(byB, "m3").felt && at(later, "m3").retention < at(byB, "m3").retention, "age is measured on story time when given");
   });
 });
