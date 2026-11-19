@@ -194,6 +194,7 @@ which script writes it; the tests fail when one is stale (<code>npm test</code> 
 </li>
 <li><a href="#forking">10. Timelines, forking and simulation</a><ul>
 <li><a href="#memory">10.1 Character memory: index v1</a></li>
+<li><a href="#mind">10.2 A character's mind: departments and a brain stem</a></li>
 </ul></li>
 <li><a href="#writing">11. Writing</a></li>
 <li><a href="#world-client">12. The world client and the live view</a><ul>
@@ -2916,6 +2917,30 @@ until story time is honest (<a href="#story-time">§5.4</a>); a range run starts
 <a href="https://krendlab.sitehost.iu.edu/upload/Kensinger_2005.pdf">Kensinger et al. 2005</a>;
 <a href="https://samlab.nd.edu/assets/288068/payne_kensinger_2018.pdf">Payne and Kensinger 2018</a>;
 <a href="https://www.frontiersin.org/journals/behavioral-neuroscience/articles/10.3389/fnbeh.2022.910317/pdf">Cunningham et al. 2022</a>.</p>
+<h2 id="mind">10.2 A character's mind: departments and a brain stem</h2>
+<p><span class="st built">Built</span>, tested with mock models only, not yet run live; the departments are the user's, the details below are a first cut. The user, 2026-11-19: a real person has
+several departments running at once, and a brain stem that decides which of their urges surface as action (speech,
+movement) and which sink until the next turn. Code: <code>engine/persona/mind.mjs</code> (the mind, any book),
+<code>engine/persona/phone.mjs</code> (a terminal chat), tests in <code>mind.test.mjs</code>.</p>
+<p>The first body is a phone: the character holds a phone from a parallel universe, and strangers from there message
+them. A message (or time passing, with no message) is a turn. Every department reads the same snapshot at once and
+proposes urges; they see each other only through what the last turn left (what is on their mind, the mood).</p>
+<table>
+<tr><th>Department</th><th>Runs on</th><th>Proposes</th></tr>
+<tr><td>memory</td><td>the recall query (§10.1), cued by the people, places and things the message names</td><td>recalls to bring up</td></tr>
+<tr><td>emotion</td><td>Jev: how it feels (seven words, very bad to very good) and how stirred (five); the mood carries over and fades</td><td>a feeling to show</td></tr>
+<tr><td>subjectivity</td><td>Jev: a stance (answer, ask back, tease, comfort, refuse, change the subject, say nothing); does it touch what they care about</td><td>an urge to speak</td></tr>
+<tr><td>action</td><td>Jev: a movement from a fixed set (look at the phone, look around, put it away, walk off)</td><td>a movement</td></tr>
+<tr><td>brain stem</td><td>Jev, one call over every urge, this turn's and the waiting ones</td><td>at most one speech and one movement, and which recalls and feelings go with them</td></tr>
+<tr><td>speaker</td><td>the work model, only when a speech surfaced</td><td>the words, in the stance, with the surfaced recalls and feeling</td></tr>
+</table>
+<p>What does not surface sinks: it waits for the next turn at 0.7 of its strength, says how long it has waited, and fades
+below 0.15. So an urge held back can come out later, unasked (on a turn with no message the character may write first).
+A turn costs four Jev calls (three departments and the stem) and one text call when they speak. What is said is remembered
+on the phone's own branch (§10.1), never in the book's canon. Open: QQ or Discord in place of the terminal (the same two
+calls, a message in and a reply out); movement in the 3D world; a talk's memories are calm unless the emotion department
+stirs, so they rank low against the book's (the last turns reach the speaker as the conversation anyway), and each run is a
+new branch, so one talk does not yet remember the last.</p>
 <h1 id="writing">11. Writing</h1>
 <p><span class="st designed">Designed</span>, later (v3 plan §1.2): for a writer, the same checks become continuity warnings
 while typing: someone in two places at one time, a thing used before it is given, a credit the scene does not back. The
