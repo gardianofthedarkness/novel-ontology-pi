@@ -2930,6 +2930,14 @@ model never gave a probability below 1, so threats that only loom are not read; 
 narrator.</p>
 <p>Constants (adaptation 0.2 a beat, mood decay 0.6 a beat, half of an expectation carried across scenes) are general and set by hand. Open: beats are counted, not timed,
 until story time is honest (<a href="#story-time">§5.4</a>); a range run starts its context fresh.</p>
+<p id="memory-universe"><strong>Across books</strong> (2026-11-19; the user: "Fix memory first"). Each book's memory pass
+keeps the book's own ids; <code>engine/memory/universe.mjs</code> makes one graph of a world's memories: a holder, a
+teller and a cue that is a character become the person of the <a href="#universal-em">universe cast</a>; places, things
+and ideas keep their book (<code>vol-6/loc_000002</code>); the books' scenes run on as one story order (volume 2's first
+scene is 279), so retention and the recall wall cross books; memories of paratext scenes are left out, and the pass skips
+paratext. The phone (§10.2) now takes a person and a point (<code>--person p_0002 --at vol-6</code>). A book only read has
+who is named in each scene but not who is present (rooms and the director add that), so the pass now skips only a scene
+with neither.</p>
 <p>Sources: <a href="https://www.annualreviews.org/doi/10.1146/annurev.neuro.27.070203.144157">McGaugh 2004</a>; <a href="https://pmc.ncbi.nlm.nih.gov/articles/PMC4143018">Rutledge et al. 2014</a>; <a href="https://fac.ppw.kuleuven.be/okp/_pdf/Kuppens2013TRBVA.pdf">Kuppens et al. 2013</a>; <a href="https://arxiv.org/abs/2508.14214">LLM ratings of emotional stimuli</a>;
 <a href="https://pmc.ncbi.nlm.nih.gov/articles/PMC2443097">LaBar and Cabeza 2006</a>;
 <a href="https://www.nature.com/articles/nature14106">Dunsmoor et al. 2015</a>;

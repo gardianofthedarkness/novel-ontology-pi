@@ -141,7 +141,7 @@ body.debug.wide #console { display: flex; flex-direction: column; gap: 12px; pos
 .urge .k { color: var(--faint); } .urge .s { color: var(--faint); text-align: right; }
 .urge.up .mark { color: var(--signal); } .urge.down .mark { color: var(--faint); } .urge.up .c { color: var(--ink); }
 .urge .c { overflow-wrap: anywhere; }
-.rows { display: grid; grid-template-columns: 40px 30px 34px 34px 28px 32px minmax(0, 1fr); gap: 1px 6px; margin-top: 4px; }
+.rows { display: grid; grid-template-columns: 40px 52px 34px 34px 28px 32px minmax(0, 1fr); gap: 1px 6px; margin-top: 4px; }
 .rows .h { color: var(--faint); font-size: 10px; letter-spacing: 0.06em; }
 .rows .sum { color: var(--ink); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .rows .hit { color: var(--signal); }
@@ -295,7 +295,7 @@ function memoryBlock(rec) {
   for (const h of ['score', 'at', 'ret', 'imp', 'cue', 'tag', 'memory (→ proposed)']) rows.append(el('span', 'h', h));
   const urged = new Set((rec.urges || []).map((u) => u.content));
   for (const r of rec.recalled || []) {
-    rows.append(el('span', null, Number(r.score).toFixed(3)), el('span', null, String(r.at)), el('span', null, Number(r.retention).toFixed(2)),
+    rows.append(el('span', null, Number(r.score).toFixed(3)), el('span', null, r.book ? r.book.replace('vol-', 'v') + ':' + r.at : String(r.at)), el('span', null, Number(r.retention).toFixed(2)),
       el('span', null, Number(r.importance).toFixed(2)), el('span', r.cue > 0 ? 'hit' : null, String(r.cue)), el('span', null, Number(r.tag).toFixed(2)));
     const s = el('span', 'sum', (urged.has(r.summary) ? '→ ' : '   ') + r.source + ': ' + r.summary); s.title = r.summary; rows.append(s);
   }

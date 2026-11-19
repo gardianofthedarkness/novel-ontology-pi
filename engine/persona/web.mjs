@@ -3,7 +3,7 @@
 // only; reach it from outside through a tunnel. Every turn spends money (Jev and the work model), so the page lives under
 // a secret path and everything else is 404.
 //
-// Usage: node engine/persona/web.mjs <volume folder> --holder <id> --at <scene order> [--graph <folder>] [--port 8795]
+// Usage: node engine/persona/web.mjs <library> --person <person id or a name> --at <book>[:<scene>] [--port 8795]
 //          [--secret <hex>] [--mock]
 //   Prints the local address with its secret path; put the tunnel's host in front of the same path. --secret keeps a link
 //   working across a restart (otherwise a new random one).

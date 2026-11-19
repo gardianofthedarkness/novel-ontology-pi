@@ -2,7 +2,7 @@
 // story, holds a phone that strangers from another world can message. Each message is a turn of the mind (mind.mjs);
 // the call itself (graph, models, memory of what was said) is session.mjs, shared with the web console (web.mjs).
 //
-// Usage: node engine/persona/phone.mjs <volume folder> --holder <id> --at <scene order> [--graph <folder>] [--mock]
+// Usage: node engine/persona/phone.mjs <library> --person <person id or a name> --at <book>[:<scene>] [--mock]
 //   Paid: one Jev call per department and one for the brain stem a turn, and one text call when they speak.
 //   --mock: no models, no spend (fixed answers), to check the wiring.
 //   Type a message; /wait lets time pass with no message (an urge that sank may come out); /quit ends.

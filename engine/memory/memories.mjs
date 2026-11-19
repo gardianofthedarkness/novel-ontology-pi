@@ -88,6 +88,9 @@ async function main() {
   const opt = (n) => { const i = args.indexOf(`--${n}`); return i >= 0 ? args[i + 1] : null; };
   const novel = join(volume, 'novel'), ontology = join(novel, 'ontology');
   const data = JSON.parse(await readFile(join(volume, 'reading', 'data.json'), 'utf8'));
+  // Paratext (engine/reading/paratext.mjs): an afterword or the credits are nobody's memory.
+  const paratextFile = join(volume, 'reading', 'paratext.json');
+  const paratext = new Set(existsSync(paratextFile) ? JSON.parse(await readFile(paratextFile, 'utf8')).paratext : []);
   const scenes = await latest(join(ontology, 'scenes.jsonl')), sceneOf = new Map(scenes.map((s) => [s.id, s]));
   const entities = await latest(join(ontology, 'entities.jsonl'));
   const nameOf = new Map(entities.map((e) => [e.id, e.names?.find((n) => n.kind === 'canonical')?.text ?? e.names?.[0]?.text ?? e.id]));
@@ -103,11 +106,14 @@ async function main() {
 
   const [from, to] = (opt('scenes') ?? `1-${data.scenes.length}`).split('-').map(Number);
   const chosen = data.scenes.map((s, i) => ({ ...s, order: i + 1 })).filter((s) => s.order >= from && s.order <= to);
-  const usage = { calls: 0, cached: 0, prompt: 0, completion: 0, skipped: 0, dropped: 0 };
+  const usage = { calls: 0, cached: 0, prompt: 0, completion: 0, skipped: 0, paratext: 0, dropped: 0 };
   const out = [], beats = [], v2 = opt('affect') === 'v2';
   const one = async (scene) => {
     const onto = sceneOf.get(scene.id), guessed = onto?.charactersPresent ?? [];
-    if (!guessed.length) { usage.skipped++; return; }
+    if (paratext.has(scene.id)) { usage.paratext++; return; }
+    // Who is present comes from steps after the reading (rooms, the director); a book only read has who is named. A scene
+    // with neither has no one to remember it.
+    if (!guessed.length && !(onto?.charactersMentioned ?? []).length) { usage.skipped++; return; }
     const ids = scene.sentences.filter((id) => text.has(id));
     for (let p = 0; p < ids.length; p += PART) {
       const part = ids.slice(p, p + PART), body = part.map((id) => `[${id}] ${text.get(id).text}`).join('\n');
