@@ -80,6 +80,12 @@ export const STEPS = [
       const settings = join(at.source, 'stage', 'settings.json');
       if (existsSync(settings) && !existsSync(join(at.novel, 'stage', 'settings.json'))) await cp(settings, join(at.novel, 'stage', 'settings.json'));
     } },
+  // Paratext, then the universe cast (the user, 2026-11-19): which scenes are not the story (the afterword, credits,
+  // contents), then each character of the book placed on the universe's one list of people, skipping what is paratext.
+  { id: 'paratext', paid: true, why: 'which scenes are not the story: afterword, notes, front matter (one Jev call per 25 scenes)',
+    done: at => existsSync(join(at.reading, 'paratext.json')), commands: async at => [node('engine/reading/paratext.mjs', at.novel, '--reading', at.data)] },
+  { id: 'cast', paid: true, why: 'the book\'s characters on the universe\'s one cast: the same person across books (Jev pair checks)',
+    done: at => !!readJson(join(at.universe, 'cast.json'))?.books?.includes(at.book), commands: async at => [node('engine/universe/cast.mjs', at.library, '--books', at.book)] },
   // The sky before the agent's steps: the rooms pass chooses each unit's shot by its time of day and weather (rain an eye
   // level shot, a new time of day an outside one), which only the reading's sky.json gives; the sky reads the reading alone.
   { id: 'sky', paid: true, why: 'time of day and weather by unit (12 or so Jev questions)',

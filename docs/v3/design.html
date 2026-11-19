@@ -639,7 +639,7 @@ none calls a model except <code>read</code>.</p>
 extraction of the same book than the file gives (volume 1: 124,716 characters stored, 129,322 from the EPUB), the book is
 shown as that stored source, because the reading's sentence ids cite it. A one-click reading is made inside the folder
 (<a href="#readings">§4.5</a>).</p>
-<p><strong>The same entry across books</strong> is matched today by a shared name. <span class="st left">Left out of v3</span> The
+<p><strong>The same entry across books</strong>: people by the <a href="#universal-em">universe cast</a> (2026-11-19); other entries by a shared name. <span class="st left">Left out of v3</span> The
 universe-level systems v1 built are the design for doing it properly, each one list per universe that every book's
 records are placed on: <a href="#universal-em">universal EM</a> (one character list), the <a href="#universe-calendar">universe calendar</a>
 (one clock) and the <a href="#causality">universe causal ledger</a>. In v3 they belong to a universe of the workspace, written by
@@ -1143,8 +1143,27 @@ as one are merged; a plate page's people let the cropper bind a face by eliminat
 (v1, decision 24): a full label is matched literally, never a fragment.</p>
 <h3 id="universal-em">Universal EM: one character list per universe</h3>
 <p><span id="fragment-at-birth"></span>
-<span class="st left">Left out of v3</span> Built in v1 (2026-10-28) and not carried into the v2 reading or v3's
-workspace, which matches the same person across books by a shared name.</p>
+<span class="st built">Built</span> in v1 (2026-10-28), left out of the v2 reading and v3's workspace, and brought back
+on 2026-11-19 (the user: "This needs to be unified first") as a step after each book's reading:
+<code>engine/universe/cast.mjs</code>, writing <code>&lt;library&gt;/universe/cast.json</code>. Each book keeps its own
+character ids; a person (<code>p_0001</code>...) holds every name form and the book records that are them, and what crosses
+books (memory, the bot, strands carried on) goes through the person.</p>
+<p>A book's characters in its story (present or named in a scene that is not paratext) are matched in the job's order.
+Candidates are the people already in the cast who share a run of two or more characters with one of its names (no lists
+of words). Jev answers v1's pair check for each (same person? shown as two people?), both sides given by their names,
+where they are and a few lines where they act. Same at 0.9 and not shown as two: one person. When one side's full name
+(its longest form) is exactly a name of the other, 0.6 is enough: on volumes 1-6 Jev never gave identical full names 0.9
+(0.77-0.89), and a shared short form (a family name the clones and relatives share) still needs 0.9. Between: a new
+person, listed for review. The book's own new people are then checked against each other. Volumes 1-6: 43 Jev calls,
+110 people, 20 across books (Index and Touma in all six, the main cast whole), 16 pairs for review; three splits left
+(one person in two records across books twice, and a reading that gave one person another's name).</p>
+<p id="paratext"><strong>Paratext</strong> (<code>engine/reading/paratext.mjs</code>, before the cast). The reading's own
+front and back matter finder looks for heading words and found none in volumes 1-3: the author, the editor and the
+illustrator came in as people, an afterword as a strand. Jev now reads each scene's first and last lines and says story,
+afterword or author's note, translator's or editor's note, or front matter; the story starts with its first stretch of
+story scenes of 20 sentences (a bare heading does not break it) and ends with its last, and what is outside is paratext
+(<code>reading/paratext.json</code>; nothing rewritten). A middle scene that is not story is listed as doubtful, not
+dropped. Volumes 1-6: one Jev call per 25 scenes; covers, blurbs, credits, contents and afterwords found in all six.</p>
 <p>Who a character is used to be decided in five places that never saw the same candidates (an exact name index, a
 per-scene birth check, the review gate, a structural pass after apply, and <code>novel match</code>); one person under a full name,
 a short form and a description became three records, and a person met again in a later book became a new one. Universal
