@@ -51,9 +51,14 @@ async function modelsOf(mock) {
   };
 }
 
-export async function openWorld({ library, person, at: point, mock }) {
+/** The world's graph and the models, opened once and shared by every person a server hosts. */
+export async function openUniverse({ library, mock }) {
+  return { u: await universeGraph(library), models: await modelsOf(mock), mock };
+}
+
+export async function openWorld({ library, person, at: point, mock }, shared = null) {
   const { recall, indexMemories, DEFAULT_RECALL_WEIGHTS } = await load('dist/src/ground/ontology/memory.js');
-  const u = await universeGraph(library), run = u.run, models = await modelsOf(mock);
+  const { u, models } = shared ?? await openUniverse({ library, mock }), run = u.run;
   const who = findPerson(u, person), holderId = who.id, at = storyPoint(u.books, point), day = storyDay(u.books, at);
   const weights = { ...DEFAULT_RECALL_WEIGHTS, ...TIME_WEIGHTS };
   const card = await characterCard(u, holderId, at, point, models.generate), present = await presentCard(u, holderId, at, point, models.generate);
@@ -93,7 +98,7 @@ export async function openWorld({ library, person, at: point, mock }) {
     const send = (input) => (queue = queue.then(() => turn(input), () => turn(input)));
     return { branch, send };
   }
-  return { self, mock, at: point, cards: { character: card, present }, newCall, close: () => u.close() };
+  return { self, mock, at: point, cards: { character: card, present }, newCall, close: () => (shared ? null : u.close()) };
 }
 
 /** One world and one call (the terminal). */
