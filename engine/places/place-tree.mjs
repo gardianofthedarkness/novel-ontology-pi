@@ -338,7 +338,9 @@ export function checkOf(stores) {
 }
 function checkParts(stores) {
   const tree = treeOf(stores), placed = placedScenes(stores);
-  const areas = tree.filter(row => ['city', 'district', 'region'].includes(row.scale) && !isPool(row.id));
+  // Another book's place in a sampling pool (elsewhere:<book>/<id>) is that book's to decide, not this one's, unless a unit
+  // of this book is in it (volume 3's pass failed on four of volume 2's, which nothing in its text names).
+  const areas = tree.filter(row => ['city', 'district', 'region'].includes(row.scale) && !isPool(row.id) && !(String(row.id).startsWith('elsewhere:') && !row.unitsUnder));
   return {
     undecided: areas.filter(row => row.status === 'undecided').map(row => ({ id: row.id, label: row.label, scale: row.scale, unitsUnder: row.unitsUnder })),
     emptySettings: tree.filter(row => row.status === 'setting' && row.unitsUnder === 0).map(row => ({ id: row.id, label: row.label })),
