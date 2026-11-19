@@ -104,6 +104,8 @@ export function createMind(self, models, options = {}) {
       recalls.length ? `What comes to mind and you may bring up:\n${recalls.join('\n')}` : '',
       `Conversation so far:\n${state.history.slice(-o.history).map((h) => `${h.from}: ${h.text}`).join('\n') || '(none)'}`,
       input ? `${input.from}: ${input.text}` : '(No new message. You write first.)',
+      // Said last, where it is followed: the memories above are in English whatever the book's language.
+      'Write in the language the stranger wrote in, whatever language your own world speaks.',
       `${self.name}:`,
     ].filter(Boolean).join('\n\n');
     return String(await models.speak({ system, prompt })).trim();
