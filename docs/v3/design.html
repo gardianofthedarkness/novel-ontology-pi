@@ -2921,7 +2921,7 @@ until story time is honest (<a href="#story-time">§5.4</a>); a range run starts
 <p><span class="st built">Built</span>, tested with mock models only, not yet run live; the departments are the user's, the details below are a first cut. The user, 2026-11-19: a real person has
 several departments running at once, and a brain stem that decides which of their urges surface as action (speech,
 movement) and which sink until the next turn. Code: <code>engine/persona/mind.mjs</code> (the mind, any book),
-<code>engine/persona/phone.mjs</code> (a terminal chat), tests in <code>mind.test.mjs</code>.</p>
+<code>engine/persona/phone.mjs</code> (a terminal chat), <code>web.mjs</code> (the same call as a page for a phone, on this computer only, under a random secret path, reached through a tunnel), <code>session.mjs</code> (the call both share), tests in <code>mind.test.mjs</code>.</p>
 <p>The first body is a phone: the character holds a phone from a parallel universe, and strangers from there message
 them. A message (or time passing, with no message) is a turn. Every department reads the same snapshot at once and
 proposes urges; they see each other only through what the last turn left (what is on their mind, the mood).</p>
