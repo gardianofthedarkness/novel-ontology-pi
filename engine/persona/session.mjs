@@ -12,6 +12,8 @@ import { storedKeys } from '../volume/credentials.mjs';
 import { universeGraph, storyPoint, storyDay, findPerson, TIME_WEIGHTS } from '../memory/universe.mjs';
 import { characterCard, presentCard, cardText, presentText } from './cards.mjs';
 import { createMind } from './mind.mjs';
+import { worldOf, nextSceneOf } from './world.mjs';
+import { createGod, glimpseText } from './god.mjs';
 
 const repo = resolve(dirname(fileURLToPath(import.meta.url)), '..', '..');
 const load = (rel) => import(pathToFileURL(join(repo, rel)).href);
@@ -53,16 +55,20 @@ async function modelsOf(mock) {
 
 /** The world's graph and the models, opened once and shared by every person a server hosts. */
 export async function openUniverse({ library, mock }) {
-  return { u: await universeGraph(library), models: await modelsOf(mock), mock };
+  const u = await universeGraph(library);
+  return { u, world: await worldOf(u), models: await modelsOf(mock), mock };
 }
 
 export async function openWorld({ library, person, at: point, mock }, shared = null) {
   const { recall, indexMemories, DEFAULT_RECALL_WEIGHTS } = await load('dist/src/ground/ontology/memory.js');
-  const { u, models } = shared ?? await openUniverse({ library, mock }), run = u.run;
+  const { u, world, models } = shared ?? await openUniverse({ library, mock }), run = u.run;
   const who = findPerson(u, person), holderId = who.id, at = storyPoint(u.books, point), day = storyDay(u.books, at);
   const weights = { ...DEFAULT_RECALL_WEIGHTS, ...TIME_WEIGHTS };
-  const card = await characterCard(u, holderId, at, point, models.generate), present = await presentCard(u, holderId, at, point, models.generate);
-  const self = { id: holderId, name: who.name, card: cardText({ name: who.name, ...card }), present: presentText(present) };
+  const god = createGod(u, world, models.act);
+  // The present card is written from the person's last memories and from what the world shows at that point.
+  const presentAt = async (order, key) => presentText(await presentCard(u, holderId, order, key, models.generate, glimpseText(world, god.glimpse({ focus: holderId, order }))));
+  const card = await characterCard(u, holderId, at, point, models.generate), present = await presentAt(at, point);
+  const self = { id: holderId, name: who.name, card: cardText({ name: who.name, ...card }), present };
   const bookAt = (order) => u.books.findLast((b) => order > b.offset)?.book ?? null;
   const logs = join(u.library, 'universe', 'phone');
   await mkdir(logs, { recursive: true });
@@ -70,10 +76,12 @@ export async function openWorld({ library, person, at: point, mock }, shared = n
   /** A call of its own: its own mind, conversation and branch. */
   function newCall() {
     const branch = `phone-${new Date().toISOString().replace(/\D/g, '').slice(0, 14)}-${randomBytes(3).toString('hex')}`;
-    let now = 0;
-    const lineage = () => [['canon', at], [branch, at + now]];
-    const time = () => day + now / 1440; // a call's turns are a minute apart in story time
-    const mind = createMind(self, {
+    // The call's own point: Wait moves it to the person's next scene in the books, and the world goes on there.
+    let now = 0, order = at, today = day;
+    const own = { ...self };
+    const lineage = () => [['canon', order], [branch, order + now]];
+    const time = () => today + now / 1440; // a call's turns are a minute apart in story time
+    const mind = createMind(own, {
       decide: models.decide, act: models.act, cuesOf: u.cuesOf, nameOf: u.nameOf,
       // Every part of the score comes along, for the trace: when, how known, retention, importance, cue, tag, the book.
       recall: async ({ cues, mood }) => (await recall(run, { holderId, lineage: lineage(), cues, mood, k: 8, weights, nowTime: time() })).map((r) => ({ ...r, book: bookAt(r.at) })),
@@ -82,12 +90,21 @@ export async function openWorld({ library, person, at: point, mock }, shared = n
     let queue = Promise.resolve();
     async function turn(input) {
       now++;
+      let moved = null;
+      if (!input) {
+        const next = nextSceneOf(world, holderId, order);
+        if (next) {
+          order = next.order; today = storyDay(u.books, order);
+          own.present = await presentAt(order, `${next.book}:${next.order - u.books.find((b) => b.book === next.book).offset}`);
+          moved = { book: next.book, scene: next.id };
+        }
+      }
       const t = Date.now(), out = await mind.turn(input);
-      const result = { ...out, ms: Date.now() - t, spend: { ...models.spend } };
+      const result = { ...out, ms: Date.now() - t, spend: { ...models.spend }, world: { ...god.glimpse({ focus: holderId, order }), moved } };
       await appendFile(log, JSON.stringify({ person: holderId, at: point, input, ...result }) + '\n');
       if (input || out.said) {
         await indexMemories(run, [{
-          id: `${branch}-${out.turn}`, holderId, branchId: branch, kind: 'episode', source: 'did', atOrder: at + now, learnedOrder: at + now, learnedTime: time(),
+          id: `${branch}-${out.turn}`, holderId, branchId: branch, kind: 'episode', source: 'did', atOrder: order + now, learnedOrder: order + now, learnedTime: time(),
           summaryEn: `On the phone: ${input ? `the stranger said "${input.text}"` : 'a silence'}${out.said ? `; I said "${out.said}"` : '; I said nothing'}`,
           arousal: out.mood.arousal, valence: out.mood.valence, relevance: 0.3, central: 1, confidence: 1, cues: input ? u.cuesOf(input.text) : [], evidence: [],
         }]);
@@ -96,7 +113,9 @@ export async function openWorld({ library, person, at: point, mock }, shared = n
     }
     /** One turn: input { from, text } or null (time passes). Turns run one at a time, in the order they come. */
     const send = (input) => (queue = queue.then(() => turn(input), () => turn(input)));
-    return { branch, send };
+    /** The world agent, asked by the visitor: it knows this call's now and the books' future. */
+    const ask = (question) => god.ask(question, { focus: holderId, order });
+    return { branch, send, ask, glimpse: () => god.glimpse({ focus: holderId, order }) };
   }
   return { self, mock, at: point, cards: { character: card, present }, newCall, close: () => (shared ? null : u.close()) };
 }

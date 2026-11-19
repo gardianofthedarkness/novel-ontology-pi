@@ -82,7 +82,7 @@ export async function characterCard(u, personId, at, point, generate) {
 }
 
 /** The present card: where the person is at a story order. */
-export async function presentCard(u, personId, at, point, generate) {
+export async function presentCard(u, personId, at, point, generate, seen = '') {
   return cached(u, `${personId}@${point}.present`, async () => {
     const mems = u.memories.filter((m) => m.holderId === personId && m.learnedOrder <= at).slice(-25);
     const b = u.books.findLast((x) => at > x.offset), sceneIndex = at - b.offset - 1;
@@ -91,9 +91,10 @@ export async function presentCard(u, personId, at, point, generate) {
     const prompt = [
       `The person: ${u.nameOf(personId)}.`,
       `The moment: ${b.book}, scene ${sceneIndex + 1} of ${b.scenes}; the story's clock there: ${b.nodes?.[sceneIndex] ?? 'unknown'} (t:year:month-day:time).`,
+      seen ? `What the world shows at this moment (where they are, who is there, what happens):\n${seen}` : '',
       `People their last memories name: ${around.join(', ') || '(none)'}.`,
       `Their last memories before this moment, in order (their own view):\n${mems.map((m) => `- ${clip(m.summaryEn, 140)}`).join('\n')}`,
-    ].join('\n\n');
+    ].filter(Boolean).join('\n\n');
     return { personId, point, made: new Date().toISOString(), ...JSON.parse(await generate({ system: PRESENT_SYSTEM, prompt })) };
   });
 }

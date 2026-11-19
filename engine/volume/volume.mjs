@@ -192,6 +192,9 @@ export async function execute(novelDir, ids, { log = () => {} } = {}) {
     await save(at, state);
     try {
       if (step.workflow) {
+        // The agent's workflow runs in this process and starts its agent from this process's environment: the step's
+        // environment (the stored keys, the pinned models) is this process's for it, as a command's would be.
+        for (const [key, value] of Object.entries(stepEnvironment())) if (process.env[key] === undefined) process.env[key] = value;
         const { runWorkflow } = await import('../workflows/workflows.mjs');
         const out = await open(join(at.logs, `${id}.out`), 'w');
         const result = await runWorkflow(step.workflow, at.novel, { log: line => { void out.write(`${new Date().toISOString()} ${line}\n`); log(line); } });

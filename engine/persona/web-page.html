@@ -148,6 +148,22 @@ body.debug.wide #console { display: flex; flex-direction: column; gap: 12px; pos
 .warnline { color: var(--warn); }
 .speaker pre { white-space: pre-wrap; margin: 4px 0 0; max-height: 220px; overflow: auto; color: var(--dim); background: rgba(0, 0, 0, 0.3); padding: 8px; border-radius: 8px; }
 
+/* The world: a line under each turn (where, when, with whom), a small map of the place, and the world agent's panel. */
+.worldline { align-self: stretch; font: 11.5px/1.5 var(--mono); color: var(--warn); border-left: 2px solid rgba(255, 179, 92, 0.5); padding: 2px 0 2px 10px; }
+.worldline span { color: var(--dim); display: block; }
+.minimap { align-self: stretch; height: 120px; border: 1px solid rgba(150, 130, 255, 0.15); border-radius: 10px; background: rgba(0, 0, 0, 0.3); }
+.minimap text { font: 10px var(--mono); fill: var(--dim); }
+.world-toggle { right: 92px; }
+#worldpanel { display: none; position: absolute; inset: auto 0 0 0; max-height: 70%; z-index: 4; flex-direction: column; background: rgba(10, 8, 20, 0.97);
+  border-top: 1px solid var(--edge); border-radius: 18px 18px 0 0; padding: 12px 16px calc(12px + env(safe-area-inset-bottom)); gap: 8px; }
+#worldpanel.open { display: flex; }
+#worldpanel h4 { margin: 0; font: 11px var(--mono); letter-spacing: 0.2em; text-transform: uppercase; color: var(--warn); display: flex; justify-content: space-between; }
+#worldpanel h4 button { height: 22px; min-width: 0; padding: 0 8px; font: 11px var(--mono); background: transparent; color: var(--dim); border: 1px solid var(--edge); box-shadow: none; }
+#wlog { overflow-y: auto; display: flex; flex-direction: column; gap: 8px; font-size: 14px; }
+#wlog .q { align-self: flex-end; color: var(--signal); font: 12px var(--mono); }
+#wlog .a { white-space: pre-wrap; color: var(--ink); border-left: 2px solid var(--warn); padding-left: 10px; }
+#wform { display: flex; gap: 8px; padding: 0; border: 0; }
+
 @keyframes turn { to { rotate: 360deg; } }
 @keyframes breathe { 50% { scale: 1.06; opacity: 0.6; } }
 @keyframes drift { to { translate: 340px 340px; } }
@@ -177,6 +193,7 @@ body.debug.wide #console { display: flex; flex-direction: column; gap: 12px; pos
     <span><span class="clock" id="clock">--:--</span> <span class="battery" title="It never runs down">∞ ▮▮▮</span></span>
   </div>
   <header>
+    <button type="button" class="dbg-toggle world-toggle" id="wtoggle" title="Ask the world: it knows where everyone is, and what will happen">world</button>
     <button type="button" class="dbg-toggle" id="dbg" aria-pressed="false" title="Show what every faculty and the brain stem did each turn">debug</button>
     <div class="label">Unknown line · origin outside this world</div>
     <div class="who" id="who"></div>
@@ -184,6 +201,11 @@ body.debug.wide #console { display: flex; flex-direction: column; gap: 12px; pos
   </header>
   <section id="log" aria-live="polite">
     <div class="intro">This handset is not from here.<br>Whoever holds it on the other side can read what you send.<br>Be kind. Be strange. Or wait, and listen to the static.</div>
+  </section>
+  <section id="worldpanel" aria-label="The world">
+    <h4>The world <button type="button" id="wclose">close</button></h4>
+    <div id="wlog"><div class="a">I am the world this phone reaches into. I know where everyone is, and what will come. Ask.</div></div>
+    <form id="wform"><input id="wq" autocomplete="off" placeholder="Ask the world…" aria-label="Ask the world"><button>Ask</button></form>
   </section>
   <form id="f">
     <input id="t" autocomplete="off" placeholder="Send across…" aria-label="Message">
@@ -246,6 +268,7 @@ async function turn(text) {
     if (o.moved) note('[ ' + o.moved + ' ]');
     if (!o.said && !o.moved) note('… only static …');
     inside(o);
+    if (o.world) showWorld(o.world);
     if (o.trace) showTrace(o, text);
   } catch (e) { waiting.remove(); note('signal lost: ' + e.message, true); }
   finally { buttons.forEach((b) => (b.disabled = false)); input.focus(); }
@@ -335,6 +358,42 @@ function showTrace(o, text) {
   if (wideQuery.matches) $('console').firstElementChild.after(box);
   else { log.append(box); scroll(); }
 }
+
+// ---- The world: where, when, with whom, under each turn; a small map; the world agent's panel ------------------------
+function showWorld(w) {
+  if (w.moved) note('— time passes: the story moves on —');
+  const line = el('div', 'worldline', '📍 ' + (w.where && w.where.length ? w.where.slice(0, 3).join(' < ') : (w.text || 'a place not built yet')) + (w.when ? ' · ' + w.when : ''));
+  if (w.with && w.with.length) line.append(el('span', null, 'with ' + w.with.join(', ')));
+  if (w.happens && w.happens.length) line.append(el('span', null, w.happens[0].slice(0, 120)));
+  log.append(line);
+  if (w.map && w.map.people && w.map.people.length) log.append(miniMap(w.map));
+  scroll();
+}
+function miniMap(m) {
+  const NS = 'http://www.w3.org/2000/svg', svg = document.createElementNS(NS, 'svg'); svg.setAttribute('class', 'minimap');
+  const pts = m.people.map((p) => p.at), xs = pts.map((p) => p[0]), zs = pts.map((p) => p[1]);
+  if (m.box) { xs.push(m.box[0] - m.box[2] / 2, m.box[0] + m.box[2] / 2); zs.push(m.box[1] - m.box[3] / 2, m.box[1] + m.box[3] / 2); }
+  const pad = 6, x0 = Math.min(...xs) - pad, x1 = Math.max(...xs) + pad, z0 = Math.min(...zs) - pad, z1 = Math.max(...zs) + pad;
+  svg.setAttribute('viewBox', x0 + ' ' + z0 + ' ' + (x1 - x0) + ' ' + (z1 - z0)); svg.setAttribute('preserveAspectRatio', 'xMidYMid meet');
+  const r = (x1 - x0) / 60, add = (tag, attrs) => { const e = document.createElementNS(NS, tag); for (const k in attrs) e.setAttribute(k, attrs[k]); svg.append(e); return e; };
+  if (m.box) add('rect', { x: m.box[0] - m.box[2] / 2, y: m.box[1] - m.box[3] / 2, width: m.box[2], height: m.box[3], fill: 'rgba(123,92,255,0.12)', stroke: 'rgba(150,130,255,0.5)', 'stroke-width': r / 3 });
+  for (const p of m.people) {
+    add('circle', { cx: p.at[0], cy: p.at[1], r: p.me ? r * 1.6 : r, fill: p.me ? '#ffb35c' : '#63f2d6' });
+    const label = add('text', { x: p.at[0] + r * 2, y: p.at[1] + r / 2, 'font-size': r * 3 }); label.textContent = p.name + (p.floor != null ? ' · F' + p.floor : '');
+  }
+  return svg;
+}
+$('wtoggle').onclick = () => $('worldpanel').classList.toggle('open');
+$('wclose').onclick = () => $('worldpanel').classList.remove('open');
+$('wform').onsubmit = async (e) => {
+  e.preventDefault(); const q = $('wq').value.trim(); if (!q) return; $('wq').value = '';
+  const wlog = $('wlog'); wlog.append(el('div', 'q', q)); const wait = el('div', 'a', '…'); wlog.append(wait); wlog.scrollTop = wlog.scrollHeight;
+  try { const r = await fetch('ask', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ question: q, call: CALL }) }); const o = await r.json(); wait.textContent = r.ok ? o.answer : 'the world is silent: ' + (o.error || r.status); }
+  catch (err) { wait.textContent = 'the world is silent: ' + err.message; }
+  wlog.scrollTop = wlog.scrollHeight;
+};
+// Where they are when the page opens.
+fetch('glimpse', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ call: CALL }) }).then((r) => r.json()).then((o) => o.world && showWorld(o.world)).catch(() => {});
 </script>
 </body>
 </html>
