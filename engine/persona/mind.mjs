@@ -9,10 +9,15 @@
 //   action        what the body does (Jev: a movement from a fixed set)                              -> move urges
 // The brain stem (one Jev call) takes every urge, this turn's and the ones that sank before, and lets through at most
 // one speech and one movement, and the recalls and feelings that go with them. The rest sink: they wait for the next
-// turn, weaker each time, and fade out. Only a surfaced speech costs a text call (the speaker).
-// Departments see each other only through what the last turn left (on their mind, the mood), as in a body, not this turn's.
+// turn, weaker each time, and fade out. Departments see each other only through what the last turn left (on their
+// mind, the mood), as in a body, not this turn's.
+// Every faculty sees the person's two cards (cards.mjs): who they are, and where they are now.
+// A surfaced speech is not a reply written at once: the action faculty acts with tools (the user, 2026-11-19: "give a
+// action tool for action faculty to send reply to the phone ... collect what's happening now first"): look (where they
+// are and what the phone shows), recall (ask their memory about something), send (the only way words reach the phone,
+// refused until they have looked this turn), put away (end without a word). A few steps a turn, the work model.
 
-export const MIND_DEFAULTS = { sink: 0.7, fadeBelow: 0.15, moodKeep: 0.6, recallK: 6, history: 8 };
+export const MIND_DEFAULTS = { sink: 0.7, fadeBelow: 0.15, moodKeep: 0.6, recallK: 6, history: 8, actSteps: 4, inMind: 4 };
 export const STANCES = ['answer', 'ask back', 'tease', 'comfort', 'refuse', 'change the subject', 'say nothing'];
 export const MOVES = ['stay as they are', 'look closely at the phone', 'look around', 'put the phone away', 'walk off'];
 const VALENCE = ['very bad', 'bad', 'a little bad', 'neutral', 'a little good', 'good', 'very good'];
@@ -23,21 +28,23 @@ const clip = (x) => Math.max(0, Math.min(1, x));
 const levelOf = (labels, answer) => { const i = labels.indexOf(String(answer)); return i < 0 ? null : i; };
 
 /**
- * self: { id, name, about }  (who they are, a few lines, from their memories)
- * models: { decide(state, questions) -> answers (Jev), speak({ system, prompt }) -> text (the speaker),
+ * self: { id, name, card, present }  (the character card and the present card as text, cards.mjs)
+ * models: { decide(state, questions) -> answers (Jev), act({ system, prompt }) -> JSON text (one tool call, the work model),
  *           recall({ cues, mood, turn }) -> [{ id, summary, score, ...parts }], cuesOf(text) -> entity ids, nameOf(id)? }
  */
 export function createMind(self, models, options = {}) {
   const o = { ...MIND_DEFAULTS, ...options };
-  const state = { turn: 0, mood: { valence: 0, arousal: 0 }, onMind: [], urges: [], history: [] };
+  const state = { turn: 0, mood: { valence: 0, arousal: 0 }, onMind: [], urges: [], history: [], seen: 0 };
+  const PHONE = 'They hold a phone that reaches a parallel universe; strangers from there can message them.';
 
   const snapshot = (input) => ({
-    who: `${self.name}. ${self.about}`,
-    situation: 'They hold a phone that reaches a parallel universe; strangers from there can message them.',
+    who: self.card,
+    now: self.present,
+    situation: PHONE,
     mood: `${VALENCE[Math.round((state.mood.valence + 1) * 3)]}, ${AROUSAL[Math.round(state.mood.arousal * 4)]}`,
     onTheirMind: state.onMind.map((m) => m.summary),
     conversation: state.history.slice(-o.history).map((h) => `${h.from}: ${h.text}`),
-    now: input ? `A message from ${input.from}: ${input.text}` : 'No new message; time passes.',
+    happening: input ? `A message on the phone from ${input.from}: ${input.text}` : 'No new message; time passes.',
   });
 
   const departments = {
@@ -95,27 +102,61 @@ export function createMind(self, models, options = {}) {
     return surfaced;
   }
 
-  async function speakOut(speech, surfaced, input, trace) {
-    const recalls = [...surfaced].filter((u) => u.kind === 'recall').map((u) => `- ${u.content}`);
+  const TOOLS = {
+    look: 'look: where you are, who is around, and what the phone shows. Args: {}',
+    recall: 'recall: ask your memory about someone or something. Args: {"about": "a name or a few words"}',
+    send: 'send: write on the phone. The only way the stranger hears from you; you must have looked this turn. Args: {"text": "..."}',
+    put_away: 'put_away: end without writing (you can come back to it later). Args: {}',
+  };
+  /** The action faculty: a few tool steps; it must look before it sends. Returns what was sent, or null. */
+  async function act(intent, surfaced, recalled, input, trace) {
+    const bring = [...surfaced].filter((u) => u.kind === 'recall').map((u) => u.content);
     const feeling = [...surfaced].find((u) => u.kind === 'express');
+    const inMind = recalled.filter((r) => !bring.includes(r.summary)).slice(0, o.inMind).map((r) => r.summary);
     const system = [
-      `You are ${self.name}. ${self.about}`,
-      'You found a phone that reaches a parallel universe; the person writing to you is from there. You know only your own life.',
-      'Reply as yourself, in the language of the message, in one to three short lines, as in a chat. No narration, no stage directions.',
-    ].join(' ');
-    const prompt = [
-      `What you want to do: ${speech.content}.`,
-      feeling ? `What shows in how you say it: ${feeling.content}.` : 'Your feelings stay hidden.',
-      recalls.length ? `What comes to mind and you may bring up:\n${recalls.join('\n')}` : '',
-      `Conversation so far:\n${state.history.slice(-o.history).map((h) => `${h.from}: ${h.text}`).join('\n') || '(none)'}`,
-      input ? `${input.from}: ${input.text}` : '(No new message. You write first.)',
-      // Said last, where it is followed: the memories above are in English whatever the book's language.
-      'Write in the language the stranger wrote in, whatever language your own world speaks.',
-      `${self.name}:`,
-    ].filter(Boolean).join('\n\n');
-    const t = Date.now(), text = String(await models.speak({ system, prompt })).trim();
-    Object.assign(trace, { system, prompt, ms: Date.now() - t });
-    return text;
+      `You are ${self.name}. Act as yourself from this moment, in your own voice.`,
+      `Who you are:\n${self.card}`,
+      `Where you are now:\n${self.present}`,
+      'You hold a phone that reaches a parallel universe; a stranger from there may be writing to you. You know only your own life and world.',
+      `Each step, call one tool. Answer as JSON only: {"thought": "a few words", "tool": "look|recall|send|put_away", "args": {}}.\nTools:\n${Object.values(TOOLS).join('\n')}`,
+      'A message on the phone is short, one to three lines, as in a chat; no narration or stage directions. Write it in the language the stranger wrote in.',
+    ].join('\n\n');
+    const steps = [];
+    let looked = false, sent = null;
+    for (let n = 0; n < o.actSteps && sent === null; n++) {
+      const prompt = [
+        `What you want to do: ${intent}.`,
+        feeling ? `What shows in how you act: ${feeling.content}.` : 'Your feelings stay hidden.',
+        bring.length ? `What comes to mind and you want to bring up:\n${bring.map((s) => `- ${s}`).join('\n')}` : '',
+        inMind.length ? `Also in your mind (you need not mention it):\n${inMind.map((s) => `- ${s}`).join('\n')}` : '',
+        input ? 'Something just came on the phone.' : 'Nothing new came on the phone; time has passed.',
+        steps.length ? `Your steps so far this turn:\n${steps.map((s) => `${s.tool}(${JSON.stringify(s.args)}) -> ${s.result}`).join('\n')}` : 'No steps yet this turn.',
+        'Your next step:',
+      ].filter(Boolean).join('\n\n');
+      const t = Date.now();
+      let call;
+      try { call = JSON.parse(String(await models.act({ system, prompt }))); } catch { call = { tool: 'put_away', args: {}, thought: '(an answer that was not a tool call)' }; }
+      const tool = String(call.tool ?? ''), args = call.args ?? {};
+      let result;
+      if (tool === 'look') {
+        const fresh = state.history.slice(state.seen).some((h) => h.from !== self.name);
+        state.seen = state.history.length; looked = true;
+        result = `${self.present}\nOn the phone (last messages):\n${state.history.slice(-o.history).map((h) => `${h.from}: ${h.text}`).join('\n') || '(nothing yet)'}${fresh ? '' : '\n(nothing new)'}`;
+      } else if (tool === 'recall') {
+        const rows = await models.recall({ cues: models.cuesOf(String(args.about ?? '')), mood: state.mood.valence, turn: state.turn });
+        result = rows.slice(0, 5).map((r) => `- ${r.summary}`).join('\n') || '(nothing comes back)';
+      } else if (tool === 'send') {
+        const text = String(args.text ?? '').trim();
+        if (!looked) result = 'Refused: look first, to see where you are and what the phone shows.';
+        else if (!text) result = 'Refused: nothing to send.';
+        else { sent = text; result = 'sent'; }
+      } else if (tool === 'put_away') result = 'You put the phone away.';
+      else result = `No tool ${tool}.`;
+      steps.push({ tool, args, thought: call.thought, result, ms: Date.now() - t });
+      if (tool === 'put_away') break;
+    }
+    Object.assign(trace, { system, steps, sent });
+    return sent;
   }
 
   /** One turn. input: { from, text } or null (time passes). Returns what surfaced, what sank, and what was said and done. */
@@ -124,7 +165,7 @@ export function createMind(self, models, options = {}) {
     if (input) state.history.push(input);
     const view = snapshot(input);
     // The trace: every department's questions and answers, what it proposed and how long it took; the stem's choices.
-    const trace = { view, departments: {}, stem: { calls: [] }, speaker: null };
+    const trace = { view, departments: {}, stem: { calls: [] }, action: null };
     const asker = (record) => async (s, questions) => {
       const t = Date.now(), answers = await models.decide(s, questions);
       record.calls.push({ ms: Date.now() - t, asked: questions.map(({ key, primitive, instructions, options }) => ({ key, primitive, instructions, options })),
@@ -141,7 +182,8 @@ export function createMind(self, models, options = {}) {
     const t = Date.now(), surfaced = await stem(view, urges, asker(trace.stem), trace.stem);
     trace.stem.ms = Date.now() - t;
     const speech = [...surfaced].find((u) => u.kind === 'speak'), move = [...surfaced].find((u) => u.kind === 'move');
-    const said = speech ? await speakOut(speech, surfaced, input, (trace.speaker = {})) : null;
+    const recalled = trace.departments.memory?.recalled ?? [];
+    const said = speech ? await act(speech.content, surfaced, recalled, input, (trace.action = {})) : null;
     if (said) state.history.push({ from: self.name, text: said });
     state.onMind = fresh.filter((u) => u.kind === 'recall').slice(0, 3).map((u) => ({ summary: u.content, id: u.memoryId }));
     // What did not surface sinks: weaker each turn, gone below the threshold. A recall or feeling that surfaced is spent.

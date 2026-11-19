@@ -49,6 +49,13 @@ export function sceneMinutes(timeYaml, sceneIds) {
   return sceneIds.map((id) => byScene.get(id) ?? null);
 }
 
+/** Each scene's place on the story's clock as the reading wrote it (t:year:month-day:time), or null. */
+export function sceneNodes(timeYaml, sceneIds) {
+  const scenesPart = timeYaml.slice(timeYaml.indexOf('\nscenes:'), timeYaml.indexOf('\ntree:')), byScene = new Map();
+  for (const block of scenesPart.split(/\n\s*- scene: /).slice(1)) { const id = block.match(/^(\S+)/)?.[1], node = block.match(/\n\s*node: (\S+)/)?.[1]; byScene.set(id, node && node !== 'null' ? node : null); }
+  return sceneIds.map((id) => byScene.get(id) ?? null);
+}
+
 /** Minutes per scene made whole: a gap keeps the time before it (the first ones take the first known), never going back. */
 export function fillTimes(raw, notBefore = 0) {
   const first = raw.find((x) => x !== null) ?? notBefore, out = [];
@@ -67,11 +74,12 @@ export async function booksOf(libraryDir) {
     if (!existsSync(dataFile)) break; // a book not read yet: the order stops here
     const ids = JSON.parse(await readFile(dataFile, 'utf8')).scenes.map((s) => s.id), scenes = ids.length;
     const pt = join(dir, 'reading', 'paratext.json'), tf = join(dir, 'reading', 'time.yaml');
-    const raw = existsSync(tf) ? sceneMinutes(await readFile(tf, 'utf8'), ids) : ids.map(() => null);
+    const timeYaml = existsSync(tf) ? await readFile(tf, 'utf8') : null;
+    const raw = timeYaml ? sceneMinutes(timeYaml, ids) : ids.map(() => null), nodes = timeYaml ? sceneNodes(timeYaml, ids) : ids.map(() => null);
     // A book whose own clock starts before the last one ended is moved after it (one story, told in order).
     const firstKnown = raw.find((x) => x !== null), shift = firstKnown !== undefined && firstKnown < until ? until - firstKnown : 0;
     const minutes = fillTimes(raw.map((x) => (x === null ? null : x + shift)), until);
-    out.push({ book, dir, scenes, offset, days: minutes.map((m) => m / DAY), paratext: new Set(existsSync(pt) ? JSON.parse(await readFile(pt, 'utf8')).paratext : []) });
+    out.push({ book, dir, scenes, offset, ids, nodes, days: minutes.map((m) => m / DAY), paratext: new Set(existsSync(pt) ? JSON.parse(await readFile(pt, 'utf8')).paratext : []) });
     offset += scenes; until = minutes.at(-1) ?? until;
   }
   return out;
@@ -119,7 +127,7 @@ export async function universeMemories(libraryDir) {
   }
   const nameOf = (p) => [...(called.get(p.id) ?? new Map()).entries()].sort((a, b) => b[1] - a[1] || a[0].length - b[0].length)[0]?.[0] ?? p.label;
   const people = cast.persons.map((p) => ({ id: p.id, name: nameOf(p), forms: p.forms }));
-  return { library, books, people, things, memories, skipped, files };
+  return { library, books, cast, people, things, memories, skipped, files };
 }
 
 /** The graph for the world's memories as they are now: built once per set of memory files, then reused. */

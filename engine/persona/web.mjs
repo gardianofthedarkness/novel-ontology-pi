@@ -12,14 +12,20 @@ import { randomBytes } from 'node:crypto';
 import { readFile } from 'node:fs/promises';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { openPhone, phoneArgs } from './session.mjs';
+import { openWorld, phoneArgs } from './session.mjs';
 
 const options = phoneArgs(process.argv.slice(2));
 const port = Number(options.opt('port') ?? 8795);
 const secret = /^[0-9a-f]{16,64}$/.test(options.opt('secret') ?? '') ? options.opt('secret') : randomBytes(12).toString('hex');
 const base = `/c/${secret}/`;
 const template = await readFile(join(dirname(fileURLToPath(import.meta.url)), 'web-page.html'), 'utf8');
-const phone = await openPhone(options);
+const phone = await openWorld(options);
+// One call per visitor: the page makes a call id when it loads and sends it with each turn; a new load is a new call.
+const calls = new Map(), CALLS_KEPT = 50;
+const callOf = (id) => {
+  if (!calls.has(id)) { calls.set(id, phone.newCall()); if (calls.size > CALLS_KEPT) calls.delete(calls.keys().next().value); }
+  return calls.get(id);
+};
 // What the page is told: who answers, from which point of their story, and whether the link is live. "<" is escaped so
 // nothing in a name can close the script.
 const boot = JSON.stringify({ name: phone.self.name, worldLine: options.at, mode: phone.mock ? 'mock' : 'live' }).replace(/</g, '\\u003c');
@@ -32,9 +38,10 @@ const server = createServer(async (req, res) => {
     if (req.method === 'POST' && req.url === `${base}turn`) {
       let body = '';
       for await (const chunk of req) { body += chunk; if (body.length > 4000) return send(413, 'application/json', '{"error":"too long"}'); }
-      const text = JSON.parse(body || '{}').text;
+      const { text, call } = JSON.parse(body || '{}');
+      if (typeof call !== 'string' || !/^[0-9a-f]{16,40}$/.test(call)) return send(400, 'application/json', '{"error":"no call"}');
       const input = typeof text === 'string' && text.trim() ? { from: 'stranger', text: text.trim().slice(0, 1000) } : null;
-      const out = await phone.send(input);
+      const out = await callOf(call).send(input);
       return send(200, 'application/json', JSON.stringify(out));
     }
     send(404, 'text/plain', 'not found');

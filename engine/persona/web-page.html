@@ -195,6 +195,8 @@ body.debug.wide #console { display: flex; flex-direction: column; gap: 12px; pos
 
 <script>
 const BOOT = /*BOOT*/{};
+// This page's own call: a new one each time the page loads.
+const CALL = [...crypto.getRandomValues(new Uint8Array(12))].map((b) => b.toString(16).padStart(2, '0')).join('');
 const $ = (id) => document.getElementById(id);
 const log = $('log'), input = $('t'), buttons = [...document.querySelectorAll('button')];
 $('who').textContent = BOOT.name;
@@ -237,7 +239,7 @@ async function turn(text) {
   buttons.forEach((b) => (b.disabled = true));
   const waiting = document.createElement('div'); waiting.className = 'receiving'; waiting.textContent = 'receiving '; log.append(waiting); scroll();
   try {
-    const r = await fetch('turn', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ text }) });
+    const r = await fetch('turn', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ text, call: CALL }) });
     const o = await r.json(); waiting.remove();
     if (!r.ok) throw new Error(o.error || String(r.status));
     if (o.said) { bubble('them', o.said, 'from the other side · ' + stampOf()); $('phone').classList.add('glitch'); setTimeout(() => $('phone').classList.remove('glitch'), 400); }
@@ -321,11 +323,14 @@ function showTrace(o, text) {
   if (d.memory) box.append(memoryBlock(d.memory));
   for (const name of ['emotion', 'subjectivity', 'action']) if (d[name]) box.append(facultyBlock(name, d[name]));
   box.append(stemBlock(tr.stem));
-  if (tr.speaker) {
-    const s = el('div', 'fac speaker'), det = el('details');
-    s.append(el('b', null, 'speaker'), el('span', 'ms', tr.speaker.ms + ' ms'));
-    det.append(el('summary', null, 'prompt sent'), el('pre', null, tr.speaker.system + '\n\n' + tr.speaker.prompt)); s.append(det); box.append(s);
-  } else box.append(el('div', 'fac q', 'speaker: not called (no speech surfaced)'));
+  if (tr.action) {
+    const s = el('div', 'fac speaker'); s.append(el('b', null, 'action'), el('span', 'ms', tr.action.steps.reduce((a, x) => a + x.ms, 0) + ' ms'));
+    for (const st of tr.action.steps) {
+      const line = el('div', 'q'); line.append(el('i', null, st.tool + ' '), el('span', 'ans', JSON.stringify(st.args)), el('span', null, (st.thought ? '  · ' + st.thought : '')));
+      const det = el('details'); det.append(el('summary', null, 'result'), el('pre', null, String(st.result))); s.append(line, det);
+    }
+    const sys = el('details'); sys.append(el('summary', null, 'what the action faculty is told'), el('pre', null, tr.action.system)); s.append(sys); box.append(s);
+  } else box.append(el('div', 'fac q', 'action: not run (no speech surfaced)'));
   if (!debug) return;
   if (wideQuery.matches) $('console').firstElementChild.after(box);
   else { log.append(box); scroll(); }

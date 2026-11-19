@@ -3,8 +3,8 @@ import assert from 'node:assert/strict';
 import { createMind } from './mind.mjs';
 
 // Made-up person and models; nothing from any book, no spend.
-const self = { id: 'a', name: 'A', about: 'A student.' };
-function models({ table = {}, delay = 0, recalls = [] } = {}) {
+const self = { id: 'a', name: 'A', card: 'A student.', present: 'Where: a classroom. When: noon.' };
+function models({ table = {}, delay = 0, recalls = [], steps = null } = {}) {
   const log = { decide: [], spoke: [], started: 0, running: 0, maxRunning: 0 };
   const decide = async (state, questions) => {
     log.running++; log.maxRunning = Math.max(log.maxRunning, log.running);
@@ -18,7 +18,12 @@ function models({ table = {}, delay = 0, recalls = [] } = {}) {
   return {
     log,
     decide,
-    speak: async ({ prompt }) => { log.spoke.push(prompt); return 'hello'; },
+    // The action faculty: looks, then sends (or a given list of tool calls, one per step).
+    act: async ({ system, prompt }) => {
+      log.spoke.push(`${system}\n${prompt}`);
+      if (steps) return JSON.stringify(steps.shift() ?? { tool: 'put_away', args: {} });
+      return JSON.stringify(/No steps yet/.test(prompt) ? { tool: 'look', args: {} } : { tool: 'send', args: { text: 'hello' } });
+    },
     recall: async () => recalls,
     cuesOf: () => [],
   };
@@ -35,25 +40,27 @@ test('the brain stem lets one speech through and the speaker is called only then
   const m = models({ table: { 'subject.stance': 'answer', 'subject.matters': 1, 'stem.speak': first, 'emotion.arousal': 'stirred', 'emotion.valence': 'bad' } });
   const out = await createMind(self, m).turn({ from: 'B', text: 'hi' });
   assert.equal(out.said, 'hello');
-  assert.equal(m.log.spoke.length, 1);
+  assert.equal(m.log.spoke.length, 2, 'two steps: look, then send');
   assert.match(m.log.spoke[0], /What you want to do: answer/);
+  assert.deepEqual(out.trace.action.steps.map((s) => s.tool), ['look', 'send']);
+  assert.match(out.trace.action.steps[0].result, /a classroom[\s\S]*B: hi/, 'looking shows where they are and the phone');
   assert.ok(out.sank.some((u) => u.kind === 'express'), 'the feeling did not come out: it sank');
   // The trace keeps every department's questions and answers and the stem's choice of each urge.
   assert.deepEqual(Object.keys(out.trace.departments).sort(), ['action', 'emotion', 'memory', 'subjectivity']);
   assert.equal(out.trace.departments.emotion.calls[0].answers.find((a) => a.key === 'emotion.arousal').value, 'stirred');
   assert.equal(out.trace.stem.urges.length, out.trace.stem.surfaced.length);
-  assert.ok(out.trace.speaker.prompt.includes('answer'));
+  assert.ok(out.trace.action.system.includes('A student.') && out.trace.action.system.includes('a classroom'), 'the cards are what it acts from');
 
   const quiet = models({ table: { 'subject.stance': 'answer' } }); // the stem answers "stay silent"
   const q = await createMind(self, quiet).turn({ from: 'B', text: 'hi' });
   assert.equal(q.said, null);
-  assert.equal(quiet.log.spoke.length, 0, 'no speech surfaced, no text call');
+  assert.equal(quiet.log.spoke.length, 0, 'no speech surfaced, no action');
 });
 
 test('what sinks waits, weaker, and can surface on a later turn or fade', async () => {
   let open = false;
   const m = models({ table: {
-    'subject.stance': (q, s) => (s.now.startsWith('A message') ? 'comfort' : 'say nothing'),
+    'subject.stance': (q, s) => (s.happening.startsWith('A message') ? 'comfort' : 'say nothing'),
     'subject.matters': 1,
     'stem.speak': (q) => (open ? q.options.find((o) => /waiting 1 turn/.test(o)) : 'stay silent'),
   } });
@@ -66,9 +73,9 @@ test('what sinks waits, weaker, and can surface on a later turn or fade', async 
   open = true;
   const t2 = await mind.turn(null); // time passes, no message: the urge from before comes out
   assert.equal(t2.said, 'hello');
-  assert.match(m.log.spoke[0], /comfort[\s\S]*You write first/);
+  assert.match(m.log.spoke[0], /comfort[\s\S]*Nothing new came on the phone/);
 
-  const fade = createMind(self, models({ table: { 'subject.stance': (q, s) => (s.now.startsWith('A message') ? 'tease' : 'say nothing') } }));
+  const fade = createMind(self, models({ table: { 'subject.stance': (q, s) => (s.happening.startsWith('A message') ? 'tease' : 'say nothing') } }));
   let left = (await fade.turn({ from: 'B', text: 'x' })).sank.filter((u) => u.kind === 'speak').length;
   for (let i = 0; i < 6 && left; i++) left = (await fade.turn(null)).sank.filter((u) => u.kind === 'speak').length;
   assert.equal(left, 0, 'an urge never acted on fades out');
@@ -82,6 +89,20 @@ test('recalls go with the speech when they surface, and stay on the mind for the
   const mind = createMind(self, m);
   await mind.turn({ from: 'B', text: 'remember the bridge?' });
   assert.match(m.log.spoke[0], /the fight on the bridge/);
-  assert.doesNotMatch(m.log.spoke[0], /a quiet lunch/, 'the weaker recall did not surface');
+  assert.match(m.log.spoke[0], /want to bring up:\n- the fight on the bridge\n\nAlso in your mind[^\n]*\n- a quiet lunch/, 'the weaker recall did not surface: it is in mind, not to bring up');
   assert.deepEqual(mind.state.onMind.map((x) => x.id), ['m1', 'm2']);
+});
+
+test('the action faculty must look before it sends, can ask its memory, and can put the phone away', async () => {
+  const m = models({
+    table: { 'subject.stance': 'answer', 'stem.speak': first },
+    recalls: [{ id: 'm1', summary: 'the fight on the bridge', score: 1 }],
+    steps: [{ tool: 'send', args: { text: 'too soon' } }, { tool: 'look', args: {} }, { tool: 'recall', args: { about: 'bridge' } }, { tool: 'send', args: { text: 'I remember' } }],
+  });
+  const out = await createMind(self, m).turn({ from: 'B', text: 'the bridge?' });
+  assert.deepEqual(out.trace.action.steps.map((s) => [s.tool, s.result.split('\n')[0]]), [['send', 'Refused: look first, to see where you are and what the phone shows.'], ['look', 'Where: a classroom. When: noon.'], ['recall', '- the fight on the bridge'], ['send', 'sent']]);
+  assert.equal(out.said, 'I remember');
+  const away = await createMind(self, models({ table: { 'subject.stance': 'answer', 'stem.speak': first }, steps: [{ tool: 'look', args: {} }, { tool: 'put_away', args: {} }] })).turn({ from: 'B', text: 'hi' });
+  assert.equal(away.said, null);
+  assert.deepEqual(away.trace.action.steps.map((s) => s.tool), ['look', 'put_away']);
 });
