@@ -50,6 +50,7 @@ export async function openPhone({ volume, holderId, at, graphDir, mock }) {
   // A cue is any person, place or thing of the book named in the message.
   const named = entities.flatMap((e) => (e.names ?? []).map((n) => [n.text, e.id])).filter(([t]) => t && t.length >= 2);
   const cuesOf = (text) => [...new Set(named.filter(([t]) => text.includes(t)).map(([, id]) => id))];
+  const nameOf = (id) => entities.find((e) => e.id === id)?.names?.[0]?.text ?? id;
 
   const spend = { jev: 0, text: 0 };
   let decide, speak;
@@ -66,8 +67,9 @@ export async function openPhone({ volume, holderId, at, graphDir, mock }) {
     speak = ({ system, prompt }) => { spend.text++; return http.generate({ system, prompt, maxTokens: 200 }); };
   }
   const mind = createMind(self, {
-    decide, speak, cuesOf,
-    recall: async ({ cues, mood }) => (await recall(run, { holderId, lineage: lineage(), cues, mood, k: 8 })).map((r) => ({ id: r.id, summary: r.summary, score: r.score })),
+    decide, speak, cuesOf, nameOf,
+    // Every part of the score comes along, for the trace: when, how known, retention, importance, cue, tag.
+    recall: async ({ cues, mood }) => await recall(run, { holderId, lineage: lineage(), cues, mood, k: 8 }),
   });
 
   const log = join(graphDir, `${branch}.jsonl`);

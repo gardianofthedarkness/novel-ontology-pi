@@ -38,6 +38,11 @@ test('the brain stem lets one speech through and the speaker is called only then
   assert.equal(m.log.spoke.length, 1);
   assert.match(m.log.spoke[0], /What you want to do: answer/);
   assert.ok(out.sank.some((u) => u.kind === 'express'), 'the feeling did not come out: it sank');
+  // The trace keeps every department's questions and answers and the stem's choice of each urge.
+  assert.deepEqual(Object.keys(out.trace.departments).sort(), ['action', 'emotion', 'memory', 'subjectivity']);
+  assert.equal(out.trace.departments.emotion.calls[0].answers.find((a) => a.key === 'emotion.arousal').value, 'stirred');
+  assert.equal(out.trace.stem.urges.length, out.trace.stem.surfaced.length);
+  assert.ok(out.trace.speaker.prompt.includes('answer'));
 
   const quiet = models({ table: { 'subject.stance': 'answer' } }); // the stem answers "stay silent"
   const q = await createMind(self, quiet).turn({ from: 'B', text: 'hi' });

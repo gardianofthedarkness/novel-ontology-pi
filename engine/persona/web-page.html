@@ -109,6 +109,45 @@ button { font: 600 14px system-ui, sans-serif; height: 42px; min-width: 42px; pa
 button.alt { background: transparent; color: var(--dim); border: 1px solid var(--edge); box-shadow: none; font: 12px var(--mono); letter-spacing: 0.06em; }
 button:disabled { opacity: 0.4; cursor: default; }
 
+/* Debug: every faculty's questions, answers and proposals, and the brain stem's choices, per turn. Beside the phone on a
+   wide screen; inline under each turn on a phone. */
+header { position: relative; }
+.dbg-toggle { position: absolute; right: 18px; bottom: 11px; font: 10.5px var(--mono); letter-spacing: 0.12em; text-transform: uppercase; height: 24px; min-width: 0; padding: 0 10px; border-radius: 12px;
+  background: transparent; color: var(--faint); border: 1px solid rgba(150, 130, 255, 0.2); box-shadow: none; }
+.dbg-toggle[aria-pressed="true"] { color: var(--signal); border-color: var(--me-edge); }
+#console { display: none; }
+body.debug.wide { grid-template-columns: 400px minmax(0, 640px); gap: 28px; justify-content: center; }
+body.debug.wide #console { display: flex; flex-direction: column; gap: 12px; position: relative; z-index: 1; height: min(820px, calc(100dvh - 48px)); overflow-y: auto;
+  padding: 16px; border-radius: 18px; border: 1px solid var(--edge); background: rgba(8, 7, 16, 0.86); scrollbar-width: thin; scrollbar-color: var(--faint) transparent; }
+#console > h2 { font: 11px var(--mono); letter-spacing: 0.2em; text-transform: uppercase; color: var(--rift-2); margin: 0 0 2px; }
+.turn { border: 1px solid rgba(150, 130, 255, 0.16); border-radius: 12px; padding: 10px 12px; background: rgba(0, 0, 0, 0.25); font: 11.5px/1.5 var(--mono); color: var(--dim); flex-shrink: 0; }
+#log .turn { align-self: stretch; }
+.turn h3 { margin: 0 0 6px; font: 600 11px var(--mono); letter-spacing: 0.12em; color: var(--ink); text-transform: uppercase; display: flex; justify-content: space-between; gap: 8px; }
+.turn h3 span { color: var(--faint); font-weight: 400; text-transform: none; letter-spacing: 0; }
+.fac { margin-top: 8px; padding-top: 8px; border-top: 1px dashed rgba(150, 130, 255, 0.15); }
+.fac > b { color: var(--signal); font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase; font-size: 10.5px; }
+.fac > b.stem { color: var(--warn); } .fac > b.mem { color: var(--rift); }
+.fac .ms { color: var(--faint); float: right; }
+.q { margin: 4px 0 0; color: var(--dim); }
+.q i { color: var(--faint); font-style: normal; }
+.ans { color: var(--ink); }
+.dist { display: grid; grid-template-columns: minmax(0, 1fr) 80px 34px; gap: 2px 8px; align-items: center; margin: 3px 0 2px 10px; }
+.dist .o { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--faint); }
+.dist .o.win { color: var(--ink); }
+.dist .bar { height: 6px; border-radius: 3px; background: rgba(150, 130, 255, 0.12); overflow: hidden; }
+.dist .bar i { display: block; height: 100%; background: linear-gradient(90deg, var(--rift), var(--signal)); }
+.dist .p { text-align: right; color: var(--faint); }
+.urge { display: grid; grid-template-columns: 16px 56px 36px minmax(0, 1fr); gap: 6px; margin-top: 2px; }
+.urge .k { color: var(--faint); } .urge .s { color: var(--faint); text-align: right; }
+.urge.up .mark { color: var(--signal); } .urge.down .mark { color: var(--faint); } .urge.up .c { color: var(--ink); }
+.urge .c { overflow-wrap: anywhere; }
+.rows { display: grid; grid-template-columns: 40px 30px 34px 34px 28px 32px minmax(0, 1fr); gap: 1px 6px; margin-top: 4px; }
+.rows .h { color: var(--faint); font-size: 10px; letter-spacing: 0.06em; }
+.rows .sum { color: var(--ink); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.rows .hit { color: var(--signal); }
+.warnline { color: var(--warn); }
+.speaker pre { white-space: pre-wrap; margin: 4px 0 0; max-height: 220px; overflow: auto; color: var(--dim); background: rgba(0, 0, 0, 0.3); padding: 8px; border-radius: 8px; }
+
 @keyframes turn { to { rotate: 360deg; } }
 @keyframes breathe { 50% { scale: 1.06; opacity: 0.6; } }
 @keyframes drift { to { translate: 340px 340px; } }
@@ -138,6 +177,7 @@ button:disabled { opacity: 0.4; cursor: default; }
     <span><span class="clock" id="clock">--:--</span> <span class="battery" title="It never runs down">∞ ▮▮▮</span></span>
   </div>
   <header>
+    <button type="button" class="dbg-toggle" id="dbg" aria-pressed="false" title="Show what every faculty and the brain stem did each turn">debug</button>
     <div class="label">Unknown line · origin outside this world</div>
     <div class="who" id="who"></div>
     <div class="line" id="line"></div>
@@ -151,6 +191,7 @@ button:disabled { opacity: 0.4; cursor: default; }
     <button id="send" aria-label="Send">➤</button>
   </form>
 </main>
+<aside id="console" aria-label="Debug console"><h2>Faculties · brain stem · per turn</h2></aside>
 
 <script>
 const BOOT = /*BOOT*/{};
@@ -203,11 +244,92 @@ async function turn(text) {
     if (o.moved) note('[ ' + o.moved + ' ]');
     if (!o.said && !o.moved) note('… only static …');
     inside(o);
+    if (o.trace) showTrace(o, text);
   } catch (e) { waiting.remove(); note('signal lost: ' + e.message, true); }
   finally { buttons.forEach((b) => (b.disabled = false)); input.focus(); }
 }
 $('f').onsubmit = (e) => { e.preventDefault(); const v = input.value.trim(); if (!v) return; input.value = ''; bubble('me', v, 'sent across · ' + stampOf()); turn(v); };
 $('wait').onclick = () => { note('— time passes on their side —'); turn(null); };
+
+// ---- Debug: what every faculty asked and answered, what it proposed, and what the brain stem let through ----------
+let debug = false;
+try { debug = localStorage.getItem('phone.debug') === '1'; } catch {}
+const wideQuery = matchMedia('(min-width: 1100px)');
+function layout() { document.body.classList.toggle('debug', debug); document.body.classList.toggle('wide', wideQuery.matches); $('dbg').setAttribute('aria-pressed', String(debug)); }
+wideQuery.addEventListener('change', layout); layout();
+$('dbg').onclick = () => { debug = !debug; try { localStorage.setItem('phone.debug', debug ? '1' : '0'); } catch {} layout(); };
+function el(tag, cls, text) { const e = document.createElement(tag); if (cls) e.className = cls; if (text != null) e.textContent = text; return e; }
+const pct = (x) => Math.round(Number(x) * 100) + '%';
+function answersBlock(call) {
+  const box = el('div');
+  for (const q of call.asked) {
+    const a = call.answers.find((x) => x.key === q.key) || {};
+    const line = el('div', 'q'); line.append(el('i', null, q.key + ' · '), el('span', null, q.instructions + ' → '));
+    const shown = q.primitive === 'noul' ? 'yes ' + pct(a.value) : String(a.value);
+    line.append(el('span', 'ans', shown + (a.confidence != null ? '  (conf ' + Number(a.confidence).toFixed(2) + ')' : '')));
+    box.append(line);
+    const d = a.distribution;
+    if (d && q.options) {
+      const grid = el('div', 'dist');
+      for (const opt of q.options) {
+        const p = Number(d[opt] ?? 0), bar = el('span', 'bar'), fill = el('i'); fill.style.width = pct(p); bar.append(fill);
+        grid.append(el('span', 'o' + (opt === a.value ? ' win' : ''), opt), bar, el('span', 'p', pct(p)));
+      }
+      box.append(grid);
+    }
+  }
+  return box;
+}
+function proposes(rec) { return el('div', 'q', rec.urges && rec.urges.length ? 'proposes: ' + rec.urges.map((u) => u.kind + ' ' + Number(u.salience).toFixed(2) + ' "' + String(u.content).slice(0, 60) + '"').join(' · ') : 'proposes nothing'); }
+function facultyBlock(name, rec) {
+  const f = el('div', 'fac'); f.append(el('b', null, name), el('span', 'ms', (rec.ms ?? 0) + ' ms'));
+  for (const call of rec.calls || []) f.append(answersBlock(call));
+  f.append(proposes(rec));
+  return f;
+}
+function memoryBlock(rec) {
+  const f = el('div', 'fac'); f.append(el('b', 'mem', 'memory'), el('span', 'ms', (rec.ms ?? 0) + ' ms'));
+  const cues = rec.cues || [];
+  f.append(el('div', cues.length ? 'q' : 'q warnline', 'cues from the message: ' + (cues.length ? cues.map((c) => c.name + ' (' + c.id + ')').join(', ') : 'none: nothing in it matched a name of a person, place or thing of the book')));
+  const rows = el('div', 'rows');
+  for (const h of ['score', 'at', 'ret', 'imp', 'cue', 'tag', 'memory (→ proposed)']) rows.append(el('span', 'h', h));
+  const urged = new Set((rec.urges || []).map((u) => u.content));
+  for (const r of rec.recalled || []) {
+    rows.append(el('span', null, Number(r.score).toFixed(3)), el('span', null, String(r.at)), el('span', null, Number(r.retention).toFixed(2)),
+      el('span', null, Number(r.importance).toFixed(2)), el('span', r.cue > 0 ? 'hit' : null, String(r.cue)), el('span', null, Number(r.tag).toFixed(2)));
+    const s = el('span', 'sum', (urged.has(r.summary) ? '→ ' : '   ') + r.source + ': ' + r.summary); s.title = r.summary; rows.append(s);
+  }
+  if (!(rec.recalled || []).length) f.append(el('div', 'q warnline', 'recalled nothing'));
+  f.append(rows);
+  return f;
+}
+function stemBlock(rec) {
+  const f = el('div', 'fac'); f.append(el('b', 'stem', 'brain stem'), el('span', 'ms', (rec.ms ?? 0) + ' ms'));
+  (rec.urges || []).forEach((u, i) => {
+    const up = rec.surfaced && rec.surfaced[i], row = el('div', 'urge ' + (up ? 'up' : 'down'));
+    row.append(el('span', 'mark', up ? '▲' : '▽'), el('span', 'k', u.kind), el('span', 's', Number(u.salience).toFixed(2)), el('span', 'c', u.content + (u.waiting ? '  · waited ' + u.waiting : '') + '  [' + u.dept + ']'));
+    row.title = up ? 'surfaced' : 'sank to the next turn'; f.append(row);
+  });
+  if (!(rec.urges || []).length) f.append(el('div', 'q', 'no urges'));
+  for (const call of rec.calls || []) f.append(answersBlock(call));
+  return f;
+}
+function showTrace(o, text) {
+  const tr = o.trace, box = el('div', 'turn');
+  const head = el('h3', null, 'turn ' + o.turn); head.append(el('span', null, (text ? '"' + text.slice(0, 40) + '"' : 'time passes') + ' · ' + o.ms + ' ms')); box.append(head);
+  const d = tr.departments;
+  if (d.memory) box.append(memoryBlock(d.memory));
+  for (const name of ['emotion', 'subjectivity', 'action']) if (d[name]) box.append(facultyBlock(name, d[name]));
+  box.append(stemBlock(tr.stem));
+  if (tr.speaker) {
+    const s = el('div', 'fac speaker'), det = el('details');
+    s.append(el('b', null, 'speaker'), el('span', 'ms', tr.speaker.ms + ' ms'));
+    det.append(el('summary', null, 'prompt sent'), el('pre', null, tr.speaker.system + '\n\n' + tr.speaker.prompt)); s.append(det); box.append(s);
+  } else box.append(el('div', 'fac q', 'speaker: not called (no speech surfaced)'));
+  if (!debug) return;
+  if (wideQuery.matches) $('console').firstElementChild.after(box);
+  else { log.append(box); scroll(); }
+}
 </script>
 </body>
 </html>
