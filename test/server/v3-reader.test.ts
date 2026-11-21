@@ -2,11 +2,11 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { writeFile } from "node:fs/promises";
 import { join } from "node:path";
-import { createZip } from "../../src/reading/album/zip.js";
-import { linkReading, putBook, scanFolder, universeAdd } from "../../src/library/folder.js";
+import { createZip } from "story-graph/dist/src/reading/album/zip.js";
+import { linkReading, putBook, scanFolder, universeAdd } from "story-graph/dist/src/library/folder.js";
 import { readerBook, readerDocument, readerLine, readerPortrait } from "../../src/server/reader.js";
 import { NovelServer } from "../../src/server/server.js";
-import { NovelWorkspace } from "../../src/library/workspace.js";
+import { NovelWorkspace } from "story-graph/dist/src/library/workspace.js";
 import { shelf } from "../v3-fixture.js";
 
 async function arranged() {

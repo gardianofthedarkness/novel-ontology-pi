@@ -62,9 +62,11 @@ export function architectureCandidates(label: string): ArchitectureKind[] {
 }
 
 /** The building to draw: the recorded pick when there is one ("none": no building), else the name's likeliest. */
-export function architectureOf(label: string, decided?: ArchitectureKind | "none" | null): ArchitectureKind | null {
+const KINDS = new Set<string>(["church", "hospital", "station", "market", "castle", "park", "village", "skyscraper", "school", "city", "home", "office"] satisfies ArchitectureKind[]);
+/** The kind a decision picked (the reading carries it as a word: one not a kind here is not taken), else the name's. */
+export function architectureOf(label: string, decided?: string | null): ArchitectureKind | null {
   if (decided === "none") return null;
-  return decided ?? architectureCandidates(label)[0] ?? null;
+  return (decided && KINDS.has(decided) ? decided as ArchitectureKind : null) ?? architectureCandidates(label)[0] ?? null;
 }
 
 export const ARCHITECTURE_LABEL: Record<ArchitectureKind, string> = {

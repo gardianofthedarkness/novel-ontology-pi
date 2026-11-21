@@ -16,15 +16,15 @@ import { existsSync, mkdtempSync, readFileSync, statSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { loadConfig } from "../../src/cli/config.js";
-import { JevClient } from "../../src/ground/connectors/jev.js";
+import { loadConfig } from "story-graph/dist/src/ground/config.js";
+import { JevClient } from "story-graph/dist/src/ground/connectors/jev.js";
 import {
   deleteStoredSecret,
   getStoredSecret,
   resolveJevKey,
   secretStorePath,
   setStoredSecret,
-} from "../../src/ground/connectors/secrets.js";
+} from "story-graph/dist/src/ground/connectors/secrets.js";
 import { jevStatus } from "../../src/cli/commands/shared/jevCommands.js";
 
 const cli = fileURLToPath(new URL("../../src/cli/cli.js", import.meta.url));

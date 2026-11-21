@@ -1,7 +1,7 @@
 import { createHash } from "node:crypto";
-import type { DecisionModel } from "../../ground/connectors/jev.js";
-import type { Entity } from "../../ground/ontology/types.js";
-import type { ChangeProposal } from "../../canon/gate/changeset.js";
+import type { DecisionModel } from "story-graph/dist/src/ground/connectors/jev.js";
+import type { Entity } from "story-graph/dist/src/ground/ontology/types.js";
+import type { ChangeProposal } from "story-graph/dist/src/canon/gate/changeset.js";
 import { LANDSCAPE_HINTS, LANDSCAPE_TYPES, type Landscape, type LandscapeType } from "../../world/built/landscape.js";
 
 /**

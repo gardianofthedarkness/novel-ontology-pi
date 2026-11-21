@@ -196,7 +196,7 @@ export const standInWork = { modelId: 'stand-in-work', generate: async ({ prompt
 /** Review `items` (pool items) and append one answer line per item to `out`. */
 export async function reviewItems(items, { book, people, roles, cards, scenes, ledger, script, pins, spans = null, voices = null, decide, work: workModel = null, out = null, dry = false, concurrency = 4, looks = 0, minLooks = 0, workAll = false, log = () => {} }) {
   const results = [];
-  const { ask, compose } = await load('dist/src/context/engine.js');
+  const { ask, compose } = await import('story-graph/dist/src/context/engine.js');
   const one = async unit => {
     const item = unit[0], asked = askedQuote(unit.map(member => asAsked(member, { ledger, book, people, roles })));
     const mode = modeOf(item.kind), ctx = { book, people, roles, scenes };
@@ -304,14 +304,14 @@ async function main() {
   let decide, work = null, usage = null;
   if (values['stand-in']) { decide = standIn(stores.roles); if (!values['no-work']) work = standInWork; }
   else if (!values.dry) {
-    const { jevFromEnv } = await load('dist/src/ground/connectors/jev.js'), { cachedDecisions, cachedWork } = await load('dist/src/reading/v1/timeplace/cache.js');
+    const { jevFromEnv } = await import('story-graph/dist/src/ground/connectors/jev.js'), { cachedDecisions, cachedWork } = await import('story-graph/dist/src/reading/v1/timeplace/cache.js');
     const { PICKER_MODEL } = await import('../live/sim-jev.mjs');
     const cache = resolve(values.cache ?? join(dirname(out), 'cache'));
     const client = jevFromEnv({ ...process.env, JEV_MODEL: PICKER_MODEL }); usage = client.usage;
     const cached = cachedDecisions(client, cache);
     decide = Object.assign((state, questions) => cached.decide(state, questions), { modelId: cached.modelId });
     if (!values['no-work']) {
-      if (process.env.WORK_LLM_API_KEY) { const { workModelFromEnv } = await load('dist/src/ground/connectors/workModel.js'); work = cachedWork(workModelFromEnv(process.env), cache); }
+      if (process.env.WORK_LLM_API_KEY) { const { workModelFromEnv } = await import('story-graph/dist/src/ground/connectors/workModel.js'); work = cachedWork(workModelFromEnv(process.env), cache); }
       else console.error('system 2 off: no work model configured (WORK_LLM_API_KEY)');
     }
   }

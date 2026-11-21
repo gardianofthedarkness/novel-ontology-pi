@@ -3,14 +3,14 @@ import assert from "node:assert/strict";
 import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { MockDecisionModel, type DecisionAnswer, type DecisionModel, type DecisionQuestion } from "../../src/ground/connectors/jev.js";
+import { MockDecisionModel, type DecisionAnswer, type DecisionModel, type DecisionQuestion } from "story-graph/dist/src/ground/connectors/jev.js";
 import { pickArchitecture, type ArchitecturePlace } from "../../src/play/stage/architecture.js";
-import { pickScales, scaleOfName, stageKindOf, SCALE_HINTS, type ScalePlace } from "../../src/play/stage/scale.js";
+import { pickScales, scaleOfName, stageKindOf, SCALE_HINTS, type ScalePlace } from "story-graph/dist/src/reading/stage/scale.js";
 import { askMovement, sceneCallLimit, type MovementScene } from "../../src/play/stage/movement.js";
 import { prepareStage } from "../../src/play/stage/prep.js";
 import { navGrid } from "../../src/world/built/holoNav.js";
-import { describeError } from "../../src/ground/errors.js";
-import { initWorkspace } from "../../src/ground/workspace/init.js";
+import { describeError } from "story-graph/dist/src/ground/errors.js";
+import { initWorkspace } from "story-graph/dist/src/ground/workspace/init.js";
 import { stageInputs } from "../../src/cli/commands/extract/stageCommands.js";
 
 /** A decision model that records what it was asked and answers from a function. */

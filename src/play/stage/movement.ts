@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import type { DecisionAnswer, DecisionModel, DecisionQuestion } from "../../ground/connectors/jev.js";
+import type { DecisionAnswer, DecisionModel, DecisionQuestion } from "story-graph/dist/src/ground/connectors/jev.js";
 import { ARCHITECTURE_LABEL, type ArchitectureKind } from "../../world/built/placeArchitecture.js";
 import { DIRECTIONS, DIRECTION_HINT, MANNERS, centreSpot, navGrid, type Manner } from "../../world/built/holoNav.js";
 

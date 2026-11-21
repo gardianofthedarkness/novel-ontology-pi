@@ -124,7 +124,7 @@ export async function bookText(metadataDirectory, block) {
   const files = (await readdir(metadataDirectory)).filter(name => /^b\d{4}\.txt$/.test(name)).sort();
   const name = `b${String(block + 1).padStart(4, '0')}.txt`;
   if (!files.includes(name)) return null;
-  const { sectionBlock } = await import('../../dist/src/reading/text/sectioning.js');
+  const { sectionBlock } = await import('story-graph/dist/src/reading/text/sectioning.js');
   const text = await readFile(resolve(metadataDirectory, name), 'utf8');
   let cursor = 0;
   const sentences = sectionBlock(text, block).sentences.map((sentence) => {

@@ -3,7 +3,7 @@ import { fileURLToPath, pathToFileURL } from "node:url";
 import {
   BOOK, changesSince, exportSnapshot, importBundle, latestSnapshot, libraryOf, matchingSnapshot, libraryPaths, readIndex, readSnapshot,
   restoreSnapshot, takeSnapshot, type SnapshotKind,
-} from "../../../ground/workspace/universe.js";
+} from "story-graph/dist/src/ground/workspace/universe.js";
 
 export const UNIVERSE_USAGE = [
   "novel universe paths <library> [--book vol-<n>]",

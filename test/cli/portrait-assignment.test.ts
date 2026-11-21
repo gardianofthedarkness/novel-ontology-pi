@@ -4,10 +4,10 @@ import { access, chmod, mkdir, mkdtemp, readFile, rm, symlink, writeFile } from 
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { albumAssign, portraitReadiness } from "../../src/cli/commands/extract/portraitCommands.js";
-import { bindPortraitsAtBirth, finalizePortraits, type PortraitRecord } from "../../src/reading/album/portraits.js";
-import { initWorkspace } from "../../src/ground/workspace/init.js";
-import { bindWorkspaceSource } from "../../src/ground/workspace/source.js";
-import type { Entity } from "../../src/ground/ontology/types.js";
+import { bindPortraitsAtBirth, finalizePortraits, type PortraitRecord } from "story-graph/dist/src/reading/album/portraits.js";
+import { initWorkspace } from "story-graph/dist/src/ground/workspace/init.js";
+import { bindWorkspaceSource } from "story-graph/dist/src/ground/workspace/source.js";
+import type { Entity } from "story-graph/dist/src/ground/ontology/types.js";
 
 const character: Entity = { id: "char_a", kind: "Character", names: [{ text: "御坂美琴", lang: "zh", kind: "canonical" }], properties: {}, confidence: 1 };
 const orphan: PortraitRecord = { entityId: null, name: "御坂美琴", portrait: "assets/portraits/a.png", sourceIllustration: "ill_1", sourceAsset: "assets/plate.png", ocrText: "御坂美琴", ocrConfidence: 0.99, matchKind: "exact-line" };

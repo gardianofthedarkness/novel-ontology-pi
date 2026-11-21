@@ -27,7 +27,7 @@ const rows = MT.ridesToAsk({ prefilm, vehicles });
 console.error(`to ask: ${rows.length} carried or ridden moves and journeys`);
 if (values.dry) process.exit(0);
 
-const { loadWorkspaceSentences } = await load('dist/src/cli/commands/extract/timeplaceCommands.js'), { ask } = await load('dist/src/context/engine.js');
+const { loadWorkspaceSentences } = await load('dist/src/cli/commands/extract/timeplaceCommands.js'), { ask } = await import('story-graph/dist/src/context/engine.js');
 const text = await loadWorkspaceSentences(resolve(novelDir)), line = id => text.get(id)?.text ?? '';
 const clip = (value, size) => (value.length > size ? `${value.slice(0, size - 1)}…` : value);
 const order = [...text.keys()], at = new Map(order.map((id, n) => [id, n])), round = (id, k) => order.slice(Math.max(0, (at.get(id) ?? 0) - k), (at.get(id) ?? 0) + k + 1);
@@ -40,7 +40,7 @@ for (const row of rows) {
 }
 
 let paid = 0;
-const { jevFromEnv } = await load('dist/src/ground/connectors/jev.js'), { cachedDecisions } = await load('dist/src/reading/v1/timeplace/cache.js');
+const { jevFromEnv } = await import('story-graph/dist/src/ground/connectors/jev.js'), { cachedDecisions } = await import('story-graph/dist/src/reading/v1/timeplace/cache.js');
 const live = jevFromEnv(process.env), jev = cachedDecisions({ modelId: live.modelId, decide: (...args) => { paid++; return live.decide(...args); } }, resolve(values.cache ?? join(dir, '..', 'cache-rides')));
 const decide = Object.assign((state, questions) => jev.decide(state, questions), { record: () => {} });
 const mode = { name: 'rides', task: 'A light novel being staged in a 3D city. For each move (a line, the lines round it, who moves, and how the notes read it: carried, or by a vehicle), say what carries the person: another person (in their arms, on their back, along in a teleport), a vehicle they ride, or that the lines do not say.', definitions: () => ({}), sources: [{ name: 'moves', key: 'moves', quota: 0, keep: true, collect: focus => focus.items.map(([id, fields]) => ({ id, score: 1, fields })) }], cutOrder: [], questions: focus => focus.questions, budget: 120_000 };

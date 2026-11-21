@@ -6,8 +6,8 @@
  * its description lines, and where everyone stands now; every line keeps its sentence id, and the direction's answer says
  * which line it rests on. Pictures come with the request (the camera operator's shots, src/context/camera.ts).
  */
-import type { DecisionQuestion } from "../ground/connectors/jev.js";
-import type { Item, Mode, Source } from "./engine.js";
+import type { DecisionQuestion } from "story-graph/dist/src/ground/connectors/jev.js";
+import type { Item, Mode, Source } from "story-graph/dist/src/context/engine.js";
 import { notesSource, type RouteFocus } from "./cutBag.js";
 
 export interface Line { id: string; text: string }

@@ -2,7 +2,7 @@ import { createHash } from "node:crypto";
 import { readFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
-import type { DecisionModel } from "../../ground/connectors/jev.js";
+import type { DecisionModel } from "story-graph/dist/src/ground/connectors/jev.js";
 import { architectureCandidates, type ArchitectureKind } from "../../world/built/placeArchitecture.js";
 
 /**

@@ -20,9 +20,9 @@ import { existsSync } from "node:fs";
 import { mkdir, open, readFile, rename, writeFile } from "node:fs/promises";
 import { dirname, extname, join, resolve } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
-import { NovelError } from "../ground/errors.js";
-import { getStoredSecret, resolveJevKey, setStoredSecret } from "../ground/connectors/secrets.js";
-import { STATE_DIR, findFile, linkReading, loadState, putBook, readBook, universeAdd } from "../library/folder.js";
+import { NovelError } from "story-graph/dist/src/ground/errors.js";
+import { getStoredSecret, resolveJevKey, setStoredSecret } from "story-graph/dist/src/ground/connectors/secrets.js";
+import { STATE_DIR, findFile, linkReading, loadState, putBook, readBook, universeAdd } from "story-graph/dist/src/library/folder.js";
 
 export const WORK_SECRET_NAME = "work-llm";
 const BLOCK_SIZE = 24000;
@@ -133,7 +133,8 @@ async function run(folder: string, id: string, standIn: string | null): Promise<
       if (step) { state.steps.push({ step: step[1], requests: Number(step[2]), ms: Number(step[3]) }); state.now = `after ${step[1]}`; save().catch(() => {}); }
     };
     state.now = "reading"; await save();
-    const { read } = await import(pathToFileURL(join(repository, "engine", "reading", "read.mjs")).href) as { read: (novel: string, out: string, options: Record<string, unknown>) => Promise<{ paidRequests?: { jev: number; work: number } } | undefined> };
+    const readModule = "story-graph/engine/reading/read.mjs";
+    const { read } = await import(readModule) as { read: (novel: string, out: string, options: Record<string, unknown>) => Promise<{ paidRequests?: { jev: number; work: number } } | undefined> };
     const extra = standIn ? (await import(pathToFileURL(standIn).href) as { options: (book: { novel: string; text: string }) => Record<string, unknown> }).options({ novel: at.novel, text }) : {};
     const result = await read(at.novel, at.reading, { ...(file.kind === "epub" ? { epub: join(root, file.path) } : {}), ...extra });
     console.error = report;

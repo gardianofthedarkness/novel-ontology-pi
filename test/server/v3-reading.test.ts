@@ -5,10 +5,10 @@ import { mkdtemp, readFile, stat, writeFile, mkdir } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { loadState, scanFolder } from "../../src/library/folder.js";
+import { loadState, scanFolder } from "story-graph/dist/src/library/folder.js";
 import { keyStatus, placesOf, readingStatus, setKey, startReading, stopReading } from "../../src/server/reading.js";
 import { readerBook } from "../../src/server/reader.js";
-import { NovelWorkspace } from "../../src/library/workspace.js";
+import { NovelWorkspace } from "story-graph/dist/src/library/workspace.js";
 import { shelf } from "../v3-fixture.js";
 
 const standIn = join(dirname(fileURLToPath(import.meta.url)), "..", "v3-standin.js");

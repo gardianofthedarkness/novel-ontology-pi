@@ -1,24 +1,24 @@
 import { readFile, readdir, stat } from "node:fs/promises";
 import { join, resolve } from "node:path";
-import { BundleStore } from "../../../ground/connectors/bundle.js";
-import type { Entity, Relation, Scene } from "../../../ground/ontology/types.js";
-import { storedSource } from "../../../ground/workspace/source.js";
-import { libraryShow } from "../../../ground/workspace/library.js";
-import { cutBlocks } from "../../../reading/text/blocks.js";
-import { nominatePlacePairs, type PlaceTreeMemory } from "../../../reading/v1/timeplace/placeTreeSweep.js";
-import { flagForRepair } from "../../../reading/v1/timeplace/placeTreeRepair.js";
-import { readCausalityMemory } from "../../../universe/causality/faculty.js";
-import { loadUniverseContext, universeBindings, universeCandidates } from "../../../universe/causality/universe.js";
-import { atlasAsked, atlasCandidates, atlasContext } from "../../../universe/atlas/universeAtlas.js";
-import { listChangeSets } from "../../../canon/gate/changesetStore.js";
+import { BundleStore } from "story-graph/dist/src/ground/connectors/bundle.js";
+import type { Entity, Relation, Scene } from "story-graph/dist/src/ground/ontology/types.js";
+import { storedSource } from "story-graph/dist/src/ground/workspace/source.js";
+import { libraryShow } from "story-graph/dist/src/ground/workspace/library.js";
+import { cutBlocks } from "story-graph/dist/src/reading/text/blocks.js";
+import { nominatePlacePairs, type PlaceTreeMemory } from "story-graph/dist/src/reading/v1/timeplace/placeTreeSweep.js";
+import { flagForRepair } from "story-graph/dist/src/reading/v1/timeplace/placeTreeRepair.js";
+import { readCausalityMemory } from "story-graph/dist/src/universe/causality/faculty.js";
+import { loadUniverseContext, universeBindings, universeCandidates } from "story-graph/dist/src/universe/causality/universe.js";
+import { atlasAsked, atlasCandidates, atlasContext } from "story-graph/dist/src/universe/atlas/universeAtlas.js";
+import { listChangeSets } from "story-graph/dist/src/canon/gate/changesetStore.js";
 import { loadWorkspaceSentences, placeScales, strandInputs } from "./timeplaceCommands.js";
-import { timePlaceAttempted } from "../../../reading/v1/timeplace/afterApply.js";
+import { timePlaceAttempted } from "story-graph/dist/src/reading/v1/timeplace/afterApply.js";
 import { landscapePacketsOpen, objectsPacketsOpen, stageInputs } from "./stageCommands.js";
 import { simCurrent, simPicksDone } from "./simCommands.js";
-import { castScope, loadCast } from "../../../universe/identity/cast.js";
-import { openIdentityPackets } from "../../../universe/identity/afterApply.js";
-import { calendarStale, loadCalendar } from "../../../universe/calendar/calendar.js";
-import { calendarPacketId } from "../../../universe/calendar/review.js";
+import { castScope, loadCast } from "story-graph/dist/src/universe/identity/cast.js";
+import { openIdentityPackets } from "story-graph/dist/src/universe/identity/afterApply.js";
+import { calendarStale, loadCalendar } from "story-graph/dist/src/universe/calendar/calendar.js";
+import { calendarPacketId } from "story-graph/dist/src/universe/calendar/review.js";
 
 /**
  * `novel checklist` — what a completed analysis still lacks, in dependency

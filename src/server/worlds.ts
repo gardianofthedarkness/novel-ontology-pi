@@ -90,7 +90,7 @@ export async function findWorlds(folder: string, depth = 2): Promise<World[]> {
  * by v2's import, each book's text checked against the hash the snapshot names. The world it copies is only read.
  */
 export async function copyWorld(folder: string, root: string, { snapshot = null }: { snapshot?: string | null } = {}): Promise<World & { copiedFrom: { root: string; snapshot: string } }> {
-  const universe = await import("../ground/workspace/universe.js");
+  const universe = await import("story-graph/dist/src/ground/workspace/universe.js");
   const source = resolve(root), index = await universe.readIndex(source) as unknown as { snapshots?: Array<{ id: string; kind: string }> } | Array<{ id: string; kind: string }>;
   const list = Array.isArray(index) ? index : index.snapshots ?? [];
   const id = snapshot ?? [...list].reverse().find((entry) => ["after", "manual", "imported"].includes(entry.kind))?.id;

@@ -27,10 +27,10 @@ if (values.dry) process.exit(0);
 
 let paid = 0, model = 'stand-in';
 if (!values['stand-in']) {
-  const { loadWorkspaceSentences } = await load('dist/src/cli/commands/extract/timeplaceCommands.js'), { ask } = await load('dist/src/context/engine.js');
+  const { loadWorkspaceSentences } = await load('dist/src/cli/commands/extract/timeplaceCommands.js'), { ask } = await import('story-graph/dist/src/context/engine.js');
   const text = await loadWorkspaceSentences(resolve(novelDir)), line = id => text.get(id)?.text ?? '';
   const clip = (value, size) => (value.length > size ? `${value.slice(0, size - 1)}…` : value);
-  const { jevFromEnv } = await load('dist/src/ground/connectors/jev.js'), { cachedDecisions } = await load('dist/src/reading/v1/timeplace/cache.js');
+  const { jevFromEnv } = await import('story-graph/dist/src/ground/connectors/jev.js'), { cachedDecisions } = await import('story-graph/dist/src/reading/v1/timeplace/cache.js');
   const live = jevFromEnv(process.env), jev = cachedDecisions({ modelId: live.modelId, decide: (...args) => { paid++; return live.decide(...args); } }, resolve(values.cache ?? join(universe, '..', 'cache-transport')));
   model = live.modelId;
   const decide = Object.assign((state, questions) => jev.decide(state, questions), { record: () => {} });

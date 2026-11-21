@@ -13,7 +13,7 @@ const repository = resolve(dirname(fileURLToPath(import.meta.url)), '..', '..', 
 const { values, positionals: [novelDir, readingPath] } = parseArgs({ allowPositionals: true, options: { cache: { type: 'string' }, dry: { type: 'boolean' } } });
 if (!novelDir || !readingPath) { console.error('usage: node engine/casts/run/set-dresser.mjs <novel-dir> <data.json> [--cache <dir>] [--dry]'); process.exit(2); }
 const dir = dirname(resolve(readingPath)), reading = JSON.parse(await readFile(resolve(readingPath), 'utf8'));
-const { loadWorkspaceSentences } = await load('dist/src/cli/commands/extract/timeplaceCommands.js'), { ask } = await load('dist/src/context/engine.js');
+const { loadWorkspaceSentences } = await load('dist/src/cli/commands/extract/timeplaceCommands.js'), { ask } = await import('story-graph/dist/src/context/engine.js');
 const text = await loadWorkspaceSentences(resolve(novelDir)), line = id => text.get(id)?.text ?? '';
 const clip = (value, size) => (value.length > size ? `${value.slice(0, size - 1)}…` : value);
 const heading = new Map((reading.sequences ?? []).map(sequence => [sequence.id, sequence.heading]));
@@ -21,7 +21,7 @@ const units = reading.scenes.map(scene => ({ id: scene.id, lines: scene.sentence
 console.error(`to ask: ${units.length} units with environment lines (of ${reading.scenes.length})`);
 if (values.dry) process.exit(0);
 let paid = 0;
-const { jevFromEnv } = await load('dist/src/ground/connectors/jev.js'), { cachedDecisions } = await load('dist/src/reading/v1/timeplace/cache.js');
+const { jevFromEnv } = await import('story-graph/dist/src/ground/connectors/jev.js'), { cachedDecisions } = await import('story-graph/dist/src/reading/v1/timeplace/cache.js');
 const live = jevFromEnv(process.env), jev = cachedDecisions({ modelId: live.modelId, decide: (...args) => { paid++; return live.decide(...args); } }, resolve(values.cache ?? join(dir, '..', 'cache-set-dresser')));
 const decide = Object.assign((state, questions) => jev.decide(state, questions), { record: () => {} });
 const mode = { name: 'set-dresser', task: 'Segments of a light novel being staged in a 3D city, each given by its environment lines (what the text says of its surroundings) and its screenplay heading. For each, say the kind of setting it plays in, as the lines describe it.', definitions: () => ({ settings: SETTINGS }), sources: [{ name: 'segments', key: 'segments', quota: 0, keep: true, collect: focus => focus.items.map(([id, fields]) => ({ id, score: 1, fields })) }], cutOrder: [], questions: focus => focus.questions, budget: 120_000 };

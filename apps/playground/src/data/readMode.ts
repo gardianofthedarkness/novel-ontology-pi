@@ -1,6 +1,6 @@
 import { sentenceKey, type HoloScript } from "./holoScript.js";
 import type { MovePlan } from "./holoNav.js";
-import type { TimePlaceProjection } from "./timePlace.js";
+import type { TimePlaceProjection } from "story-graph/dist/src/reading/strands-data/timePlace.js";
 import type { WorldNode } from "../types.js";
 
 /**

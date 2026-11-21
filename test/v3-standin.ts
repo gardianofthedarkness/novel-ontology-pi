@@ -5,7 +5,7 @@
  */
 import { writeFileSync } from "node:fs";
 import { join } from "node:path";
-import { MockDecisionModel } from "../src/ground/connectors/jev.js";
+import { MockDecisionModel } from "story-graph/dist/src/ground/connectors/jev.js";
 
 export function options(book: { novel: string; text: string }): Record<string, unknown> {
   const words = [...new Set(book.text.match(/\b[A-Z][a-z]{2,}\b/g) ?? [])].filter((word) => !["The", "Chapter", "Not", "Who", "Bring", "There", "You", "Below", "Morning", "Captain"].includes(word));

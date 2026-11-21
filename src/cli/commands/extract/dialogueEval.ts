@@ -1,5 +1,5 @@
 import { readFile } from "node:fs/promises";
-import type { DialogueCard } from "../../../ground/ontology/types.js";
+import type { DialogueCard } from "story-graph/dist/src/ground/ontology/types.js";
 
 function normalize(value: unknown): DialogueCard[] {
   if (!Array.isArray(value)) throw new Error("Dialogue evaluation expects an array of cards");

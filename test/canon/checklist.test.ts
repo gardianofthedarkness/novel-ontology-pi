@@ -3,13 +3,13 @@ import assert from "node:assert/strict";
 import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { initWorkspace } from "../../src/ground/workspace/init.js";
-import { saveChangeSet } from "../../src/canon/gate/changesetStore.js";
+import { initWorkspace } from "story-graph/dist/src/ground/workspace/init.js";
+import { saveChangeSet } from "story-graph/dist/src/canon/gate/changesetStore.js";
 import { bookChecklist } from "../../src/cli/commands/extract/checklistCommands.js";
-import { rememberTimePlaceAttempt } from "../../src/reading/v1/timeplace/afterApply.js";
-import { markCausalitySweepPending } from "../../src/universe/causality/faculty.js";
-import type { ChangeSet } from "../../src/canon/gate/changeset.js";
-import { runIdentityAfterApply } from "../../src/universe/identity/afterApply.js";
+import { rememberTimePlaceAttempt } from "story-graph/dist/src/reading/v1/timeplace/afterApply.js";
+import { markCausalitySweepPending } from "story-graph/dist/src/universe/causality/faculty.js";
+import type { ChangeSet } from "story-graph/dist/src/canon/gate/changeset.js";
+import { runIdentityAfterApply } from "story-graph/dist/src/universe/identity/afterApply.js";
 
 async function workspace(context: { after: (callback: () => Promise<void>) => void }) {
   const parent = await mkdtemp(join(tmpdir(), "checklist-"));

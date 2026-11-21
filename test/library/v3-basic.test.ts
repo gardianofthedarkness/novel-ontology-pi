@@ -3,8 +3,8 @@ import assert from "node:assert/strict";
 import { mkdir, mkdtemp, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { basicLayer, basicStep, numberOf, overlap, readBasic, seriesOf, seriesSuggestions } from "../../src/library/basic.js";
-import { importFiles, loadState, scanFolder } from "../../src/library/folder.js";
+import { basicLayer, basicStep, numberOf, overlap, readBasic, seriesOf, seriesSuggestions } from "story-graph/dist/src/library/basic.js";
+import { importFiles, loadState, scanFolder } from "story-graph/dist/src/library/folder.js";
 import { NovelServer } from "../../src/server/server.js";
 import { tinyEpub } from "../v3-fixture.js";
 

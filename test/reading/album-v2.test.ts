@@ -3,28 +3,28 @@ import assert from "node:assert/strict";
 import { mkdtemp, readFile, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { createZip } from "../../src/reading/album/zip.js";
+import { createZip } from "story-graph/dist/src/reading/album/zip.js";
 import {
   importEpubAlbum,
   locateAnchor,
   picturesByBlock,
   resolveAnchors,
   type IllustrationRecord,
-} from "../../src/reading/album/album.js";
-import { cutBlocks } from "../../src/reading/text/blocks.js";
-import { sectionBlock } from "../../src/reading/text/sectioning.js";
+} from "story-graph/dist/src/reading/album/album.js";
+import { cutBlocks } from "story-graph/dist/src/reading/text/blocks.js";
+import { sectionBlock } from "story-graph/dist/src/reading/text/sectioning.js";
 import {
   bindPortraitsAtBirth,
   finalizePortraits,
   followPortraitMerges,
   type PortraitRecord,
-} from "../../src/reading/album/portraits.js";
-import { initWorkspace } from "../../src/ground/workspace/init.js";
-import { projectEvent, type ProcessingEvent } from "../../src/ground/events/types.js";
+} from "story-graph/dist/src/reading/album/portraits.js";
+import { initWorkspace } from "story-graph/dist/src/ground/workspace/init.js";
+import { projectEvent, type ProcessingEvent } from "story-graph/dist/src/ground/events/types.js";
 import { emitAlbumAnchors } from "../../src/cli/commands/extract/albumCommands.js";
 import { placePictures } from "../../apps/playground/src/data/pictureNodes.js";
 import { projectProcessingEvent } from "../../apps/playground/src/events/project.js";
-import type { Entity } from "../../src/ground/ontology/types.js";
+import type { Entity } from "story-graph/dist/src/ground/ontology/types.js";
 
 const JPEG = Buffer.from([0xff, 0xd8, 0xff, 0xe0, 1, 2, 3, 4]);
 

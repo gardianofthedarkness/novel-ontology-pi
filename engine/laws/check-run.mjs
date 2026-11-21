@@ -49,7 +49,7 @@ if (process.argv[1] === fileURLToPath(import.meta.url)) {
   const record = await read('stage', 'director', 'run.json'), world = await read('stage', 'world', 'segments', 'script.json').then(() => ['stage', 'world', 'segments'], () => ['stage', 'world']);
   const [page, strands, script, whole] = await Promise.all([read('stage', 'simulation', 'runs', 'director', `${id}.page.json`), read(...world, 'strands.json'), read(...world, 'script.json'), readFile(resolve(values.reading), 'utf8').then(JSON.parse)]);
   // The run played the reading by unit (segments.mjs), built the same way here.
-  const reading = (await import('../director/segments.mjs')).segmentWorld({ reading: whole, script, spawn: null })?.reading ?? whole;
+  const reading = (await import('story-graph/engine/strands/segments.mjs')).segmentWorld({ reading: whole, script, spawn: null })?.reading ?? whole;
   const abilities = await readFile(join(dir, '..', '..', 'universe', 'abilities.json'), 'utf8').then(JSON.parse, () => ({ version: 1, people: {} }));
   const played = playedLine({ record, page, reading });
   const laws = checkAll({ played, strands, script, speakers: speakersOf(reading), abilities });

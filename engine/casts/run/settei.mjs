@@ -16,7 +16,7 @@ const { values, positionals: [novelDir, readingPath] } = parseArgs({ allowPositi
 if (!novelDir || !readingPath || !values.universe) { console.error('usage: node engine/casts/run/settei.mjs <novel-dir> <data.json> --universe <library>/universe [--cache <dir>] [--dry]'); process.exit(2); }
 const reading = JSON.parse(await readFile(resolve(readingPath), 'utf8'));
 const prefilm = await (await import('../prefilm.mjs')).loadPrefilm(dirname(resolve(readingPath)));
-const { loadWorkspaceSentences } = await load('dist/src/cli/commands/extract/timeplaceCommands.js'), { ask } = await load('dist/src/context/engine.js');
+const { loadWorkspaceSentences } = await load('dist/src/cli/commands/extract/timeplaceCommands.js'), { ask } = await import('story-graph/dist/src/context/engine.js');
 const text = await loadWorkspaceSentences(resolve(novelDir));
 // The book's introduction (src/reading/front.ts; front.json beside the reading): each introduced person's line from
 // it (what they are, by the publisher) leads the lines asked about them, and an introduced person is asked about even if
@@ -24,7 +24,7 @@ const text = await loadWorkspaceSentences(resolve(novelDir));
 const front = JSON.parse(await readFile(join(dirname(resolve(readingPath)), 'front.json'), 'utf8').catch(() => 'null'));
 const introLine = new Map(), introOf = new Map();
 if (front && reading.intro?.cast?.length) {
-  const { introParts, introSentences } = await load('dist/src/reading/front.js'), { sentences } = introSentences(introParts(front));
+  const { introParts, introSentences } = await import('story-graph/dist/src/reading/front.js'), { sentences } = introSentences(introParts(front));
   reading.intro.cast.forEach((entry, k) => { if (entry.entity && sentences[k]) { introLine.set(sentences[k].id, sentences[k].text); introOf.set(entry.entity, sentences[k].id); } });
 }
 const line = id => text.get(id)?.text ?? introLine.get(id) ?? '';
@@ -47,7 +47,7 @@ console.error(`to ask: ${abilities.length} abilities of people, ${people.length}
 if (values.dry) process.exit(0);
 
 let paid = 0;
-const { jevFromEnv } = await load('dist/src/ground/connectors/jev.js'), { cachedDecisions } = await load('dist/src/reading/v1/timeplace/cache.js');
+const { jevFromEnv } = await import('story-graph/dist/src/ground/connectors/jev.js'), { cachedDecisions } = await import('story-graph/dist/src/reading/v1/timeplace/cache.js');
 const live = jevFromEnv(process.env), jev = cachedDecisions({ modelId: live.modelId, decide: (...args) => { paid++; return live.decide(...args); } }, resolve(values.cache ?? join(resolve(values.universe), '..', 'cache-settei')));
 const decide = Object.assign((state, questions) => jev.decide(state, questions), { record: () => {} });
 const given = name => ({ name, key: name, quota: 0, keep: true, collect: focus => focus.items.map(([id, fields]) => ({ id, score: 1, fields })) });

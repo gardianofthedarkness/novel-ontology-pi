@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { atlasArrangement, atlasNodeId, atlasScenes, atlasWorld, pinNodeId, portalNodeId, readingOrderProjection, routeCausalArcs, spiralArrangement, spiralNodeId, spiralWorld } from "../../apps/playground/src/data/orbitalTimePlace.js";
 import { orbitalLevel, surroundingEntities, mainProminence } from "../../apps/playground/src/data/orbitalModel.js";
 import { layoutOrbitalLevel } from "../../apps/playground/src/data/orbitalLayout.js";
-import type { TimePlaceProjection } from "../../apps/playground/src/data/timePlace.js";
+import type { TimePlaceProjection } from "story-graph/dist/src/reading/strands-data/timePlace.js";
 import type { WorldEdge, WorldNode } from "../../apps/playground/src/types.js";
 import { causalProjection } from "../../apps/playground/src/data/causalProjection.js";
 

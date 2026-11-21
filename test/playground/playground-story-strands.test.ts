@@ -1,8 +1,8 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { storyStrands } from "../../apps/playground/src/data/storyStrands.js";
+import { storyStrands } from "story-graph/dist/src/reading/strands-data/storyStrands.js";
 import { shapeChange, spiralArrangement, spiralNodeId, strandSummary } from "../../apps/playground/src/data/orbitalTimePlace.js";
-import type { StoryScene, TimePlaceProjection } from "../../apps/playground/src/data/timePlace.js";
+import type { StoryScene, TimePlaceProjection } from "story-graph/dist/src/reading/strands-data/timePlace.js";
 
 // Invented: Ming and Lan leave the station together (s1), then the story cuts
 // between Ming at the port (m1, m2) and Lan at the hill (l1, l2) until they

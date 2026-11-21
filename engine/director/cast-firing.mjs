@@ -57,7 +57,7 @@ if (process.argv[1] === fileURLToPath(import.meta.url)) {
 
   if (values.stage === 'oracle') {
     const DG = await import('../casts/digest.mjs'), { loadWorkspaceSentences } = await load('dist/src/cli/commands/extract/timeplaceCommands.js');
-    const { workModelFromEnv } = await load('dist/src/ground/connectors/workModel.js'), { cachedWork } = await load('dist/src/reading/v1/timeplace/cache.js');
+    const { workModelFromEnv } = await import('story-graph/dist/src/ground/connectors/workModel.js'), { cachedWork } = await import('story-graph/dist/src/reading/v1/timeplace/cache.js');
     const text = await loadWorkspaceSentences(resolve(novelDir)), work = cachedWork(workModelFromEnv(process.env), join(dirname(resolve(segmentsPath)), 'cache-work-firing'));
     const names = new Map((await readFile(join(resolve(novelDir), 'ontology', 'entities.jsonl'), 'utf8')).trim().split('\n').map(row => JSON.parse(row)).map(entity => [entity.id, entity.names?.[0]?.text ?? entity.id]));
     const sceneOf = new Map(reading.scenes.flatMap(scene => scene.sentences.map(id => [id, scene.id])));
@@ -110,8 +110,8 @@ if (process.argv[1] === fileURLToPath(import.meta.url)) {
   }
 
   if (values.stage === 'residual') {
-    const S = await load('dist/src/reading/v1/autostep/segmentation.js'), { loadWorkspaceSentences } = await load('dist/src/cli/commands/extract/timeplaceCommands.js');
-    const { jevFromEnv } = await load('dist/src/ground/connectors/jev.js'), { cachedDecisions } = await load('dist/src/reading/v1/timeplace/cache.js');
+    const S = await import('story-graph/dist/src/reading/v1/autostep/segmentation.js'), { loadWorkspaceSentences } = await load('dist/src/cli/commands/extract/timeplaceCommands.js');
+    const { jevFromEnv } = await import('story-graph/dist/src/ground/connectors/jev.js'), { cachedDecisions } = await import('story-graph/dist/src/reading/v1/timeplace/cache.js');
     const text = await loadWorkspaceSentences(resolve(novelDir)), said = id => text.get(id)?.text ?? '';
     const usage = { requests: 0 }, live = jevFromEnv(process.env), jev = cachedDecisions({ modelId: live.modelId, decide: (...args) => { usage.requests++; return live.decide(...args); } }, join(dirname(dirname(resolve(readingPath))), 'cache'));
     const grids = JSON.parse(await readFile(resolve(values.grid ?? 'firing-grid.json'), 'utf8'));

@@ -20,7 +20,7 @@ import { join } from 'node:path';
 import * as DG from './digest.mjs';
 import { prefilmOf } from '../director/specialists.mjs';
 import * as G from '../director/gate.mjs';
-import * as SG from '../director/segments.mjs';
+import * as SG from 'story-graph/engine/strands/segments.mjs';
 
 export const PRESENT = new Set(['speaks', 'acts', 'addressed']);
 

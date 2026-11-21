@@ -10,7 +10,7 @@ import { existsSync } from "node:fs";
 import { mkdir, readFile, rename, writeFile } from "node:fs/promises";
 import { dirname, join, resolve } from "node:path";
 import { forgetLayers, layersOf, merge, overridesOf, problemsOf, resolveSetting, schema, table, universeFor, type Layer } from "../../../world/settings.js";
-import { latestSnapshot, libraryOf, readSnapshot, takeSnapshot } from "../../../ground/workspace/universe.js";
+import { latestSnapshot, libraryOf, readSnapshot, takeSnapshot } from "story-graph/dist/src/ground/workspace/universe.js";
 
 interface LayerFile { values?: Record<string, unknown>; tables?: Record<string, unknown>; places?: Record<string, { values?: Record<string, unknown>; tables?: Record<string, unknown> }>; log?: unknown[] }
 const isObject = (value: unknown): value is Record<string, unknown> => typeof value === "object" && value !== null && !Array.isArray(value);

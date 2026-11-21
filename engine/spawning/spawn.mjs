@@ -12,10 +12,10 @@ import { fileURLToPath, pathToFileURL } from 'node:url';
 import { parseArgs } from 'node:util';
 
 const repository = resolve(dirname(fileURLToPath(import.meta.url)), '..', '..'), load = path => import(pathToFileURL(join(repository, path)).href);
-const P = await load('dist/src/world/spawning/positions.js'), { sceneThings } = await load('dist/src/reading/script.js');
-const { compose } = await load('dist/src/context/engine.js'), { spawnSpotMode, spawnLines } = await load('dist/src/context/spawnModes.js'), CP = await load('dist/src/world/terrain/composite.js');
+const P = await load('dist/src/world/spawning/positions.js'), { sceneThings } = await import('story-graph/dist/src/reading/script.js');
+const { compose } = await import('story-graph/dist/src/context/engine.js'), { spawnSpotMode, spawnLines } = await load('dist/src/context/spawnModes.js'), CP = await load('dist/src/world/terrain/composite.js');
 const { loadWorkspaceSentences } = await load('dist/src/cli/commands/extract/timeplaceCommands.js');
-const SG = await import('../director/segments.mjs');
+const SG = await import('story-graph/engine/strands/segments.mjs');
 
 /** The scenes' starts on a book: its script, strands, terrain and built page; `reading`: the reading's data, for things. */
 export async function spawnBook(novelDir, { reading = null } = {}) {

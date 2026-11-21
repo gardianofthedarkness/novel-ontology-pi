@@ -1,8 +1,8 @@
 import { readdir, readFile } from "node:fs/promises";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
-import { decodeEntities, htmlToText, resolveEpubPath } from "../../../reading/album/epub.js";
-import { unzipAll } from "../../../reading/album/zip.js";
+import { decodeEntities, htmlToText, resolveEpubPath } from "story-graph/dist/src/reading/album/epub.js";
+import { unzipAll } from "story-graph/dist/src/reading/album/zip.js";
 import { loadWorkspaceSentences } from "./timeplaceCommands.js";
 
 /**
@@ -135,7 +135,7 @@ const canon = async () => import(pathToFileURL(join(await repository(), "engine"
   toCanon(novelDir: string, options: { run: string; reading: Reading }): Promise<Record<string, unknown>>;
   undoCanon(novelDir: string, options: { run: string }): Promise<Record<string, unknown>>;
 }>;
-const graphAgain = async (novelDir: string) => { const { buildGraphFromBundle } = await import("../../../ground/connectors/ladybug.js"); await buildGraphFromBundle(join(novelDir, "ontology"), join(novelDir, "ontology", "graph.lbug")); };
+const graphAgain = async (novelDir: string) => { const { buildGraphFromBundle } = await import("story-graph/dist/src/ground/connectors/ladybug.js"); await buildGraphFromBundle(join(novelDir, "ontology"), join(novelDir, "ontology", "graph.lbug")); };
 
 /** `novel world canon <dir> [--run <id>]`: what a director run settled, into canon by its gates (the director does it after each run). */
 export async function worldCanon(novelDir: string, options: { run?: string }): Promise<Record<string, unknown>> {

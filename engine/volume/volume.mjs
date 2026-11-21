@@ -19,7 +19,7 @@ import { cp, mkdir, open, readFile, readdir, rename, writeFile } from 'node:fs/p
 import { basename, dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { parseArgs } from 'node:util';
-import { storedKeys } from './credentials.mjs';
+import { storedKeys } from 'story-graph/engine/credentials.mjs';
 
 const repository = resolve(dirname(fileURLToPath(import.meta.url)), '..', '..');
 const json = file => readFile(file, 'utf8').then(JSON.parse).catch(() => null);
@@ -58,6 +58,8 @@ export function stepEnvironment(env = process.env) {
   return out;
 }
 const node = (script, ...args) => ({ program: process.execPath, args: [join(repository, script), ...args] });
+// A script of story-graph (the reading, the paratext, the cast, the strands), where the package is installed.
+const story = (script, ...args) => ({ program: process.execPath, args: [fileURLToPath(import.meta.resolve(`story-graph/${script}`)), ...args] });
 const cli = (...args) => node('dist/src/cli/cli.js', ...args);
 
 /**
@@ -70,10 +72,10 @@ export const STEPS = [
     act: async at => { if (!existsSync(at.novel)) throw new Error(`no book folder at ${at.novel}`); await rename(at.novel, at.source); } },
   { id: 'read', paid: true, why: 'the reading (Jev and the work model; ~$0.3–0.4 a volume)',
     done: at => existsSync(join(at.readingRun, 'v2', 'data.json')) || existsSync(at.data),
-    commands: async at => { const job = await jobEntry(at); return [node('engine/reading/read.mjs', existsSync(at.source) ? at.source : at.novel, at.readingRun, ...(job?.epub ? ['--epub', job.epub] : []))]; } },
+    commands: async at => { const job = await jobEntry(at); return [story('engine/reading/read.mjs', existsSync(at.source) ? at.source : at.novel, at.readingRun, ...(job?.epub ? ['--epub', job.epub] : []))]; } },
   { id: 'workspace', paid: false, why: 'the world-first workspace and its world script from the reading; the reading into the book',
     done: at => existsSync(join(at.novel, 'stage', 'world', 'script.json')) && existsSync(at.data),
-    commands: async at => [node('engine/reading/workspace.mjs', at.source, at.readingRun, at.novel)],
+    commands: async at => [story('engine/reading/workspace.mjs', at.source, at.readingRun, at.novel)],
     after: async at => {
       await mkdir(at.reading, { recursive: true }); await cp(join(at.readingRun, 'v2'), at.reading, { recursive: true });
       // The book's own settings (a look pass done before, the book's layer) stay the book's.
@@ -83,9 +85,9 @@ export const STEPS = [
   // Paratext, then the universe cast (the user, 2026-11-19): which scenes are not the story (the afterword, credits,
   // contents), then each character of the book placed on the universe's one list of people, skipping what is paratext.
   { id: 'paratext', paid: true, why: 'which scenes are not the story: afterword, notes, front matter (one Jev call per 25 scenes)',
-    done: at => existsSync(join(at.reading, 'paratext.json')), commands: async at => [node('engine/reading/paratext.mjs', at.novel, '--reading', at.data)] },
+    done: at => existsSync(join(at.reading, 'paratext.json')), commands: async at => [story('engine/reading/paratext.mjs', at.novel, '--reading', at.data)] },
   { id: 'cast', paid: true, why: 'the book\'s characters on the universe\'s one cast: the same person across books (Jev pair checks)',
-    done: at => !!readJson(join(at.universe, 'cast.json'))?.books?.includes(at.book), commands: async at => [node('engine/universe/cast.mjs', at.library, '--books', at.book)] },
+    done: at => !!readJson(join(at.universe, 'cast.json'))?.books?.includes(at.book), commands: async at => [story('engine/universe/cast.mjs', at.library, '--books', at.book)] },
   // The sky before the agent's steps: the rooms pass chooses each unit's shot by its time of day and weather (rain an eye
   // level shot, a new time of day an outside one), which only the reading's sky.json gives; the sky reads the reading alone.
   { id: 'sky', paid: true, why: 'time of day and weather by unit (12 or so Jev questions)',
@@ -100,7 +102,7 @@ export const STEPS = [
     done: at => readJson(join(at.bookDir, 'workflows', 'rooms.json'))?.done === true },
   { id: 'strands', paid: false, why: 'the book\'s strands by interaction (stage/world/strands.json)',
     done: at => existsSync(join(at.novel, 'stage', 'world', 'strands.json')),
-    commands: async at => [node('engine/reading/strands.mjs', at.novel, '--reading', at.data)] },
+    commands: async at => [story('engine/reading/strands.mjs', at.novel, '--reading', at.data)] },
   { id: 'carry', paid: true, why: 'the book before registered with its run\'s damage kept, then this book inheriting or closing its open strands (a few work-model questions)',
     done: at => !previousBook(at.book) || !!readJson(join(at.universe, 'strands.json'))?.decisions?.[at.book],
     commands: async at => {

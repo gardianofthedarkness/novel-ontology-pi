@@ -1,9 +1,9 @@
 import { readFile, rename, stat, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
-import { jevFromEnv, type DecisionModel } from "../../../ground/connectors/jev.js";
-import { storyStrands } from "../../../reading/v1/timeplace/strandQuestions.js";
-import { forkTimeline, type TimelineScene } from "../../../play/stage/environment.js";
+import { jevFromEnv, type DecisionModel } from "story-graph/dist/src/ground/connectors/jev.js";
+import { storyStrands } from "story-graph/dist/src/reading/v1/timeplace/strandQuestions.js";
+import { forkTimeline, type TimelineScene } from "story-graph/dist/src/reading/stage/environment.js";
 import { stageInputs } from "./stageCommands.js";
 
 /**

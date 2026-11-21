@@ -9,7 +9,7 @@ import { fileURLToPath, pathToFileURL } from 'node:url';
 import { parseArgs } from 'node:util';
 
 const repository = resolve(dirname(fileURLToPath(import.meta.url)), '..', '..'), load = path => import(pathToFileURL(join(repository, path)).href);
-const M = await load('dist/src/context/directorModes.js'), { ask } = await load('dist/src/context/engine.js');
+const M = await load('dist/src/context/directorModes.js'), { ask } = await import('story-graph/dist/src/context/engine.js');
 const BATCH = 20, KINDS = new Set(['narration', 'environment']);
 
 /**
@@ -50,7 +50,7 @@ if (process.argv[1] === fileURLToPath(import.meta.url)) {
   const { values, positionals: [novelDir] } = parseArgs({ allowPositionals: true, options: { reading: { type: 'string' }, from: { type: 'string' }, to: { type: 'string' }, cache: { type: 'string' }, out: { type: 'string' } } });
   if (!novelDir || !values.reading || !values.from || !values.to) { console.error('usage: node engine/director/pass.mjs <novel-dir> --reading <data.json> --from <scene> --to <scene> [--cache <dir>] [--out <file>]'); process.exit(2); }
   const reading = JSON.parse(await readFile(values.reading, 'utf8'));
-  const { jevFromEnv } = await load('dist/src/ground/connectors/jev.js'), { cachedDecisions } = await load('dist/src/reading/v1/timeplace/cache.js'), { PICKER_MODEL } = await import('../live/sim-jev.mjs');
+  const { jevFromEnv } = await import('story-graph/dist/src/ground/connectors/jev.js'), { cachedDecisions } = await import('story-graph/dist/src/reading/v1/timeplace/cache.js'), { PICKER_MODEL } = await import('../live/sim-jev.mjs');
   const jev = cachedDecisions(jevFromEnv({ ...process.env, JEV_MODEL: PICKER_MODEL }), resolve(values.cache ?? join(novelDir, 'stage', 'director', 'cache')));
   let calls = 0;
   const decide = async (state, questions, options) => { calls++; return jev.decide(state, questions, options); };

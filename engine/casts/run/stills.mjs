@@ -40,7 +40,7 @@ const prepare = async references => {
 // The universe's face store (the user, 2026-11-05: portraits "sampling from ground truth"): each face named surely in a
 // story picture (Jev sure and the matcher agreeing, stills.mjs confirmedFaces), kept as a black-and-white reference for the
 // next picture and the next book. The book's own art: kept with the library, never exported (universe.ts).
-const library = (await load('dist/src/ground/workspace/universe.js')).libraryOf(dir);
+const library = (await import('story-graph/dist/src/ground/workspace/universe.js')).libraryOf(dir);
 const storeDir = library ? join(library.root, 'universe', 'faces') : join(dir, 'faces'), book = library?.book ?? 'book';
 const store = JSON.parse(await readFile(join(storeDir, 'faces.json'), 'utf8').catch(() => '{"version":1,"faces":[]}'));
 const storedReferences = () => store.faces.map(face => ({ id: `face:${face.id}`, entityId: face.entityId, path: join(storeDir, face.file), picture: face.book === book ? face.picture : null }));
@@ -52,7 +52,7 @@ const pictures = records.filter(record => record.kind === 'story' && (!wanted ||
 const front = JSON.parse(await readFile(join(dir, 'front.json'), 'utf8').catch(() => 'null'));
 let intro = null;
 if (front && reading.intro?.cast?.length) {
-  const { introParts, introSentences } = await load('dist/src/reading/front.js'), { sentences: lines } = introSentences(introParts(front));
+  const { introParts, introSentences } = await import('story-graph/dist/src/reading/front.js'), { sentences: lines } = introSentences(introParts(front));
   intro = { cast: reading.intro.cast.map((entry, k) => ({ entity: entry.entity, line: lines[k]?.text ?? null })) };
 }
 
@@ -63,7 +63,7 @@ const TASK = 'The book\'s illustration of a light novel (`picture`: its faces bo
 
 let paid = 0, asked = 0;
 const jev = values.dry ? null : await (async () => {
-  const { jevFromEnv } = await load('dist/src/ground/connectors/jev.js'), { cachedDecisions } = await load('dist/src/reading/v1/timeplace/cache.js');
+  const { jevFromEnv } = await import('story-graph/dist/src/ground/connectors/jev.js'), { cachedDecisions } = await import('story-graph/dist/src/reading/v1/timeplace/cache.js');
   const live = jevFromEnv({ ...process.env, JEV_MODEL: process.env.JEV_MODEL ?? 'jev-1.14.0' });
   return cachedDecisions({ modelId: live.modelId, decide: (...args) => { paid++; return live.decide(...args); } }, resolve(values.cache ?? join(dir, '..', 'cache-stills')));
 })();

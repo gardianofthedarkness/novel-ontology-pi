@@ -12,7 +12,7 @@ import { fileURLToPath, pathToFileURL } from 'node:url';
 import { parseArgs } from 'node:util';
 import { readPrefilm } from '../prefilm.mjs';
 import { prefilmOf } from '../../director/specialists.mjs';
-import * as SG from '../../director/segments.mjs';
+import * as SG from 'story-graph/engine/strands/segments.mjs';
 
 const repository = resolve(dirname(fileURLToPath(import.meta.url)), '..', '..', '..'), load = path => import(pathToFileURL(join(repository, path)).href);
 const { values, positionals: [novelDir, readingPath] } = parseArgs({ allowPositionals: true, options: { from: { type: 'string' }, to: { type: 'string' }, 'stand-in': { type: 'boolean' } } });
@@ -22,13 +22,13 @@ const script = JSON.parse(await readFile(join(dir, 'stage', 'world', 'script.jso
 const pins = (await (await import('../../review/review.mjs')).loadPins(dir)).present ?? {};
 const { loadWorkspaceSentences } = await load('dist/src/cli/commands/extract/timeplaceCommands.js');
 const text = new Map([...(await loadWorkspaceSentences(dir))].map(([id, entry]) => [id, entry.text]));
-const strandsWith = await (await import('../../director/strand-builder.mjs')).strandBuilder(dir);
+const strandsWith = await (await import('story-graph/engine/strands/strand-builder.mjs')).strandBuilder(dir);
 let work;
 if (values['stand-in']) {
   const { ruledWork } = await import('../../director/rehearsal.mjs');
   work = ruledWork();
 } else {
-  const { workModelFromEnv } = await load('dist/src/ground/connectors/workModel.js'), { cachedWork } = await load('dist/src/reading/v1/timeplace/cache.js');
+  const { workModelFromEnv } = await import('story-graph/dist/src/ground/connectors/workModel.js'), { cachedWork } = await import('story-graph/dist/src/reading/v1/timeplace/cache.js');
   // The cache keeps its old folder name: the answers already paid for stay found.
   work = cachedWork(workModelFromEnv(process.env), join(dirname(resolve(readingPath)), '..', 'cache-faculties'));
 }

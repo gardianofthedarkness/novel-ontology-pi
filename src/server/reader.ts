@@ -8,10 +8,10 @@
  */
 import { readFile } from "node:fs/promises";
 import { extname, isAbsolute, join } from "node:path";
-import { mentions } from "../reading/em.js";
-import type { Reference } from "../library/book.js";
-import { epubDocument, epubItems, type EpubDocument } from "../library/epub.js";
-import type { NovelWorkspace, OpenBook } from "../library/workspace.js";
+import { mentions } from "story-graph/dist/src/reading/em.js";
+import type { Reference } from "story-graph/dist/src/library/book.js";
+import { epubDocument, epubItems, type EpubDocument } from "story-graph/dist/src/library/epub.js";
+import type { NovelWorkspace, OpenBook } from "story-graph/dist/src/library/workspace.js";
 
 /** [at, length, type, ref]: type person|place|thing|concept|time|desc; ref the entity (a description: whom it means). */
 export type Mark = [number, number, string, string | null];

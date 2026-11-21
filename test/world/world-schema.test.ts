@@ -21,7 +21,8 @@ test("every key is documented, its layers known and its default in its range", (
     assert.ok(entry.layers.every((layer) => LAYERS.has(layer)), `${key}'s layers`);
     if (entry.range) assert.ok(typeof entry.default === "number" && entry.default >= entry.range[0] && entry.default <= entry.range[1], `${key}'s default in range`);
     assert.deepEqual(problemsOf(key, entry.default), [], `${key}'s default is valid for itself`);
-    for (const use of entry.used) assert.ok(existsSync(join(ROOT, use.split(" ")[0])), `${key} is used in ${use}`);
+    // story-graph/<path>: a file of the story-graph package, where it is installed.
+    for (const use of entry.used) { const file = use.split(" ")[0]; assert.ok(existsSync(join(ROOT, file.startsWith("story-graph/") ? join("node_modules", file) : file)), `${key} is used in ${use}`); }
   }
   for (const [name, entry] of Object.entries(tables)) {
     assert.ok(existsSync(join(ROOT, entry.file)), `table ${name}'s file`);

@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { compose, type Mode } from "../../src/context/engine.js";
+import { compose, type Mode } from "story-graph/dist/src/context/engine.js";
 
 type Focus = { asked: string[]; ambiguity: number };
 type Stores = { facts: { id: string; text: string; score: number }[] };
@@ -36,7 +36,7 @@ test("the context engine: quotas scaled by the complexity, the budget cut weakes
 });
 
 test("the engine for every Jev request: a task from the focus, a ranked source in its own order, a key always there, a mode's own render, and ask() recording the manifest", async () => {
-  const { ask } = await import("../../src/context/engine.js");
+  const { ask } = await import("story-graph/dist/src/context/engine.js");
   const ranked: Mode<{ ids: string[] }, null> = {
     name: "ranked", task: (focus) => `${focus.ids.length} asked`, budget: 10_000, cutOrder: [],
     sources: [
@@ -77,7 +77,7 @@ test("terrain's ground: the sentences around the part's name in the scenes namin
       { id: "c", index: 2, sentences: ["s5"], environment: [{ id: "environment:s5", first: "s5", text: sentences[4].text }] }, { id: "d", index: 3, sentences: ["s7"], environment: [] }],
   }, sentences, parentOf, label);
   const focus = { part: { id: "d7", label: "District Seven", scale: "district" }, holder: { id: "city", label: "City" }, city: { id: "city", label: "City" }, shapes: { donut: "a donut" }, pictures: { map: "the map" } };
-  const composed = await (await import("../../src/context/engine.js")).compose(T.terrainGroundMode, focus, stores);
+  const composed = await (await import("story-graph/dist/src/context/engine.js")).compose(T.terrainGroundMode, focus, stores);
   const state = composed.state as Record<string, Record<string, unknown>>;
   assert.deepEqual(state.part, { name: "District Seven", scale: "district", in: "City" });
   assert.deepEqual(state.scenes, { a: "The station square of District Seven is busy.", d: "They walked back to District Seven at night." }, "the scenes naming it, the one set in it first; never the city's other scenes nor District Six's");
@@ -86,10 +86,10 @@ test("terrain's ground: the sentences around the part's name in the scenes namin
   const district = ["cbd", "dwelling", "industrial", "harbour", "mountain", "oldtown", "village", "farmland", "donut"];
   // Its kind only: where it lies and how large it is are the program's (docs/v3/design.html#world-engine-v2 §2.0.21).
   assert.deepEqual([Object.keys(state.kinds), composed.questions.map((question) => question.key), composed.questions[0].options], [district, ["kind"], district]);
-  const street = await (await import("../../src/context/engine.js")).compose(T.terrainGroundMode, { ...focus, part: { ...focus.part, scale: "street" } }, stores);
+  const street = await (await import("story-graph/dist/src/context/engine.js")).compose(T.terrainGroundMode, { ...focus, part: { ...focus.part, scale: "street" } }, stores);
   assert.deepEqual(Object.keys((street.state as Record<string, object>).kinds), ["shopping", "centre", "avenue", "square", "crossing", "station", "alley", "residential", "waterfront", "park", "stadium", "donut"]);
   // A pool's member (sampled): asked its kind, not where it lies; its own sentences' scene is its text (it has no name to find).
-  const sampled = await (await import("../../src/context/engine.js")).compose(T.terrainGroundMode, { ...focus, part: { id: "unnamed:s1", label: "a square (scene 1)", scale: "street" }, sampled: true }, { ...stores, own: (id: string) => (id === "unnamed:s1" ? [{ id: "s1", text: sentences[0].text }] : []) });
+  const sampled = await (await import("story-graph/dist/src/context/engine.js")).compose(T.terrainGroundMode, { ...focus, part: { id: "unnamed:s1", label: "a square (scene 1)", scale: "street" }, sampled: true }, { ...stores, own: (id: string) => (id === "unnamed:s1" ? [{ id: "s1", text: sentences[0].text }] : []) });
   assert.deepEqual([sampled.questions.map((question) => question.key), Object.keys((sampled.state as Record<string, object>).scenes)], [["kind"], ["a"]]);
   assert.equal(T.TERRAIN_KINDS.district.cbd.ground, "skyscrapers");
   // Each kind its own manifold, and Jev gives its median (the user's calls): a CBD's medians, a mountain's tops.
@@ -101,9 +101,9 @@ test("terrain's ground: the sentences around the part's name in the scenes namin
   assert.deepEqual([cbd.slices[0], cbd.slices[3].y, cbd.slices.length], [{ letter: "A", y: -60, said: "underground: deep underground" }, -6, 10]);
   assert.match(String(state.kinds.cbd), /highest at its core \(about 2\.1 times its edge\); a wide spread .*; one in 7 far above the rest/);
   // The city level: its own kinds, asked its kind only (it is the map); a district is told its city's kept terrain (within).
-  const city = await (await import("../../src/context/engine.js")).compose(T.terrainGroundMode, { ...focus, part: { id: "city", label: "City", scale: "city" } }, stores);
+  const city = await (await import("story-graph/dist/src/context/engine.js")).compose(T.terrainGroundMode, { ...focus, part: { id: "city", label: "City", scale: "city" } }, stores);
   assert.deepEqual([Object.keys((city.state as Record<string, object>).kinds).slice(0, 4), city.questions.map((question) => question.key)], [["metropolis", "city", "town", "oldcity"], ["kind"]]);
-  const height = await (await import("../../src/context/engine.js")).compose(T.terrainHeightMode, { ...focus, kind: "cbd", ...cbd, within: { City: "metropolis, median 15 m" } }, stores);
+  const height = await (await import("story-graph/dist/src/context/engine.js")).compose(T.terrainHeightMode, { ...focus, kind: "cbd", ...cbd, within: { City: "metropolis, median 15 m" } }, stores);
   const said = height.state as Record<string, Record<string, unknown>>;
   assert.ok(Object.keys(said.scenes).join() === "a,d" && said.heights.E === "30 m: about 10 floors" && said.heights.A === "-60 m: underground: deep underground" && said.within.City === "metropolis, median 15 m");
   assert.match(String(height.state.task), /median height .* not the tallest/);
@@ -112,9 +112,9 @@ test("terrain's ground: the sentences around the part's name in the scenes namin
 });
 
 test("the reading's prompts of plain text, composed by the engine, are the digger's own: the tiling window and seam, and a flashback's continuation", async () => {
-  const { tilingDocument } = await import("../../src/reading/v1/autostep/segmentation.js");
-  const { continuationDocument, continuationQuestion } = await import("../../src/reading/v1/timeplace/roles.js");
-  const R = await import("../../src/context/readingModes.js");
+  const { tilingDocument } = await import("story-graph/dist/src/reading/v1/autostep/segmentation.js");
+  const { continuationDocument, continuationQuestion } = await import("story-graph/dist/src/reading/v1/timeplace/roles.js");
+  const R = await import("story-graph/dist/src/context/readingModes.js");
   const lines = [{ id: "s1", text: "One." }, { id: "s2", text: "Two." }, { id: "s3", text: "Three." }];
   const window = { kind: "window" as const, summary: "Processing block b0001.", context: lines, questions: [] };
   const seam = { kind: "seam" as const, summary: "Processing block b0001.", open: "s1", tail: lines.slice(0, 2), head: lines.slice(2), questions: [] };
@@ -135,7 +135,7 @@ test("compatibility at the street level: an avenue may carry a station front or 
 });
 
 test("a place's scenes go by the question asked: for its height, the scene telling its floors beside it first; for its kind, the one telling its streets", async () => {
-  const T = await import("../../src/context/terrainModes.js"), { compose } = await import("../../src/context/engine.js");
+  const T = await import("../../src/context/terrainModes.js"), { compose } = await import("story-graph/dist/src/context/engine.js");
   const sentences = [
     { id: "x1", text: "第十五学区是最大的闹市。" }, { id: "x2", text: "那里有五十层的高楼。" },
     { id: "y1", text: "他们路过第十五学区的街口。" }, { id: "y2", text: "广场上人很多。" },
@@ -150,7 +150,7 @@ test("a place's scenes go by the question asked: for its height, the scene telli
 });
 
 test("fifteen sentences in all: each mention with a sentence either side first, then wider rings; a break where they skip", async () => {
-  const T = await import("../../src/context/terrainModes.js"), { compose } = await import("../../src/context/engine.js");
+  const T = await import("../../src/context/terrainModes.js"), { compose } = await import("story-graph/dist/src/context/engine.js");
   const lines = Array.from({ length: 40 }, (_, n) => ({ id: `z${String(n).padStart(2, "0")}`, text: n === 5 || n === 30 ? `第十五学区${n}。` : `第${n}句。` }));
   const stores = await T.terrainStores({ entities: [], facts: [], slots: [], settings: [], scenes: [{ id: "z", index: 0, sentences: lines.map((line) => line.id) }] }, lines, () => null, (id) => id);
   const focus = { part: { id: "d15", label: "第十五学区", scale: "district" }, holder: { id: "city", label: "City" }, city: { id: "city", label: "City" }, kind: "cbd", measure: "median" as const, slices: [{ letter: "A", y: 30, said: "about 10 floors" }], pictures: {} };

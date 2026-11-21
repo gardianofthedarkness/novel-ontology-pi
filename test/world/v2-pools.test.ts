@@ -1,9 +1,9 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { addUnit, centralBuild, dwellInGround, dwellInStreets, dwellingFor, emptyCanvas, holderFor, POOL_SPACING, tiedSpot } from "../../src/world/built/placeCanvas.js";
-import { buildingUseOf } from "../../src/world/rules/language.js";
-import { continuityTies, emptyRegistry, evenPick, withPools } from "../../src/reading/pools.js";
-import type { ReadingScript } from "../../src/reading/script.js";
+import { buildingUseOf } from "story-graph/dist/src/rules/language.js";
+import { continuityTies, emptyRegistry, evenPick, withPools } from "story-graph/dist/src/reading/pools.js";
+import type { ReadingScript } from "story-graph/dist/src/reading/script.js";
 
 const script = (): ReadingScript => ({
   version: 2, from: "v2-reading", scenes: [],

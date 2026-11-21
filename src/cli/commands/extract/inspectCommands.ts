@@ -1,15 +1,15 @@
 import { readdir, readFile, stat } from "node:fs/promises";
 import { join, resolve } from "node:path";
-import type { BundleManifest } from "../../../ground/connectors/bundle.js";
+import type { BundleManifest } from "story-graph/dist/src/ground/connectors/bundle.js";
 import type {
   Branch,
   Entity,
   OntEvent,
   Relation,
   Scene,
-} from "../../../ground/ontology/types.js";
-import { listChangeSets } from "../../../canon/gate/changesetStore.js";
-import { cutBlocks, splitChapters } from "../../../reading/text/blocks.js";
+} from "story-graph/dist/src/ground/ontology/types.js";
+import { listChangeSets } from "story-graph/dist/src/canon/gate/changesetStore.js";
+import { cutBlocks, splitChapters } from "story-graph/dist/src/reading/text/blocks.js";
 
 /**
  * `novel inspect <novel-dir>` — corpus diagnostics over a novel bundle.

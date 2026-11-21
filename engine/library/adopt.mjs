@@ -13,7 +13,7 @@ import { parseArgs } from 'node:util';
 import { undoCanon } from '../review/canon.mjs';
 
 const repository = resolve(dirname(fileURLToPath(import.meta.url)), '..', '..');
-const universe = () => import(pathToFileURL(join(repository, 'dist', 'src', 'ground', 'workspace', 'universe.js')).href);
+const universe = () => import('story-graph/dist/src/ground/workspace/universe.js');
 
 /** A run's outputs in a book (what the director and the review write per run): set aside for the clean state. */
 export const RUN_OUTPUTS = ['stage/director/run.json', 'stage/director/laws.json', 'stage/director/reading.json', 'stage/director/reading-path.json', 'stage/world/pins.json', 'stage/world/speakers.json', 'stage/world/pool.jsonl', 'stage/world/answers.jsonl', 'stage/world/canon.jsonl'];

@@ -104,7 +104,7 @@ const report = { lines: lines.length, known: known.length, weights: best.w, cove
 // 4 · Jev with exemplars, on a sample of the hidden lines of folds 1–4 that have two or more candidates.
 if (values.jev) {
   const want = Number(values.jev), sample = known.filter(line => results.has(line.id) && line.candidates.length >= 2).sort((a, b) => createHash('sha1').update(a.id).digest('hex').localeCompare(createHash('sha1').update(b.id).digest('hex'))).slice(0, want);
-  const { ask } = await load('dist/src/context/engine.js'), { jevFromEnv } = await load('dist/src/ground/connectors/jev.js'), { cachedDecisions } = await load('dist/src/reading/v1/timeplace/cache.js');
+  const { ask } = await import('story-graph/dist/src/context/engine.js'), { jevFromEnv } = await import('story-graph/dist/src/ground/connectors/jev.js'), { cachedDecisions } = await import('story-graph/dist/src/reading/v1/timeplace/cache.js');
   let paid = 0;
   const live = jevFromEnv(process.env), jev = cachedDecisions({ modelId: live.modelId, decide: (...args) => { paid++; return live.decide(...args); } }, join(cacheDir, 'jev'));
   const decide = Object.assign((state, questions) => jev.decide(state, questions), { record: () => {} });
@@ -116,7 +116,7 @@ if (values.jev) {
   // the work model writes how each candidate talks from their known lines of that fold only (never the hidden ones).
   const variants = values.profiles ? ['jev', 'jevProfiles', 'jevProfilesOnly'] : ['jev'], profiles = new Map();
   if (values.profiles) {
-    const { workModelFromEnv } = await load('dist/src/ground/connectors/workModel.js'), { cachedWork } = await load('dist/src/reading/v1/timeplace/cache.js');
+    const { workModelFromEnv } = await import('story-graph/dist/src/ground/connectors/workModel.js'), { cachedWork } = await import('story-graph/dist/src/reading/v1/timeplace/cache.js');
     const work = cachedWork(workModelFromEnv(process.env), join(cacheDir, 'profiles'));
     let tokens = { prompt: 0, completion: 0, requests: 0 };
     const wanted = new Set(sample.flatMap(line => line.candidates.map(who => `${fold(line)}|${who}`)));

@@ -19,9 +19,9 @@ const fold = records => [...new Map(records.map(record => [record.id, record])).
 const formsOf = entity => [...new Set((entity.names ?? []).map(name => name.text).filter(text => text && text.trim().length >= 2))];
 
 export async function takeBase(novelDir, outDir) {
-  const { BundleStore } = await load('dist/src/ground/connectors/bundle.js');
+  const { BundleStore } = await import('story-graph/dist/src/ground/connectors/bundle.js');
   const { loadWorkspaceSentences } = await load('dist/src/cli/commands/extract/timeplaceCommands.js');
-  const { listChangeSets } = await load('dist/src/canon/gate/changesetStore.js');
+  const { listChangeSets } = await import('story-graph/dist/src/canon/gate/changesetStore.js');
   const bundle = new BundleStore(join(novelDir, 'ontology'));
   const scenes = fold(await bundle.loadFile('scenes.jsonl')).sort((a, b) => order(a.sentenceIds?.[0]) - order(b.sentenceIds?.[0]));
   const events = fold(await bundle.loadFile('events.jsonl')), entities = fold(await bundle.loadFile('entities.jsonl')), relations = await bundle.loadFile('relations.jsonl');

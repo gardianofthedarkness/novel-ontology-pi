@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { buildingMoments, buildingsAt } from "../../apps/playground/src/data/placeBuildings.js";
-import type { StoryScene, StoryTime, TimePlaceProjection } from "../../apps/playground/src/data/timePlace.js";
+import type { StoryScene, StoryTime, TimePlaceProjection } from "story-graph/dist/src/reading/strands-data/timePlace.js";
 
 const time = (id: string, storyIndex: number, extra: Partial<StoryTime> = {}) => ({ id, label: id, gloss: "", family: "date", role: "ADVANCE", flashback: false, storyIndex, narrativeIndex: storyIndex, date: null, partOfDay: null, ...extra }) as unknown as StoryTime;
 const scene = (id: string, index: number, period: string | null): StoryScene => ({ id, index, chapterIndex: 0, label: id, times: period ? [{ id: period, via: "anchor" }] : [], flashback: false, placeIds: ["tower"], placeCarried: false, characterIds: [] });

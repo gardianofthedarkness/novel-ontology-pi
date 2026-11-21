@@ -38,7 +38,7 @@ if (process.argv[1] === fileURLToPath(import.meta.url)) {
   const novelDir = resolve(novelArg), sceneIds = values.scenes.split(','), spotsPer = Number(values.spots ?? 3);
   const { strandDemo, inlineStrand } = await import('../world/export-strand-demo.mjs'), { browser, serve } = await import('../view/two-view-things.mjs');
   const { VENDOR_FILES, PICKER_MODEL } = await import('../live/sim-jev.mjs');
-  const { jevFromEnv } = await load('dist/src/ground/connectors/jev.js'), { cachedDecisions } = await load('dist/src/reading/v1/timeplace/cache.js');
+  const { jevFromEnv } = await import('story-graph/dist/src/ground/connectors/jev.js'), { cachedDecisions } = await import('story-graph/dist/src/reading/v1/timeplace/cache.js');
   const work = join(novelDir, 'stage', 'pick-test'), shots = join(work, 'shots');
   await mkdir(shots, { recursive: true });
   for (const [path, file] of Object.entries(VENDOR_FILES)) { await mkdir(dirname(join(work, 'vendor', path)), { recursive: true }); await copyFile(join(repository, file), join(work, 'vendor', path)); }

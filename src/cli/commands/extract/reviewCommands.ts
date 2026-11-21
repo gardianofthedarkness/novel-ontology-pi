@@ -1,5 +1,7 @@
-import { review } from "../../../canon/gate/review.js";
-import type { ReviewTarget } from "../../../canon/gate/reviewTypes.js";
+// The 3D figures settle after a cast review saves (castHooks.ts).
+import "../../../characters/castHooks.js";
+import { review } from "story-graph/dist/src/canon/gate/review.js";
+import type { ReviewTarget } from "story-graph/dist/src/canon/gate/reviewTypes.js";
 
 /** Options each review operation takes (also used to suggest the right one for a mistyped option). */
 export const REVIEW_OPTIONS: Record<string, string[]> = {

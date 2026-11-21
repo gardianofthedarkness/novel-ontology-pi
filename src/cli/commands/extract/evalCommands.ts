@@ -1,7 +1,7 @@
 import { mkdir, readdir, readFile, stat, writeFile } from "node:fs/promises";
 import { join, resolve } from "node:path";
-import { BundleStore } from "../../../ground/connectors/bundle.js";
-import type { Entity, OntEvent, Relation, Scene } from "../../../ground/ontology/types.js";
+import { BundleStore } from "story-graph/dist/src/ground/connectors/bundle.js";
+import type { Entity, OntEvent, Relation, Scene } from "story-graph/dist/src/ground/ontology/types.js";
 
 /**
  * `novel eval run <dataset-dir> <predictions-dir>` — golden-chapter eval

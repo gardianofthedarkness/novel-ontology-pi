@@ -36,7 +36,7 @@ export async function strandsRegister(novelDir: string, options: { run?: string;
 /** `novel strands inherit <dir> [--work]`: at this book's reading, each open strand of the last book inherited or closed. */
 export async function strandsInherit(novelDir: string, options: { reading?: string; work?: boolean; dry?: boolean }): Promise<Record<string, unknown>> {
   let work: unknown = null;
-  if (options.work) { const { workModelFromEnv } = await import("../../../ground/connectors/workModel.js"); work = workModelFromEnv(process.env); }
+  if (options.work) { const { workModelFromEnv } = await import("story-graph/dist/src/ground/connectors/workModel.js"); work = workModelFromEnv(process.env); }
   return (await carry()).inherit(novelDir, { reading: await readingAt(options.reading), work, write: !options.dry });
 }
 /** `novel strands set <dir> <strand key> inherited|closed --why <text> [--into <key>]`: the main agent's override. */
@@ -72,7 +72,7 @@ interface SamePlacesModule {
 const samePlaces = async () => import(pathToFileURL(join(await repository(), "engine", "world", "same-places.mjs")).href) as Promise<SamePlacesModule>;
 /** `novel same-places match <dir> [--work] [--dry]`: each named place beside the earlier books' namesakes, the work model reading both. */
 export async function samePlacesMatch(novelDir: string, options: { work?: boolean; dry?: boolean }): Promise<Record<string, unknown>> {
-  const work = options.work ? (await import("../../../ground/connectors/workModel.js")).workModelFromEnv(process.env) : null;
+  const work = options.work ? (await import("story-graph/dist/src/ground/connectors/workModel.js")).workModelFromEnv(process.env) : null;
   return (await samePlaces()).match(novelDir, { work, write: !options.dry });
 }
 /** `novel same-places set <dir> <place id> <book>:<place id>|new --why <text>`: a person's override. */

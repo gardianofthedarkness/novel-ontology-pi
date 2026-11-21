@@ -16,7 +16,7 @@ const esc = text => String(text).replace(/[&<>"]/g, char => ({ '&': '&amp;', '<'
 
 export async function compatPage() {
   const T = await load('dist/src/context/terrainModes.js'), { LANDSCAPES } = await load('dist/src/world/built/landscape.js');
-  const { USE_MODELS, BUILT_SHAPES, UNDERGROUND_MODELS } = await load('dist/src/world/built/useModels.js'), { ZH } = await load('dist/src/world/rules/language.js');
+  const { USE_MODELS, BUILT_SHAPES, UNDERGROUND_MODELS } = await load('dist/src/world/built/useModels.js'), { ZH } = await import('story-graph/dist/src/rules/language.js');
   const U = await load('dist/src/world/built/underground.js');
   const library = JSON.parse(await readFile(join(repository, 'apps/playground/src/data/architectureModels.json'), 'utf8'));
   const themes = JSON.parse(await readFile(join(repository, 'apps/playground/src/data/modelThemes.json'), 'utf8'));

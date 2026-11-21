@@ -2,7 +2,7 @@ import { readFile } from 'node:fs/promises';
 import { createViewer } from '../../tools/pi-review/serve.mjs';
 import { snapshot } from '../../tools/pi-review/snapshot.mjs';
 import { recordSource } from '../../tools/pi-review/record-source.mjs';
-import { sectionBlock } from '../../dist/src/reading/text/sectioning.js';
+import { sectionBlock } from 'story-graph/dist/src/reading/text/sectioning.js';
 
 const rows = async filename => (await readFile(filename, 'utf8')).split('\n').filter(Boolean).map(JSON.parse);
 

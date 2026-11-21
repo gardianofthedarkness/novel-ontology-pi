@@ -12,14 +12,16 @@
 import { copyWorld, findWorlds } from "./worlds.js";
 import { join } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
-import { recordOf, type OutlineNode, type Span } from "../library/book.js";
-import { folderTree, importFiles, scanFolder } from "../library/folder.js";
-import { basicStep, readBasic, seriesSuggestions } from "../library/basic.js";
-import { putBook, universeAdd } from "../library/folder.js";
+import { recordOf, type OutlineNode, type Span } from "story-graph/dist/src/library/book.js";
+import { folderTree, importFiles, scanFolder } from "story-graph/dist/src/library/folder.js";
+import { basicStep, readBasic, seriesSuggestions } from "story-graph/dist/src/library/basic.js";
+import { putBook, universeAdd } from "story-graph/dist/src/library/folder.js";
 import { readerBook, readerDocument, readerLine, readerPortrait } from "./reader.js";
 import { keyStatus, readingStatus, setKey, startReading, stopReading } from "./reading.js";
 import { worldView } from "./world.js";
-import { NovelWorkspace, type OpenBook } from "../library/workspace.js";
+import { NovelWorkspace, type OpenBook } from "story-graph/dist/src/library/workspace.js";
+// The 3D figures settle after story-graph saves a cast (castHooks.ts).
+import "../characters/castHooks.js";
 
 type Json = Record<string, unknown>;
 interface Position { line: number; character: number }

@@ -3,9 +3,9 @@ import assert from "node:assert/strict";
 import { spawn } from "node:child_process";
 import { dirname, join } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
-import { linkReading, putBook, scanFolder, universeAdd } from "../../src/library/folder.js";
+import { linkReading, putBook, scanFolder, universeAdd } from "story-graph/dist/src/library/folder.js";
 import { NovelServer } from "../../src/server/server.js";
-import { NovelWorkspace } from "../../src/library/workspace.js";
+import { NovelWorkspace } from "story-graph/dist/src/library/workspace.js";
 import { KEEPER, shelf } from "../v3-fixture.js";
 
 type Json = Record<string, unknown>;

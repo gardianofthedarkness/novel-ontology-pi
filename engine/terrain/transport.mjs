@@ -38,7 +38,7 @@ export function cityInputs(data, cityId) {
 
 export async function terrainTransport(novelDir, { rebuild = false, dry = false, log = (line) => console.error(line) } = {}) {
   const { simStrandList } = await load('dist/src/cli/commands/extract/simCommands.js');
-  const { universeOf } = await load('dist/src/reading/pools.js');
+  const { universeOf } = await import('story-graph/dist/src/reading/pools.js');
   const { strandDemo } = await import('../world/export-strand-demo.mjs');
   const HW = await import('../world/highways.mjs');
   const [line] = await simStrandList(novelDir);

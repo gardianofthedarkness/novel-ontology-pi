@@ -71,8 +71,8 @@ if (process.argv[1] === fileURLToPath(import.meta.url)) {
   const { values, positionals: [novelDir, readingPath] } = parseArgs({ allowPositionals: true, options: { scenes: { type: 'string' }, mode: { type: 'string' }, purpose: { type: 'string' }, write: { type: 'boolean' }, out: { type: 'string' } } });
   const mode = values.mode ?? 'cuts', purpose = values.purpose !== 'no';
   if (!novelDir || !readingPath || !values.scenes) { console.error('usage: node engine/director/segment-tiling.mjs <novel-dir> <reading>/v2/data.json --scenes a,b [--out file]'); process.exit(2); }
-  const S = await load('dist/src/reading/v1/autostep/segmentation.js'), { loadWorkspaceSentences } = await load('dist/src/cli/commands/extract/timeplaceCommands.js');
-  const { jevFromEnv } = await load('dist/src/ground/connectors/jev.js'), { cachedDecisions } = await load('dist/src/reading/v1/timeplace/cache.js');
+  const S = await import('story-graph/dist/src/reading/v1/autostep/segmentation.js'), { loadWorkspaceSentences } = await load('dist/src/cli/commands/extract/timeplaceCommands.js');
+  const { jevFromEnv } = await import('story-graph/dist/src/ground/connectors/jev.js'), { cachedDecisions } = await import('story-graph/dist/src/reading/v1/timeplace/cache.js');
   const reading = JSON.parse(await readFile(readingPath, 'utf8')), text = await loadWorkspaceSentences(resolve(novelDir));
   const gate = JSON.parse(await readFile(join(dirname(resolve(readingPath)), 'gate.json'), 'utf8').catch(() => 'null'));
   const order = reading.scenes.flatMap(scene => scene.sentences), position = new Map(order.map((id, n) => [id, n]));

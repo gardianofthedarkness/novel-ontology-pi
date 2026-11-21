@@ -1,6 +1,6 @@
 import { join } from "node:path";
-import { BundleStore } from "../../../ground/connectors/bundle.js";
-import type { Scene } from "../../../ground/ontology/types.js";
+import { BundleStore } from "story-graph/dist/src/ground/connectors/bundle.js";
+import type { Scene } from "story-graph/dist/src/ground/ontology/types.js";
 import { loadWorkspaceSentences } from "./timeplaceCommands.js";
 
 /**

@@ -13,8 +13,8 @@
  * the stored copy (an environment variable, if set, is unaffected).
  * ping spends one tiny live decision to prove the resolved key works.
  */
-import { loadConfig } from "../../config.js";
-import { jevFromEnv } from "../../../ground/connectors/jev.js";
+import { loadConfig } from "story-graph/dist/src/ground/config.js";
+import { jevFromEnv } from "story-graph/dist/src/ground/connectors/jev.js";
 import {
   JEV_KEY_ENV,
   JEV_SECRET_NAME,
@@ -23,7 +23,7 @@ import {
   secretStorePath,
   setStoredSecret,
   type JevKeySource,
-} from "../../../ground/connectors/secrets.js";
+} from "story-graph/dist/src/ground/connectors/secrets.js";
 
 export interface JevStatusResult {
   status: "ok";

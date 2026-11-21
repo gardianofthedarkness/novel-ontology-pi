@@ -1,129 +1,40 @@
-# Novel Console
+# novel-ontology
 
-Novel Console is a Mac app for reading your own EPUB novels with the help of AI.
-It reads each book once, then gives you a reader that marks the characters, places and story threads as you go.
-You can also open views for each book's characters, places and threads.
+The world engine for a novel series: it builds the places a story happens in (cities, streets, buildings, rooms), stands
+its people in them scene by scene, and plays each book through with a director, so that every character has a position in
+a world that stays the same across volumes.
 
-Your books stay on your Mac.
-The app only adds a small hidden `.novel` folder next to them.
+It stands on **[story-graph](https://github.com/gardianofthedarkness/story-graph)**, which reads the books (scenes, who is
+there, story time, places in the text), finds each person across volumes and gives the characters their memories, cards and
+a mind to answer as them. What this repository adds is the world: once a book has run here, story-graph's world agent
+shows where everyone stands (`novel/stage/world/spawn.json`).
 
-## What you need
+| Part | Where |
+|---|---|
+| The volume runner: every step of a book, from the reading to the director's run | `engine/volume` |
+| Places, rooms and the place tree | `engine/places`, `engine/workflows` |
+| Terrain: city to street, buildings and their floors | `engine/terrain`, `src/world` |
+| Where each one starts; casts (what is in use, the set dresser, rides, voices, the book's pictures) | `engine/spawning`, `engine/casts` |
+| The director's run, its smoothing and what a book leaves for the next | `engine/director`, `engine/smoother` |
+| The live view and the native client | `engine/live`, `engine/render`, `clients/godot` |
+| The `novel` command and the server the console talks to | `src/cli`, `src/server` |
 
-- **A Mac with Apple Silicon** (M1 or later). Intel Macs are not supported.
-- **Two API keys**, used when a book is read:
-  - **Jev**, from TypeSafe AI.
-  - **A work model**, from DeepSeek.
-- **Optional:** an AI agent such as [Claude Code](https://claude.com/claude-code), Codex or Pi, if you want one to work with your library (see [Use it from your own agent](#use-it-from-your-own-agent)).
+The desktop app is **[Novel Console](https://github.com/gardianofthedarkness/novel-console)** (macOS and Windows).
 
-## Download and install
+## Develop
 
-1. Go to the **[latest release](https://github.com/gardianofthedarkness/novel-ontology-pi/releases/latest)**.
-   Download the file named `Novel-Console-…-arm64.dmg`.
-2. Open the DMG and drag **Novel Console** onto the **Applications** folder.
-3. Eject the DMG.
-
-### Opening it the first time
-
-The app isn't signed with an Apple developer certificate yet, so macOS blocks it the first time you open it.
-You only have to allow it once:
-
-1. Open **Novel Console** from Applications.
-   macOS says it can't be opened. Click **Done**.
-2. Open **System Settings → Privacy & Security**.
-   Scroll down to the Security section.
-3. Next to the message about Novel Console, click **Open Anyway**.
-   Confirm, then enter your Mac password.
-
-From then on it opens normally.
-
-If you're comfortable with Terminal, this one command does the same thing:
+Check out story-graph beside this repository (`package.json` takes it as `file:../story-graph`), then:
 
 ```sh
-xattr -dr com.apple.quarantine "/Applications/Novel Console.app"
+(cd ../story-graph && npm install && npm run build)
+npm install
+npm run build
+npm test             # the TypeScript tests
+npm run engine:test  # the engine scripts' tests
 ```
 
-## Getting started
+How it works is in the [design document](docs/v3/design.html), and the history is in the [milestones](docs/v3/milestones.html).
 
-1. **Add your keys.**
-   Click **Keys** in the top bar.
-   Paste your Jev key and your work-model key, then click **Save**.
-   The dots next to Keys turn on when each key is set.
-   Keys are kept only on this Mac, readable only by you, and never shown again.
-2. **Add a folder of books.**
-   Click **Add a folder…** and choose a folder with your EPUBs.
-   Plain-text books (`.txt` or `.md`) can be brought in with **Import a text file…** in the Library.
-3. **Read a book.**
-   In the Library, click **▶** next to a book.
-   The app shows the cost before you start.
-   It's about $0.35 for a 125,000-character volume and takes a couple of minutes.
-   Reading happens in the background, and you can stop it at any time.
-4. **Open it in the Reader.**
-   Once a book has been read, open it in the **Reader**.
-   Names, places, who is speaking and notes are marked in the text.
+## License
 
-## Finding your way around
-
-The icons down the left side open the different views:
-
-| View | What it shows |
-| --- | --- |
-| **Library** | Your folders and their books |
-| **Outline** | The open book's chapters and scenes |
-| **Search** | Words and names in the open book |
-| **Characters** | The people in the book, and the path each one takes |
-| **Places** | Where things happen, what lies inside what, and who was there |
-| **Strands** | Who travels together, where they part, and where they meet again |
-| **Record** | One character or place, with every line that mentions them |
-| **Problems** | Spots where the reading wasn't sure who said or did something |
-| **Reader** | The book itself, with its marks |
-| **Readings** | Each book's reading, and your keys |
-
-Other things you can do:
-
-- **Arrange.**
-  In the Library, **Arrange all** sorts the series it finds by title into universes, each in volume order.
-  It's free and uses no AI.
-  Fix anything it missed by hand, or ask an agent (below).
-- **Day and night.**
-  Click **◐** to switch between light and dark.
-
-## Use it from your own agent
-
-Novel Console comes with a `novel` command and a skill, so an AI agent you already use can work with your library.
-This works with Claude Code, Codex or Pi.
-Your agent stays signed in its own way, and the app never sees its login.
-
-1. Open the chat panel with **⌘I** and click **Set up your agent**.
-   This installs the `novel` command as `~/.local/bin/novel`.
-   It also adds the `novel-folder` skill to each of those agents it finds on your Mac.
-2. Start a new session of your agent and ask it things like:
-   - "Arrange the novels in ~/Books into universes and reading order."
-   - "In ~/Books, who is Ana and where is she first named?"
-3. Watch the result appear in Novel Console as the agent works.
-
-The chat panel also lists your agents' recent sessions.
-From the Library you can ask Claude Code or Pi to arrange a folder for you.
-
-> **Agents cost tokens.** An agent reads the books' openings and runs many commands to decide.
-> That uses your agent's own plan or API credit, which can add up on a big folder.
-> **Arrange all** is free, so try it first.
-
-The skill is also attached to each [release](https://github.com/gardianofthedarkness/novel-ontology-pi/releases/latest) as `novel-folder-skill-….zip`, for an agent the app doesn't detect.
-Put the `novel-folder` folder in that agent's skills folder.
-The `novel` command still comes from the app.
-
-## Your privacy
-
-- Your books are never uploaded anywhere by this app, and nothing about them is published.
-- The only thing written into your book folder is a hidden `.novel` folder holding the reading results.
-- While a book is being read, its text is sent to the two model services (TypeSafe and DeepSeek) using your keys.
-  Nothing is sent at any other time.
-- You pay those services directly for what a reading uses.
-
-## Help
-
-Something not working? [Open an issue](https://github.com/gardianofthedarkness/novel-ontology-pi/issues).
-
----
-
-<sub>For developers: how it works is in the [design document](docs/v3/design.html), and the history is in the [milestones](docs/v3/milestones.html).</sub>
+MIT.

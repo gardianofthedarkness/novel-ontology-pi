@@ -4,10 +4,10 @@ import { mkdtemp, realpath, rm, symlink, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { inspectAlbumAccess, readAppliedSource, verifyAlbumAccess } from './album-access.mjs';
-import { createZip } from '../../dist/src/reading/album/zip.js';
-import { walkEpub } from '../../dist/src/reading/album/epub.js';
-import { initWorkspace } from '../../dist/src/ground/workspace/init.js';
-import { bindWorkspaceSource } from '../../dist/src/ground/workspace/source.js';
+import { createZip } from 'story-graph/dist/src/reading/album/zip.js';
+import { walkEpub } from 'story-graph/dist/src/reading/album/epub.js';
+import { initWorkspace } from 'story-graph/dist/src/ground/workspace/init.js';
+import { bindWorkspaceSource } from 'story-graph/dist/src/ground/workspace/source.js';
 
 test('real EPUB intake access checks assigned text, bytes, symlinks and changed source without models', async context => {
   const directory = await realpath(await mkdtemp(join(tmpdir(), 'album-access-')));

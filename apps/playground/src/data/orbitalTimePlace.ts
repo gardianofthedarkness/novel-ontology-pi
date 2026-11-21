@@ -2,8 +2,8 @@ import type { CausalLink, CausalSummary, WorldEdge, WorldNode } from "../types.j
 import type { CausalArrow } from "./causalProjection.js";
 import type { Position3 } from "./spatialLayout.js";
 import { helixPoint, type OrbitalDraw, type OrbitalPath } from "./orbitalLayout.js";
-import { storyStrands, type StrandCheck, type StrandEdge } from "./storyStrands.js";
-import { dateLine, placeLinks, placePathLabel, placeTreeLayout, scenePeriod, type StoryScene, type TimePlaceProjection } from "./timePlace.js";
+import { storyStrands, type StrandCheck, type StrandEdge } from "story-graph/dist/src/reading/strands-data/storyStrands.js";
+import { dateLine, placeLinks, placePathLabel, placeTreeLayout, scenePeriod, type StoryScene, type TimePlaceProjection } from "story-graph/dist/src/reading/strands-data/timePlace.js";
 import { ARCHITECTURE_LABEL, architectureOf, type ArchitectureKind } from "./placeArchitecture.js";
 import { buildingsAt, migrationsAt, simulationAt, type NamedBuilding, type SimulatedPlace } from "./placeBuildings.js";
 

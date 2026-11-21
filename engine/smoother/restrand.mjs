@@ -22,9 +22,9 @@ import { mkdir, readFile, readdir, writeFile } from 'node:fs/promises';
 import { basename, dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { parseArgs } from 'node:util';
-import { builtTree, groupStrands, placeTree, strandBeats, strandsDocument } from '../../dist/src/reading/strands.js';
+import { builtTree, groupStrands, placeTree, strandBeats, strandsDocument } from 'story-graph/dist/src/reading/strands.js';
 import { setting } from '../../dist/src/world/settings.js';
-import { segmentWorld } from '../director/segments.mjs';
+import { segmentWorld } from 'story-graph/engine/strands/segments.mjs';
 
 const holds = (box, at) => at.x >= box[0] && at.x <= box[2] && at.z >= box[1] && at.z <= box[3];
 const area = box => (box[2] - box[0]) * (box[3] - box[1]);

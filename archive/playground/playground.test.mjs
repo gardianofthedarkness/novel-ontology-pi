@@ -6,7 +6,7 @@ import { join } from 'node:path';
 import { request } from 'node:http';
 import { configuration, startPlayground } from './start.mjs';
 import { preparePlayground } from './prepare.mjs';
-import { LadybugStore } from '../../dist/src/ground/connectors/ladybug.js';
+import { LadybugStore } from 'story-graph/dist/src/ground/connectors/ladybug.js';
 
 test('team configuration fails closed and never silently starts paid work', () => {
   assert.equal(configuration([], {}).mode, 'view');

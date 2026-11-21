@@ -14,9 +14,9 @@
  *   within speaking distance of the first of them.
  */
 import { numberOf } from "../../context/measures.js";
-import type { ScriptScene } from "../../reading/script.js";
+import type { ScriptScene } from "story-graph/dist/src/reading/script.js";
 import { seeded } from "../terrain/config.js";
-import { closeInTime } from "../rules/time.js";
+import { closeInTime } from "story-graph/dist/src/rules/time.js";
 import { setting } from "../settings.js";
 
 /** A footprint: its centre, its width and depth, its turn (world metres). */

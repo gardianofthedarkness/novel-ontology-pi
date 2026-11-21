@@ -1,7 +1,7 @@
 import type { WorldEdge, WorldNode } from "../types.js";
 import { storyOrderScenes } from "./orbitalTimePlace.js";
 import { architectureOf, type ArchitectureKind } from "./placeArchitecture.js";
-import { dateLine, placeLinks, placeTreeLayout, scenePeriod, type StoryScene, type TimePlaceProjection } from "./timePlace.js";
+import { dateLine, placeLinks, placeTreeLayout, scenePeriod, type StoryScene, type TimePlaceProjection } from "story-graph/dist/src/reading/strands-data/timePlace.js";
 
 /**
  * Holo stage (places phase 2, exploration): a place's scenes replayed like a

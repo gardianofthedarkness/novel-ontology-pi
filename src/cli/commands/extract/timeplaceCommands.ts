@@ -1,27 +1,27 @@
 import { createHash } from "node:crypto";
-import { parentMap, placePath } from "../../../ground/ontology/placeTree.js";
-import { sweepPlaceTree, type PlaceTreeMemory } from "../../../reading/v1/timeplace/placeTreeSweep.js";
-import { repairPlaceTree } from "../../../reading/v1/timeplace/placeTreeRepair.js";
+import { parentMap, placePath } from "story-graph/dist/src/ground/ontology/placeTree.js";
+import { sweepPlaceTree, type PlaceTreeMemory } from "story-graph/dist/src/reading/v1/timeplace/placeTreeSweep.js";
+import { repairPlaceTree } from "story-graph/dist/src/reading/v1/timeplace/placeTreeRepair.js";
 import { mkdir, readFile, readdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
-import { BundleStore } from "../../../ground/connectors/bundle.js";
-import { jevFromEnv } from "../../../ground/connectors/jev.js";
-import { workModelFromEnv } from "../../../ground/connectors/workModel.js";
-import { EventLog } from "../../../ground/events/log.js";
-import { observeDecisions, observeWork } from "../../../ground/events/observe.js";
-import type { Entity, Relation, Scene } from "../../../ground/ontology/types.js";
-import { storedSource } from "../../../ground/workspace/source.js";
-import { cutBlocks } from "../../../reading/text/blocks.js";
-import { sectionBlock, type Sentence } from "../../../reading/text/sectioning.js";
-import { runTimePlace, timePlaceProposals, type TimePlaceResult, type VocabularyMode } from "../../../reading/v1/timeplace/faculty.js";
-import { saveChangeSet } from "../../../canon/gate/changesetStore.js";
-import { cachedDecisions, cachedWork } from "../../../reading/v1/timeplace/cache.js";
-import { timePlaceAttempted, timePlaceForNewScenes, timePlaceReviewSource } from "../../../reading/v1/timeplace/afterApply.js";
-import type { ChangeSet } from "../../../canon/gate/changeset.js";
-import { listChangeSets } from "../../../canon/gate/changesetStore.js";
-import { askStrandQuestions, planStrandQuestions, scenePassage, storyStrands, strandProjection, STRAND_QUESTION_DEFAULTS } from "../../../reading/v1/timeplace/strandQuestions.js";
-import { castCandidates } from "../../../reading/v1/processing/castCandidates.js";
-import type { StrandAnswers } from "../../../../apps/playground/src/data/storyStrands.js";
+import { BundleStore } from "story-graph/dist/src/ground/connectors/bundle.js";
+import { jevFromEnv } from "story-graph/dist/src/ground/connectors/jev.js";
+import { workModelFromEnv } from "story-graph/dist/src/ground/connectors/workModel.js";
+import { EventLog } from "story-graph/dist/src/ground/events/log.js";
+import { observeDecisions, observeWork } from "story-graph/dist/src/ground/events/observe.js";
+import type { Entity, Relation, Scene } from "story-graph/dist/src/ground/ontology/types.js";
+import { storedSource } from "story-graph/dist/src/ground/workspace/source.js";
+import { cutBlocks } from "story-graph/dist/src/reading/text/blocks.js";
+import { sectionBlock, type Sentence } from "story-graph/dist/src/reading/text/sectioning.js";
+import { runTimePlace, timePlaceProposals, type TimePlaceResult, type VocabularyMode } from "story-graph/dist/src/reading/v1/timeplace/faculty.js";
+import { saveChangeSet } from "story-graph/dist/src/canon/gate/changesetStore.js";
+import { cachedDecisions, cachedWork } from "story-graph/dist/src/reading/v1/timeplace/cache.js";
+import { timePlaceAttempted, timePlaceForNewScenes, timePlaceReviewSource } from "story-graph/dist/src/reading/v1/timeplace/afterApply.js";
+import type { ChangeSet } from "story-graph/dist/src/canon/gate/changeset.js";
+import { listChangeSets } from "story-graph/dist/src/canon/gate/changesetStore.js";
+import { askStrandQuestions, planStrandQuestions, scenePassage, storyStrands, strandProjection, STRAND_QUESTION_DEFAULTS } from "story-graph/dist/src/reading/v1/timeplace/strandQuestions.js";
+import { castCandidates } from "story-graph/dist/src/reading/v1/processing/castCandidates.js";
+import type { StrandAnswers } from "story-graph/dist/src/reading/strands-data/storyStrands.js";
 
 /**
  * `novel timeplace run|tree|show` — the time-place faculty over a
@@ -36,15 +36,9 @@ const fold = <T extends { id: string }>(records: T[]) => [...new Map(records.map
 const order = (id: string) => { const match = /^b(\d+)_s(\d+)$/.exec(id); return match ? Number(match[1]) * 1_000_000 + Number(match[2]) : Number.MAX_SAFE_INTEGER; };
 
 /** Every source sentence of a workspace, keyed by id (bound or single legacy source). */
-export async function loadWorkspaceSentences(novelDir: string): Promise<Map<string, Sentence>> {
-  const bound = await storedSource(novelDir);
-  const files = bound ? [bound.file] : (await readdir(join(novelDir, "source"))).filter((name) => !name.startsWith("."));
-  if (files.length !== 1) throw new Error("Time-place needs one unambiguous stored source; explicit source migration required.");
-  const text = await readFile(join(novelDir, "source", files[0]), "utf8");
-  const sentences = new Map<string, Sentence>();
-  for (const block of bound ? cutBlocks(text, bound.blockSize) : cutBlocks(text)) for (const sentence of sectionBlock(block.text, block.index).sentences) sentences.set(sentence.id, sentence);
-  return sentences;
-}
+// The book's sentences by id: story-graph's (src/reading/text/workspaceSentences.ts), kept here for the callers of this module.
+export { loadWorkspaceSentences } from "story-graph/dist/src/reading/text/workspaceSentences.js";
+import { loadWorkspaceSentences } from "story-graph/dist/src/reading/text/workspaceSentences.js";
 
 async function loadBundle(novelDir: string) {
   const bundle = new BundleStore(join(novelDir, "ontology"));
@@ -119,7 +113,7 @@ export async function timeplaceRun(novelDir: string, options: TimeplaceRunOption
  * Default run: only scenes without time facts, continuing from the book's
  * stored periods — the same path as at-birth runs after each block.
  */
-async function timeplaceIncremental(novelDir: string, options: TimeplaceRunOptions & { mode: VocabularyMode }, models: { work?: import("../../../ground/connectors/llm.js").WorkModel; decisions?: import("../../../ground/connectors/jev.js").DecisionModel }): Promise<Record<string, unknown>> {
+async function timeplaceIncremental(novelDir: string, options: TimeplaceRunOptions & { mode: VocabularyMode }, models: { work?: import("story-graph/dist/src/ground/connectors/llm.js").WorkModel; decisions?: import("story-graph/dist/src/ground/connectors/jev.js").DecisionModel }): Promise<Record<string, unknown>> {
   const { scenes, relations } = await loadBundle(novelDir);
   const timed = new Set(relations.filter((relation) => relation.type === "OCCURS_DURING").map((relation) => relation.fromId));
   const attempted = await timePlaceAttempted(novelDir);

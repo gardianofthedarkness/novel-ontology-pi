@@ -204,7 +204,7 @@ if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.ur
   let out;
   if (command === 'match') {
     let work = null;
-    if (values.work) { const { workModelFromEnv } = await import(pathToFileURL(join(repository, 'dist', 'src', 'ground', 'connectors', 'workModel.js')).href); work = workModelFromEnv(process.env); }
+    if (values.work) { const { workModelFromEnv } = await import('story-graph/dist/src/ground/connectors/workModel.js'); work = workModelFromEnv(process.env); }
     out = await match(novelDir, { work, write: !values.dry });
   } else if (command === 'set') {
     if (!rest[0] || !rest[1] || !values.why) throw new Error('Usage: same-places.mjs set <novel-dir> <place id> <book>:<place id>|new --why <text>');

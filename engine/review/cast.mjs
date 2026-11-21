@@ -65,7 +65,7 @@ export async function readingsOf(novelDir, extra = []) {
 
 /** The universe a book's sheets live in (src/reading/pools.ts universeOf: a library's, else the book's own). */
 export async function universeDir(novelDir) {
-  const { universeOf } = await load('dist/src/reading/pools.js');
+  const { universeOf } = await import('story-graph/dist/src/reading/pools.js');
   return universeOf(resolve(novelDir)).dir;
 }
 

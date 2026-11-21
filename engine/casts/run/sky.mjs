@@ -14,7 +14,7 @@ const repository = resolve(dirname(fileURLToPath(import.meta.url)), '..', '..', 
 const { values, positionals: [novelDir, readingPath] } = parseArgs({ allowPositionals: true, options: { cache: { type: 'string' }, dry: { type: 'boolean' } } });
 if (!novelDir || !readingPath) { console.error('usage: node engine/casts/run/sky.mjs <novel-dir> <data.json> [--cache <dir>] [--dry]'); process.exit(2); }
 const reading = JSON.parse(await readFile(resolve(readingPath), 'utf8')), dir = dirname(resolve(readingPath));
-const { loadWorkspaceSentences } = await load('dist/src/cli/commands/extract/timeplaceCommands.js'), { ask } = await load('dist/src/context/engine.js');
+const { loadWorkspaceSentences } = await load('dist/src/cli/commands/extract/timeplaceCommands.js'), { ask } = await import('story-graph/dist/src/context/engine.js');
 const sentences = await loadWorkspaceSentences(resolve(novelDir)), text = id => sentences.get(id)?.text ?? '';
 const clip = (value, size) => (value.length > size ? `${value.slice(0, size - 1)}…` : value);
 
@@ -30,7 +30,7 @@ console.error(`to ask: ${sequences.length} sequences, ${Math.ceil(sequences.leng
 const jev = {};
 let paid = 0;
 if (!values.dry) {
-  const { jevFromEnv } = await load('dist/src/ground/connectors/jev.js'), { cachedDecisions } = await load('dist/src/reading/v1/timeplace/cache.js');
+  const { jevFromEnv } = await import('story-graph/dist/src/ground/connectors/jev.js'), { cachedDecisions } = await import('story-graph/dist/src/reading/v1/timeplace/cache.js');
   const live = jevFromEnv(process.env), cached = cachedDecisions({ modelId: live.modelId, decide: (...args) => { paid++; return live.decide(...args); } }, resolve(values.cache ?? join(dir, '..', 'cache-sky')));
   const decide = Object.assign((state, questions) => cached.decide(state, questions), { record: () => {} });
   const given = name => ({ name, key: name, quota: 0, keep: true, collect: focus => focus.items.map(([id, fields]) => ({ id, score: 1, fields })) });

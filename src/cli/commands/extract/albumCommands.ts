@@ -1,4 +1,4 @@
-import { importV2Album } from "../../../reading/album/inReading.js";
+import { importV2Album } from "story-graph/dist/src/reading/album/inReading.js";
 /** `novel album` — EPUB illustration import + anchor listing + portrait finalization. */
 import { readFile } from "node:fs/promises";
 import { join } from "node:path";
@@ -7,15 +7,15 @@ import {
   picturesByBlock,
   resolveAnchors,
   type IllustrationRecord,
-} from "../../../reading/album/album.js";
+} from "story-graph/dist/src/reading/album/album.js";
 import {
   finalizePortraits,
   hostVisionFromEnv,
-} from "../../../reading/album/portraits.js";
-import { BundleStore } from "../../../ground/connectors/bundle.js";
-import type { EventSink } from "../../../ground/events/types.js";
-import type { Block } from "../../../reading/text/blocks.js";
-import type { Entity } from "../../../ground/ontology/types.js";
+} from "story-graph/dist/src/reading/album/portraits.js";
+import { BundleStore } from "story-graph/dist/src/ground/connectors/bundle.js";
+import type { EventSink } from "story-graph/dist/src/ground/events/types.js";
+import type { Block } from "story-graph/dist/src/reading/text/blocks.js";
+import type { Entity } from "story-graph/dist/src/ground/ontology/types.js";
 
 export async function albumImport(novelDir: string, epubPath: string) {
   // A v2 book (its text read by the v2 flow, not extracted from this EPUB): its pictures are anchored by their words.

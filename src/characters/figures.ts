@@ -21,8 +21,8 @@ import { randomUUID } from "node:crypto";
 import { existsSync, readFileSync } from "node:fs";
 import { appendFile, copyFile, lstat, mkdir, readFile, rename, unlink, writeFile } from "node:fs/promises";
 import { join, resolve } from "node:path";
-import { formKey } from "../ground/language/nameForms.js";
-import { castScope, loadCast, type CastFile, type CastPerson, type CastScope } from "../universe/identity/cast.js";
+import { formKey } from "story-graph/dist/src/ground/language/nameForms.js";
+import { castScope, loadCast, type CastFile, type CastPerson, type CastScope } from "story-graph/dist/src/universe/identity/cast.js";
 
 /** One record of figures.jsonl. */
 export interface FigureRecord {

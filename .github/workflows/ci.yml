@@ -15,14 +15,30 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  # story-graph (the reading, the cast, the characters) is a package this repository takes from beside it
+  # (package.json: file:../story-graph): both are checked out side by side, story-graph built first.
   test:
     runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: novel-ontology-pi
     steps:
       - uses: actions/checkout@v4
+        with:
+          path: novel-ontology-pi
+
+      - uses: actions/checkout@v4
+        with:
+          repository: ${{ github.repository_owner }}/story-graph
+          path: story-graph
 
       - uses: actions/setup-node@v4
         with:
           node-version: 22
+
+      - name: Build story-graph
+        working-directory: story-graph
+        run: npm install && npm run build
 
       - run: npm ci
 
@@ -30,11 +46,22 @@ jobs:
 
   team-playground:
     runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: novel-ontology-pi
     steps:
       - uses: actions/checkout@v4
+        with:
+          path: novel-ontology-pi
+      - uses: actions/checkout@v4
+        with:
+          repository: ${{ github.repository_owner }}/story-graph
+          path: story-graph
       - uses: actions/setup-node@v4
         with:
           node-version: 24.3.0
+      - run: npm install && npm run build
+        working-directory: story-graph
       - run: npm ci
       - run: npm ci --prefix tools/pi-review --ignore-scripts
       - run: npm ci --prefix apps/playground

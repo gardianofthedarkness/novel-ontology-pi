@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { placePathLabel, placeTreeCircles, placeTreeLayout, type StoryPlace, type TimePlaceProjection, type TreePlace } from "../../apps/playground/src/data/timePlace.js";
+import { placePathLabel, placeTreeCircles, placeTreeLayout, type StoryPlace, type TimePlaceProjection, type TreePlace } from "story-graph/dist/src/reading/strands-data/timePlace.js";
 import { atlasArrangement, atlasNodeId, pinNodeId } from "../../apps/playground/src/data/orbitalTimePlace.js";
 
 // Invented: a city with two districts; a hospital and a station square in one of them.

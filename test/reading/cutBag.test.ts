@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { notesOfUnit, route, ROUTES, type RouteFocus } from "../../src/context/cutBag.js";
-import { compose } from "../../src/context/engine.js";
+import { compose } from "story-graph/dist/src/context/engine.js";
 import { moveWhetherMode } from "../../src/context/directorModes.js";
 
 const prepared = {

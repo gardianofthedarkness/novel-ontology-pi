@@ -6,7 +6,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { evalExtract, evalRun } from "../../src/cli/commands/extract/evalCommands.js";
-import { initWorkspace } from "../../src/ground/workspace/init.js";
+import { initWorkspace } from "story-graph/dist/src/ground/workspace/init.js";
 
 const cli = fileURLToPath(new URL("../../src/cli/cli.js", import.meta.url));
 

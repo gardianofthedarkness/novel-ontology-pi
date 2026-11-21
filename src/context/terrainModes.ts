@@ -1,7 +1,7 @@
-import type { DecisionQuestion } from "../ground/connectors/jev.js";
-import { ReadingGraph } from "../reading/readingGraph.js";
-import { LANGUAGE } from "../world/rules/language.js";
-import type { Item, Mode, Source } from "./engine.js";
+import type { DecisionQuestion } from "story-graph/dist/src/ground/connectors/jev.js";
+import { ReadingGraph } from "story-graph/dist/src/reading/readingGraph.js";
+import { LANGUAGE } from "story-graph/dist/src/rules/language.js";
+import type { Item, Mode, Source } from "story-graph/dist/src/context/engine.js";
 
 /**
  * The context engine's terrain modes (docs/v3/design.html#visual-context-engine §5.6; layer 3 of docs/v3/design.html#world-model): what Jev

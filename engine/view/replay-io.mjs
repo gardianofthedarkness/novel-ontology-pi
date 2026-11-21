@@ -118,7 +118,7 @@ export async function replayIo(workspace, metadataDirectory, outDir, { title = '
 
   // The reader's book: every sentence of the volume in order, by its stand-in (who says it, when the reading knows).
   const whoSays = new Map(director.cards.flatMap(card => (card.lines ?? []).map(line => [line.id, line.who ?? null])));
-  const { sectionBlock } = await import(pathToFileURL(join(repository, 'dist', 'src', 'reading', 'text', 'sectioning.js')).href);
+  const { sectionBlock } = await import('story-graph/dist/src/reading/text/sectioning.js');
   const blocks = (await readdir(metadataDirectory)).filter(name => /^b\d{4}\.txt$/.test(name)).sort();
   const book = [];
   for (const [block, name] of blocks.entries()) {

@@ -4,7 +4,7 @@ import { resolve } from 'node:path';
 
 export async function createLibraryAccess(config, volumes) {
   if (!config) return null;
-  const { libraryShow, libraryPlan, libraryReviewItems } = await import('../../dist/src/ground/workspace/library.js');
+  const { libraryShow, libraryPlan, libraryReviewItems } = await import('story-graph/dist/src/ground/workspace/library.js');
   const directory = resolve(config.directory);
   if (!(await lstat(directory)).isDirectory() || await realpath(directory) !== directory) throw new Error('Assigned library must be a regular canonical directory');
   const identities = new Map();

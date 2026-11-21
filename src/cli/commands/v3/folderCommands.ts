@@ -4,11 +4,11 @@
  * server answers an editor from the same state and the same index.
  */
 import { resolve } from "node:path";
-import { folderTree, linkReading, putBook, scanFolder, takeBook, universeAdd, universeRemove } from "../../../library/folder.js";
+import { folderTree, linkReading, putBook, scanFolder, takeBook, universeAdd, universeRemove } from "story-graph/dist/src/library/folder.js";
 import { NovelServer, serve } from "../../../server/server.js";
-import { NovelWorkspace } from "../../../library/workspace.js";
+import { NovelWorkspace } from "story-graph/dist/src/library/workspace.js";
 import { keyStatus, readingStatus, setKey, startReading, stopReading } from "../../../server/reading.js";
-import { basicList, basicStep } from "../../../library/basic.js";
+import { basicList, basicStep } from "story-graph/dist/src/library/basic.js";
 
 export const FOLDER_USAGE = [
   "Usage: novel folder scan <folder>",

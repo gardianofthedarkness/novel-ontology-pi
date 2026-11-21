@@ -4,7 +4,7 @@ import { resolve } from "node:path";
 import { test } from "node:test";
 import { LANDSCAPES } from "../../src/world/built/landscape.js";
 import { TERRAIN_KINDS } from "../../src/context/terrainModes.js";
-import { LANGUAGE } from "../../src/world/rules/language.js";
+import { LANGUAGE } from "story-graph/dist/src/rules/language.js";
 
 // The spawning configurations (docs/v3/design.html#borrow-and-spawn §5), read from the repository's root (npm test): every kind a
 // file names must be one Jev can answer at its level, and every building use one the language profile or the landscapes know.

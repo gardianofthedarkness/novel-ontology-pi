@@ -8,9 +8,9 @@
  */
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
-import { readingScript, type ReadingScript } from "../reading/script.js";
-import { groupStrands, strandBeats, strandsDocument, type GroupStrands, type StrandFork } from "../reading/strands.js";
-import type { NovelWorkspace, OpenBook } from "../library/workspace.js";
+import { readingScript, type ReadingScript } from "story-graph/dist/src/reading/script.js";
+import { groupStrands, strandBeats, strandsDocument, type GroupStrands, type StrandFork } from "story-graph/dist/src/reading/strands.js";
+import type { NovelWorkspace, OpenBook } from "story-graph/dist/src/library/workspace.js";
 
 const repository = resolve(dirname(fileURLToPath(import.meta.url)), "..", "..", "..");
 
@@ -55,7 +55,8 @@ export async function worldView(ws: NovelWorkspace, name: string): Promise<World
   const text = (id: string) => index.line(id)?.text ?? "";
   const script: ReadingScript = readingScript(result as never, text);
   // Who is present in each unit by the director's own reading of it (credits checked), and the strands it plays.
-  const segments = await import(pathToFileURL(join(repository, "engine", "director", "segments.mjs")).href) as {
+  const segmentsModule = "story-graph/engine/strands/segments.mjs";
+  const segments = await import(segmentsModule) as {
     segmentWorld: (input: { reading: unknown; script: ReadingScript }) => { script: ReadingScript; reading: unknown } | null;
     strandsFile: (script: ReadingScript, builder: unknown, options: { reading: unknown }) => { strands: GroupStrands };
   };

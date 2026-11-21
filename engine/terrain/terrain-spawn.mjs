@@ -70,10 +70,10 @@ export async function terrainSpawn(novelDir, { jev: given = null, run = false, p
   const { stageInputs } = await load('dist/src/cli/commands/extract/stageCommands.js');
   const { simStrandList } = await load('dist/src/cli/commands/extract/simCommands.js');
   const { loadWorkspaceSentences } = await load('dist/src/cli/commands/extract/timeplaceCommands.js');
-  const { jevFromEnv } = await load('dist/src/ground/connectors/jev.js'), { cachedDecisions } = await load('dist/src/reading/v1/timeplace/cache.js');
+  const { jevFromEnv } = await import('story-graph/dist/src/ground/connectors/jev.js'), { cachedDecisions } = await import('story-graph/dist/src/reading/v1/timeplace/cache.js');
   // Every Jev request is composed by the context engine (the user's call): the terrain modes, from the reading's stores.
-  const { ask } = await load('dist/src/context/engine.js'), T = await load('dist/src/context/terrainModes.js');
-  const { continuityTies, universeOf } = await load('dist/src/reading/pools.js');
+  const { ask } = await import('story-graph/dist/src/context/engine.js'), T = await load('dist/src/context/terrainModes.js');
+  const { continuityTies, universeOf } = await import('story-graph/dist/src/reading/pools.js');
   // The zoom engine (docs/v3/design.html#visual-context-engine §4.1): every frame Jev is shown and every box it answers.
   const Z = await load('dist/src/context/zoom.js'), { LANDSCAPES, formsFor, formsTaking, averageOverMedian } = await load('dist/src/world/built/landscape.js');
   const inputs = await stageInputs(novelDir), [line] = await simStrandList(novelDir);
@@ -153,7 +153,7 @@ export async function terrainSpawn(novelDir, { jev: given = null, run = false, p
   // The building level's inventory (config/terrain/building-types.json) and its search: by meaning when an embedding model
   // is configured (the embedding connector), else by words (src/world/terrain/inventory.ts).
   const I = spawn ? await load('dist/src/world/terrain/inventory.js') : null, buildingTypes = I ? I.loadBuildingTypes() : {};
-  const embedder = spawn ? await (async () => { try { const { loadConfig } = await load('dist/src/cli/config.js'), { loadEmbedder } = await load('dist/src/ground/connectors/embeddings.js'), cfg = loadConfig(process.env); return cfg.embeddings.status === 'deferred' ? null : loadEmbedder({ provider: cfg.embeddings.provider, model: cfg.embeddings.model, dimension: cfg.embeddings.dimension, baseUrl: cfg.embeddings.baseUrl, apiKey: process.env.EMBEDDING_API_KEY?.trim() || null }); } catch { return null; } })() : null;
+  const embedder = spawn ? await (async () => { try { const { loadConfig } = await import('story-graph/dist/src/ground/config.js'), { loadEmbedder } = await import('story-graph/dist/src/ground/connectors/embeddings.js'), cfg = loadConfig(process.env); return cfg.embeddings.status === 'deferred' ? null : loadEmbedder({ provider: cfg.embeddings.provider, model: cfg.embeddings.model, dimension: cfg.embeddings.dimension, baseUrl: cfg.embeddings.baseUrl, apiKey: process.env.EMBEDDING_API_KEY?.trim() || null }); } catch { return null; } })() : null;
   // A building type's least floors, its minimum (config/terrain/heights.json; the user, 2026-11-01); the measures a place's
   // sentences give, offered at every level.
   const H = spawn ? S.loadHeights() : null, M = await load('dist/src/context/measures.js');

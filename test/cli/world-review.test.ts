@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { mkdtemp, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { initWorkspace } from "../../src/ground/workspace/init.js";
+import { initWorkspace } from "story-graph/dist/src/ground/workspace/init.js";
 import { sourceGrep, sourceSimilar } from "../../src/cli/commands/extract/sourceCommands.js";
 import { landscapeItem, loadPool, makeBatch, worldAnswer, worldBatch, worldPool, writePool, type PoolItem } from "../../src/cli/commands/extract/worldCommands.js";
 

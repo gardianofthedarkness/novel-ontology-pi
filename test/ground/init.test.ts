@@ -5,9 +5,9 @@ import { mkdir, mkdtemp, readFile, readdir, rm, symlink, writeFile } from "node:
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { BundleStore, type BundleManifest } from "../../src/ground/connectors/bundle.js";
-import { listChangeSets } from "../../src/canon/gate/changesetStore.js";
-import { initWorkspace } from "../../src/ground/workspace/init.js";
+import { BundleStore, type BundleManifest } from "story-graph/dist/src/ground/connectors/bundle.js";
+import { listChangeSets } from "story-graph/dist/src/canon/gate/changesetStore.js";
+import { initWorkspace } from "story-graph/dist/src/ground/workspace/init.js";
 
 const cli = fileURLToPath(new URL("../../src/cli/cli.js", import.meta.url));
 

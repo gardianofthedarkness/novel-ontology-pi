@@ -1,8 +1,8 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { linkReading, putBook, scanFolder, universeAdd } from "../../src/library/folder.js";
+import { linkReading, putBook, scanFolder, universeAdd } from "story-graph/dist/src/library/folder.js";
 import { worldView } from "../../src/server/world.js";
-import { NovelWorkspace } from "../../src/library/workspace.js";
+import { NovelWorkspace } from "story-graph/dist/src/library/workspace.js";
 import { shelf } from "../v3-fixture.js";
 
 test("a book's world: scenes with who is present where, its places and its strands, from the reading alone", async () => {

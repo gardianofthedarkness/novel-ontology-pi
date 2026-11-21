@@ -5,11 +5,11 @@ import { promisify } from 'node:util';
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import { join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { initWorkspace } from '../../dist/src/ground/workspace/init.js';
-import { BundleStore } from '../../dist/src/ground/connectors/bundle.js';
-import { buildGraphFromBundle } from '../../dist/src/ground/connectors/ladybug.js';
-import { cutBlocks, splitChapters } from '../../dist/src/reading/text/blocks.js';
-import { sectionBlock } from '../../dist/src/reading/text/sectioning.js';
+import { initWorkspace } from 'story-graph/dist/src/ground/workspace/init.js';
+import { BundleStore } from 'story-graph/dist/src/ground/connectors/bundle.js';
+import { buildGraphFromBundle } from 'story-graph/dist/src/ground/connectors/ladybug.js';
+import { cutBlocks, splitChapters } from 'story-graph/dist/src/reading/text/blocks.js';
+import { sectionBlock } from 'story-graph/dist/src/reading/text/sectioning.js';
 
 export const repository = resolve(fileURLToPath(new URL('../../', import.meta.url)));
 export const fixtureDirectory = fileURLToPath(new URL('./fixtures/lantern-harbor/', import.meta.url));

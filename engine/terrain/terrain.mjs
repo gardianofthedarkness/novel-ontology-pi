@@ -47,7 +47,7 @@ export async function terrainAndSpawns(novelDir, { jev: given = null, turns = 1,
   const L = await load('dist/src/world/built/landscape.js'), C = await load('dist/src/world/built/placeCanvas.js');
   const { stageInputs } = await load('dist/src/cli/commands/extract/stageCommands.js');
   const { loadWorkspaceSentences } = await load('dist/src/cli/commands/extract/timeplaceCommands.js');
-  const { jevFromEnv } = await load('dist/src/ground/connectors/jev.js'), { cachedDecisions } = await load('dist/src/reading/v1/timeplace/cache.js');
+  const { jevFromEnv } = await import('story-graph/dist/src/ground/connectors/jev.js'), { cachedDecisions } = await import('story-graph/dist/src/reading/v1/timeplace/cache.js');
   const inputs = await stageInputs(novelDir), script = inputs.world;
   if (!script) throw new Error('Terrain and spawns need the world loop\'s script (stage/world/script.json): run the world loop first.');
   const manifest = JSON.parse(await readFile(join(novelDir, 'ontology', 'manifest.json'), 'utf8'));

@@ -5,7 +5,7 @@
  */
 import { readFile } from "node:fs/promises";
 import { join, resolve } from "node:path";
-import { workModelFromEnv } from "../../../ground/connectors/workModel.js";
+import { workModelFromEnv } from "story-graph/dist/src/ground/connectors/workModel.js";
 import { bindKit, bindPart, logUsage, nominateBuildings, recheckModel, briefOf, catalogOf, checkModel, idOf, kitModules, KIT_CATEGORIES, nominate, nominationsOf, pickParts, propsOf, putModel, readingOf, saveNominations, storeOf, writeModel, type Nomination } from "../../../world/models/models.js";
 import { loadWorkspaceSentences } from "./timeplaceCommands.js";
 import { PART_REF } from "../../../world/models/partRefs.js";

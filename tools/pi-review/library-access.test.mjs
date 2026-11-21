@@ -5,7 +5,7 @@ import { promisify } from 'node:util';
 import { mkdtemp, realpath, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
-import { libraryAdd, libraryDecide, libraryInit, libraryPlan, libraryPropose, libraryShow, libraryView } from '../../dist/src/ground/workspace/library.js';
+import { libraryAdd, libraryDecide, libraryInit, libraryPlan, libraryPropose, libraryShow, libraryView } from 'story-graph/dist/src/ground/workspace/library.js';
 import { createLibraryAccess } from './library-access.mjs';
 import { authorize } from './guard.mjs';
 

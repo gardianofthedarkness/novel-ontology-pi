@@ -11,5 +11,5 @@ novels/*/ontology/graph.lbug*
 !.env.example
 __pycache__/
 
-apps/novel-console/build/
-apps/novel-console/release/
+# The console moved to its own repository (novel-console); a local copy left from before stays out of this one.
+apps/novel-console/

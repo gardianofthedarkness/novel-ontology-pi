@@ -24,7 +24,7 @@ export async function addBook(libraryDir, bookFile, { dry = false } = {}) {
   const book = `vol-${n}`, novel = join(library, book, 'novel');
   if (existsSync(join(library, book))) throw new Error(`${book} is already there`);
 
-  const { readBook } = await import(pathToFileURL(join(repository, 'dist/src/library/folder.js')).href);
+  const { readBook } = await import(pathToFileURL(join(repository, 'story-graph/dist/src/library/folder.js')).href);
   const bytes = await readFile(file), id = `f_${sha(bytes).slice(0, 12)}`;
   const kind = extname(file).toLowerCase() === '.epub' ? 'epub' : 'text';
   const { title, text } = readBook(bytes, kind, file);

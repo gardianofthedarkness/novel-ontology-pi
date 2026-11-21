@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { closeInTime, floorByWords, spawnScenes, type Entry, type Target } from "../../src/world/spawning/positions.js";
-import type { ScriptScene } from "../../src/reading/script.js";
+import type { ScriptScene } from "story-graph/dist/src/reading/script.js";
 
 // Spawning positions (docs/v3/design.html#spawning): people and things in one pass, by rule.
 const scene = (id: string, place: string, present: string[], node: string, extra: Partial<ScriptScene> = {}): ScriptScene => ({ id, chapter: 0, place, placeBy: "environment", clock: [0, 0], present, stayed: [], firstSeen: [], timeline: [], at: { node, stated: true }, ...extra });
@@ -50,7 +50,7 @@ test("people carry on at the same place close in time, else start fresh; things 
 
 test("Jev's spot question reads the scene's own text: the lines naming those asked about or saying where, their neighbours, its opening", async () => {
   const { spawnLines, spawnSpotMode } = await import("../../src/context/spawnModes.js");
-  const { compose } = await import("../../src/context/engine.js");
+  const { compose } = await import("story-graph/dist/src/context/engine.js");
   const lines = Array.from({ length: 20 }, (_, n) => ({ id: `s${n}`, text: n === 10 ? "A走上了楼顶。" : `line ${n}` }));
   const kept = spawnLines(lines, ["A"], ["s15"]);
   assert.deepEqual(kept.map((line) => line.id), ["s0", "s1", "s2", "s3", "s9", "s10", "s11", "s14", "s15", "s16"]);

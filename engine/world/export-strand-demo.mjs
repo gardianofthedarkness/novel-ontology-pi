@@ -93,9 +93,9 @@ export async function strandDemo(novelDir, options) {
   const earlierSpots = await SAME.earlierCanvas(novelDir);
   const earlierAt = (id, parent) => { const kept = earlierSpots?.[K.placeKey(id)]; return kept && kept.parent === (parent ? K.placeKey(parent) : null) ? { fixed: kept.at, kept: true } : {}; };
   const { stageInputs } = await load('dist/src/cli/commands/extract/stageCommands.js');
-  const { storyStrands } = await load('dist/src/reading/v1/timeplace/strandQuestions.js');
-  const { latestStrandAnswers } = await load('dist/src/reading/v1/timeplace/strandView.js');
-  const { forkTimeline, walkTimeline } = await load('dist/src/play/stage/environment.js');
+  const { storyStrands } = await import('story-graph/dist/src/reading/v1/timeplace/strandQuestions.js');
+  const { latestStrandAnswers } = await import('story-graph/dist/src/reading/v1/timeplace/strandView.js');
+  const { forkTimeline, walkTimeline } = await import('story-graph/dist/src/reading/stage/environment.js');
   const { composePlace, placeGraph, placeSpot, nodePosition, nodeOf, degrade, semanticAxis, cellAt, cutOffOf } = await load('dist/apps/playground/src/data/skeletonPlace.js');
   const { macroLattice, latticeNode, latticeWithin, crossings, smoothPath } = await load('dist/apps/playground/src/data/macroPath.js');
   const { structureOf, intact, blast, settle, skeletonStanding, unitAt, BLAST_ENERGY } = await load('dist/apps/playground/src/data/structure.js');
@@ -104,8 +104,8 @@ export async function strandDemo(novelDir, options) {
   // Model themes (modelThemes.json): a thing is drawn in the theme of the manifold under it, unless Jev switched theme.
   const { themedModel } = await load('dist/apps/playground/src/data/modelThemes.js'), modelThemes = JSON.parse(await readFile(`${repository}/apps/playground/src/data/modelThemes.json`, 'utf8'));
   const { newBuildingHere } = await load('dist/src/play/stage/objects.js');
-  const { stageKindOf, scaleOfName } = await load('dist/src/play/stage/scale.js');
-  const { continuityTies } = await load('dist/src/reading/pools.js'), { buildingUseOf, undergroundKindOf } = await load('dist/src/world/rules/language.js'), UM = await load('dist/src/world/built/useModels.js'), Z = await load('dist/src/context/zoom.js');
+  const { stageKindOf, scaleOfName } = await import('story-graph/dist/src/reading/stage/scale.js');
+  const { continuityTies } = await import('story-graph/dist/src/reading/pools.js'), { buildingUseOf, undergroundKindOf } = await import('story-graph/dist/src/rules/language.js'), UM = await load('dist/src/world/built/useModels.js'), Z = await load('dist/src/context/zoom.js');
   const SP = await load('dist/src/world/terrain/config.js'), spawning = SP.loadSpawning(), TM = await load('dist/src/context/terrainModes.js');
   // A kept part's manifold is its kind's as configured now (Jev gives only its median): a kind tuned (the CBD's tail, the
   // user, 2026-11-01) shows in a world already kept, with no question asked again.
@@ -157,7 +157,7 @@ export async function strandDemo(novelDir, options) {
   const anew = sceneId => spawnPlan?.scenes?.[sceneId]?.spawn === 'new';
   let jev = null;
   if (worldScript && !options.worldOnly) {
-    const { jevFromEnv } = await load('dist/src/ground/connectors/jev.js'), { cachedDecisions } = await load('dist/src/reading/v1/timeplace/cache.js');
+    const { jevFromEnv } = await import('story-graph/dist/src/ground/connectors/jev.js'), { cachedDecisions } = await import('story-graph/dist/src/reading/v1/timeplace/cache.js');
     // Pinned to the model that answers box questions (1.14): left to the environment, Jev defaults to 1.13, which refuses them.
     jev = cachedDecisions(jevFromEnv({ ...process.env, JEV_MODEL: WORLD_MODEL }), `${novelDir}/stage/world/cache`);
     // A live run records every question the engine asks (its exact prompt and pictures) on the live page.

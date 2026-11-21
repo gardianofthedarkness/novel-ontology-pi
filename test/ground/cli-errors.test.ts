@@ -5,7 +5,7 @@ import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { describeError, EXIT_CODES, graphSchema, NovelError } from "../../src/ground/errors.js";
+import { describeError, EXIT_CODES, graphSchema, NovelError } from "story-graph/dist/src/ground/errors.js";
 
 const cli = fileURLToPath(new URL("../../src/cli/cli.js", import.meta.url));
 const run = (...args: string[]) => spawnSync(process.execPath, [cli, ...args], { encoding: "utf8", env: { PATH: process.env.PATH, HOME: process.env.HOME, NOVEL_SECRETS_DIR: join(tmpdir(), "no-cli-error-keys") } });

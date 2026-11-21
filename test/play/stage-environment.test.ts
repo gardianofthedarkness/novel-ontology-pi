@@ -1,8 +1,8 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { storyStrands } from "../../apps/playground/src/data/storyStrands.js";
-import type { StoryScene, TimePlaceProjection } from "../../apps/playground/src/data/timePlace.js";
-import { forkTimeline, walkTimeline, type Mover, type Outcome, type TimelineScene } from "../../src/play/stage/environment.js";
+import { storyStrands } from "story-graph/dist/src/reading/strands-data/storyStrands.js";
+import type { StoryScene, TimePlaceProjection } from "story-graph/dist/src/reading/strands-data/timePlace.js";
+import { forkTimeline, walkTimeline, type Mover, type Outcome, type TimelineScene } from "story-graph/dist/src/reading/stage/environment.js";
 
 // Invented, as in the story-strands test: Ming and Lan leave the station together (s1), then the story
 // cuts between Ming at the port (m1, m2) and Lan at the hill (l1, l2) until they meet at the bridge (s6).

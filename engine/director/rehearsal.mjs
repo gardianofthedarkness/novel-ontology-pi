@@ -21,7 +21,7 @@ import { smoothBlasts } from '../smoother/blasts.mjs';
 import { restrandRun, summary as restrandSummary } from '../smoother/restrand.mjs';
 import { checkAll } from '../laws/laws.mjs';
 import { playedLine, speakersOf } from '../laws/check-run.mjs';
-import { segmentWorld } from './segments.mjs';
+import { segmentWorld } from 'story-graph/engine/strands/segments.mjs';
 
 /**
  * A work model answering every summarizer request by rule: the scene digest (everyone walking or standing, a few in

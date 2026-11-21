@@ -20,7 +20,7 @@ import { parseArgs } from 'node:util';
 
 const repository = resolve(dirname(fileURLToPath(import.meta.url)), '..', '..'), load = path => import(pathToFileURL(join(repository, path)).href);
 const RVM = await import('./reviewer.mjs'), RBM = await import('../world/room-binding.mjs');
-const C = await load('dist/src/context/camera.js'), CB = await load('dist/src/context/cutBag.js'), M = await load('dist/src/context/directorModes.js'), { ask } = await load('dist/src/context/engine.js');
+const C = await load('dist/src/context/camera.js'), CB = await load('dist/src/context/cutBag.js'), M = await load('dist/src/context/directorModes.js'), { ask } = await import('story-graph/dist/src/context/engine.js');
 const S = await load('dist/apps/playground/src/data/skeleton.js'), { loadWorkspaceSentences } = await load('dist/src/cli/commands/extract/timeplaceCommands.js');
 const { strandDemo, inlineStrand } = await import('../world/export-strand-demo.mjs');
 const { browser, serve } = await import('../view/two-view-things.mjs');
@@ -84,7 +84,7 @@ export function standIn() {
 
 /** The reader's view of a reading: kinds, marks (not everyday things) and the names they point at. */
 export async function readerView(reading, text) {
-  const { sentenceMarks } = await import('../reading/marks.mjs');
+  const { sentenceMarks } = await import('story-graph/engine/reading/marks.mjs');
   const marks = Object.fromEntries(Object.entries(await sentenceMarks(reading, text)).map(([id, found]) => [id, found.filter(([, , type]) => type !== 'r')]).filter(([, found]) => found.length));
   const names = Object.fromEntries([...reading.chart.entities.map(entity => [entity.id, [entity.proper?.[0] ?? entity.names?.[0] ?? entity.id, entity.category ?? null]]), ...(reading.slots ?? []).map(slot => [slot.id, [slot.label, slot.kind ?? 'person']])]);
   return { version: 2, kinds: Object.fromEntries(Object.entries(reading.kinds ?? {}).map(([id, entry]) => [id, entry.kind])), marks, names };
@@ -112,9 +112,9 @@ export async function direct(novelDir, { reading, readingPath = null, prefilm = 
   // world script's, the spawn plan's and the strands' views by physics are built here and played (kept beside the world
   // files in stage/world/segments for the log, the laws and the rehearsal).
   const worldFile = async name => JSON.parse(await readFile(join(novelDir, 'stage', 'world', name), 'utf8').catch(() => 'null'));
-  const SG = await import('./segments.mjs'), seg = SG.segmentWorld({ reading, script: await worldFile('script.json'), spawn: await worldFile('spawn.json'), backCredits: setting('director.backCredits', { book: novelDir }) });
+  const SG = await import('story-graph/engine/strands/segments.mjs'), seg = SG.segmentWorld({ reading, script: await worldFile('script.json'), spawn: await worldFile('spawn.json'), backCredits: setting('director.backCredits', { book: novelDir }) });
   if (!seg) throw new Error('the reading has no scenes to play');
-  const segStrands = SG.strandsFile(seg.script, await (await import('./strand-builder.mjs')).strandBuilder(novelDir), { reading: seg.reading });
+  const segStrands = SG.strandsFile(seg.script, await (await import('story-graph/engine/strands/strand-builder.mjs')).strandBuilder(novelDir), { reading: seg.reading });
   const segForkOf = new Map((segStrands.scenes ?? []).map(entry => [entry.id, entry.fork ?? entry.id]));
   reading = seg.reading;
   const scriptOf = async () => seg.script ?? { scenes: [] }, strandsOf = async () => segStrands, spawnOf = async () => seg.spawn;
@@ -2702,7 +2702,7 @@ export async function direct(novelDir, { reading, readingPath = null, prefilm = 
       // so what it holds (the lines no one could settle, the audits) goes to the review with the rest.
       try {
         record.review.canon = await C6.toCanon(novelDir, { run: id, reading, speakers });
-        const { buildGraphFromBundle } = await load('dist/src/ground/connectors/ladybug.js');
+        const { buildGraphFromBundle } = await import('story-graph/dist/src/ground/connectors/ladybug.js');
         await buildGraphFromBundle(join(novelDir, 'ontology'), join(novelDir, 'ontology', 'graph.lbug'));
       } catch (error) { record.review.canon = { error: String(error.message ?? error) }; }
       log(`canon: ${JSON.stringify(record.review.canon)}`);
@@ -2760,7 +2760,7 @@ if (process.argv[1] === fileURLToPath(import.meta.url)) {
   // --from-last asks for a second pass on the last run. What changed since the book's last snapshot (an unfinished run, or
   // edits by hand) is never dropped silently: --discard-edits drops it (a guard snapshot still holds it), --keep-edits
   // makes it the new `before`. After the run, its result is snapshotted (`after`), ready for novel universe export.
-  const U = await load('dist/src/ground/workspace/universe.js'), library = novelDir ? U.libraryOf(resolve(novelDir)) : null;
+  const U = await import('story-graph/dist/src/ground/workspace/universe.js'), library = novelDir ? U.libraryOf(resolve(novelDir)) : null;
   // A library's book reads its own reading (vol-<n>/reading/data.json) when none is named.
   if (!values.reading && library?.book && existsSync(U.libraryPaths(library.root).book(library.book).reading.data)) values.reading = U.libraryPaths(library.root).book(library.book).reading.data;
   if (!novelDir || !values.reading || !values.from || !values.to) { console.error('usage: node engine/director/director.mjs <novel-dir> --reading <data.json> --from <scene> --to <scene> [--budget 60] [--stand-in] [--live] [--from-last] [--discard-edits|--keep-edits] [--no-snapshots] [--review-every N --reviewer pi|claude-code|stand-in]'); process.exit(2); }
@@ -2789,7 +2789,7 @@ if (process.argv[1] === fileURLToPath(import.meta.url)) {
   const reading = JSON.parse(await readFile(values.reading, 'utf8'));
   let jev = standIn();
   if (!values['stand-in']) {
-    const { jevFromEnv } = await load('dist/src/ground/connectors/jev.js'), { cachedDecisions } = await load('dist/src/reading/v1/timeplace/cache.js');
+    const { jevFromEnv } = await import('story-graph/dist/src/ground/connectors/jev.js'), { cachedDecisions } = await import('story-graph/dist/src/reading/v1/timeplace/cache.js');
     // The cache hides the client's `usage` (what Jev reports of each request): carried on, so the run meters Jev's tokens.
     const client = jevFromEnv({ ...process.env, JEV_MODEL: PICKER_MODEL });
     jev = Object.assign(cachedDecisions(client, join(resolve(novelDir), 'stage', 'director', 'cache')), { usage: client.usage });
@@ -2799,7 +2799,7 @@ if (process.argv[1] === fileURLToPath(import.meta.url)) {
   // System 2's work model (WORK_LLM_*), cached as Jev is; without one, system 2 is off and says so.
   let workModel = null;
   if (!values['stand-in'] && process.env.WORK_LLM_API_KEY) {
-    const { workModelFromEnv } = await load('dist/src/ground/connectors/workModel.js'), { cachedWork } = await load('dist/src/reading/v1/timeplace/cache.js');
+    const { workModelFromEnv } = await import('story-graph/dist/src/ground/connectors/workModel.js'), { cachedWork } = await import('story-graph/dist/src/reading/v1/timeplace/cache.js');
     workModel = cachedWork(workModelFromEnv(process.env), join(resolve(novelDir), 'stage', 'director', 'cache-work'));
   } else if (!values['stand-in']) console.error('system 2 off: no work model configured (WORK_LLM_API_KEY)');
   let live = null;

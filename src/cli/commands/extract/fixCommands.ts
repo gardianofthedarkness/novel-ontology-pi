@@ -1,10 +1,10 @@
 import { join } from "node:path";
-import { buildGraphFromBundle } from "../../../ground/connectors/ladybug.js";
+import { buildGraphFromBundle } from "story-graph/dist/src/ground/connectors/ladybug.js";
 import {
   addCorrection,
   loadCorrections,
   type Correction,
-} from "../../../canon/maintenance/corrections.js";
+} from "story-graph/dist/src/canon/maintenance/corrections.js";
 import {
   addNameForm,
   appendAudit,
@@ -14,9 +14,9 @@ import {
   removeEvent,
   renameEntity,
   unrelate,
-} from "../../../canon/maintenance/fixes.js";
-import type { NameForm, RelationType } from "../../../ground/ontology/types.js";
-import { EXTRACTION_CONSTRAINTS_KEY, parseExtractionConstraints } from "../../../reading/v1/extraction/constraints.js";
+} from "story-graph/dist/src/canon/maintenance/fixes.js";
+import type { NameForm, RelationType } from "story-graph/dist/src/ground/ontology/types.js";
+import { EXTRACTION_CONSTRAINTS_KEY, parseExtractionConstraints } from "story-graph/dist/src/reading/v1/extraction/constraints.js";
 
 export interface FixResult {
   status: "ok";

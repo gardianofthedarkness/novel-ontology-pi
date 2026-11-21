@@ -337,7 +337,7 @@ if (process.argv[1] === fileURLToPath(import.meta.url)) {
   const [page, novelDir] = positionals.map(path => resolve(path));
   if (!page || !novelDir || !values.vendor) throw new Error('Usage: node engine/view/two-view-things.mjs <strand-page.html> <novel-dir> --vendor <dir> [--out <dir>] [--max N] [--fresh]');
   const load = path => import(pathToFileURL(`${repository}/${path}`));
-  const { jevFromEnv } = await load('dist/src/ground/connectors/jev.js');
+  const { jevFromEnv } = await import('story-graph/dist/src/ground/connectors/jev.js');
   // Box questions need Jev 1.14; the analysis keeps its own pinned model.
   const jev = jevFromEnv({ ...process.env, JEV_MODEL: values.model }), report = `${novelDir}/stage/thing-boxes.json`, out = values.out ? resolve(values.out) : null;
   const previous = values.fresh ? null : JSON.parse(await readFile(report, 'utf8').catch(() => 'null'));

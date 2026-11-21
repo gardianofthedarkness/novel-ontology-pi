@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { universeIds, universeStoryRows, type TimePlaceProjection, type StoryScene, type StoryTime } from "../../apps/playground/src/data/timePlace.js";
+import { universeIds, universeStoryRows, type TimePlaceProjection, type StoryScene, type StoryTime } from "story-graph/dist/src/reading/strands-data/timePlace.js";
 import { bookNodeId, spiralArrangement, spiralNodeId } from "../../apps/playground/src/data/orbitalTimePlace.js";
 
 // Invented universe: two books in the main line, one in an alternate line.

@@ -9,7 +9,7 @@ export async function inspectAlbumAccess(epub, input, extractText) {
   if (!/\.epub$/iu.test(path) || !info.isFile() || info.isSymbolicLink() || info.size > 64 * 1024 * 1024 || await realpath(path) !== path) throw new Error('Assigned EPUB must be a bounded regular file, not a symlink');
   const bytes = await readFile(path);
   if (bytes.length > 64 * 1024 * 1024) throw new Error('Assigned EPUB exceeds the size limit');
-  const text = extractText ?? (await import('../../dist/src/reading/album/epub.js')).walkEpub;
+  const text = extractText ?? (await import('story-graph/dist/src/reading/album/epub.js')).walkEpub;
   const importAllowed = text(bytes).text === await readFile(input, 'utf8');
   return { epub: path, sha256: createHash('sha256').update(bytes).digest('hex'), importAllowed, ...(importAllowed ? {} : { reasonCode: 'assigned_text_differs_from_epub_use_fresh_workspace' }) };
 }
@@ -20,7 +20,7 @@ export async function verifyAlbumAccess(album, input) {
 }
 
 export async function readAppliedSource(workspace, input) {
-  const { storedSource, sourceHash } = await import('../../dist/src/ground/workspace/source.js');
+  const { storedSource, sourceHash } = await import('story-graph/dist/src/ground/workspace/source.js');
   const bound = await storedSource(workspace);
   const text = await readFile(resolve(workspace, 'source', bound?.file ?? basename(input)), 'utf8');
   if (bound && (sourceHash(text) !== bound.sha256 || bound.blockSize !== 24000)) throw new Error('Stored source or block boundaries changed; restore before resuming');

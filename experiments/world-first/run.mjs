@@ -74,8 +74,8 @@ const count = (text, form) => text.split(form).length - 1;
 export async function runWorldFirst(outDir, { chapters = null, maxCalls = 400, decisions = null, novelDir = null, batchSize = 8, agentConsole = null } = {}) {
   const scenes = JSON.parse(await readFile(join(outDir, 'base', 'scenes.json'), 'utf8')), roster = JSON.parse(await readFile(join(outDir, 'base', 'roster.json'), 'utf8'));
   const states = JSON.parse(await readFile(join(outDir, 'base', 'states.json'), 'utf8').catch(() => '[]'));
-  const { jevFromEnv } = await load('dist/src/ground/connectors/jev.js'), { cachedDecisions } = await load('dist/src/reading/v1/timeplace/cache.js');
-  const { detectTimeMentions } = await load('dist/src/reading/v1/timeplace/lexicon.js');
+  const { jevFromEnv } = await import('story-graph/dist/src/ground/connectors/jev.js'), { cachedDecisions } = await import('story-graph/dist/src/reading/v1/timeplace/cache.js');
+  const { detectTimeMentions } = await import('story-graph/dist/src/reading/v1/timeplace/lexicon.js');
   // Real calls are counted below the cache, so a rerun counts only what it pays for.
   let calls = 0;
   const live = decisions ?? jevFromEnv(process.env), counted = { modelId: live.modelId, decide: (...args) => { calls++; return live.decide(...args); } };

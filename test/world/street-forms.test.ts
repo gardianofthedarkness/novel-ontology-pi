@@ -85,7 +85,7 @@ test("the terrain view draws a building as a model of its use whose floors hold 
 });
 
 test("the underground: a part below the street becomes the hall its name says (a car park, a passage), else one by its proportions; every kind says what it lies under", async () => {
-  const U = await import("../../src/world/built/underground.js"), { undergroundKindOf } = await import("../../src/world/rules/language.js");
+  const U = await import("../../src/world/built/underground.js"), { undergroundKindOf } = await import("story-graph/dist/src/rules/language.js");
   assert.deepEqual(["地下停车场", "地下通道 (scene 21)", "地下街", "防空洞", "共同沟", "地铁站", "地下二层", "广场"].map((label) => undergroundKindOf(label)), ["parking", "corridor", "mall", "shelter", "utility", "station", "basement", null]);
   const shape = { id: "s", x: 0, z: 0, w: 114, d: 22, top: -6 };
   assert.equal(U.shapeHall(shape).kind, "corridor", "a long shape: a passage");

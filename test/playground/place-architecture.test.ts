@@ -2,7 +2,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { architectureCandidates, architectureOf, SHORTLIST_SIZE } from "../../apps/playground/src/data/placeArchitecture.js";
 import { atlasArrangement } from "../../apps/playground/src/data/orbitalTimePlace.js";
-import type { StoryPlace, TimePlaceProjection } from "../../apps/playground/src/data/timePlace.js";
+import type { StoryPlace, TimePlaceProjection } from "story-graph/dist/src/reading/strands-data/timePlace.js";
 
 test("a name says outright what it is: the strong kind comes first", () => {
   assert.equal(architectureOf("医院"), "hospital");

@@ -1,6 +1,6 @@
 import { readFile, readdir } from 'node:fs/promises';
-import { causalityEvidence } from '../../dist/src/universe/causality/evidence.js';
-import { semanticFacts } from '../../dist/src/canon/gate/semantic.js';
+import { causalityEvidence } from 'story-graph/dist/src/universe/causality/evidence.js';
+import { semanticFacts } from 'story-graph/dist/src/canon/gate/semantic.js';
 import { reviewRevision } from './review-coverage.mjs';
 
 const standaloneId = /^cs_causality_(agent|sweep)_\d+$/;

@@ -11,7 +11,7 @@
  * carries them under `notes` and its manifest records every note kept and every note cut.
  * Physics is no cast and is given no notes: it executes what the casts decide and pushes back through the laws.
  */
-import type { Item, Source } from "./engine.js";
+import type { Item, Source } from "story-graph/dist/src/context/engine.js";
 
 export type PreFilmCast = "script supervisor" | "screenwriter" | "storyboard artist" | "cinematographer" | "blocking" | "action director" | "dialogue coverage" | "background action";
 export type RuntimeTask = "layout" | "frame" | "keys" | "layout check" | "key check" | "rush check";

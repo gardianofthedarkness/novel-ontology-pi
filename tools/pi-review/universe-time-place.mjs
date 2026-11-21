@@ -108,8 +108,8 @@ export function mergeUniverse({ atlas, books, continuities }) {
  * book is not in a reviewed universe with at least two hosted books.
  */
 export async function readUniverseTimePlace(directory, bindings, resolveWorkspace, volume) {
-  const library = await import('../../dist/src/ground/workspace/library.js');
-  const { atlasView, atlasContext } = await import('../../dist/src/universe/atlas/universeAtlas.js');
+  const library = await import('story-graph/dist/src/ground/workspace/library.js');
+  const { atlasView, atlasContext } = await import('story-graph/dist/src/universe/atlas/universeAtlas.js');
   const view = await library.libraryView(resolve(directory));
   const sourceId = bindings.find(binding => binding.volume === volume)?.sourceId;
   const continuityId = view.organization.assignments.find(entry => entry.sourceId === sourceId && entry.status === 'confirmed')?.continuityId;

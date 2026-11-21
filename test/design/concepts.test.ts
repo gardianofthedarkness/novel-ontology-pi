@@ -1,13 +1,14 @@
 import assert from "node:assert/strict";
 import { existsSync, readFileSync } from "node:fs";
-import { resolve } from "node:path";
+import { join, resolve } from "node:path";
 import { test } from "node:test";
 import { CONCEPTS, LAYERS, STAGES } from "../../src/concepts.js";
 
 // Run from the repository's root (npm test): every pointer of the concept map must still hold, or the map has gone stale.
 // A design pointer (`docs/v3/design.html#<section> · <journal> §<heading>`) holds when the design has that section.
 const holds = (pointer: string) => {
-  const [file, text] = pointer.split("#"), path = resolve(process.cwd(), file);
+  // story-graph/<path>: a file of the story-graph package, where it is installed.
+  const [file, text] = pointer.split("#"), path = resolve(process.cwd(), file.startsWith("story-graph/") ? join("node_modules", file) : file);
   if (!existsSync(path)) return false;
   const body = readFileSync(path, "utf8");
   return file === "docs/v3/design.html" ? body.includes(`id="${text.split(" · ")[0]}"`) : body.includes(text);

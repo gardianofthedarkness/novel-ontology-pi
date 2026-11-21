@@ -4,7 +4,7 @@
  * roof, under the street, the street in front, the composite parts inside it), read from the scene's own text. One
  * request a scene, no picture.
  */
-import type { Item, Mode, Source } from "./engine.js";
+import type { Item, Mode, Source } from "story-graph/dist/src/context/engine.js";
 
 /** A spot of the place: its letter, what it is in words. */
 export interface SpawnSpot { letter: string; said: string }

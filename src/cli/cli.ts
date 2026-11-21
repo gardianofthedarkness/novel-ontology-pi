@@ -8,11 +8,11 @@
  * query and the rest) were archived on 2026-11-11 with the CLI as it stood: archive/cli/.
  * All commands print JSON by default; add --pretty for humans.
  */
-import { describeError, EXIT_CODES, NovelError } from "../ground/errors.js";
-import { ERROR_CATALOG } from "../ground/errorCatalog.js";
+import { describeError, EXIT_CODES, NovelError } from "story-graph/dist/src/ground/errors.js";
+import { ERROR_CATALOG } from "story-graph/dist/src/ground/errorCatalog.js";
 import { diagnose } from "./diagnose.js";
 import { join, resolve } from "node:path";
-import { loadConfig } from "./config.js";
+import { loadConfig } from "story-graph/dist/src/ground/config.js";
 import { llmPing, llmProbe } from "./commands/shared/llmCommands.js";
 import { universeCommand } from "./commands/extract/universeCommands.js";
 import {
@@ -21,7 +21,7 @@ import {
   jevPing,
   jevStatus,
 } from "./commands/shared/jevCommands.js";
-import { resolveJevKey } from "../ground/connectors/secrets.js";
+import { resolveJevKey } from "story-graph/dist/src/ground/connectors/secrets.js";
 import { inspectNovel } from "./commands/extract/inspectCommands.js";
 import { evalExtract, evalRun } from "./commands/extract/evalCommands.js";
 import { evalDialogueCards } from "./commands/extract/dialogueEval.js";
@@ -41,6 +41,8 @@ import { PLACES_COMMANDS, placesCommand } from "./commands/extract/placesCommand
 import { ROOMS_COMMANDS, roomsCommand } from "./commands/extract/roomsCommands.js";
 import { modelBind, modelBrief, modelCheck, modelList, modelNominate, modelParts, modelPut, modelShelf, modelShow, modelUse, modelWrite } from "./commands/extract/modelCommands.js";
 import { readingShow, sourceEpub, worldApply, worldCanon, worldHeld, worldLogShow, worldUndo } from "./commands/extract/worldReviewCommands.js";
+// The 3D figures settle after story-graph saves a cast (castHooks.ts).
+import "../characters/castHooks.js";
 
 const COMMANDS: Record<string, string> = {
   "novel universe snapshots|snapshot|status|restore <library> ...": "A universe's snapshots: one before each book's first run (where a rerun starts) and one after each run; restore puts a snapshot back (what it replaces is snapshotted first)",

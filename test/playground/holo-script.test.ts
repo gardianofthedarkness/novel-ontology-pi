@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { isConflict, journeyScript, placeScript, quoteOf, speakerOf } from "../../apps/playground/src/data/holoScript.js";
-import type { StoryPlace, StoryScene, TimePlaceProjection } from "../../apps/playground/src/data/timePlace.js";
+import type { StoryPlace, StoryScene, TimePlaceProjection } from "story-graph/dist/src/reading/strands-data/timePlace.js";
 import type { WorldEdge, WorldNode } from "../../apps/playground/src/types.js";
 
 // Invented: Mira and Tomas meet in an old tower, quarrel, then Mira goes to the harbour.

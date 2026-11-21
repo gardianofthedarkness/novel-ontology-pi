@@ -39,7 +39,7 @@ export function libraryFaculties(records, now = Date.now()) {
 }
 
 export async function readLibraryLive(directory, bindings = [], readView, resolveWorkspace) {
-  const reader = readView ?? (await import('../../dist/src/ground/workspace/library.js')).libraryView;
+  const reader = readView ?? (await import('story-graph/dist/src/ground/workspace/library.js')).libraryView;
   const view = await reader(resolve(directory));
   const known = new Set(view.sources.map(source => source.id));
   const seen = new Set();

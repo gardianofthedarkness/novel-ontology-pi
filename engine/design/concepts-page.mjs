@@ -20,7 +20,7 @@ const DESIGN = 'docs/v3/design.html', GITHUB_DESIGN = 'https://github.com/gardia
 export async function conceptsPage({ section = false } = {}) {
   const { CONCEPTS, LAYERS, STAGES } = await import(pathToFileURL(join(repository, 'dist/src/concepts.js')).href);
   // A design pointer is `docs/v3/design.html#<section> · <journal> §<heading>`: it holds when the design has the section.
-  const holds = pointer => { const [file, text] = pointer.split('#'), path = join(repository, file); if (!existsSync(path)) return false; const body = readFileSync(path, 'utf8'); return file === DESIGN ? body.includes(`id="${text.split(' · ')[0]}"`) : body.includes(text); };
+  const holds = pointer => { const [file, text] = pointer.split('#'), path = join(repository, file.startsWith('story-graph/') ? join('node_modules', file) : file); if (!existsSync(path)) return false; const body = readFileSync(path, 'utf8'); return file === DESIGN ? body.includes(`id="${text.split(' · ')[0]}"`) : body.includes(text); };
   const broken = CONCEPTS.flatMap(concept => [...concept.lives, ...concept.docs].filter(pointer => !holds(pointer)).map(pointer => `${concept.id}: ${pointer}`));
   if (broken.length) throw new Error(`The concept map no longer holds:\n${broken.join('\n')}`);
   const commit = (() => { try { return execFileSync('git', ['-C', repository, 'rev-parse', '--short', 'HEAD'], { encoding: 'utf8' }).trim(); } catch { return 'unknown'; } })();

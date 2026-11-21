@@ -19,8 +19,8 @@ const repository = resolve(dirname(fileURLToPath(import.meta.url)), '..', '..', 
 const { values, positionals: [novelDir, readingPath] } = parseArgs({ allowPositionals: true, options: { to: { type: 'string' }, out: { type: 'string' }, cache: { type: 'string' } } });
 if (!novelDir || !readingPath || !values.out) { console.error('usage: node engine/casts/run/prefilm-jev.mjs <novel-dir> <data.json> [--to <unit>] --out <file> [--cache <dir>]'); process.exit(2); }
 const reading = JSON.parse(await readFile(resolve(readingPath), 'utf8')), prefilm = await (await import('../prefilm.mjs')).loadPrefilm(dirname(resolve(readingPath)));
-const { loadWorkspaceSentences } = await load('dist/src/cli/commands/extract/timeplaceCommands.js'), { ask } = await load('dist/src/context/engine.js');
-const { jevFromEnv } = await load('dist/src/ground/connectors/jev.js'), { cachedDecisions } = await load('dist/src/reading/v1/timeplace/cache.js');
+const { loadWorkspaceSentences } = await load('dist/src/cli/commands/extract/timeplaceCommands.js'), { ask } = await import('story-graph/dist/src/context/engine.js');
+const { jevFromEnv } = await import('story-graph/dist/src/ground/connectors/jev.js'), { cachedDecisions } = await import('story-graph/dist/src/reading/v1/timeplace/cache.js');
 const text = await loadWorkspaceSentences(resolve(novelDir)), line = id => text.get(id)?.text ?? '';
 const last = values.to ? reading.scenes.findIndex(scene => scene.id === values.to) : reading.scenes.length - 1, units = reading.scenes.slice(0, last + 1);
 

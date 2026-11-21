@@ -1,4 +1,4 @@
-import type { DecisionQuestion } from "../../ground/connectors/jev.js";
+import type { DecisionQuestion } from "story-graph/dist/src/ground/connectors/jev.js";
 
 /**
  * The direction a person sets off in, as Jev is asked it over the rendered

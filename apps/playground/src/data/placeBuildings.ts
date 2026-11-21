@@ -1,4 +1,4 @@
-import { dateLine, scenePeriod, type SimulationLot, type StoryTime, type TimePlaceProjection } from "./timePlace.js";
+import { dateLine, scenePeriod, type SimulationLot, type StoryTime, type TimePlaceProjection } from "story-graph/dist/src/reading/strands-data/timePlace.js";
 
 /**
  * The buildings a story names at its places (the building log the viewer

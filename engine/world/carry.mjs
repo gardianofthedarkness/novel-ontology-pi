@@ -78,7 +78,7 @@ export async function bookStrands(novelDir, { run = null, reading = null } = {})
   const dir = resolve(novelDir), world = join(dir, 'stage', 'world');
   const restranded = run ? await json(join(world, 'restrand', `${run}.json`)) : null;
   if (restranded?.forks) return { from: `run:${run}`, run, forks: restranded.forks, script: { scenes: restranded.units?.length ? scriptOfUnits(restranded) : (await json(join(world, 'segments', 'script.json')))?.scenes ?? [] } };
-  const { segmentWorld, strandsFile } = await import('../director/segments.mjs'), { strandBuilder } = await import('../director/strand-builder.mjs');
+  const { segmentWorld, strandsFile } = await import('story-graph/engine/strands/segments.mjs'), { strandBuilder } = await import('story-graph/engine/strands/strand-builder.mjs');
   const given = reading ?? (await json(join(dir, '..', 'reading', 'data.json')));
   const book = await json(join(world, 'script.json'));
   if (!given?.scenes || !book?.scenes) throw new Error(`${dir}: no reading or no world script to build the book's strands from`);
@@ -280,7 +280,7 @@ if (process.argv[1] === fileURLToPath(import.meta.url)) {
   if (command === 'register') out = await register(novelDir, { run: values.run ?? null, reading, write: !values.dry });
   else if (command === 'inherit') {
     let work = null;
-    if (values.work) { const { workModelFromEnv } = await import('../../dist/src/ground/connectors/workModel.js'); work = workModelFromEnv(process.env); }
+    if (values.work) { const { workModelFromEnv } = await import('story-graph/dist/src/ground/connectors/workModel.js'); work = workModelFromEnv(process.env); }
     out = await inherit(novelDir, { reading, work, write: !values.dry });
   } else if (command === 'set') {
     const [key, state] = rest;

@@ -3,8 +3,8 @@ import assert from "node:assert/strict";
 import { spawn } from "node:child_process";
 import { createServer, type IncomingMessage, type Server } from "node:http";
 import { fileURLToPath } from "node:url";
-import { loadConfig } from "../../src/cli/config.js";
-import { HttpWorkModel } from "../../src/ground/connectors/workModel.js";
+import { loadConfig } from "story-graph/dist/src/ground/config.js";
+import { HttpWorkModel } from "story-graph/dist/src/ground/connectors/workModel.js";
 
 const cli = fileURLToPath(new URL("../../src/cli/cli.js", import.meta.url));
 const FAKE_KEY = "sk-test-fake-key-value";

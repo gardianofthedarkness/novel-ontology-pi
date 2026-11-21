@@ -3,12 +3,12 @@ import assert from "node:assert/strict";
 import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { describeError } from "../../src/ground/errors.js";
-import { ERROR_CATALOG } from "../../src/ground/errorCatalog.js";
+import { describeError } from "story-graph/dist/src/ground/errors.js";
+import { ERROR_CATALOG } from "story-graph/dist/src/ground/errorCatalog.js";
 import { diagnose } from "../../src/cli/diagnose.js";
-import { initWorkspace } from "../../src/ground/workspace/init.js";
-import { sectionBlock } from "../../src/reading/text/sectioning.js";
-import type { OntEvent } from "../../src/ground/ontology/types.js";
+import { initWorkspace } from "story-graph/dist/src/ground/workspace/init.js";
+import { sectionBlock } from "story-graph/dist/src/reading/text/sectioning.js";
+import type { OntEvent } from "story-graph/dist/src/ground/ontology/types.js";
 
 const failing = (message: string, argv: string[]) => diagnose(describeError(new Error(message), argv), argv);
 

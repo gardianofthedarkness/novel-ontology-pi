@@ -1,15 +1,15 @@
 import { createHash } from "node:crypto";
-import type { WorkModel } from "../../ground/connectors/llm.js";
-import type { Embedder } from "../../ground/connectors/embeddings.js";
-import { cosineSimilarity } from "../../ground/connectors/embeddings.js";
-import type { Entity, Relation } from "../../ground/ontology/types.js";
-import { treeViolation } from "../../ground/ontology/placeTree.js";
-import type { ChangeProposal } from "../../canon/gate/changeset.js";
-import type { DecisionModel } from "../../ground/connectors/jev.js";
-import { EM_MIN_SCORE, resolveNewNames, type NewName } from "../../universe/identity/em.js";
-import type { PoolEntry, Recommendation } from "../../universe/identity/recommender.js";
-import { nameAffinity, thingPool, type ThingsFile } from "../../universe/identity/things.js";
-import type { CastBook } from "../../universe/identity/cast.js";
+import type { WorkModel } from "story-graph/dist/src/ground/connectors/llm.js";
+import type { Embedder } from "story-graph/dist/src/ground/connectors/embeddings.js";
+import { cosineSimilarity } from "story-graph/dist/src/ground/connectors/embeddings.js";
+import type { Entity, Relation } from "story-graph/dist/src/ground/ontology/types.js";
+import { treeViolation } from "story-graph/dist/src/ground/ontology/placeTree.js";
+import type { ChangeProposal } from "story-graph/dist/src/canon/gate/changeset.js";
+import type { DecisionModel } from "story-graph/dist/src/ground/connectors/jev.js";
+import { EM_MIN_SCORE, resolveNewNames, type NewName } from "story-graph/dist/src/universe/identity/em.js";
+import type { PoolEntry, Recommendation } from "story-graph/dist/src/universe/identity/recommender.js";
+import { nameAffinity, thingPool, type ThingsFile } from "story-graph/dist/src/universe/identity/things.js";
+import type { CastBook } from "story-graph/dist/src/universe/identity/cast.js";
 
 /**
  * Stage faculty — objects: the buildings and large things each scene puts in

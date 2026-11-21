@@ -6,8 +6,8 @@ import { join } from "node:path";
 import { pathToFileURL } from "node:url";
 import { FLOW_EDGES, FLOW_NODES, commandScope, flowNodeOf, flowState } from "../../apps/playground/src/data/facultyFlow.js";
 import type { LiveActivity } from "../../apps/playground/src/data/liveActivity.js";
-import { libraryCallSink, observeDecisions, observeWork } from "../../src/ground/events/observe.js";
-import type { ProcessingEvent } from "../../src/ground/events/types.js";
+import { libraryCallSink, observeDecisions, observeWork } from "story-graph/dist/src/ground/events/observe.js";
+import type { ProcessingEvent } from "story-graph/dist/src/ground/events/types.js";
 
 async function sources(directory: string): Promise<string[]> {
   const entries = await readdir(directory, { withFileTypes: true });
@@ -18,7 +18,8 @@ test("every faculty name the source can report has a node in the flow graph", as
   // The repo is read from the compiled test's location: dist/test → repo root.
   const root = join(import.meta.dirname, "..", "..", "..");
   const names = new Set<string>();
-  for (const file of await sources(join(root, "src"))) {
+  // The faculties live here and in story-graph (the reading's), where the package is installed.
+  for (const file of [...await sources(join(root, "src")), ...await sources(join(root, "node_modules", "story-graph", "src"))]) {
     const text = await readFile(file, "utf8");
     // System 1 calls are named by their question key prefix; candidate keys are not questions.
     for (const match of text.matchAll(/key(?::| =) `([a-z_-]+)[:$]/g)) if (match[1] !== "existing") names.add(match[1]);

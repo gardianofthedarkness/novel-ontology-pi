@@ -20,7 +20,7 @@ const prefilm = prefilmOf(await read('prefilm.json').catch(() => read('faculties
 const abilities = JSON.parse(await readFile(join(resolve(values.universe), 'abilities.json'), 'utf8'));
 const reading = JSON.parse(await readFile(resolve(readingPath), 'utf8'));
 const names = new Map((reading.chart?.entities ?? []).map(entity => [entity.id, entity.proper?.[0] ?? entity.names?.[0] ?? entity.id]));
-const { loadWorkspaceSentences } = await load('dist/src/cli/commands/extract/timeplaceCommands.js'), { ask } = await load('dist/src/context/engine.js');
+const { loadWorkspaceSentences } = await load('dist/src/cli/commands/extract/timeplaceCommands.js'), { ask } = await import('story-graph/dist/src/context/engine.js');
 const text = await loadWorkspaceSentences(resolve(novelDir)), line = id => text.get(id)?.text ?? '';
 const clip = (value, size) => (value.length > size ? `${value.slice(0, size - 1)}…` : value);
 const rows = IU.movesToAsk({ prefilm, abilities });
@@ -28,7 +28,7 @@ console.error(`to ask: ${rows.length} moves and journeys; blows sorted by rule`)
 if (values.dry) process.exit(0);
 
 let paid = 0;
-const { jevFromEnv } = await load('dist/src/ground/connectors/jev.js'), { cachedDecisions } = await load('dist/src/reading/v1/timeplace/cache.js');
+const { jevFromEnv } = await import('story-graph/dist/src/ground/connectors/jev.js'), { cachedDecisions } = await import('story-graph/dist/src/reading/v1/timeplace/cache.js');
 const live = jevFromEnv(process.env), jev = cachedDecisions({ modelId: live.modelId, decide: (...args) => { paid++; return live.decide(...args); } }, resolve(values.cache ?? join(dir, '..', 'cache-in-use')));
 const decide = Object.assign((state, questions) => jev.decide(state, questions), { record: () => {} });
 const mode = { name: 'in-use', task: 'A light novel being staged in a 3D city. For each move (a line, a few lines round it, who moves, and how the notes read it), say whether the line shows the person using one of their own powers to move (the options name the ones they have), or an ordinary move: walking, running, being carried.', definitions: () => ({ ways: MOVES }), sources: [{ name: 'moves', key: 'moves', quota: 0, keep: true, collect: focus => focus.items.map(([id, fields]) => ({ id, score: 1, fields })) }], cutOrder: [], questions: focus => focus.questions, budget: 120_000 };

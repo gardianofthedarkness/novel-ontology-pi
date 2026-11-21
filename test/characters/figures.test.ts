@@ -14,7 +14,7 @@ mkdirSync(join(root, "packs"), { recursive: true });
 const F = await import("../../src/characters/figures.js");
 const WH = await import("../../src/world/models/warehouse.js");
 const { warehouseUse } = await import("../../src/cli/commands/extract/warehouseCommands.js");
-type CastFile = import("../../src/universe/identity/cast.js").CastFile;
+type CastFile = import("story-graph/dist/src/universe/identity/cast.js").CastFile;
 type FigureRecord = import("../../src/characters/figures.js").FigureRecord;
 
 const person = (id: string, name: string, forms: string[] = [], books = ["book"]) => ({ id, name, forms: [name, ...forms].map((text, k) => ({ text, kind: (k ? "alias" : "canonical") as "alias" | "canonical" })), members: books.map((sourceId, k) => ({ sourceId, entityId: `${id}_${k}` })) });

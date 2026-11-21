@@ -1,4 +1,0 @@
-rapidocr-onnxruntime
-dghs-imgutils
-opencc-python-reimplemented
-pillow

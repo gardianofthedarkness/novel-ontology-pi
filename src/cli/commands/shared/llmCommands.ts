@@ -12,11 +12,11 @@
  * never printed. Missing configuration is a loud, specific error —
  * for a smoke command, silently succeeding would be the bug.
  */
-import { loadConfig, type KeyStatus } from "../../config.js";
+import { loadConfig, type KeyStatus } from "story-graph/dist/src/ground/config.js";
 import {
   workModelFromEnv,
   type WorkModelUsage,
-} from "../../../ground/connectors/workModel.js";
+} from "story-graph/dist/src/ground/connectors/workModel.js";
 
 export interface LlmPingResult {
   status: "ok";

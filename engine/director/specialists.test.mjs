@@ -34,7 +34,7 @@ test('the docs are as the registry writes them', async () => {
 test('every state lands on something the ontology has (src/ground/ontology/types.ts), or says it needs a new field', async () => {
   const { readFile } = await import('node:fs/promises');
   const { STATE, target } = await import('./specialists.mjs');
-  const types = await readFile(new URL('../../src/ground/ontology/types.ts', import.meta.url), 'utf8');
+  const types = await readFile(new URL('../../node_modules/story-graph/src/ground/ontology/types.ts', import.meta.url), 'utf8');
   const union = name => [...(types.match(new RegExp(`export type ${name} =([\\s\\S]*?");`))?.[1] ?? '').matchAll(/"([A-Za-z_]+)"/g)].map(m => m[1]);
   const fields = name => [...(types.match(new RegExp(`export interface ${name} \\{([\\s\\S]*?)\\n\\}`))?.[1] ?? '').matchAll(/^\s+([a-zA-Z]+)\??:/gm)].map(m => m[1]);
   const has = { scene: fields('Scene'), stateChange: fields('StateChange'), relation: union('RelationType'), event: union('EventType'), entity: union('EntityKind') };
@@ -99,7 +99,7 @@ test('the mixed index: sentences and blocks, each by its score; an unsure block 
 });
 
 test('the block types Jev is asked are the registry\'s', async () => {
-  const { BLOCK_TYPES: asked } = await import('../../dist/src/reading/v1/autostep/segmentation.js');
+  const { BLOCK_TYPES: asked } = await import('story-graph/dist/src/reading/v1/autostep/segmentation.js');
   const { BLOCK_TYPES } = await import('./specialists.mjs');
   assert.deepEqual(Object.keys(asked), Object.keys(BLOCK_TYPES));
 });
